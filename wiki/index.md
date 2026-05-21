@@ -5,8 +5,8 @@ Top-level Map of Content. See `CLAUDE.md` for conventions.
 ## MOCs
 
 - [[decisions]] — architectural and product decisions
+- [[research]] — external references that shape direction
 - [[architecture]] — system shape and rendering strategy *(stub)*
-- [[research]] — visual references, papers, links *(stub)*
 
 ## Active
 
@@ -16,4 +16,5 @@ Top-level Map of Content. See `CLAUDE.md` for conventions.
 
 Daily logs live in `wiki/daily/YYYY-MM-DD.md`. Latest:
 
+- [[2026-05-22]]
 - [[2026-05-21]]

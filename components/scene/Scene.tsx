@@ -3,12 +3,21 @@
 import { Canvas } from "@react-three/fiber";
 import { Stars } from "@react-three/drei";
 import * as THREE from "three";
-import { PlaceholderBuilding } from "./PlaceholderBuilding";
+import { useSceneStore } from "@/lib/state/sceneStore";
+import { City } from "./City";
+import { Moon } from "./Moon";
+import { Ground } from "./Ground";
+import { Streetlights } from "./Streetlights";
+import { CameraControls } from "./CameraControls";
+import { PerfMonitor } from "./PerfMonitor";
 
 export function Scene() {
+  const masterSeed = useSceneStore((s) => s.masterSeed);
+  const intent = useSceneStore((s) => s.cameraIntent);
+
   return (
     <Canvas
-      camera={{ position: [0, 4, 18], fov: 45 }}
+      camera={{ position: intent.position, fov: intent.fov, near: 0.5, far: 4000 }}
       gl={{
         antialias: true,
         toneMapping: THREE.ACESFilmicToneMapping,
@@ -16,13 +25,19 @@ export function Scene() {
       }}
       dpr={[1, 2]}
     >
-      <color attach="background" args={["#000"]} />
-      <ambientLight intensity={0.05} />
-      <directionalLight position={[10, 20, 5]} intensity={0.2} />
+      <CameraControls />
+      <PerfMonitor />
 
-      <Stars radius={150} depth={80} count={6000} factor={5} saturation={0} fade speed={0} />
+      <color attach="background" args={["#0a1838"]} />
+      <fog attach="fog" args={["#0a1838", 220, 1100]} />
+      <ambientLight intensity={0.04} />
 
-      <PlaceholderBuilding />
+      <Stars radius={1200} depth={400} count={8000} factor={20} saturation={0} fade speed={0} />
+
+      <Moon />
+      <Ground />
+      <City masterSeed={masterSeed} />
+      <Streetlights masterSeed={masterSeed} />
     </Canvas>
   );
 }

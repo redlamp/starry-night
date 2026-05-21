@@ -45,9 +45,9 @@ The city as a place where people live, not a spectacle. Closer to Stalenhag and 
 
 ### Visual references
 
+- **Streets of Rage (Sega Genesis, 1991) — primary direct anchor for v1.** Tile-able skyline backdrop. Three-layer depth (foreground silhouette / mid teal-glowing towers / distant back row), deep navy sky (not pure black), warm yellow/amber windows, streetlights and road dashes at base. See `wiki/research/streets-of-rage-intro.md` and `wiki/notes/decision-streets-of-rage-direction.md`.
 - **PS2-era low poly**: Shadow of the Colossus, ICO, Silent Hill 2, Jet Set Radio. Polygon limits as aesthetic choice, not technical constraint
 - **Ghost in the Shell (1995)**: establishing montages, aspect-to-aspect sequencing per Scott McCloud's "Understanding Comics," world beyond the story
-- **16-bit console era city skylines**: Streets of Rage (original anchor), lower skyline, working-class density, stylized silhouettes
 - **Edward Hopper and Simon Stalenhag**: flat planes of color, hard light boundaries, "Nighthawks" lighting psychology (most windows dark, a few warm pockets where life is happening), implied human presence, atmosphere as storytelling
 - **Berkeley Systems After Dark "Starry Night" (original Macintosh screensaver)**: the source. Small city silhouette, vast sky, twinkling stars, occasional shooting star. The proportion of city to sky is the proportion we want to honor
 
