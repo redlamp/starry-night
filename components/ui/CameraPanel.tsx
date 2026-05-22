@@ -80,9 +80,15 @@ export function CameraPanel() {
 
   if (hidden) {
     return (
-      <div className="pointer-events-auto absolute right-3 top-3 rounded bg-black/60 px-2 py-1 text-xs text-white/60 backdrop-blur">
-        press H to show camera panel
-      </div>
+      <button
+        onClick={() => setHidden(false)}
+        className="pointer-events-auto absolute right-3 top-3 flex h-11 min-w-11 items-center gap-2 rounded-full bg-black/70 px-4 text-xs font-medium text-white/85 backdrop-blur active:bg-black/85"
+        title="Show camera panel (H)"
+        aria-label="Show camera panel"
+      >
+        <span aria-hidden="true" className="text-base leading-none">⚙</span>
+        <span>panel</span>
+      </button>
     );
   }
 
@@ -133,8 +139,9 @@ export function CameraPanel() {
           </button>
           <button
             onClick={() => setHidden(true)}
-            className="rounded bg-white/10 px-2 py-0.5 hover:bg-white/20"
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-base leading-none hover:bg-white/20 active:bg-white/30"
             title="Hide (H)"
+            aria-label="Hide camera panel"
           >
             ×
           </button>
