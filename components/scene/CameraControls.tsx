@@ -72,6 +72,27 @@ export function CameraControls() {
   const tween = useRef<TweenInternal | null>(null);
   const tweenRequest = useSceneStore((s) => s.cameraTweenRequest);
   const clearCameraTweenRequest = useSceneStore((s) => s.clearCameraTweenRequest);
+  const orbit = useSceneStore((s) => s.orbit);
+  const orbitStart = useRef(performance.now());
+
+  useEffect(() => {
+    if (mode === "orbit") orbitStart.current = performance.now();
+  }, [mode]);
+
+  const prevMode = useRef(mode);
+  useEffect(() => {
+    if (prevMode.current === "orbit" && mode !== "orbit") {
+      captureCurrentPoseAsIntent();
+    }
+    if (prevMode.current === "fly" && mode !== "fly") {
+      if (typeof document !== "undefined" && document.pointerLockElement) {
+        document.exitPointerLock();
+      }
+    }
+    prevMode.current = mode;
+    // captureCurrentPoseAsIntent is stable enough — listed deps would create churn.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, camera]);
 
   useEffect(() => {
     if (mode !== "still") return;
@@ -109,7 +130,7 @@ export function CameraControls() {
     clearCameraTweenRequest();
   }, [tweenRequest, camera, clearCameraTweenRequest]);
 
-  const exitFly = () => {
+  const captureCurrentPoseAsIntent = () => {
     const fwd = new THREE.Vector3();
     camera.getWorldDirection(fwd);
     const target = new THREE.Vector3().copy(camera.position).addScaledVector(fwd, 10);
@@ -120,10 +141,19 @@ export function CameraControls() {
       fov: camera.fov,
       orient: "lookAt",
     });
+  };
+
+  const exitFly = () => {
+    captureCurrentPoseAsIntent();
     setCameraMode("still");
     if (typeof document !== "undefined" && document.pointerLockElement) {
       document.exitPointerLock();
     }
+  };
+
+  const exitOrbit = () => {
+    captureCurrentPoseAsIntent();
+    setCameraMode("still");
   };
 
   useEffect(() => {
@@ -165,6 +195,18 @@ export function CameraControls() {
         rotation: [camera.rotation.x, camera.rotation.y, camera.rotation.z],
         fov: camera.fov,
       });
+    }
+
+    // Orbit mode — autonomous revolution around configured centre.
+    if (mode === "orbit") {
+      const t = (now - orbitStart.current) / 1000;
+      const startRad = (orbit.startAngleDeg * Math.PI) / 180;
+      const angle = startRad + (t / Math.max(1, orbit.periodSec)) * Math.PI * 2;
+      const px = orbit.centerX + Math.sin(angle) * orbit.radius;
+      const pz = orbit.centerZ + Math.cos(angle) * orbit.radius;
+      camera.position.set(px, orbit.cameraY, pz);
+      camera.lookAt(orbit.centerX, orbit.lookAtY, orbit.centerZ);
+      return;
     }
 
     // Tween (still mode only)

@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "capture": "tsx scripts/capture.ts"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.7",
@@ -29,10 +30,12 @@
     "@types/three": "^0.184.1",
     "eslint": "^10.4.0",
     "eslint-config-next": "^16.2.6",
+    "playwright": "^1.60.0",
     "postcss": "^8.5.15",
     "prettier": "^3.8.3",
     "prettier-plugin-tailwindcss": "^0.8.0",
     "tailwindcss": "^4.3.0",
+    "tsx": "^4.22.3",
     "typescript": "^6.0.3"
   }
 }
