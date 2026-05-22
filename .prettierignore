@@ -1,0 +1,9 @@
+node_modules
+.next
+out
+build
+dist
+.vercel
+bun.lockb
+.remember
+samples

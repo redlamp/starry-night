@@ -44,8 +44,9 @@ Thumbs.db
 # Test coverage
 coverage/
 
-# Captured samples (gitignored by default — curated subset committed separately)
-/samples/
+# Captured samples — raw seed captures gitignored, curated favourites kept
+/samples/*
+!/samples/curated/
 
 # Misc
 *.tsbuildinfo
