@@ -2,7 +2,7 @@ import { create } from "zustand";
 
 export type LightingMode = "classic" | "modern";
 export type QualityTier = "low" | "med" | "high" | "ultra";
-export type CameraMode = "still" | "fly";
+export type CameraMode = "still" | "fly" | "orbit";
 
 export type Vec3 = [number, number, number];
 
@@ -46,6 +46,26 @@ export const PRESETS: { id: string; label: string; intent: CameraIntent }[] = [
 
 export type TweenRequest = { to: CameraIntent; durationMs: number };
 
+export type OrbitConfig = {
+  centerX: number;
+  centerZ: number;
+  lookAtY: number; // absolute Y the camera aims at
+  cameraY: number; // absolute Y of the camera itself (independent of lookAtY)
+  radius: number;
+  periodSec: number; // seconds per full revolution
+  startAngleDeg: number; // starting angle around the circle
+};
+
+const DEFAULT_ORBIT: OrbitConfig = {
+  centerX: 0,
+  centerZ: -120,
+  lookAtY: 260,
+  cameraY: 2,
+  radius: 750,
+  periodSec: 500,
+  startAngleDeg: 180,
+};
+
 export type Perf = {
   fps: number;
   triangles: number;
@@ -59,10 +79,14 @@ type SceneState = {
   lightingMode: LightingMode;
   qualityTier: QualityTier;
   paused: boolean;
+  captureMode: boolean;
+  setCaptureMode: (captureMode: boolean) => void;
   cameraMode: CameraMode;
   cameraIntent: CameraIntent;
   cameraLive: CameraLive;
   cameraTweenRequest: TweenRequest | null;
+  orbit: OrbitConfig;
+  setOrbit: (patch: Partial<OrbitConfig>) => void;
   perf: Perf;
   setPerf: (perf: Perf) => void;
   setSeed: (seed: string) => void;
@@ -83,6 +107,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   lightingMode: "classic",
   qualityTier: "high",
   paused: false,
+  captureMode: false,
+  setCaptureMode: (captureMode) => set({ captureMode }),
   cameraMode: "still",
   cameraIntent: DEFAULT_INTENT,
   cameraLive: {
@@ -91,6 +117,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     fov: DEFAULT_INTENT.fov,
   },
   cameraTweenRequest: null,
+  orbit: DEFAULT_ORBIT,
+  setOrbit: (patch) => set((s) => ({ orbit: { ...s.orbit, ...patch } })),
   perf: { fps: 0, triangles: 0, calls: 0, geometries: 0, textures: 0 },
   setPerf: (perf) => set({ perf }),
   setSeed: (masterSeed) => set({ masterSeed }),

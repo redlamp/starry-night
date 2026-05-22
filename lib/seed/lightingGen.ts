@@ -10,17 +10,21 @@ type LightingProfile = {
   tvFlickerRatio: number;
 };
 
+// Per-building mood — adds intra-archetype variety so adjacent same-archetype
+// neighbours feel like different inhabitants.
+type Mood = "warm" | "cool" | "sparse" | "blazing" | "neutral";
+
 function profileFor(arch: Archetype, layer: Layer): LightingProfile {
   const base = (() => {
     switch (arch) {
       case "residential-tower":
-        return { litRatio: 0.5, brightRatio: 0.15, officeRatio: 0.0, tvFlickerRatio: 0.05 };
+        return { litRatio: 0.5, brightRatio: 0.15, officeRatio: 0.04, tvFlickerRatio: 0.1 };
       case "narrow-tower":
-        return { litRatio: 0.55, brightRatio: 0.18, officeRatio: 0.05, tvFlickerRatio: 0.05 };
+        return { litRatio: 0.55, brightRatio: 0.18, officeRatio: 0.08, tvFlickerRatio: 0.1 };
       case "mid-rise":
-        return { litRatio: 0.46, brightRatio: 0.12, officeRatio: 0.0, tvFlickerRatio: 0.04 };
+        return { litRatio: 0.46, brightRatio: 0.12, officeRatio: 0.03, tvFlickerRatio: 0.08 };
       case "low-rise":
-        return { litRatio: 0.52, brightRatio: 0.1, officeRatio: 0.0, tvFlickerRatio: 0.03 };
+        return { litRatio: 0.52, brightRatio: 0.1, officeRatio: 0.02, tvFlickerRatio: 0.06 };
       case "warehouse":
         return { litRatio: 0.18, brightRatio: 0.06, officeRatio: 0.5, tvFlickerRatio: 0 };
       case "office-block":
@@ -34,6 +38,74 @@ function profileFor(arch: Archetype, layer: Layer): LightingProfile {
   return base;
 }
 
+function pickMood(rng: () => number, arch: Archetype): Mood {
+  const residential =
+    arch === "residential-tower" ||
+    arch === "narrow-tower" ||
+    arch === "mid-rise" ||
+    arch === "low-rise";
+  const officeStyle = arch === "office-block" || arch === "spire" || arch === "warehouse";
+  const r = rng();
+
+  // Wildcard mood — 10% chance regardless of archetype
+  if (r < 0.1) {
+    const wild = rng();
+    if (wild < 0.25) return "warm";
+    if (wild < 0.5) return "cool";
+    if (wild < 0.75) return "sparse";
+    return "blazing";
+  }
+
+  if (residential) {
+    if (r < 0.5) return "warm";
+    if (r < 0.7) return "neutral";
+    if (r < 0.88) return "blazing";
+    return "sparse";
+  }
+  if (officeStyle) {
+    if (r < 0.35) return "sparse";
+    if (r < 0.8) return "cool";
+    if (r < 0.93) return "neutral";
+    return "blazing";
+  }
+  return "neutral";
+}
+
+function applyMood(p: LightingProfile, mood: Mood): LightingProfile {
+  switch (mood) {
+    case "warm":
+      return {
+        litRatio: Math.min(0.85, p.litRatio * 1.1),
+        brightRatio: p.brightRatio * 1.2,
+        officeRatio: 0,
+        tvFlickerRatio: Math.min(0.15, p.tvFlickerRatio + 0.04),
+      };
+    case "cool":
+      return {
+        litRatio: Math.min(0.85, p.litRatio * 1.1),
+        brightRatio: p.brightRatio * 0.6,
+        officeRatio: Math.max(0.55, p.officeRatio + 0.4),
+        tvFlickerRatio: 0,
+      };
+    case "sparse":
+      return {
+        litRatio: p.litRatio * 0.3,
+        brightRatio: p.brightRatio * 0.4,
+        officeRatio: p.officeRatio,
+        tvFlickerRatio: p.tvFlickerRatio * 0.5,
+      };
+    case "blazing":
+      return {
+        litRatio: Math.min(0.92, p.litRatio * 1.5),
+        brightRatio: Math.min(0.4, p.brightRatio * 2.2),
+        officeRatio: p.officeRatio,
+        tvFlickerRatio: p.tvFlickerRatio,
+      };
+    case "neutral":
+      return p;
+  }
+}
+
 function pickKelvin(rng: () => number, profile: LightingProfile): {
   color: THREE.Color;
   intensity: number;
@@ -43,9 +115,13 @@ function pickKelvin(rng: () => number, profile: LightingProfile): {
   if (roll < profile.tvFlickerRatio) {
     return { color: kelvinToColor(6500), intensity: 0.55 };
   }
-  // Office cool fluorescent
+  // Office cool fluorescent — visibly blue-white now
   if (roll < profile.tvFlickerRatio + profile.officeRatio) {
-    return { color: lerpKelvin(rng, 4200, 5000), intensity: 0.55 };
+    // Small chance of a brighter "neon" 6800K highlight
+    if (rng() < 0.12) {
+      return { color: lerpKelvin(rng, 6500, 7200), intensity: 0.95 };
+    }
+    return { color: lerpKelvin(rng, 5000, 5800), intensity: 0.7 };
   }
   // Bright warm — like a closer / brighter incandescent
   if (roll < profile.tvFlickerRatio + profile.officeRatio + profile.brightRatio) {
@@ -70,7 +146,9 @@ export function generateWindowTexture(
   building: Building,
 ): WindowDataTexture {
   const rng = seedrandom(`${masterSeed}::lighting::${building.id}::${building.windowSeed}`);
-  const profile = profileFor(building.archetype, building.layer);
+  const baseProfile = profileFor(building.archetype, building.layer);
+  const mood = pickMood(rng, building.archetype);
+  const profile = applyMood(baseProfile, mood);
 
   const cols = building.colsPerFace;
   const rows = building.floors;

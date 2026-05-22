@@ -61,9 +61,12 @@ export function CameraPanel() {
     resetCamera,
     snapIntentToLive,
     tweenCameraTo,
+    orbit,
+    setOrbit,
   } = useSceneStore();
 
   const [hidden, setHidden] = useState(false);
+  const captureMode = useSceneStore((s) => s.captureMode);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -72,6 +75,8 @@ export function CameraPanel() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  if (captureMode) return null;
 
   if (hidden) {
     return (
@@ -82,6 +87,8 @@ export function CameraPanel() {
   }
 
   const flying = cameraMode === "fly";
+  const orbiting = cameraMode === "orbit";
+  const locked = flying || orbiting;
   const livePos = cameraLive.position;
   const liveRotDeg: Vec3 = [
     cameraLive.rotation[0] * RAD2DEG,
@@ -111,6 +118,14 @@ export function CameraPanel() {
             {flying ? "Stop fly (F)" : "Fly (F)"}
           </button>
           <button
+            onClick={() => setCameraMode(orbiting ? "still" : "orbit")}
+            className={`rounded px-2 py-0.5 text-xs ${
+              orbiting ? "bg-sky-400/80 text-black" : "bg-white/10 text-white hover:bg-white/20"
+            }`}
+          >
+            {orbiting ? "Stop orbit" : "Orbit"}
+          </button>
+          <button
             onClick={() => resetCamera()}
             className="rounded bg-white/10 px-2 py-0.5 hover:bg-white/20"
           >
@@ -131,6 +146,11 @@ export function CameraPanel() {
           Click scene to lock · WASD move · Space up · C down · Q/E roll · Shift sprint · Esc release
         </div>
       ) : null}
+      {orbiting ? (
+        <div className="text-sky-300/80">
+          Orbiting downtown · adjust radius / height / period below · Stop to freeze pose
+        </div>
+      ) : null}
 
       <div className="flex items-center gap-1">
         <span className="w-16 shrink-0 text-[10px] uppercase tracking-wide text-white/40">
@@ -139,7 +159,7 @@ export function CameraPanel() {
         {PRESETS.map((p) => (
           <button
             key={p.id}
-            disabled={flying}
+            disabled={locked}
             onClick={() => tweenCameraTo(p.intent, 900)}
             className="rounded bg-white/10 px-2 py-0.5 text-xs hover:bg-white/20 disabled:opacity-50"
           >
@@ -151,7 +171,7 @@ export function CameraPanel() {
       <Vec3Input
         label="position"
         value={cameraIntent.position}
-        disabled={flying}
+        disabled={locked}
         onChange={(position) => setCameraIntent({ position })}
       />
 
@@ -161,7 +181,7 @@ export function CameraPanel() {
           {(["lookAt", "rotation"] as const).map((o) => (
             <button
               key={o}
-              disabled={flying}
+              disabled={locked}
               onClick={() => setCameraIntent({ orient: o })}
               className={`rounded px-2 py-0.5 text-[10px] ${
                 cameraIntent.orient === o
@@ -178,7 +198,7 @@ export function CameraPanel() {
       <Vec3Input
         label="lookAt"
         value={cameraIntent.lookAt}
-        disabled={flying || cameraIntent.orient !== "lookAt"}
+        disabled={locked || cameraIntent.orient !== "lookAt"}
         onChange={(lookAt) => setCameraIntent({ lookAt, orient: "lookAt" })}
       />
 
@@ -187,7 +207,7 @@ export function CameraPanel() {
         hint="degrees"
         step={1}
         value={intentRotDeg}
-        disabled={flying || cameraIntent.orient !== "rotation"}
+        disabled={locked || cameraIntent.orient !== "rotation"}
         onChange={(rotDeg) =>
           setCameraIntent({
             rotation: [rotDeg[0] * DEG2RAD, rotDeg[1] * DEG2RAD, rotDeg[2] * DEG2RAD],
@@ -196,6 +216,44 @@ export function CameraPanel() {
         }
       />
 
+      {orbiting ? (
+        <div className="flex flex-col gap-1 rounded border border-sky-400/30 bg-sky-400/5 p-2">
+          <div className="text-[10px] uppercase tracking-wide text-sky-300/80">orbit</div>
+          <OrbitSlider
+            label="period (s)"
+            value={orbit.periodSec}
+            min={20}
+            max={900}
+            step={5}
+            onChange={(periodSec) => setOrbit({ periodSec })}
+          />
+          <OrbitSlider
+            label="radius"
+            value={orbit.radius}
+            min={120}
+            max={900}
+            step={5}
+            onChange={(radius) => setOrbit({ radius })}
+          />
+          <OrbitSlider
+            label="camera y"
+            value={orbit.cameraY}
+            min={1}
+            max={400}
+            step={1}
+            onChange={(cameraY) => setOrbit({ cameraY })}
+          />
+          <OrbitSlider
+            label="lookAt y"
+            value={orbit.lookAtY}
+            min={0}
+            max={500}
+            step={1}
+            onChange={(lookAtY) => setOrbit({ lookAtY })}
+          />
+        </div>
+      ) : null}
+
       <div className="flex items-center gap-2">
         <span className="w-16 shrink-0 text-white/60">fov</span>
         <input
@@ -203,7 +261,7 @@ export function CameraPanel() {
           min={15}
           max={90}
           step={1}
-          disabled={flying}
+          disabled={locked}
           value={cameraIntent.fov}
           onChange={(e) => setCameraIntent({ fov: parseFloat(e.target.value) })}
           className="flex-1"
@@ -211,7 +269,7 @@ export function CameraPanel() {
         <input
           type="number"
           step={1}
-          disabled={flying}
+          disabled={locked}
           value={cameraIntent.fov}
           onChange={(e) => setCameraIntent({ fov: parseFloat(e.target.value) || 38 })}
           className="w-14 rounded border border-white/15 bg-black/50 px-1.5 py-0.5 text-white tabular-nums disabled:opacity-50"
@@ -242,6 +300,44 @@ export function CameraPanel() {
       <PerfReadout />
 
       <div className="text-[10px] text-white/40">H to hide · F to toggle fly</div>
+    </div>
+  );
+}
+
+function OrbitSlider({
+  label,
+  value,
+  min,
+  max,
+  step,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <div className="flex items-center gap-2 text-xs">
+      <span className="w-14 shrink-0 text-white/70">{label}</span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(parseFloat(e.target.value))}
+        className="flex-1"
+      />
+      <input
+        type="number"
+        step={step}
+        value={value}
+        onChange={(e) => onChange(parseFloat(e.target.value) || min)}
+        className="w-16 rounded border border-white/15 bg-black/50 px-1.5 py-0.5 text-white tabular-nums"
+      />
     </div>
   );
 }

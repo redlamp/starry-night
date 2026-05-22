@@ -13,3 +13,7 @@ Map of Content for external references that shape direction.
 ## Urban planning references
 
 - [[city-planning-references]] — real-world city plan patterns (multi-grid, diagonal arterials, organic cores, geo distortion) + GIS/OSM data options
+
+## Colour references
+
+- [[color-usage-night-skyline]] — kelvin distribution per source kind, what real night-skyline windows actually look like, where current palette skews wrong, recalibration plan

@@ -259,6 +259,39 @@ const DOWNTOWN_CX = 0;
 const DOWNTOWN_CZ = -120;
 const DOWNTOWN_BOOST = 1.7;
 
+// Diagonal arterials — wide streets cutting across district grids at angles.
+// Buildings whose centre falls within an arterial corridor get skipped.
+type Arterial = { x1: number; z1: number; x2: number; z2: number; halfWidth: number };
+const ARTERIALS: Arterial[] = [
+  // NW → SE sweep, runs through downtown + east residential
+  { x1: -480, z1: 220, x2: 480, z2: -460, halfWidth: 11 },
+  // SW → NE sweep, runs through industrial + downtown + east
+  { x1: -300, z1: -500, x2: 420, z2: 260, halfWidth: 9 },
+];
+
+function pointArterialDistance(x: number, z: number, a: Arterial): number {
+  const dx = a.x2 - a.x1;
+  const dz = a.z2 - a.z1;
+  const lenSq = dx * dx + dz * dz;
+  if (lenSq === 0) return Math.hypot(x - a.x1, z - a.z1);
+  let t = ((x - a.x1) * dx + (z - a.z1) * dz) / lenSq;
+  t = Math.max(0, Math.min(1, t));
+  const projX = a.x1 + t * dx;
+  const projZ = a.z1 + t * dz;
+  return Math.hypot(x - projX, z - projZ);
+}
+
+function inAnyArterial(x: number, z: number): boolean {
+  for (const a of ARTERIALS) {
+    if (pointArterialDistance(x, z, a) < a.halfWidth) return true;
+  }
+  return false;
+}
+
+export function getArterials(): Arterial[] {
+  return ARTERIALS;
+}
+
 function downtownBias(x: number, z: number): number {
   const dx = (x - DOWNTOWN_CX) / DOWNTOWN_RX;
   const dz = (z - DOWNTOWN_CZ) / DOWNTOWN_RZ;
@@ -354,6 +387,12 @@ function fillStripe(
     const worldX = spec.centerX + lxCenter * cosR - lzWithJitter * sinR;
     const worldZ = spec.centerZ + lxCenter * sinR + lzWithJitter * cosR;
 
+    // Diagonal arterials override district grid — skip buildings caught in their corridor.
+    if (inAnyArterial(worldX, worldZ)) {
+      lx += width + 0.5 + rng() * 1.5;
+      continue;
+    }
+
     buildings.push({
       id: id++,
       x: worldX,
@@ -411,15 +450,37 @@ export function generateStreetlights(masterSeed: string): Streetlight[] {
           if (rng() < 0.22) continue;
           const ox = lx + dx + (rng() - 0.5) * 1.5;
           const oz = lz + dz + (rng() - 0.5) * 1.5;
-          lights.push({
-            x: spec.centerX + ox * cosR - oz * sinR,
-            y: lightY + (rng() - 0.5) * 0.4,
-            z: spec.centerZ + ox * sinR + oz * cosR,
-          });
+          const wx = spec.centerX + ox * cosR - oz * sinR;
+          const wz = spec.centerZ + ox * sinR + oz * cosR;
+          if (inAnyArterial(wx, wz)) continue;
+          lights.push({ x: wx, y: lightY + (rng() - 0.5) * 0.4, z: wz });
         }
       }
     }
   }
+
+  // Arterial streetlights — pairs along both sides of each diagonal road.
+  const arterialRng = seedrandom(`${masterSeed}::streetlights::arterials`);
+  for (const a of ARTERIALS) {
+    const dx = a.x2 - a.x1;
+    const dz = a.z2 - a.z1;
+    const len = Math.hypot(dx, dz);
+    if (len === 0) continue;
+    const ux = dx / len;
+    const uz = dz / len;
+    const nx = -uz;
+    const nz = ux;
+    const spacing = 22;
+    const offset = a.halfWidth + 1.5;
+    for (let s = spacing; s < len; s += spacing) {
+      for (const side of [-1, 1] as const) {
+        const cx = a.x1 + ux * s + nx * offset * side;
+        const cz = a.z1 + uz * s + nz * offset * side;
+        lights.push({ x: cx, y: 7 + (arterialRng() - 0.5) * 0.4, z: cz });
+      }
+    }
+  }
+
   return lights;
 }
 
