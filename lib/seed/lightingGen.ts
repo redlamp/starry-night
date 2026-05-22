@@ -1,36 +1,85 @@
 import seedrandom from "seedrandom";
 import * as THREE from "three";
 import { kelvinToColor, lerpKelvin } from "@/lib/color/kelvin";
+import { SCENE_WB_GAIN } from "@/lib/color/whiteBalance";
 import type { Archetype, Building, Layer } from "./cityGen";
 
 type LightingProfile = {
   litRatio: number;
   brightRatio: number;
   officeRatio: number;
+  neutralRatio: number;
   tvFlickerRatio: number;
 };
 
 // Per-building mood — adds intra-archetype variety so adjacent same-archetype
 // neighbours feel like different inhabitants.
-type Mood = "warm" | "cool" | "sparse" | "blazing" | "neutral";
+type Mood = "warm" | "cool" | "sparse" | "blazing" | "neutral" | "neutral-white";
+
+// coolPop=0.4 baseline bias toward office/neutral sources in residential moods.
+// Chosen in /palette prototype 2026-05-22.
+const COOL_POP_EXTRA_OFFICE = 0.08;
+const COOL_POP_EXTRA_NEUTRAL = 0.06;
 
 function profileFor(arch: Archetype, layer: Layer): LightingProfile {
   const base = (() => {
     switch (arch) {
       case "residential-tower":
-        return { litRatio: 0.5, brightRatio: 0.15, officeRatio: 0.04, tvFlickerRatio: 0.1 };
+        return {
+          litRatio: 0.5,
+          brightRatio: 0.15,
+          officeRatio: 0.04,
+          neutralRatio: 0,
+          tvFlickerRatio: 0.1,
+        };
       case "narrow-tower":
-        return { litRatio: 0.55, brightRatio: 0.18, officeRatio: 0.08, tvFlickerRatio: 0.1 };
+        return {
+          litRatio: 0.55,
+          brightRatio: 0.18,
+          officeRatio: 0.08,
+          neutralRatio: 0,
+          tvFlickerRatio: 0.1,
+        };
       case "mid-rise":
-        return { litRatio: 0.46, brightRatio: 0.12, officeRatio: 0.03, tvFlickerRatio: 0.08 };
+        return {
+          litRatio: 0.46,
+          brightRatio: 0.12,
+          officeRatio: 0.03,
+          neutralRatio: 0,
+          tvFlickerRatio: 0.08,
+        };
       case "low-rise":
-        return { litRatio: 0.52, brightRatio: 0.1, officeRatio: 0.02, tvFlickerRatio: 0.06 };
+        return {
+          litRatio: 0.52,
+          brightRatio: 0.1,
+          officeRatio: 0.02,
+          neutralRatio: 0,
+          tvFlickerRatio: 0.06,
+        };
       case "warehouse":
-        return { litRatio: 0.18, brightRatio: 0.06, officeRatio: 0.5, tvFlickerRatio: 0 };
+        return {
+          litRatio: 0.18,
+          brightRatio: 0.06,
+          officeRatio: 0.5,
+          neutralRatio: 0,
+          tvFlickerRatio: 0,
+        };
       case "office-block":
-        return { litRatio: 0.32, brightRatio: 0.05, officeRatio: 0.4, tvFlickerRatio: 0 };
+        return {
+          litRatio: 0.32,
+          brightRatio: 0.05,
+          officeRatio: 0.4,
+          neutralRatio: 0,
+          tvFlickerRatio: 0,
+        };
       case "spire":
-        return { litRatio: 0.3, brightRatio: 0.12, officeRatio: 0.15, tvFlickerRatio: 0 };
+        return {
+          litRatio: 0.3,
+          brightRatio: 0.12,
+          officeRatio: 0.15,
+          neutralRatio: 0,
+          tvFlickerRatio: 0,
+        };
     }
   })();
   if (layer === "front") return { ...base, litRatio: base.litRatio * 0.75 };
@@ -50,16 +99,18 @@ function pickMood(rng: () => number, arch: Archetype): Mood {
   // Wildcard mood — 10% chance regardless of archetype
   if (r < 0.1) {
     const wild = rng();
-    if (wild < 0.25) return "warm";
-    if (wild < 0.5) return "cool";
-    if (wild < 0.75) return "sparse";
-    return "blazing";
+    if (wild < 0.2) return "warm";
+    if (wild < 0.4) return "cool";
+    if (wild < 0.6) return "sparse";
+    if (wild < 0.8) return "blazing";
+    return "neutral-white";
   }
 
   if (residential) {
-    if (r < 0.5) return "warm";
-    if (r < 0.7) return "neutral";
-    if (r < 0.88) return "blazing";
+    if (r < 0.42) return "warm";
+    if (r < 0.62) return "neutral-white";
+    if (r < 0.75) return "neutral";
+    if (r < 0.9) return "blazing";
     return "sparse";
   }
   if (officeStyle) {
@@ -77,7 +128,8 @@ function applyMood(p: LightingProfile, mood: Mood): LightingProfile {
       return {
         litRatio: Math.min(0.85, p.litRatio * 1.1),
         brightRatio: p.brightRatio * 1.2,
-        officeRatio: 0,
+        officeRatio: 0.07 + COOL_POP_EXTRA_OFFICE,
+        neutralRatio: 0.05 + COOL_POP_EXTRA_NEUTRAL,
         tvFlickerRatio: Math.min(0.15, p.tvFlickerRatio + 0.04),
       };
     case "cool":
@@ -85,6 +137,7 @@ function applyMood(p: LightingProfile, mood: Mood): LightingProfile {
         litRatio: Math.min(0.85, p.litRatio * 1.1),
         brightRatio: p.brightRatio * 0.6,
         officeRatio: Math.max(0.55, p.officeRatio + 0.4),
+        neutralRatio: 0.1,
         tvFlickerRatio: 0,
       };
     case "sparse":
@@ -92,6 +145,7 @@ function applyMood(p: LightingProfile, mood: Mood): LightingProfile {
         litRatio: p.litRatio * 0.3,
         brightRatio: p.brightRatio * 0.4,
         officeRatio: p.officeRatio,
+        neutralRatio: p.neutralRatio,
         tvFlickerRatio: p.tvFlickerRatio * 0.5,
       };
     case "blazing":
@@ -99,40 +153,64 @@ function applyMood(p: LightingProfile, mood: Mood): LightingProfile {
         litRatio: Math.min(0.92, p.litRatio * 1.5),
         brightRatio: Math.min(0.4, p.brightRatio * 2.2),
         officeRatio: p.officeRatio,
+        neutralRatio: p.neutralRatio,
+        tvFlickerRatio: p.tvFlickerRatio,
+      };
+    case "neutral-white":
+      return {
+        litRatio: Math.min(0.82, p.litRatio * 1.05),
+        brightRatio: p.brightRatio * 0.7,
+        officeRatio: p.officeRatio * 0.5 + COOL_POP_EXTRA_OFFICE,
+        neutralRatio: 0.7 + COOL_POP_EXTRA_NEUTRAL,
         tvFlickerRatio: p.tvFlickerRatio,
       };
     case "neutral":
-      return p;
+      return {
+        ...p,
+        officeRatio: p.officeRatio + COOL_POP_EXTRA_OFFICE,
+        neutralRatio: p.neutralRatio + COOL_POP_EXTRA_NEUTRAL,
+      };
   }
 }
 
 function pickKelvin(rng: () => number, profile: LightingProfile): {
   color: THREE.Color;
   intensity: number;
+  isTv: boolean;
 } {
   const roll = rng();
   // TV flicker — cool blue-white, dim
   if (roll < profile.tvFlickerRatio) {
-    return { color: kelvinToColor(6500), intensity: 0.55 };
+    return { color: kelvinToColor(6500), intensity: 0.55, isTv: true };
   }
   // Office cool fluorescent — visibly blue-white now
   if (roll < profile.tvFlickerRatio + profile.officeRatio) {
-    // Small chance of a brighter "neon" 6800K highlight
+    // Small chance of a brighter "neon" highlight
     if (rng() < 0.12) {
-      return { color: lerpKelvin(rng, 6500, 7200), intensity: 0.95 };
+      return { color: lerpKelvin(rng, 6500, 7200), intensity: 0.95, isTv: false };
     }
-    return { color: lerpKelvin(rng, 5000, 5800), intensity: 0.7 };
+    return { color: lerpKelvin(rng, 5000, 5800), intensity: 0.7, isTv: false };
   }
-  // Bright warm — like a closer / brighter incandescent
-  if (roll < profile.tvFlickerRatio + profile.officeRatio + profile.brightRatio) {
-    return { color: lerpKelvin(rng, 2800, 3200), intensity: 0.9 };
+  // Neutral white residential — modern apartment LED bridge between warm + cool
+  if (roll < profile.tvFlickerRatio + profile.officeRatio + profile.neutralRatio) {
+    return { color: lerpKelvin(rng, 3300, 3800), intensity: 0.55, isTv: false };
   }
-  // Dim warm — most windows. Old bulbs, lamp glow.
+  // Bright warm — closer / brighter incandescent (range lifted from 2800-3200K)
+  if (
+    roll <
+    profile.tvFlickerRatio +
+      profile.officeRatio +
+      profile.neutralRatio +
+      profile.brightRatio
+  ) {
+    return { color: lerpKelvin(rng, 3300, 3700), intensity: 0.75, isTv: false };
+  }
+  // Dim warm — old bulbs, lamp glow (range lifted from 1800-2200K)
   if (rng() < 0.28) {
-    return { color: lerpKelvin(rng, 1800, 2200), intensity: 0.3 };
+    return { color: lerpKelvin(rng, 2700, 3100), intensity: 0.4, isTv: false };
   }
-  // Standard warm — common residential
-  return { color: lerpKelvin(rng, 2300, 2700), intensity: 0.55 };
+  // Standard warm — common residential (range lifted from 2300-2700K)
+  return { color: lerpKelvin(rng, 3200, 3600), intensity: 0.55, isTv: false };
 }
 
 export type WindowDataTexture = {
@@ -165,11 +243,21 @@ export function generateWindowTexture(
         data[idx + 3] = 0;
         continue;
       }
-      const { color, intensity } = pickKelvin(rng, profile);
-      data[idx + 0] = Math.floor(color.r * intensity * 255);
-      data[idx + 1] = Math.floor(color.g * intensity * 255);
-      data[idx + 2] = Math.floor(color.b * intensity * 255);
-      data[idx + 3] = 255;
+      const { color, intensity, isTv } = pickKelvin(rng, profile);
+      data[idx + 0] = Math.min(
+        255,
+        Math.floor(color.r * intensity * SCENE_WB_GAIN.x * 255),
+      );
+      data[idx + 1] = Math.min(
+        255,
+        Math.floor(color.g * intensity * SCENE_WB_GAIN.y * 255),
+      );
+      data[idx + 2] = Math.min(
+        255,
+        Math.floor(color.b * intensity * SCENE_WB_GAIN.z * 255),
+      );
+      // alpha encodes TV flag: 128 = TV (flickers), 255 = steady lit, 0 = unlit
+      data[idx + 3] = isTv ? 128 : 255;
     }
   }
 
