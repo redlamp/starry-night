@@ -4,7 +4,7 @@ import { Canvas } from "@react-three/fiber";
 import { Stars } from "@react-three/drei";
 import * as THREE from "three";
 import { useSceneStore } from "@/lib/state/sceneStore";
-import { City } from "./City";
+import { InstancedCity } from "./InstancedCity";
 import { Moon } from "./Moon";
 import { Ground } from "./Ground";
 import { Streetlights } from "./Streetlights";
@@ -38,7 +38,7 @@ export function Scene() {
 
       <Moon />
       <Ground />
-      <City masterSeed={masterSeed} />
+      <InstancedCity masterSeed={masterSeed} />
       <Streetlights masterSeed={masterSeed} />
     </Canvas>
   );
