@@ -2,7 +2,6 @@
 
 import { useEffect, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
-import { PointerLockControls } from "@react-three/drei";
 import * as THREE from "three";
 import { useSceneStore, type CameraIntent, type Vec3 } from "@/lib/state/sceneStore";
 
@@ -57,8 +56,13 @@ function keyOf(e: KeyboardEvent): KeyName | null {
 
 const ROLL_SPEED = 1.5;
 
+const POINTER_SENSITIVITY = 0.002;
+const _euler = new THREE.Euler(0, 0, 0, "YXZ");
+const HALF_PI = Math.PI / 2;
+
 export function CameraControls() {
   const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
+  const gl = useThree((s) => s.gl);
   const mode = useSceneStore((s) => s.cameraMode);
   const intent = useSceneStore((s) => s.cameraIntent);
   const setCameraLive = useSceneStore((s) => s.setCameraLive);
@@ -246,8 +250,42 @@ export function CameraControls() {
     if (k.e) camera.rotateZ(-ROLL_SPEED * dt);
   });
 
-  if (mode === "fly") {
-    return <PointerLockControls onUnlock={exitFly} />;
-  }
+  // Custom pointer-lock toggle for fly mode.
+  // - First canvas click engages pointer lock + hides cursor (mouse drives yaw/pitch)
+  // - Click again (or Esc) releases the lock + restores the cursor while STAYING in fly mode
+  // - User explicitly exits fly mode via F key or the panel "Stop fly" button
+  useEffect(() => {
+    if (mode !== "fly") return;
+    const dom = gl.domElement;
+
+    const toggleLock = (e: MouseEvent) => {
+      if (e.button !== 0) return;
+      if (document.pointerLockElement === dom) {
+        document.exitPointerLock();
+      } else {
+        // requestPointerLock can reject if called too soon after exit; ignore failure.
+        dom.requestPointerLock?.();
+      }
+    };
+
+    const onMouseMove = (e: MouseEvent) => {
+      if (document.pointerLockElement !== dom) return;
+      _euler.setFromQuaternion(camera.quaternion);
+      _euler.y -= e.movementX * POINTER_SENSITIVITY;
+      _euler.x -= e.movementY * POINTER_SENSITIVITY;
+      _euler.x = Math.max(-HALF_PI + 0.001, Math.min(HALF_PI - 0.001, _euler.x));
+      camera.quaternion.setFromEuler(_euler);
+    };
+
+    dom.addEventListener("mousedown", toggleLock);
+    document.addEventListener("mousemove", onMouseMove);
+
+    return () => {
+      dom.removeEventListener("mousedown", toggleLock);
+      document.removeEventListener("mousemove", onMouseMove);
+      if (document.pointerLockElement === dom) document.exitPointerLock();
+    };
+  }, [mode, gl, camera]);
+
   return null;
 }

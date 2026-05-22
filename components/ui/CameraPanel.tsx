@@ -143,7 +143,7 @@ export function CameraPanel() {
 
       {flying ? (
         <div className="text-white/60">
-          Click scene to lock · WASD move · Space up · C down · Q/E roll · Shift sprint · Esc release
+          Click scene to toggle look · WASD move · Space up · C down · Q/E roll · Shift sprint · F or Stop to exit
         </div>
       ) : null}
       {orbiting ? (
@@ -222,32 +222,32 @@ export function CameraPanel() {
           <OrbitSlider
             label="period (s)"
             value={orbit.periodSec}
-            min={20}
-            max={900}
+            min={5}
+            max={3600}
             step={5}
             onChange={(periodSec) => setOrbit({ periodSec })}
           />
           <OrbitSlider
             label="radius"
             value={orbit.radius}
-            min={120}
-            max={900}
+            min={20}
+            max={5000}
             step={5}
             onChange={(radius) => setOrbit({ radius })}
           />
           <OrbitSlider
             label="camera y"
             value={orbit.cameraY}
-            min={1}
-            max={400}
+            min={-50}
+            max={3000}
             step={1}
             onChange={(cameraY) => setOrbit({ cameraY })}
           />
           <OrbitSlider
             label="lookAt y"
             value={orbit.lookAtY}
-            min={0}
-            max={500}
+            min={-200}
+            max={2000}
             step={1}
             onChange={(lookAtY) => setOrbit({ lookAtY })}
           />
@@ -258,8 +258,8 @@ export function CameraPanel() {
         <span className="w-16 shrink-0 text-white/60">fov</span>
         <input
           type="range"
-          min={15}
-          max={90}
+          min={5}
+          max={150}
           step={1}
           disabled={locked}
           value={cameraIntent.fov}
@@ -293,6 +293,10 @@ export function CameraPanel() {
 
       <hr className="border-white/10" />
 
+      <DebugRow />
+
+      <hr className="border-white/10" />
+
       <SeedRow />
 
       <hr className="border-white/10" />
@@ -300,6 +304,109 @@ export function CameraPanel() {
       <PerfReadout />
 
       <div className="text-[10px] text-white/40">H to hide · F to toggle fly</div>
+    </div>
+  );
+}
+
+function DebugRow() {
+  const moonOpposite = useSceneStore((s) => s.moonOppositeCamera);
+  const setMoonOpposite = useSceneStore((s) => s.setMoonOppositeCamera);
+  const stars = useSceneStore((s) => s.stars);
+  const setStars = useSceneStore((s) => s.setStars);
+  const moon = useSceneStore((s) => s.moon);
+  const setMoon = useSceneStore((s) => s.setMoon);
+
+  return (
+    <div className="flex flex-col gap-1 rounded border border-indigo-400/30 bg-indigo-400/5 p-2">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] uppercase tracking-wide text-indigo-300/80">debug</span>
+        <button
+          onClick={() => setMoonOpposite(!moonOpposite)}
+          className={`rounded px-2 py-0.5 text-xs ${
+            moonOpposite ? "bg-indigo-400/80 text-black" : "bg-white/10 hover:bg-white/20"
+          }`}
+          title="Place moon on the opposite side of the city from the camera"
+        >
+          {moonOpposite ? "Moon opp. cam (on)" : "Moon opp. cam"}
+        </button>
+      </div>
+      <OrbitSlider
+        label="star size"
+        value={stars.factor}
+        min={5}
+        max={500}
+        step={1}
+        onChange={(factor) => setStars({ factor })}
+      />
+      <OrbitSlider
+        label="star radius"
+        value={stars.radius}
+        min={500}
+        max={30000}
+        step={100}
+        onChange={(radius) => setStars({ radius })}
+      />
+      <OrbitSlider
+        label="star depth"
+        value={stars.depth}
+        min={50}
+        max={8000}
+        step={50}
+        onChange={(depth) => setStars({ depth })}
+      />
+      <OrbitSlider
+        label="star count"
+        value={stars.count}
+        min={100}
+        max={30000}
+        step={100}
+        onChange={(count) => setStars({ count })}
+      />
+
+      <OrbitSlider
+        label="moon r"
+        value={moon.horizontalRadius}
+        min={50}
+        max={20000}
+        step={10}
+        onChange={(horizontalRadius) => setMoon({ horizontalRadius })}
+      />
+      <OrbitSlider
+        label="moon h"
+        value={moon.height}
+        min={-500}
+        max={10000}
+        step={10}
+        onChange={(height) => setMoon({ height })}
+      />
+      <OrbitSlider
+        label="moon ang°"
+        value={moon.angleDeg}
+        min={0}
+        max={360}
+        step={1}
+        onChange={(angleDeg) => setMoon({ angleDeg })}
+      />
+
+      <MoonReadout />
+    </div>
+  );
+}
+
+function MoonReadout() {
+  const moon = useSceneStore((s) => s.moonLive);
+  return (
+    <div className="mt-1 grid grid-cols-[5rem_1fr] gap-1 border-t border-indigo-400/15 pt-1 font-mono text-[10px] text-white/70">
+      <div>moon pos</div>
+      <div className="tabular-nums">
+        {fmt(moon.position[0], 0)} {fmt(moon.position[1], 0)} {fmt(moon.position[2], 0)}
+      </div>
+      <div>moon r</div>
+      <div className="tabular-nums">{fmt(moon.horizontalRadius, 0)}</div>
+      <div>moon h</div>
+      <div className="tabular-nums">{fmt(moon.height, 0)}</div>
+      <div>moon ang°</div>
+      <div className="tabular-nums">{fmt(moon.angleDeg, 1)}</div>
     </div>
   );
 }
