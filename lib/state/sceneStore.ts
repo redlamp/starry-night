@@ -59,9 +59,9 @@ export type OrbitConfig = {
 const DEFAULT_ORBIT: OrbitConfig = {
   centerX: 0,
   centerZ: -120,
-  lookAtY: 260,
+  lookAtY: 240,
   cameraY: 2,
-  radius: 750,
+  radius: 650,
   periodSec: 500,
   startAngleDeg: 180,
 };
@@ -109,7 +109,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   paused: false,
   captureMode: false,
   setCaptureMode: (captureMode) => set({ captureMode }),
-  cameraMode: "still",
+  // Note: cameraMode default is "orbit" — see below.
+  cameraMode: "orbit",
   cameraIntent: DEFAULT_INTENT,
   cameraLive: {
     position: DEFAULT_INTENT.position,

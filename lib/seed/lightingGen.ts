@@ -109,30 +109,31 @@ function applyMood(p: LightingProfile, mood: Mood): LightingProfile {
 function pickKelvin(rng: () => number, profile: LightingProfile): {
   color: THREE.Color;
   intensity: number;
+  isTv: boolean;
 } {
   const roll = rng();
   // TV flicker — cool blue-white, dim
   if (roll < profile.tvFlickerRatio) {
-    return { color: kelvinToColor(6500), intensity: 0.55 };
+    return { color: kelvinToColor(6500), intensity: 0.55, isTv: true };
   }
   // Office cool fluorescent — visibly blue-white now
   if (roll < profile.tvFlickerRatio + profile.officeRatio) {
     // Small chance of a brighter "neon" 6800K highlight
     if (rng() < 0.12) {
-      return { color: lerpKelvin(rng, 6500, 7200), intensity: 0.95 };
+      return { color: lerpKelvin(rng, 6500, 7200), intensity: 0.95, isTv: false };
     }
-    return { color: lerpKelvin(rng, 5000, 5800), intensity: 0.7 };
+    return { color: lerpKelvin(rng, 5000, 5800), intensity: 0.7, isTv: false };
   }
   // Bright warm — like a closer / brighter incandescent
   if (roll < profile.tvFlickerRatio + profile.officeRatio + profile.brightRatio) {
-    return { color: lerpKelvin(rng, 2800, 3200), intensity: 0.9 };
+    return { color: lerpKelvin(rng, 2800, 3200), intensity: 0.9, isTv: false };
   }
   // Dim warm — most windows. Old bulbs, lamp glow.
   if (rng() < 0.28) {
-    return { color: lerpKelvin(rng, 1800, 2200), intensity: 0.3 };
+    return { color: lerpKelvin(rng, 1800, 2200), intensity: 0.3, isTv: false };
   }
   // Standard warm — common residential
-  return { color: lerpKelvin(rng, 2300, 2700), intensity: 0.55 };
+  return { color: lerpKelvin(rng, 2300, 2700), intensity: 0.55, isTv: false };
 }
 
 export type WindowDataTexture = {
@@ -165,11 +166,12 @@ export function generateWindowTexture(
         data[idx + 3] = 0;
         continue;
       }
-      const { color, intensity } = pickKelvin(rng, profile);
+      const { color, intensity, isTv } = pickKelvin(rng, profile);
       data[idx + 0] = Math.floor(color.r * intensity * 255);
       data[idx + 1] = Math.floor(color.g * intensity * 255);
       data[idx + 2] = Math.floor(color.b * intensity * 255);
-      data[idx + 3] = 255;
+      // alpha encodes TV flag: 128 = TV (flickers), 255 = steady lit, 0 = unlit
+      data[idx + 3] = isTv ? 128 : 255;
     }
   }
 

@@ -5,6 +5,7 @@ import * as THREE from "three";
 import type { Building as BuildingData } from "@/lib/seed/cityGen";
 import { FACADE_BY_LAYER, GLOW_BY_LAYER, generateWindowTexture } from "@/lib/seed/lightingGen";
 import { windowVertexShader, windowFragmentShader } from "@/lib/shaders/window";
+import { sharedTime } from "@/lib/shaders/sharedTime";
 
 export function Building({ data, masterSeed }: { data: BuildingData; masterSeed: string }) {
   const { material, geometry } = useMemo(() => {
@@ -23,6 +24,8 @@ export function Building({ data, masterSeed }: { data: BuildingData; masterSeed:
           uWindowWidth: { value: 0.3 },
           uWindowHeight: { value: 0.5 },
           uEmissiveBoost: { value: 1.1 },
+          uTime: { value: 0 },
+          uBuildingHash: { value: data.windowSeed * 1000 },
         },
       ]),
       fog: true,
@@ -30,6 +33,8 @@ export function Building({ data, masterSeed }: { data: BuildingData; masterSeed:
     // UniformsUtils.merge clones data textures — restore real ref so updates work.
     mat.uniforms.uWindowData.value = texture;
     mat.uniforms.uFacadeColor.value = new THREE.Color(FACADE_BY_LAYER[data.layer]);
+    // Share single time uniform across all materials — one update per frame, all read it.
+    mat.uniforms.uTime = sharedTime;
 
     const geo = new THREE.BoxGeometry(data.width, data.height, data.depth);
     return { material: mat, geometry: geo };

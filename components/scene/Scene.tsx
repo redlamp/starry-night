@@ -10,6 +10,7 @@ import { Ground } from "./Ground";
 import { Streetlights } from "./Streetlights";
 import { CameraControls } from "./CameraControls";
 import { PerfMonitor } from "./PerfMonitor";
+import { TimeTicker } from "./TimeTicker";
 
 export function Scene() {
   const masterSeed = useSceneStore((s) => s.masterSeed);
@@ -27,6 +28,7 @@ export function Scene() {
     >
       <CameraControls />
       <PerfMonitor />
+      <TimeTicker />
 
       <color attach="background" args={["#0a1838"]} />
       <fog attach="fog" args={["#0a1838", 220, 1100]} />
