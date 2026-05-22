@@ -98,7 +98,7 @@ function buildMeshes(masterSeed: string): THREE.InstancedMesh[] {
           uWindowAtlas: { value: null },
           uWindowWidth: { value: 0.3 },
           uWindowHeight: { value: 0.5 },
-          uEmissiveBoost: { value: 1.1 },
+          uEmissiveBoost: { value: 1.4 },
           uTime: { value: 0 },
         },
       ]),
