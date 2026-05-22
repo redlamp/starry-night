@@ -309,8 +309,8 @@ export function CameraPanel() {
 }
 
 function DebugRow() {
-  const moonOpposite = useSceneStore((s) => s.moonOppositeCamera);
-  const setMoonOpposite = useSceneStore((s) => s.setMoonOppositeCamera);
+  const followCamera = useSceneStore((s) => s.moonFollowCamera);
+  const setFollowCamera = useSceneStore((s) => s.setMoonFollowCamera);
   const stars = useSceneStore((s) => s.stars);
   const setStars = useSceneStore((s) => s.setStars);
   const moon = useSceneStore((s) => s.moon);
@@ -321,13 +321,13 @@ function DebugRow() {
       <div className="flex items-center justify-between">
         <span className="text-[10px] uppercase tracking-wide text-indigo-300/80">debug</span>
         <button
-          onClick={() => setMoonOpposite(!moonOpposite)}
+          onClick={() => setFollowCamera(!followCamera)}
           className={`rounded px-2 py-0.5 text-xs ${
-            moonOpposite ? "bg-indigo-400/80 text-black" : "bg-white/10 hover:bg-white/20"
+            followCamera ? "bg-indigo-400/80 text-black" : "bg-white/10 hover:bg-white/20"
           }`}
-          title="Place moon on the opposite side of the city from the camera"
+          title="Moon tracks the camera so it always sits opposite the city from where you're standing"
         >
-          {moonOpposite ? "Moon opp. cam (on)" : "Moon opp. cam"}
+          {followCamera ? "Follow camera (on)" : "Follow camera"}
         </button>
       </div>
       <OrbitSlider
@@ -364,28 +364,28 @@ function DebugRow() {
       />
 
       <OrbitSlider
-        label="moon r"
-        value={moon.horizontalRadius}
-        min={50}
-        max={20000}
-        step={10}
-        onChange={(horizontalRadius) => setMoon({ horizontalRadius })}
-      />
-      <OrbitSlider
-        label="moon h"
-        value={moon.height}
-        min={-500}
-        max={10000}
-        step={10}
-        onChange={(height) => setMoon({ height })}
-      />
-      <OrbitSlider
-        label="moon ang°"
-        value={moon.angleDeg}
+        label="moon az°"
+        value={moon.azimuthDeg}
         min={0}
         max={360}
         step={1}
-        onChange={(angleDeg) => setMoon({ angleDeg })}
+        onChange={(azimuthDeg) => setMoon({ azimuthDeg })}
+      />
+      <OrbitSlider
+        label="moon el°"
+        value={moon.elevationDeg}
+        min={-10}
+        max={90}
+        step={0.5}
+        onChange={(elevationDeg) => setMoon({ elevationDeg })}
+      />
+      <OrbitSlider
+        label="moon dist"
+        value={moon.distance}
+        min={500}
+        max={30000}
+        step={50}
+        onChange={(distance) => setMoon({ distance })}
       />
 
       <MoonReadout />
@@ -401,12 +401,12 @@ function MoonReadout() {
       <div className="tabular-nums">
         {fmt(moon.position[0], 0)} {fmt(moon.position[1], 0)} {fmt(moon.position[2], 0)}
       </div>
-      <div>moon r</div>
-      <div className="tabular-nums">{fmt(moon.horizontalRadius, 0)}</div>
-      <div>moon h</div>
-      <div className="tabular-nums">{fmt(moon.height, 0)}</div>
-      <div>moon ang°</div>
-      <div className="tabular-nums">{fmt(moon.angleDeg, 1)}</div>
+      <div>moon az°</div>
+      <div className="tabular-nums">{fmt(moon.azimuthDeg, 1)}</div>
+      <div>moon el°</div>
+      <div className="tabular-nums">{fmt(moon.elevationDeg, 1)}</div>
+      <div>moon dist</div>
+      <div className="tabular-nums">{fmt(moon.distance, 0)}</div>
     </div>
   );
 }

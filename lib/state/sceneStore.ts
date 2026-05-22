@@ -81,21 +81,22 @@ type SceneState = {
   paused: boolean;
   captureMode: boolean;
   setCaptureMode: (captureMode: boolean) => void;
-  moonOppositeCamera: boolean;
-  setMoonOppositeCamera: (v: boolean) => void;
+  moonFollowCamera: boolean;
+  setMoonFollowCamera: (v: boolean) => void;
   stars: { radius: number; depth: number; count: number; factor: number };
   setStars: (patch: Partial<{ radius: number; depth: number; count: number; factor: number }>) => void;
   moon: {
-    horizontalRadius: number; // distance from city axis in xz plane
-    height: number; // y above ground
-    angleDeg: number; // yaw around city axis, 0 = +z
+    // Celestial body modelled on a sky dome around the city axis.
+    azimuthDeg: number; // compass yaw, 0 = +z (north), 90 = +x (east)
+    elevationDeg: number; // angle above horizon, 0 = horizon, 90 = zenith
+    distance: number; // radial distance from city centre; default tracks stars.radius
   };
   setMoon: (patch: Partial<SceneState["moon"]>) => void;
   moonLive: {
     position: Vec3;
-    horizontalRadius: number;
-    height: number;
-    angleDeg: number;
+    azimuthDeg: number;
+    elevationDeg: number;
+    distance: number;
   };
   setMoonLive: (live: SceneState["moonLive"]) => void;
   cameraMode: CameraMode;
@@ -126,13 +127,18 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   paused: false,
   captureMode: false,
   setCaptureMode: (captureMode) => set({ captureMode }),
-  moonOppositeCamera: true,
-  setMoonOppositeCamera: (moonOppositeCamera) => set({ moonOppositeCamera }),
+  moonFollowCamera: false,
+  setMoonFollowCamera: (moonFollowCamera) => set({ moonFollowCamera }),
   stars: { radius: 4500, depth: 800, count: 8000, factor: 65 },
   setStars: (patch) => set((s) => ({ stars: { ...s.stars, ...patch } })),
-  moon: { horizontalRadius: 3742, height: 2321, angleDeg: 200 },
+  // Defaults preserve the old (3742, 2321, 200) position:
+  //   distance = sqrt(3742² + 2321²) ≈ 4403
+  //   elevation = asin(2321 / 4403) ≈ 31.8°
+  //   azimuth   = 200°
+  // Distance default sits on the star dome (4500) so moon hugs the celestial sphere.
+  moon: { azimuthDeg: 200, elevationDeg: 32, distance: 4500 },
   setMoon: (patch) => set((s) => ({ moon: { ...s.moon, ...patch } })),
-  moonLive: { position: [0, 0, 0], horizontalRadius: 0, height: 0, angleDeg: 0 },
+  moonLive: { position: [0, 0, 0], azimuthDeg: 0, elevationDeg: 0, distance: 0 },
   setMoonLive: (moonLive) => set({ moonLive }),
   // Note: cameraMode default is "orbit" — see below.
   cameraMode: "orbit",
