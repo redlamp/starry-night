@@ -23,6 +23,7 @@ export type Building = {
   archetype: Archetype;
   layer: Layer;
   district: DistrictCharacter;
+  downtownBias: number; // 0..1 — how deep this building sits in the downtown ellipse
   windowSeed: number;
   rowsPerFloor: number;
   colsPerFace: number;
@@ -199,6 +200,15 @@ function pickArchetype(
 ): Archetype {
   const r = rng();
   if (character === "downtown") {
+    // Deep core (downtown > 0.7) — spires + narrow-towers dominate.
+    if (downtown > 0.7) {
+      if (r < 0.32) return "spire";
+      if (r < 0.65) return "narrow-tower";
+      if (r < 0.85) return "office-block";
+      if (r < 0.95) return "residential-tower";
+      return "mid-rise";
+    }
+    // Outer downtown — original spread.
     if (downtown > 0.55 && r < 0.3) return "spire";
     if (r < 0.5) return "narrow-tower";
     if (r < 0.75) return "office-block";
@@ -404,6 +414,7 @@ function fillStripe(
       archetype,
       layer: layerForZ(worldZ),
       district: spec.character,
+      downtownBias: dt,
       windowSeed: rng(),
       rowsPerFloor: 1,
       colsPerFace,

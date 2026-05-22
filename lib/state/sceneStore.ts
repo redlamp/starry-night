@@ -81,6 +81,23 @@ type SceneState = {
   paused: boolean;
   captureMode: boolean;
   setCaptureMode: (captureMode: boolean) => void;
+  moonOppositeCamera: boolean;
+  setMoonOppositeCamera: (v: boolean) => void;
+  stars: { radius: number; depth: number; count: number; factor: number };
+  setStars: (patch: Partial<{ radius: number; depth: number; count: number; factor: number }>) => void;
+  moon: {
+    horizontalRadius: number; // distance from city axis in xz plane
+    height: number; // y above ground
+    angleDeg: number; // yaw around city axis, 0 = +z
+  };
+  setMoon: (patch: Partial<SceneState["moon"]>) => void;
+  moonLive: {
+    position: Vec3;
+    horizontalRadius: number;
+    height: number;
+    angleDeg: number;
+  };
+  setMoonLive: (live: SceneState["moonLive"]) => void;
   cameraMode: CameraMode;
   cameraIntent: CameraIntent;
   cameraLive: CameraLive;
@@ -109,6 +126,14 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   paused: false,
   captureMode: false,
   setCaptureMode: (captureMode) => set({ captureMode }),
+  moonOppositeCamera: true,
+  setMoonOppositeCamera: (moonOppositeCamera) => set({ moonOppositeCamera }),
+  stars: { radius: 4500, depth: 800, count: 8000, factor: 65 },
+  setStars: (patch) => set((s) => ({ stars: { ...s.stars, ...patch } })),
+  moon: { horizontalRadius: 3742, height: 2321, angleDeg: 200 },
+  setMoon: (patch) => set((s) => ({ moon: { ...s.moon, ...patch } })),
+  moonLive: { position: [0, 0, 0], horizontalRadius: 0, height: 0, angleDeg: 0 },
+  setMoonLive: (moonLive) => set({ moonLive }),
   // Note: cameraMode default is "orbit" — see below.
   cameraMode: "orbit",
   cameraIntent: DEFAULT_INTENT,

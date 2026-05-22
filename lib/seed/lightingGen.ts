@@ -87,7 +87,8 @@ function profileFor(arch: Archetype, layer: Layer): LightingProfile {
   return base;
 }
 
-function pickMood(rng: () => number, arch: Archetype): Mood {
+function pickMood(rng: () => number, building: Building): Mood {
+  const arch = building.archetype;
   const residential =
     arch === "residential-tower" ||
     arch === "narrow-tower" ||
@@ -104,6 +105,33 @@ function pickMood(rng: () => number, arch: Archetype): Mood {
     if (wild < 0.6) return "sparse";
     if (wild < 0.8) return "blazing";
     return "neutral-white";
+  }
+
+  // Mixed-use cross-pollination — same archetype reads differently depending on
+  // where in the city it sits. Real apartments in a financial district feel
+  // like serviced condos / lit boardrooms; corner shops on a residential
+  // street feel like warm bodegas.
+  const inDowntown = building.downtownBias > 0.4;
+  const onResidentialEdge =
+    building.district === "residential" || building.district === "oldtown";
+
+  if (residential && inDowntown) {
+    // Residential building dropped into downtown core — bias cool / neutral-white.
+    if (r < 0.3) return "cool";
+    if (r < 0.55) return "neutral-white";
+    if (r < 0.7) return "warm";
+    if (r < 0.85) return "blazing";
+    if (r < 0.95) return "neutral";
+    return "sparse";
+  }
+  if (officeStyle && onResidentialEdge && building.downtownBias < 0.25) {
+    // Office building tucked into a residential / oldtown street — small shop,
+    // mixed live-work, bias warmer + more lit.
+    if (r < 0.4) return "warm";
+    if (r < 0.6) return "neutral";
+    if (r < 0.75) return "neutral-white";
+    if (r < 0.9) return "blazing";
+    return "sparse";
   }
 
   if (residential) {
@@ -225,7 +253,7 @@ export function generateWindowTexture(
 ): WindowDataTexture {
   const rng = seedrandom(`${masterSeed}::lighting::${building.id}::${building.windowSeed}`);
   const baseProfile = profileFor(building.archetype, building.layer);
-  const mood = pickMood(rng, building.archetype);
+  const mood = pickMood(rng, building);
   const profile = applyMood(baseProfile, mood);
 
   const cols = building.colsPerFace;
