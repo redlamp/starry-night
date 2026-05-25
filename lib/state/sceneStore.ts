@@ -25,12 +25,13 @@ export type CameraLive = {
 };
 
 // All in meters. See wiki/research/building-sizes-real-world-references.md
+// Tuned via the in-app Save/Copy values workflow on 2026-05-25.
 export const DEFAULT_INTENT: CameraIntent = {
-  position: [0, 2, 400],
-  lookAt: [0, 2, 0],
-  rotation: [(16 * Math.PI) / 180, 0, 0],
+  position: [-3.428768842032016, 34.13166196623823, -769.0941943937339],
+  lookAt: [-3.377414762153272, 36.473654819023615, -759.3724439219319],
+  rotation: [2.9051946114622647, -0.005135430560327543, 3.140355522200459],
   fov: 45,
-  orient: "rotation",
+  orient: "lookAt",
 };
 
 export const TOP_DOWN_INTENT: CameraIntent = {
@@ -60,22 +61,21 @@ export type OrbitConfig = {
   periodSec: number; // seconds per full revolution
 };
 
-// elevation = asin(2 / 650) ≈ 0.18° keeps the previous near-horizon view.
-// lookAtY = 80 keeps the focal point a third of the way up the city skyline —
-// low enough that a ground-level camera doesn't look sharply up at the towers,
-// high enough to frame the buildings rather than the ground.
+// Tuned via the in-app Save/Copy values workflow on 2026-05-25.
+// Elevation pinned at the orbit floor (0.01°) so the ground plane stays visible
+// in ortho mode; focal Y at 150 frames the lower half of the city skyline.
 export const DEFAULT_ORBIT: OrbitConfig = {
   centerX: 0,
   centerZ: -120,
-  lookAtY: 80,
+  lookAtY: 150,
   radius: 650,
-  azimuthDeg: 180,
-  elevationDeg: 0.18,
+  azimuthDeg: 3.11353259843213,
+  elevationDeg: 0.01,
   periodSec: 500,
 };
 
 export const DEFAULT_MOON = { azimuthDeg: 200, elevationDeg: 32, distance: 4500 };
-export const DEFAULT_STARS = { radius: 4500, depth: 800, count: 8000, factor: 65 };
+export const DEFAULT_STARS = { radius: 4500, depth: 200, count: 16000, factor: 200 };
 
 const SAVED_CONFIG_KEY = "starry-night.savedConfig";
 
