@@ -217,8 +217,11 @@ export function CameraPanel() {
       </div>
 
       {flying ? (
-        <div className="text-white/60">
-          Click scene to toggle look · WASD move · Space up · C down · Q/E roll · Shift sprint · F or Stop to exit
+        <div className="flex flex-col gap-1 rounded border border-orange-400/30 bg-orange-400/5 p-2 text-white/70">
+          <div className="text-[10px]">
+            Hold left mouse to look · WASD move · Space up · C down · Q/E roll · Shift sprint · wheel = speed · F to exit
+          </div>
+          <FlySpeedSlider />
         </div>
       ) : null}
       {orbiting ? (
@@ -343,6 +346,32 @@ export function CameraPanel() {
       <div className="text-[10px] text-white/40">
         S still · F fly · G orbit · H hide
       </div>
+    </div>
+  );
+}
+
+function FlySpeedSlider() {
+  const flySpeed = useSceneStore((s) => s.flySpeed);
+  const setFlySpeed = useSceneStore((s) => s.setFlySpeed);
+  return (
+    <div className="flex items-center gap-2 text-xs">
+      <span className="w-16 shrink-0 text-orange-200/80">fly speed</span>
+      <input
+        type="range"
+        min={0.1}
+        max={500}
+        step={0.1}
+        value={flySpeed}
+        onChange={(e) => setFlySpeed(parseFloat(e.target.value))}
+        className="flex-1"
+      />
+      <input
+        type="number"
+        step={0.1}
+        value={flySpeed}
+        onChange={(e) => setFlySpeed(parseFloat(e.target.value) || 0.1)}
+        className="w-16 rounded border border-white/15 bg-black/50 px-1.5 py-0.5 text-white tabular-nums"
+      />
     </div>
   );
 }

@@ -59,6 +59,10 @@ function keyOf(e: KeyboardEvent): KeyName | null {
 }
 
 const ROLL_SPEED = 1.5;
+const FLY_SPRINT_MULTIPLIER = 2.85; // matches the legacy 40 m/s sprint vs 14 m/s base
+const FLY_SPEED_MIN = 0.1;
+const FLY_SPEED_MAX = 500;
+const FLY_WHEEL_STEP = 1.15; // each wheel tick scales fly speed by this — UE5-ish
 
 const POINTER_SENSITIVITY = 0.002;
 const _euler = new THREE.Euler(0, 0, 0, "YXZ");
@@ -312,7 +316,8 @@ export function CameraControls() {
     if (mode !== "fly") return;
 
     const k = keys.current;
-    const baseSpeed = k.sprint ? 40 : 14;
+    const flySpeed = useSceneStore.getState().flySpeed;
+    const baseSpeed = k.sprint ? flySpeed * FLY_SPRINT_MULTIPLIER : flySpeed;
     const dist = baseSpeed * dt;
 
     camera.getWorldDirection(forward.current);
@@ -494,17 +499,39 @@ export function CameraControls() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, gl]);
 
-  // Custom pointer-lock toggle for fly mode.
+  // Fly-mode wheel — adjust fly speed multiplicatively, UE5-style.
+  useEffect(() => {
+    if (mode !== "fly") return;
+    const dom = gl.domElement;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const s = useSceneStore.getState();
+      const factor = e.deltaY < 0 ? FLY_WHEEL_STEP : 1 / FLY_WHEEL_STEP;
+      const next = clamp(s.flySpeed * factor, FLY_SPEED_MIN, FLY_SPEED_MAX);
+      s.setFlySpeed(next);
+    };
+    dom.addEventListener("wheel", onWheel, { passive: false });
+    return () => dom.removeEventListener("wheel", onWheel);
+  }, [mode, gl]);
+
+  // Fly-mode pointer lock — engaged only while the user is actively dragging
+  // (mouse held down). Releasing returns the cursor; the camera keeps whatever
+  // orientation it ended on. UE5-style.
   useEffect(() => {
     if (mode !== "fly") return;
     const dom = gl.domElement;
 
-    const toggleLock = (e: MouseEvent) => {
+    const onMouseDown = (e: MouseEvent) => {
+      if (e.button !== 0) return;
+      if (document.pointerLockElement !== dom) {
+        dom.requestPointerLock?.();
+      }
+    };
+
+    const onMouseUp = (e: MouseEvent) => {
       if (e.button !== 0) return;
       if (document.pointerLockElement === dom) {
         document.exitPointerLock();
-      } else {
-        dom.requestPointerLock?.();
       }
     };
 
@@ -517,11 +544,13 @@ export function CameraControls() {
       camera.quaternion.setFromEuler(_euler);
     };
 
-    dom.addEventListener("mousedown", toggleLock);
+    dom.addEventListener("mousedown", onMouseDown);
+    window.addEventListener("mouseup", onMouseUp);
     document.addEventListener("mousemove", onMouseMove);
 
     return () => {
-      dom.removeEventListener("mousedown", toggleLock);
+      dom.removeEventListener("mousedown", onMouseDown);
+      window.removeEventListener("mouseup", onMouseUp);
       document.removeEventListener("mousemove", onMouseMove);
       if (document.pointerLockElement === dom) document.exitPointerLock();
     };
