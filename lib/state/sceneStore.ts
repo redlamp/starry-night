@@ -50,20 +50,21 @@ export type OrbitConfig = {
   centerX: number;
   centerZ: number;
   lookAtY: number; // absolute Y the camera aims at
-  cameraY: number; // absolute Y of the camera itself (independent of lookAtY)
-  radius: number;
+  radius: number; // 3D distance from city centre (the orbit sphere radius)
+  azimuthDeg: number; // current yaw around city axis, 0 = +z
+  elevationDeg: number; // angle above horizon, 0 = horizon, 90 = directly above
   periodSec: number; // seconds per full revolution
-  startAngleDeg: number; // starting angle around the circle
 };
 
+// elevation = asin(2 / 650) ≈ 0.18° keeps the previous near-horizon view.
 const DEFAULT_ORBIT: OrbitConfig = {
   centerX: 0,
   centerZ: -120,
   lookAtY: 240,
-  cameraY: 2,
   radius: 650,
+  azimuthDeg: 180,
+  elevationDeg: 0.18,
   periodSec: 500,
-  startAngleDeg: 180,
 };
 
 export type Perf = {
