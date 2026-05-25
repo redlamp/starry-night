@@ -47,7 +47,9 @@ If the user is mid-feedback or mid-iteration, skip the offer entirely.
 
 ### Commit, merge, push
 
-Blocked by `.claude/hooks/git-gate.sh`. When blocked, show the command you would run and wait. Unblock signals: "ship it", "next", "move on", or an explicit "yes, commit / merge / push".
+Commits are not hook-gated — local, reversible. Still: do not commit without a user signal ("ship it", "commit it", "next", "move on", "yes, commit"). Default = leave changes uncommitted, report what changed.
+
+Merge, push, and any `--force` variant are blocked by `.claude/hooks/git-gate.sh`. When blocked, show the command you would run and wait. Unblock signals: "ship it", "next", "move on", or an explicit "yes, merge / push".
 
 ## Commands
 
