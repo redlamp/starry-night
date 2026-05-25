@@ -274,9 +274,9 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   intro: {
     progress: 0,
     playing: false,
-    durationSec: 7,
+    durationSec: 24,
     mode: "random",
-    breathingPeriodSec: 90,
+    breathingPeriodSec: 240,
   },
   setIntroProgress: (progress) => set((s) => ({ intro: { ...s.intro, progress } })),
   setIntroPlaying: (playing) => set((s) => ({ intro: { ...s.intro, playing } })),

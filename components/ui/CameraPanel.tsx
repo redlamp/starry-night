@@ -84,16 +84,19 @@ function copyConfigToClipboard() {
 const THEME_KEY = "starry-night.theme";
 type Theme = "light" | "grey" | "dark";
 
+function readStoredTheme(): Theme {
+  if (typeof window === "undefined") return "dark";
+  try {
+    const v = window.localStorage.getItem(THEME_KEY);
+    if (v === "light" || v === "grey" || v === "dark") return v;
+  } catch {
+    // localStorage may be unavailable
+  }
+  return "dark";
+}
+
 function useTheme(): [Theme, (t: Theme) => void] {
-  const [theme, setThemeState] = useState<Theme>("dark");
-  useEffect(() => {
-    try {
-      const v = window.localStorage.getItem(THEME_KEY);
-      if (v === "light" || v === "grey" || v === "dark") setThemeState(v);
-    } catch {
-      // localStorage may be unavailable
-    }
-  }, []);
+  const [theme, setThemeState] = useState<Theme>(readStoredTheme);
   useEffect(() => {
     const html = document.documentElement;
     html.classList.remove("light", "grey", "dark");
@@ -118,8 +121,13 @@ const THEME_OPTIONS: Array<{ value: Theme; icon: LucideIcon; label: string }> = 
 
 function ThemeToggle() {
   const [theme, setTheme] = useTheme();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   return (
-    <div className="inline-flex items-center rounded-md border border-foreground/10 bg-foreground/5 p-0.5">
+    <div
+      className="inline-flex items-center rounded-md border border-foreground/10 bg-foreground/5 p-0.5"
+      suppressHydrationWarning
+    >
       {THEME_OPTIONS.map(({ value, icon: Icon, label }) => (
         <button
           key={value}
@@ -127,9 +135,10 @@ function ThemeToggle() {
           onClick={() => setTheme(value)}
           title={`${label} theme`}
           aria-label={`${label} theme`}
+          suppressHydrationWarning
           className={cn(
             "flex size-7 items-center justify-center rounded transition-colors",
-            theme === value
+            mounted && theme === value
               ? "bg-foreground/15 text-foreground"
               : "text-foreground/55 hover:bg-foreground/10 hover:text-foreground",
           )}
@@ -178,7 +187,7 @@ export function CameraPanel() {
     return (
       <button
         onClick={() => setHidden(false)}
-        className="pointer-events-auto fixed top-3 right-3 z-30 flex size-11 items-center justify-center rounded-full bg-black/70 text-foreground/85 backdrop-blur active:bg-black/85"
+        className="pointer-events-auto fixed top-3 right-3 z-30 flex size-11 items-center justify-center rounded-full bg-popover text-foreground/85 border border-foreground/10 shadow-lg active:bg-foreground/5 grey:bg-popover/70 grey:backdrop-blur-md"
         title="Show settings (H)"
         aria-label="Show settings"
       >
@@ -203,7 +212,7 @@ export function CameraPanel() {
   ];
 
   return (
-    <div className="pointer-events-auto fixed top-0 right-0 bottom-0 z-20 flex h-screen w-[26rem] flex-col border-l border-foreground/10 bg-popover/95 text-foreground shadow-2xl backdrop-blur">
+    <div className="pointer-events-auto fixed top-0 right-0 bottom-0 z-20 flex h-screen w-[26rem] flex-col border-l border-foreground/10 bg-popover text-foreground shadow-2xl grey:bg-popover/70 grey:backdrop-blur-md">
       {/* Sticky header */}
       <div className="flex shrink-0 flex-col gap-2.5 border-b border-border px-4 pt-4 pb-3">
         <div className="flex items-center justify-between gap-2">
