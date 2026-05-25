@@ -26,10 +26,11 @@ export function ProjectionBlender() {
   useFrame(() => {
     if (!(camera as THREE.Camera & { isPerspectiveCamera?: boolean }).isPerspectiveCamera)
       return;
-    if (camera.fov !== fov) {
-      camera.fov = fov;
-      camera.updateProjectionMatrix();
-    }
+    // Always rebuild the pure perspective matrix first. This guarantees that
+    // when an ortho blend completes (blend → 0), the camera doesn't keep
+    // rendering with the last-computed ortho matrix.
+    camera.fov = fov;
+    camera.updateProjectionMatrix();
     if (blend <= 0.0001) return;
 
     const aspect = size.width / Math.max(1, size.height);
