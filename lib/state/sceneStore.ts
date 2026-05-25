@@ -4,6 +4,8 @@ export type LightingMode = "classic" | "modern";
 export type QualityTier = "low" | "med" | "high" | "ultra";
 export type CameraMode = "still" | "fly" | "orbit";
 
+export type Projection = "perspective" | "orthographic";
+
 export type Vec3 = [number, number, number];
 
 export type OrientSource = "lookAt" | "rotation";
@@ -135,6 +137,16 @@ type SceneState = {
   cameraIntent: CameraIntent;
   cameraLive: CameraLive;
   cameraTweenRequest: TweenRequest | null;
+  // Projection model. We keep a single perspective camera under the hood; ortho
+  // is implemented by overriding camera.projectionMatrix each frame using an
+  // orthographic matrix derived from orthoSize. `projectionBlend` (0..1) drives
+  // a GSAP tween between perspective (0) and orthographic (1) for smooth swaps.
+  projection: Projection;
+  orthoSize: number; // half-height of ortho frustum, in world units
+  projectionBlend: number;
+  setProjection: (p: Projection) => void;
+  setOrthoSize: (s: number) => void;
+  setProjectionBlend: (b: number) => void;
   orbit: OrbitConfig;
   setOrbit: (patch: Partial<OrbitConfig>) => void;
   perf: Perf;
@@ -183,6 +195,13 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     fov: DEFAULT_INTENT.fov,
   },
   cameraTweenRequest: null,
+  projection: "perspective",
+  // 200 ≈ tan(45°/2) × 482 — matches the default-perspective view at the default orbit distance.
+  orthoSize: 200,
+  projectionBlend: 0,
+  setProjection: (projection) => set({ projection }),
+  setOrthoSize: (orthoSize) => set({ orthoSize }),
+  setProjectionBlend: (projectionBlend) => set({ projectionBlend }),
   orbit: DEFAULT_ORBIT,
   setOrbit: (patch) => set((s) => ({ orbit: { ...s.orbit, ...patch } })),
   perf: { fps: 0, triangles: 0, calls: 0, geometries: 0, textures: 0 },

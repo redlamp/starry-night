@@ -1,8 +1,37 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
+import gsap from "gsap";
 import { useSceneStore, type Vec3, PRESETS } from "@/lib/state/sceneStore";
 import { randomSeed } from "@/lib/seed/rng";
+
+const PROJECTION_TWEEN_DURATION = 0.5;
+
+function tweenProjectionTo(target: "perspective" | "orthographic") {
+  const s = useSceneStore.getState();
+  if (s.projection === target) return;
+  // Match framing at the lookAt distance so the projection swap is visually
+  // continuous: ortho's frustum half-height matches perspective's tangent
+  // half-extent at distance d (≈ orbit.radius).
+  const d = Math.max(1, s.orbit.radius);
+  const fovRad = (s.cameraIntent.fov * Math.PI) / 180;
+  if (target === "orthographic") {
+    s.setOrthoSize(d * Math.tan(fovRad / 2));
+  } else {
+    const matchedFov = (2 * Math.atan(s.orthoSize / d) * 180) / Math.PI;
+    s.setCameraIntent({ fov: matchedFov });
+  }
+  s.setProjection(target);
+  const from = s.projectionBlend;
+  const to = target === "orthographic" ? 1 : 0;
+  const proxy = { v: from };
+  gsap.to(proxy, {
+    v: to,
+    duration: PROJECTION_TWEEN_DURATION,
+    ease: "power2.inOut",
+    onUpdate: () => useSceneStore.getState().setProjectionBlend(proxy.v),
+  });
+}
 
 const DEBUG_VISIBLE_KEY = "starry-night.debugVisible";
 
@@ -262,27 +291,8 @@ export function CameraPanel() {
         }
       />
 
-      <div className="flex items-center gap-2">
-        <span className="w-16 shrink-0 text-white/60">fov</span>
-        <input
-          type="range"
-          min={5}
-          max={150}
-          step={1}
-          disabled={locked}
-          value={cameraIntent.fov}
-          onChange={(e) => setCameraIntent({ fov: parseFloat(e.target.value) })}
-          className="flex-1"
-        />
-        <input
-          type="number"
-          step={1}
-          disabled={locked}
-          value={cameraIntent.fov}
-          onChange={(e) => setCameraIntent({ fov: parseFloat(e.target.value) || 38 })}
-          className="w-14 rounded border border-white/15 bg-black/50 px-1.5 py-0.5 text-white tabular-nums disabled:opacity-50"
-        />
-      </div>
+      <ProjectionRow />
+      <FovOrSizeSlider />
 
       <hr className="border-white/10" />
 
@@ -313,7 +323,14 @@ export function CameraPanel() {
 
       <hr className="border-white/10" />
 
-      <div className="flex items-center justify-end gap-1">
+      <div className="flex items-center justify-between gap-2">
+        <button
+          onClick={() => resetCamera()}
+          className="rounded bg-transparent px-3 py-1 text-xs font-medium text-rose-400 hover:bg-rose-400/10 hover:text-rose-300"
+          title="Restore last saved values (falls back to hardcoded defaults if none saved)"
+        >
+          Reset
+        </button>
         <button
           onClick={() => saveCurrentAsDefault()}
           className="rounded bg-emerald-400/80 px-3 py-1 text-xs text-black hover:bg-emerald-400"
@@ -321,18 +338,91 @@ export function CameraPanel() {
         >
           Save
         </button>
-        <button
-          onClick={() => resetCamera()}
-          className="rounded bg-white/10 px-3 py-1 text-xs hover:bg-white/20"
-          title="Restore last saved values (falls back to hardcoded defaults if none saved)"
-        >
-          Reset
-        </button>
       </div>
 
       <div className="text-[10px] text-white/40">
         S still · F fly · G orbit · H hide
       </div>
+    </div>
+  );
+}
+
+function ProjectionRow() {
+  const projection = useSceneStore((s) => s.projection);
+  return (
+    <div className="flex items-center gap-2 text-xs">
+      <span className="w-16 shrink-0 text-[10px] uppercase tracking-wide text-white/40">
+        projection
+      </span>
+      <div className="flex flex-1 gap-1">
+        {(["perspective", "orthographic"] as const).map((p) => (
+          <button
+            key={p}
+            onClick={() => tweenProjectionTo(p)}
+            className={`flex-1 rounded px-2 py-0.5 text-[11px] ${
+              projection === p
+                ? "bg-white/85 text-black"
+                : "bg-white/10 text-white hover:bg-white/20"
+            }`}
+            title={`Switch to ${p} projection (tweens via GSAP)`}
+          >
+            {p === "perspective" ? "Perspective" : "Orthographic"}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function FovOrSizeSlider() {
+  const projection = useSceneStore((s) => s.projection);
+  const fov = useSceneStore((s) => s.cameraIntent.fov);
+  const orthoSize = useSceneStore((s) => s.orthoSize);
+  const setCameraIntent = useSceneStore((s) => s.setCameraIntent);
+  const setOrthoSize = useSceneStore((s) => s.setOrthoSize);
+
+  if (projection === "orthographic") {
+    return (
+      <div className="flex items-center gap-2">
+        <span className="w-16 shrink-0 text-white/60">size</span>
+        <input
+          type="range"
+          min={5}
+          max={2000}
+          step={1}
+          value={orthoSize}
+          onChange={(e) => setOrthoSize(parseFloat(e.target.value))}
+          className="flex-1"
+        />
+        <input
+          type="number"
+          step={1}
+          value={orthoSize}
+          onChange={(e) => setOrthoSize(parseFloat(e.target.value) || 5)}
+          className="w-14 rounded border border-white/15 bg-black/50 px-1.5 py-0.5 text-white tabular-nums"
+        />
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-center gap-2">
+      <span className="w-16 shrink-0 text-white/60">fov</span>
+      <input
+        type="range"
+        min={5}
+        max={150}
+        step={1}
+        value={fov}
+        onChange={(e) => setCameraIntent({ fov: parseFloat(e.target.value) })}
+        className="flex-1"
+      />
+      <input
+        type="number"
+        step={1}
+        value={fov}
+        onChange={(e) => setCameraIntent({ fov: parseFloat(e.target.value) || 38 })}
+        className="w-14 rounded border border-white/15 bg-black/50 px-1.5 py-0.5 text-white tabular-nums"
+      />
     </div>
   );
 }
