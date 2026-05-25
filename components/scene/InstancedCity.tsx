@@ -12,7 +12,12 @@ import {
 import { packWindowAtlas, type PackInput } from "@/lib/scene/atlasPacker";
 import { cityVertexShader, cityFragmentShader } from "@/lib/shaders/cityInstanced";
 import { sharedTime } from "@/lib/shaders/sharedTime";
-import { sharedIntroProgress, sharedIntroMode } from "@/lib/shaders/sharedIntro";
+import {
+  sharedIntroProgress,
+  sharedIntroMode,
+  sharedIntroCompleteAt,
+  sharedBreathingPeriod,
+} from "@/lib/shaders/sharedIntro";
 import { useSceneStore } from "@/lib/state/sceneStore";
 
 const DISTRICT_TO_IDX: Record<string, number> = {
@@ -21,6 +26,26 @@ const DISTRICT_TO_IDX: Record<string, number> = {
   industrial: 2,
   oldtown: 3,
 };
+
+// Archetypes that may use office-style correlated lighting (per-block or
+// whole-floor). For these, we pick a per-building cohort: most stay per-window,
+// some break floors into blocks, some snap entire floors. Others are always
+// per-window.
+const OFFICE_ARCHETYPES = new Set<Archetype>(["office-block", "spire"]);
+
+// Returns the breathing correlation mode for one building:
+//   0 = per-window, 1 = per-block, 2 = whole-floor.
+// Office archetypes split 40 / 35 / 25 across the three modes so the city has
+// visible variety. Non-office archetypes are always per-window.
+function pickCorrelationMode(b: Building): number {
+  if (!OFFICE_ARCHETYPES.has(b.archetype)) return 0;
+  // Cheap deterministic float from windowSeed.
+  const r = (Math.sin(b.windowSeed * 91.3) * 43758.5453) % 1;
+  const u = r < 0 ? r + 1 : r;
+  if (u < 0.4) return 0;
+  if (u < 0.75) return 1;
+  return 2;
+}
 
 export function InstancedCity({ masterSeed }: { masterSeed: string }) {
   const { meshes, maxRadius } = useMemo(() => buildMeshes(masterSeed), [masterSeed]);
@@ -49,6 +74,7 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
       mat.uniforms.uIntroMaxRadius.value = maxRadius;
       const camPos = s.cameraLive.position;
       mat.uniforms.uIntroCamPos.value.set(camPos[0], camPos[1], camPos[2]);
+      mat.uniforms.uOrthoBlend.value = s.projectionBlend;
     }
   });
 
@@ -121,6 +147,7 @@ function buildMeshes(
     const aFacadeGlow = new Float32Array(N);
     const aBuildingHash = new Float32Array(N);
     const aDistrictIdx = new Float32Array(N);
+    const aCorrelationMode = new Float32Array(N);
 
     const material = new THREE.ShaderMaterial({
       vertexShader: cityVertexShader,
@@ -138,6 +165,9 @@ function buildMeshes(
           uIntroCamPos: { value: new THREE.Vector3() },
           uIntroCityCenter: { value: new THREE.Vector3() },
           uIntroMaxRadius: { value: 1 },
+          uIntroCompleteAt: { value: 1e9 },
+          uBreathingPeriod: { value: 90 },
+          uOrthoBlend: { value: 0 },
         },
       ]),
       fog: true,
@@ -147,6 +177,8 @@ function buildMeshes(
     material.uniforms.uTime = sharedTime;
     material.uniforms.uIntroProgress = sharedIntroProgress;
     material.uniforms.uIntroMode = sharedIntroMode;
+    material.uniforms.uIntroCompleteAt = sharedIntroCompleteAt;
+    material.uniforms.uBreathingPeriod = sharedBreathingPeriod;
 
     const mesh = new THREE.InstancedMesh(geo, material, N);
 
@@ -171,6 +203,7 @@ function buildMeshes(
       aFacadeGlow[i] = GLOW_BY_LAYER[b.layer];
       aBuildingHash[i] = b.windowSeed * 1000;
       aDistrictIdx[i] = DISTRICT_TO_IDX[b.district] ?? 0;
+      aCorrelationMode[i] = pickCorrelationMode(b);
 
       position.set(b.x, b.height / 2, b.z);
       euler.set(0, b.rotationY, 0);
@@ -187,6 +220,10 @@ function buildMeshes(
     geo.setAttribute("aFacadeGlow", new THREE.InstancedBufferAttribute(aFacadeGlow, 1));
     geo.setAttribute("aBuildingHash", new THREE.InstancedBufferAttribute(aBuildingHash, 1));
     geo.setAttribute("aDistrictIdx", new THREE.InstancedBufferAttribute(aDistrictIdx, 1));
+    geo.setAttribute(
+      "aCorrelationMode",
+      new THREE.InstancedBufferAttribute(aCorrelationMode, 1),
+    );
 
     mesh.instanceMatrix.needsUpdate = true;
     mesh.frustumCulled = false; // bounds are union of all instances; cheaper to skip cull than compute.

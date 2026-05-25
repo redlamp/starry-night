@@ -357,9 +357,12 @@ function ModeDetailPanel({ mode }: { mode: "still" | "fly" | "orbit" }) {
   if (mode === "orbit") {
     return (
       <div className="flex min-h-[5.5rem] flex-col gap-1 rounded border border-sky-400/30 bg-sky-400/5 p-2 text-white/70">
-        <div className="text-[10px] uppercase tracking-wide text-sky-300/80">orbit</div>
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] uppercase tracking-wide text-sky-300/80">orbit</span>
+          <OrbitPauseBadge />
+        </div>
         <div className="text-[10px]">
-          Drag to spin · RMB drag = focal Y · pinch or wheel = zoom · two-finger pan = focal Y
+          Drag spin · RMB drag = focal Y · pinch / wheel zoom · two-finger pan = focal Y · Space pause
         </div>
         <OrbitSpeedHint />
       </div>
@@ -372,6 +375,22 @@ function ModeDetailPanel({ mode }: { mode: "still" | "fly" | "orbit" }) {
         Pose set by position / lookAt / rotation / FOV below. Tween presets to jump to common framings; switch to Fly (F) or Orbit (G) for motion.
       </div>
     </div>
+  );
+}
+
+function OrbitPauseBadge() {
+  const paused = useSceneStore((s) => s.orbitPaused);
+  const setOrbitPaused = useSceneStore((s) => s.setOrbitPaused);
+  return (
+    <button
+      onClick={() => setOrbitPaused(!paused)}
+      className={`rounded px-2 py-0.5 text-[10px] ${
+        paused ? "bg-sky-400/80 text-black" : "bg-white/10 text-white/70 hover:bg-white/20"
+      }`}
+      title="Pause / resume orbit auto-revolution (Space)"
+    >
+      {paused ? "▶ resume" : "⏸ pause"}
+    </button>
   );
 }
 
@@ -724,6 +743,7 @@ function IntroSubSection() {
   const intro = useSceneStore((s) => s.intro);
   const setIntroDuration = useSceneStore((s) => s.setIntroDuration);
   const setIntroMode = useSceneStore((s) => s.setIntroMode);
+  const setBreathingPeriod = useSceneStore((s) => s.setBreathingPeriod);
   const playIntro = useSceneStore((s) => s.playIntro);
   const modes = ["random", "district", "outside-in", "inside-out", "far-to-near"] as const;
   return (
@@ -745,6 +765,14 @@ function IntroSubSection() {
         max={30}
         step={0.5}
         onChange={(durationSec) => setIntroDuration(durationSec)}
+      />
+      <OrbitSlider
+        label="off cycle"
+        value={intro.breathingPeriodSec}
+        min={3}
+        max={600}
+        step={1}
+        onChange={(breathingPeriodSec) => setBreathingPeriod(breathingPeriodSec)}
       />
       <div className="flex items-center gap-2 text-xs">
         <span className="w-14 shrink-0 text-white/70">mode</span>

@@ -193,16 +193,23 @@ type SceneState = {
     playing: boolean;
     durationSec: number;
     mode: "random" | "district" | "outside-in" | "far-to-near" | "inside-out";
+    // Base period of the post-intro breathing cycle in seconds.
+    breathingPeriodSec: number;
   };
   setIntroProgress: (v: number) => void;
   setIntroPlaying: (v: boolean) => void;
   setIntroDuration: (v: number) => void;
   setIntroMode: (m: SceneState["intro"]["mode"]) => void;
+  setBreathingPeriod: (v: number) => void;
   playIntro: () => void;
   // Runtime flag set true while the user is holding RMB in orbit mode to drag
   // the focal Y. Used to brighten the focal indicator while editing.
   focalDragging: boolean;
   setFocalDragging: (v: boolean) => void;
+  // Orbit auto-revolution pause. Toggled with Space in orbit mode; useFrame
+  // skips advancing the sweep while true. Manual drag still works.
+  orbitPaused: boolean;
+  setOrbitPaused: (v: boolean) => void;
   orbit: OrbitConfig;
   setOrbit: (patch: Partial<OrbitConfig>) => void;
   perf: Perf;
@@ -260,20 +267,30 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setProjectionBlend: (projectionBlend) => set({ projectionBlend }),
   flySpeed: 14,
   setFlySpeed: (flySpeed) => set({ flySpeed }),
-  fog: { enabled: true, near: 220, far: 1100 },
+  fog: { enabled: true, near: 240, far: 2400 },
   setFog: (patch) => set((s) => ({ fog: { ...s.fog, ...patch } })),
   showFocalIndicator: false,
   setShowFocalIndicator: (showFocalIndicator) => set({ showFocalIndicator }),
-  intro: { progress: 0, playing: false, durationSec: 7, mode: "random" },
+  intro: {
+    progress: 0,
+    playing: false,
+    durationSec: 7,
+    mode: "random",
+    breathingPeriodSec: 90,
+  },
   setIntroProgress: (progress) => set((s) => ({ intro: { ...s.intro, progress } })),
   setIntroPlaying: (playing) => set((s) => ({ intro: { ...s.intro, playing } })),
   setIntroDuration: (durationSec) =>
     set((s) => ({ intro: { ...s.intro, durationSec } })),
   setIntroMode: (mode) => set((s) => ({ intro: { ...s.intro, mode } })),
+  setBreathingPeriod: (breathingPeriodSec) =>
+    set((s) => ({ intro: { ...s.intro, breathingPeriodSec } })),
   playIntro: () =>
     set((s) => ({ intro: { ...s.intro, progress: 0, playing: true } })),
   focalDragging: false,
   setFocalDragging: (focalDragging) => set({ focalDragging }),
+  orbitPaused: false,
+  setOrbitPaused: (orbitPaused) => set({ orbitPaused }),
   orbit: DEFAULT_ORBIT,
   setOrbit: (patch) => set((s) => ({ orbit: { ...s.orbit, ...patch } })),
   perf: { fps: 0, triangles: 0, calls: 0, geometries: 0, textures: 0 },
