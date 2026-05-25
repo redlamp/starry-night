@@ -10,9 +10,29 @@ export const metadata: Metadata = {
   description: "A modernized homage to the After Dark Starry Night screensaver.",
 };
 
+// Runs before React hydrates; reads the persisted theme from localStorage and
+// stamps the class on <html> so the first paint is correct (no light-flash on
+// dark theme, no double-class hydration mismatch with the runtime hook).
+const themeBootstrap = `
+(function(){try{
+  var t=localStorage.getItem("starry-night.theme");
+  if(t!=="light"&&t!=="grey"&&t!=="dark")t="dark";
+  var c=document.documentElement.classList;
+  c.remove("light","grey","dark");
+  c.add(t);
+}catch(e){document.documentElement.classList.add("dark");}})();
+`;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={cn("dark font-sans", geist.variable)}>
+    <html
+      lang="en"
+      className={cn("font-sans", geist.variable)}
+      suppressHydrationWarning
+    >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeBootstrap }} />
+      </head>
       <body>{children}</body>
     </html>
   );
