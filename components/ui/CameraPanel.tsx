@@ -155,7 +155,7 @@ export function CameraPanel() {
       ) : null}
       {orbiting ? (
         <div className="text-sky-300/80">
-          Orbiting downtown · adjust radius / height / period below · Stop to freeze pose
+          Drag scene to spin · pinch or wheel to zoom · sliders + Stop below
         </div>
       ) : null}
 
@@ -225,9 +225,14 @@ export function CameraPanel() {
 
       {orbiting ? (
         <div className="flex flex-col gap-1 rounded border border-sky-400/30 bg-sky-400/5 p-2">
-          <div className="text-[10px] uppercase tracking-wide text-sky-300/80">orbit</div>
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] uppercase tracking-wide text-sky-300/80">orbit</span>
+            <span className="text-[10px] text-sky-300/60">
+              drag to spin · pinch / wheel to zoom
+            </span>
+          </div>
           <OrbitSlider
-            label="period (s)"
+            label="orbit speed"
             value={orbit.periodSec}
             min={5}
             max={3600}
@@ -237,18 +242,26 @@ export function CameraPanel() {
           <OrbitSlider
             label="radius"
             value={orbit.radius}
-            min={20}
+            min={50}
             max={5000}
             step={5}
             onChange={(radius) => setOrbit({ radius })}
           />
           <OrbitSlider
-            label="camera y"
-            value={orbit.cameraY}
-            min={-50}
-            max={3000}
+            label="elevation°"
+            value={orbit.elevationDeg}
+            min={0}
+            max={90}
+            step={0.5}
+            onChange={(elevationDeg) => setOrbit({ elevationDeg })}
+          />
+          <OrbitSlider
+            label="azimuth°"
+            value={orbit.azimuthDeg}
+            min={0}
+            max={360}
             step={1}
-            onChange={(cameraY) => setOrbit({ cameraY })}
+            onChange={(azimuthDeg) => setOrbit({ azimuthDeg })}
           />
           <OrbitSlider
             label="lookAt y"
