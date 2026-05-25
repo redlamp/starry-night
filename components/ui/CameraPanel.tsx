@@ -4,15 +4,46 @@ import { useEffect, useState, type ReactNode } from "react";
 import gsap from "gsap";
 import { useSceneStore, type Vec3, PRESETS } from "@/lib/state/sceneStore";
 import { randomSeed } from "@/lib/seed/rng";
+import { cn } from "@/lib/utils";
+import {
+  Camera,
+  CloudFog,
+  Contrast,
+  Gauge,
+  Moon,
+  MoonStar,
+  Orbit as OrbitIcon,
+  Radio,
+  Sparkles,
+  Sprout,
+  Stars,
+  Sun,
+  type LucideIcon,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Slider } from "@/components/ui/slider";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const PROJECTION_TWEEN_DURATION = 0.5;
 
 function tweenProjectionTo(target: "perspective" | "orthographic") {
   const s = useSceneStore.getState();
   if (s.projection === target) return;
-  // Match framing at the lookAt distance so the projection swap is visually
-  // continuous: ortho's frustum half-height matches perspective's tangent
-  // half-extent at distance d (≈ orbit.radius).
+  // Match framing at lookAt distance so projection swap stays visually
+  // continuous: ortho frustum half-height = perspective tangent half-extent at d.
   const d = Math.max(1, s.orbit.radius);
   const fovRad = (s.cameraIntent.fov * Math.PI) / 180;
   if (target === "orthographic") {
@@ -33,27 +64,6 @@ function tweenProjectionTo(target: "perspective" | "orthographic") {
   });
 }
 
-const DEBUG_VISIBLE_KEY = "starry-night.debugVisible";
-
-function useDebugVisible(): [boolean, (v: boolean) => void] {
-  const [v, setV] = useState(false);
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    setV(window.localStorage.getItem(DEBUG_VISIBLE_KEY) === "1");
-  }, []);
-  const setter = (next: boolean) => {
-    setV(next);
-    if (typeof window !== "undefined") {
-      try {
-        window.localStorage.setItem(DEBUG_VISIBLE_KEY, next ? "1" : "0");
-      } catch {
-        // localStorage may be unavailable in private modes
-      }
-    }
-  };
-  return [v, setter];
-}
-
 function copyConfigToClipboard() {
   const s = useSceneStore.getState();
   const snippet = JSON.stringify(
@@ -71,51 +81,71 @@ function copyConfigToClipboard() {
   }
 }
 
+const THEME_KEY = "starry-night.theme";
+type Theme = "light" | "grey" | "dark";
+
+function useTheme(): [Theme, (t: Theme) => void] {
+  const [theme, setThemeState] = useState<Theme>("dark");
+  useEffect(() => {
+    try {
+      const v = window.localStorage.getItem(THEME_KEY);
+      if (v === "light" || v === "grey" || v === "dark") setThemeState(v);
+    } catch {
+      // localStorage may be unavailable
+    }
+  }, []);
+  useEffect(() => {
+    const html = document.documentElement;
+    html.classList.remove("light", "grey", "dark");
+    html.classList.add(theme);
+  }, [theme]);
+  const setTheme = (t: Theme) => {
+    setThemeState(t);
+    try {
+      window.localStorage.setItem(THEME_KEY, t);
+    } catch {
+      // ignore
+    }
+  };
+  return [theme, setTheme];
+}
+
+const THEME_OPTIONS: Array<{ value: Theme; icon: LucideIcon; label: string }> = [
+  { value: "light", icon: Sun, label: "Light" },
+  { value: "grey", icon: Contrast, label: "Grey" },
+  { value: "dark", icon: MoonStar, label: "Dark" },
+];
+
+function ThemeToggle() {
+  const [theme, setTheme] = useTheme();
+  return (
+    <div className="inline-flex items-center rounded-md border border-foreground/10 bg-foreground/5 p-0.5">
+      {THEME_OPTIONS.map(({ value, icon: Icon, label }) => (
+        <button
+          key={value}
+          type="button"
+          onClick={() => setTheme(value)}
+          title={`${label} theme`}
+          aria-label={`${label} theme`}
+          className={cn(
+            "flex size-7 items-center justify-center rounded transition-colors",
+            theme === value
+              ? "bg-foreground/15 text-foreground"
+              : "text-foreground/55 hover:bg-foreground/10 hover:text-foreground",
+          )}
+        >
+          <Icon className="size-4" />
+        </button>
+      ))}
+    </div>
+  );
+}
+
 const RAD2DEG = 180 / Math.PI;
 const DEG2RAD = Math.PI / 180;
 
 function fmt(n: number, p = 2) {
   return n.toFixed(p);
-}
-
-function Vec3Input({
-  label,
-  value,
-  disabled,
-  hint,
-  step = 0.5,
-  onChange,
-}: {
-  label: string;
-  value: Vec3;
-  disabled: boolean;
-  hint?: string;
-  step?: number;
-  onChange: (v: Vec3) => void;
-}) {
-  return (
-    <div className="flex items-center gap-2 text-xs">
-      <div className="flex w-16 shrink-0 flex-col text-white/60">
-        <span>{label}</span>
-        {hint ? <span className="text-[10px] text-white/35">{hint}</span> : null}
-      </div>
-      {(["x", "y", "z"] as const).map((axis, i) => (
-        <input
-          key={axis}
-          type="number"
-          step={step}
-          disabled={disabled}
-          value={value[i]}
-          onChange={(e) => {
-            const v = [...value] as Vec3;
-            v[i] = parseFloat(e.target.value) || 0;
-            onChange(v);
-          }}
-          className="w-16 rounded border border-white/15 bg-black/50 px-1.5 py-0.5 text-white tabular-nums disabled:opacity-50"
-        />
-      ))}
-    </div>
-  );
 }
 
 export function CameraPanel() {
@@ -148,12 +178,11 @@ export function CameraPanel() {
     return (
       <button
         onClick={() => setHidden(false)}
-        className="pointer-events-auto absolute right-3 top-3 flex h-11 min-w-11 items-center gap-2 rounded-full bg-black/70 px-4 text-xs font-medium text-white/85 backdrop-blur active:bg-black/85"
-        title="Show camera panel (H)"
-        aria-label="Show camera panel"
+        className="pointer-events-auto fixed top-3 right-3 z-30 flex size-11 items-center justify-center rounded-full bg-black/70 text-foreground/85 backdrop-blur active:bg-black/85"
+        title="Show settings (H)"
+        aria-label="Show settings"
       >
-        <span aria-hidden="true" className="text-base leading-none">⚙</span>
-        <span>panel</span>
+        <span aria-hidden="true" className="text-lg leading-none">⚙</span>
       </button>
     );
   }
@@ -174,15 +203,31 @@ export function CameraPanel() {
   ];
 
   return (
-    <div className="pointer-events-auto absolute right-3 top-3 flex w-[22rem] flex-col gap-2 rounded-lg border border-white/10 bg-black/70 p-3 text-xs text-white backdrop-blur">
-      <div className="flex items-center justify-between gap-2">
-        <span className="font-medium">Camera</span>
-        <div className="flex items-center gap-1">
+    <div className="pointer-events-auto fixed top-0 right-0 bottom-0 z-20 flex h-screen w-[26rem] flex-col border-l border-foreground/10 bg-popover/95 text-foreground shadow-2xl backdrop-blur">
+      {/* Sticky header */}
+      <div className="flex shrink-0 flex-col gap-2.5 border-b border-border px-4 pt-4 pb-3">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-base font-semibold tracking-wide">Settings</span>
+          <div className="flex items-center gap-1.5">
+            <ThemeToggle />
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => setHidden(true)}
+              title="Hide (H)"
+              aria-label="Hide settings"
+              className="text-foreground/70 hover:bg-foreground/10 hover:text-foreground"
+            >
+              ×
+            </Button>
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5">
           <ModeButton
             label="Still"
             hotkey="S"
             active={cameraMode === "still"}
-            activeClass="bg-white/85 text-black"
+            activeClass="bg-foreground text-background hover:bg-foreground"
             onClick={() => {
               if (flying) snapIntentToLive();
               setCameraMode("still");
@@ -192,7 +237,7 @@ export function CameraPanel() {
             label="Fly"
             hotkey="F"
             active={flying}
-            activeClass="bg-orange-500/80 text-black"
+            activeClass="bg-orange-500 text-black hover:bg-orange-500"
             onClick={() => {
               if (flying) snapIntentToLive();
               setCameraMode(flying ? "still" : "fly");
@@ -202,50 +247,167 @@ export function CameraPanel() {
             label="Orbit"
             hotkey="G"
             active={orbiting}
-            activeClass="bg-sky-400/80 text-black"
+            activeClass="bg-sky-400 text-black hover:bg-sky-400"
             onClick={() => setCameraMode(orbiting ? "still" : "orbit")}
           />
-          <button
-            onClick={() => setHidden(true)}
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-base leading-none hover:bg-white/20 active:bg-white/30"
-            title="Hide (H)"
-            aria-label="Hide camera panel"
-          >
-            ×
-          </button>
         </div>
+        <ModeDetailPanel mode={cameraMode} />
       </div>
 
-      {flying ? (
-        <div className="flex flex-col gap-1 rounded border border-orange-400/30 bg-orange-400/5 p-2 text-white/70">
-          <div className="text-[10px]">
-            Hold left mouse to look · WASD move · Space up · C down · Q/E roll · Shift sprint · wheel = speed · F to exit
-          </div>
-          <FlySpeedSlider />
-        </div>
-      ) : null}
-      {orbiting ? (
-        <div className="text-sky-300/80">
-          Drag to spin · Shift+drag = focal Y · pinch or wheel = zoom · two-finger pan = focal Y
-        </div>
-      ) : null}
+      {/* Scrollable middle */}
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="px-4 py-3">
+          <Accordion
+            multiple
+            defaultValue={["pose", "orbit"]}
+            className="flex flex-col gap-1.5"
+          >
+            <Section value="pose" icon={Camera} label="Camera">
+              <PoseSection
+                locked={locked}
+                cameraIntent={cameraIntent}
+                intentRotDeg={intentRotDeg}
+                setCameraIntent={setCameraIntent}
+                tweenCameraTo={tweenCameraTo}
+              />
+            </Section>
 
-      <div className="flex items-center gap-1">
-        <span className="w-16 shrink-0 text-[10px] uppercase tracking-wide text-white/40">
+            <Section value="orbit" icon={OrbitIcon} label="Orbit">
+              <OrbitSection />
+            </Section>
+
+            <Section value="stars" icon={Stars} label="Stars">
+              <StarsSection />
+            </Section>
+
+            <Section value="moon" icon={Moon} label="Moon">
+              <MoonSection />
+            </Section>
+
+            <Section value="fog" icon={CloudFog} label="Fog">
+              <FogSection />
+            </Section>
+
+            <Section value="intro" icon={Sparkles} label="Intro">
+              <IntroSection />
+            </Section>
+
+            <Section value="live" icon={Radio} label="Live readout">
+              <div className="grid grid-cols-[5rem_1fr] gap-1 font-mono text-xs text-foreground/70">
+                <div>position</div>
+                <div className="tabular-nums">
+                  {fmt(livePos[0])} {fmt(livePos[1])} {fmt(livePos[2])}
+                </div>
+                <div>rotation°</div>
+                <div className="tabular-nums">
+                  {fmt(liveRotDeg[0], 1)} {fmt(liveRotDeg[1], 1)} {fmt(liveRotDeg[2], 1)}
+                </div>
+                <div>fov</div>
+                <div className="tabular-nums">{fmt(cameraLive.fov)}</div>
+              </div>
+            </Section>
+
+            <Section value="seed" icon={Sprout} label="Seed">
+              <SeedRow />
+            </Section>
+
+            <Section value="perf" icon={Gauge} label="Performance">
+              <PerfReadout />
+            </Section>
+          </Accordion>
+        </div>
+      </ScrollArea>
+
+      {/* Sticky footer */}
+      <div className="flex shrink-0 items-center justify-between gap-2 border-t border-foreground/10 px-4 pt-3 pb-3">
+        <Button
+          variant="ghost"
+          onClick={() => resetCamera()}
+          title="Restore last saved values (falls back to hardcoded defaults if none saved)"
+          className="text-rose-400 hover:bg-rose-400/10 hover:text-rose-300"
+        >
+          Reset
+        </Button>
+        <div className="flex items-center gap-1.5">
+          <CopyButton />
+          <Button
+            onClick={() => saveCurrentAsDefault()}
+            title="Snapshot current camera + orbit + moon + stars as the new Reset target"
+            className="bg-emerald-400 text-black hover:bg-emerald-400/90"
+          >
+            Save
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Section({
+  value,
+  icon: Icon,
+  label,
+  children,
+}: {
+  value: string;
+  icon: LucideIcon;
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <AccordionItem
+      value={value}
+      className="rounded-lg border border-foreground/10 bg-foreground/[0.04] not-last:border-b"
+    >
+      <AccordionTrigger className="px-3 py-2.5 text-sm font-medium tracking-wide text-foreground/85 hover:no-underline">
+        <span className="flex items-center gap-2.5">
+          <Icon aria-hidden="true" className="size-[18px] text-foreground/70" />
+          <span>{label}</span>
+        </span>
+      </AccordionTrigger>
+      <AccordionContent className="px-3 pt-0 pb-3">
+        <div className="flex flex-col gap-2.5">{children}</div>
+      </AccordionContent>
+    </AccordionItem>
+  );
+}
+
+function PoseSection({
+  locked,
+  cameraIntent,
+  intentRotDeg,
+  setCameraIntent,
+  tweenCameraTo,
+}: {
+  locked: boolean;
+  cameraIntent: ReturnType<typeof useSceneStore.getState>["cameraIntent"];
+  intentRotDeg: Vec3;
+  setCameraIntent: ReturnType<typeof useSceneStore.getState>["setCameraIntent"];
+  tweenCameraTo: ReturnType<typeof useSceneStore.getState>["tweenCameraTo"];
+}) {
+  return (
+    <>
+      <div className="flex items-center gap-2">
+        <span className="w-16 shrink-0 text-xs uppercase tracking-wide text-foreground/40">
           tween to
         </span>
-        {PRESETS.map((p) => (
-          <button
-            key={p.id}
-            disabled={locked}
-            onClick={() => tweenCameraTo(p.intent, 900)}
-            className="rounded bg-white/10 px-2 py-0.5 text-xs hover:bg-white/20 disabled:opacity-50"
-          >
-            {p.label}
-          </button>
-        ))}
+        <div className="flex flex-wrap gap-1">
+          {PRESETS.map((p) => (
+            <Button
+              key={p.id}
+              variant="secondary"
+              size="sm"
+              disabled={locked}
+              onClick={() => tweenCameraTo(p.intent, 900)}
+              className="bg-foreground/10 text-foreground hover:bg-foreground/20"
+            >
+              {p.label}
+            </Button>
+          ))}
+        </div>
       </div>
 
+      <Vec3Header />
       <Vec3Input
         label="position"
         value={cameraIntent.position}
@@ -254,21 +416,23 @@ export function CameraPanel() {
       />
 
       <div className="flex items-center justify-between">
-        <span className="text-[10px] uppercase tracking-wide text-white/40">orient by</span>
+        <span className="text-xs uppercase tracking-wide text-foreground/40">orient by</span>
         <div className="flex gap-1">
           {(["lookAt", "rotation"] as const).map((o) => (
-            <button
+            <Button
               key={o}
+              variant="secondary"
+              size="sm"
               disabled={locked}
               onClick={() => setCameraIntent({ orient: o })}
-              className={`rounded px-2 py-0.5 text-[10px] ${
+              className={cn(
                 cameraIntent.orient === o
-                  ? "bg-white/25 text-white"
-                  : "bg-white/5 text-white/60 hover:bg-white/15"
-              } disabled:opacity-50`}
+                  ? "bg-foreground/25 text-foreground hover:bg-foreground/25"
+                  : "bg-foreground/5 text-foreground/60 hover:bg-foreground/15",
+              )}
             >
               {o}
-            </button>
+            </Button>
           ))}
         </div>
       </div>
@@ -296,57 +460,311 @@ export function CameraPanel() {
 
       <ProjectionRow />
       <FovOrSizeSlider />
+    </>
+  );
+}
 
-      <hr className="border-white/10" />
-
-      <div className="grid grid-cols-[5rem_1fr] gap-1 font-mono text-[10px] text-white/70">
-        <div>live pos</div>
-        <div className="tabular-nums">
-          {fmt(livePos[0])} {fmt(livePos[1])} {fmt(livePos[2])}
-        </div>
-        <div>live rot°</div>
-        <div className="tabular-nums">
-          {fmt(liveRotDeg[0], 1)} {fmt(liveRotDeg[1], 1)} {fmt(liveRotDeg[2], 1)}
-        </div>
-        <div>live fov</div>
-        <div className="tabular-nums">{fmt(cameraLive.fov)}</div>
+function OrbitSection() {
+  const orbit = useSceneStore((s) => s.orbit);
+  const setOrbit = useSceneStore((s) => s.setOrbit);
+  return (
+    <>
+      <div className="flex items-center justify-end">
+        <FocalIndicatorToggle />
       </div>
+      <ValueSlider
+        label="speed"
+        value={orbit.periodSec}
+        min={5}
+        max={3600}
+        step={5}
+        onChange={(periodSec) => setOrbit({ periodSec })}
+      />
+      <ValueSlider
+        label="radius"
+        value={orbit.radius}
+        min={50}
+        max={5000}
+        step={5}
+        onChange={(radius) => setOrbit({ radius })}
+      />
+      <ValueSlider
+        label="elev°"
+        value={orbit.elevationDeg}
+        min={0.01}
+        max={90}
+        step={0.5}
+        onChange={(elevationDeg) => setOrbit({ elevationDeg })}
+      />
+      <ValueSlider
+        label="azim°"
+        value={orbit.azimuthDeg}
+        min={0}
+        max={360}
+        step={1}
+        onChange={(azimuthDeg) => setOrbit({ azimuthDeg })}
+      />
+      <ValueSlider
+        label="focal y"
+        value={orbit.lookAtY}
+        min={-200}
+        max={2000}
+        step={1}
+        onChange={(lookAtY) => setOrbit({ lookAtY })}
+      />
+    </>
+  );
+}
 
-      <hr className="border-white/10" />
+function StarsSection() {
+  const stars = useSceneStore((s) => s.stars);
+  const setStars = useSceneStore((s) => s.setStars);
+  return (
+    <>
+      <ValueSlider
+        label="size"
+        value={stars.factor}
+        min={5}
+        max={500}
+        step={1}
+        onChange={(factor) => setStars({ factor })}
+      />
+      <ValueSlider
+        label="radius"
+        value={stars.radius}
+        min={500}
+        max={30000}
+        step={100}
+        onChange={(radius) => setStars({ radius })}
+      />
+      <ValueSlider
+        label="depth"
+        value={stars.depth}
+        min={50}
+        max={8000}
+        step={50}
+        onChange={(depth) => setStars({ depth })}
+      />
+      <ValueSlider
+        label="count"
+        value={stars.count}
+        min={100}
+        max={30000}
+        step={100}
+        onChange={(count) => setStars({ count })}
+      />
+    </>
+  );
+}
 
-      <DebugRow />
-
-      <hr className="border-white/10" />
-
-      <SeedRow />
-
-      <hr className="border-white/10" />
-
-      <PerfReadout />
-
-      <hr className="border-white/10" />
-
-      <div className="flex items-center justify-between gap-2">
-        <button
-          onClick={() => resetCamera()}
-          className="rounded bg-transparent px-3 py-1 text-xs font-medium text-rose-400 hover:bg-rose-400/10 hover:text-rose-300"
-          title="Restore last saved values (falls back to hardcoded defaults if none saved)"
+function MoonSection() {
+  const moon = useSceneStore((s) => s.moon);
+  const setMoon = useSceneStore((s) => s.setMoon);
+  const followCamera = useSceneStore((s) => s.moonFollowCamera);
+  const setFollowCamera = useSceneStore((s) => s.setMoonFollowCamera);
+  return (
+    <>
+      <div className="flex items-center justify-end">
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => setFollowCamera(!followCamera)}
+          title="Moon tracks the camera so it stays opposite the city"
+          className={cn(
+            followCamera
+              ? "bg-indigo-400 text-black hover:bg-indigo-400"
+              : "bg-foreground/10 text-foreground hover:bg-foreground/20",
+          )}
         >
-          Reset
-        </button>
-        <button
-          onClick={() => saveCurrentAsDefault()}
-          className="rounded bg-emerald-400/80 px-3 py-1 text-xs text-black hover:bg-emerald-400"
-          title="Snapshot current camera + orbit + moon + stars as the new Reset target"
-        >
-          Save
-        </button>
+          {followCamera ? "follow cam (on)" : "follow cam"}
+        </Button>
       </div>
+      <ValueSlider
+        label="az°"
+        value={moon.azimuthDeg}
+        min={0}
+        max={360}
+        step={1}
+        onChange={(azimuthDeg) => setMoon({ azimuthDeg })}
+      />
+      <ValueSlider
+        label="el°"
+        value={moon.elevationDeg}
+        min={-10}
+        max={90}
+        step={0.5}
+        onChange={(elevationDeg) => setMoon({ elevationDeg })}
+      />
+      <ValueSlider
+        label="dist"
+        value={moon.distance}
+        min={500}
+        max={30000}
+        step={50}
+        onChange={(distance) => setMoon({ distance })}
+      />
+      <MoonReadout />
+    </>
+  );
+}
 
-      <div className="text-[10px] text-white/40">
-        S still · F fly · G orbit · H hide
+function FogSection() {
+  const fog = useSceneStore((s) => s.fog);
+  const setFog = useSceneStore((s) => s.setFog);
+  return (
+    <>
+      <div className="flex items-center justify-end">
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => setFog({ enabled: !fog.enabled })}
+          title="Toggle linear scene fog on/off"
+          className={cn(
+            fog.enabled
+              ? "bg-foreground text-background hover:bg-foreground"
+              : "bg-foreground/10 text-foreground hover:bg-foreground/20",
+          )}
+        >
+          {fog.enabled ? "on" : "off"}
+        </Button>
+      </div>
+      <ValueSlider
+        label="near"
+        value={fog.near}
+        min={0}
+        max={6000}
+        step={10}
+        onChange={(near) => setFog({ near })}
+      />
+      <ValueSlider
+        label="far"
+        value={fog.far}
+        min={50}
+        max={6000}
+        step={10}
+        onChange={(far) => setFog({ far })}
+      />
+    </>
+  );
+}
+
+function IntroSection() {
+  const intro = useSceneStore((s) => s.intro);
+  const setIntroDuration = useSceneStore((s) => s.setIntroDuration);
+  const setIntroMode = useSceneStore((s) => s.setIntroMode);
+  const setBreathingPeriod = useSceneStore((s) => s.setBreathingPeriod);
+  const playIntro = useSceneStore((s) => s.playIntro);
+  const modes = ["random", "district", "outside-in", "inside-out", "far-to-near"] as const;
+  return (
+    <>
+      <div className="flex items-center justify-end">
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => playIntro()}
+          title="Replay the wake-up sequence from progress = 0"
+          className="bg-amber-300 text-black hover:bg-amber-300/90"
+        >
+          ▶ play
+        </Button>
+      </div>
+      <ValueSlider
+        label="duration"
+        value={intro.durationSec}
+        min={1}
+        max={30}
+        step={0.5}
+        onChange={(durationSec) => setIntroDuration(durationSec)}
+      />
+      <ValueSlider
+        label="off cycle"
+        value={intro.breathingPeriodSec}
+        min={3}
+        max={600}
+        step={1}
+        onChange={(breathingPeriodSec) => setBreathingPeriod(breathingPeriodSec)}
+      />
+      <div className="flex items-center gap-2 text-xs">
+        <span className="w-14 shrink-0 text-foreground/70">mode</span>
+        <Select
+          value={intro.mode}
+          onValueChange={(v) => setIntroMode(v as typeof intro.mode)}
+        >
+          <SelectTrigger
+            size="sm"
+            className="w-full bg-background/50 text-foreground hover:bg-background/60"
+          >
+            <SelectValue placeholder="mode" />
+          </SelectTrigger>
+          <SelectContent>
+            {modes.map((m) => (
+              <SelectItem key={m} value={m}>
+                {m}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="grid grid-cols-[5rem_1fr] gap-1 font-mono text-xs text-foreground/70">
+        <div>progress</div>
+        <div className="tabular-nums">{fmt(intro.progress, 2)}</div>
+      </div>
+    </>
+  );
+}
+
+function ModeDetailPanel({ mode }: { mode: "still" | "fly" | "orbit" }) {
+  if (mode === "fly") {
+    return (
+      <div className="flex flex-col gap-1.5 rounded-lg border border-orange-400/30 bg-orange-400/5 p-2 text-foreground/70">
+        <div className="text-xs uppercase tracking-wide text-orange-200/80">fly</div>
+        <div className="text-xs leading-snug">
+          Hold LMB look · WASD move · Space up · C down · Q/E roll · Shift sprint · wheel = speed · F exit
+        </div>
+        <FlySpeedSlider />
+      </div>
+    );
+  }
+  if (mode === "orbit") {
+    return (
+      <div className="flex flex-col gap-1.5 rounded-lg border border-sky-400/30 bg-sky-400/5 p-2 text-foreground/70">
+        <div className="flex items-center justify-between">
+          <span className="text-xs uppercase tracking-wide text-sky-300/80">orbit</span>
+          <OrbitPauseBadge />
+        </div>
+        <div className="text-xs leading-snug">
+          Drag spin · RMB drag = focal Y · pinch / wheel zoom · two-finger pan = focal Y · Space pause
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-1 rounded-lg border border-foreground/15 bg-foreground/5 p-2 text-foreground/70">
+      <div className="text-xs uppercase tracking-wide text-foreground/55">still</div>
+      <div className="text-xs leading-snug">
+        Pose set by position / lookAt / rotation / FOV. Tween presets to jump to common framings; switch to Fly (F) or Orbit (G) for motion.
       </div>
     </div>
+  );
+}
+
+function OrbitPauseBadge() {
+  const paused = useSceneStore((s) => s.orbitPaused);
+  const setOrbitPaused = useSceneStore((s) => s.setOrbitPaused);
+  return (
+    <Button
+      variant="secondary"
+      size="sm"
+      onClick={() => setOrbitPaused(!paused)}
+      title="Pause / resume orbit auto-revolution (Space)"
+      className={cn(
+        paused
+          ? "bg-sky-400 text-black hover:bg-sky-400"
+          : "bg-foreground/10 text-foreground/80 hover:bg-foreground/20",
+      )}
+    >
+      {paused ? "▶ resume" : "⏸ pause"}
+    </Button>
   );
 }
 
@@ -354,49 +772,42 @@ function FlySpeedSlider() {
   const flySpeed = useSceneStore((s) => s.flySpeed);
   const setFlySpeed = useSceneStore((s) => s.setFlySpeed);
   return (
-    <div className="flex items-center gap-2 text-xs">
-      <span className="w-16 shrink-0 text-orange-200/80">fly speed</span>
-      <input
-        type="range"
-        min={0.1}
-        max={500}
-        step={0.1}
-        value={flySpeed}
-        onChange={(e) => setFlySpeed(parseFloat(e.target.value))}
-        className="flex-1"
-      />
-      <input
-        type="number"
-        step={0.1}
-        value={flySpeed}
-        onChange={(e) => setFlySpeed(parseFloat(e.target.value) || 0.1)}
-        className="w-16 rounded border border-white/15 bg-black/50 px-1.5 py-0.5 text-white tabular-nums"
-      />
-    </div>
+    <ValueSlider
+      label="fly speed"
+      value={flySpeed}
+      min={0.1}
+      max={500}
+      step={0.1}
+      onChange={setFlySpeed}
+      labelClass="text-orange-200/80"
+    />
   );
 }
 
 function ProjectionRow() {
   const projection = useSceneStore((s) => s.projection);
   return (
-    <div className="flex items-center gap-2 text-xs">
-      <span className="w-16 shrink-0 text-[10px] uppercase tracking-wide text-white/40">
+    <div className="flex items-center gap-2">
+      <span className="w-16 shrink-0 text-xs uppercase tracking-wide text-foreground/40">
         projection
       </span>
       <div className="flex flex-1 gap-1">
         {(["perspective", "orthographic"] as const).map((p) => (
-          <button
+          <Button
             key={p}
+            variant="secondary"
+            size="sm"
             onClick={() => tweenProjectionTo(p)}
-            className={`flex-1 rounded px-2 py-0.5 text-[11px] ${
-              projection === p
-                ? "bg-white/85 text-black"
-                : "bg-white/10 text-white hover:bg-white/20"
-            }`}
             title={`Switch to ${p} projection (tweens via GSAP)`}
+            className={cn(
+              "flex-1 capitalize",
+              projection === p
+                ? "bg-foreground text-background hover:bg-foreground"
+                : "bg-foreground/10 text-foreground hover:bg-foreground/20",
+            )}
           >
-            {p === "perspective" ? "Perspective" : "Orthographic"}
-          </button>
+            {p}
+          </Button>
         ))}
       </div>
     </div>
@@ -409,50 +820,27 @@ function FovOrSizeSlider() {
   const orthoSize = useSceneStore((s) => s.orthoSize);
   const setCameraIntent = useSceneStore((s) => s.setCameraIntent);
   const setOrthoSize = useSceneStore((s) => s.setOrthoSize);
-
   if (projection === "orthographic") {
     return (
-      <div className="flex items-center gap-2">
-        <span className="w-16 shrink-0 text-white/60">size</span>
-        <input
-          type="range"
-          min={5}
-          max={2000}
-          step={1}
-          value={orthoSize}
-          onChange={(e) => setOrthoSize(parseFloat(e.target.value))}
-          className="flex-1"
-        />
-        <input
-          type="number"
-          step={1}
-          value={orthoSize}
-          onChange={(e) => setOrthoSize(parseFloat(e.target.value) || 5)}
-          className="w-14 rounded border border-white/15 bg-black/50 px-1.5 py-0.5 text-white tabular-nums"
-        />
-      </div>
+      <ValueSlider
+        label="size"
+        value={orthoSize}
+        min={5}
+        max={2000}
+        step={1}
+        onChange={setOrthoSize}
+      />
     );
   }
   return (
-    <div className="flex items-center gap-2">
-      <span className="w-16 shrink-0 text-white/60">fov</span>
-      <input
-        type="range"
-        min={5}
-        max={150}
-        step={1}
-        value={fov}
-        onChange={(e) => setCameraIntent({ fov: parseFloat(e.target.value) })}
-        className="flex-1"
-      />
-      <input
-        type="number"
-        step={1}
-        value={fov}
-        onChange={(e) => setCameraIntent({ fov: parseFloat(e.target.value) || 38 })}
-        className="w-14 rounded border border-white/15 bg-black/50 px-1.5 py-0.5 text-white tabular-nums"
-      />
-    </div>
+    <ValueSlider
+      label="fov"
+      value={fov}
+      min={5}
+      max={150}
+      step={1}
+      onChange={(v) => setCameraIntent({ fov: v })}
+    />
   );
 }
 
@@ -470,238 +858,63 @@ function ModeButton({
   onClick: () => void;
 }) {
   return (
-    <button
+    <Button
+      variant="secondary"
+      size="sm"
       onClick={onClick}
-      className={`rounded px-2 py-0.5 text-xs ${
-        active ? activeClass : "bg-white/10 text-white hover:bg-white/20"
-      }`}
       title={`${label} mode (${hotkey})`}
+      className={cn(active ? activeClass : "bg-foreground/10 text-foreground hover:bg-foreground/20")}
     >
-      {label} <span className="text-[9px] opacity-70">({hotkey})</span>
-    </button>
+      {label}
+      <span className="text-[10px] opacity-70">({hotkey})</span>
+    </Button>
   );
 }
 
-function DebugRow() {
-  const [visible, setVisible] = useDebugVisible();
-  const followCamera = useSceneStore((s) => s.moonFollowCamera);
-  const setFollowCamera = useSceneStore((s) => s.setMoonFollowCamera);
-  const stars = useSceneStore((s) => s.stars);
-  const setStars = useSceneStore((s) => s.setStars);
-  const moon = useSceneStore((s) => s.moon);
-  const setMoon = useSceneStore((s) => s.setMoon);
-  const orbit = useSceneStore((s) => s.orbit);
-  const setOrbit = useSceneStore((s) => s.setOrbit);
-
+function CopyButton() {
   const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
   const onCopy = () => {
     copyConfigToClipboard();
     setCopyState("copied");
     setTimeout(() => setCopyState("idle"), 1200);
   };
-
   return (
-    <div className="flex flex-col gap-1 rounded border border-indigo-400/30 bg-indigo-400/5 p-2">
-      <div className="flex items-center justify-between">
-        <label className="flex cursor-pointer items-center gap-2 text-[10px] uppercase tracking-wide text-indigo-300/80">
-          <input
-            type="checkbox"
-            checked={visible}
-            onChange={(e) => setVisible(e.target.checked)}
-            className="h-3 w-3 accent-indigo-400"
-          />
-          debug
-        </label>
-        <button
-          onClick={onCopy}
-          className="rounded bg-white/10 px-2 py-0.5 text-[10px] hover:bg-white/20"
-          title="Copy camera + orbit + moon + stars as JSON to clipboard"
-        >
-          {copyState === "copied" ? "copied" : "copy values"}
-        </button>
-      </div>
-
-      {visible ? (
-        <>
-          <SubSection label="🌀 orbit">
-            <OrbitSlider
-              label="speed"
-              value={orbit.periodSec}
-              min={5}
-              max={3600}
-              step={5}
-              onChange={(periodSec) => setOrbit({ periodSec })}
-            />
-            <OrbitSlider
-              label="radius"
-              value={orbit.radius}
-              min={50}
-              max={5000}
-              step={5}
-              onChange={(radius) => setOrbit({ radius })}
-            />
-            <OrbitSlider
-              label="elev°"
-              value={orbit.elevationDeg}
-              min={0.01}
-              max={90}
-              step={0.5}
-              onChange={(elevationDeg) => setOrbit({ elevationDeg })}
-            />
-            <OrbitSlider
-              label="azim°"
-              value={orbit.azimuthDeg}
-              min={0}
-              max={360}
-              step={1}
-              onChange={(azimuthDeg) => setOrbit({ azimuthDeg })}
-            />
-            <OrbitSlider
-              label="lookAt y"
-              value={orbit.lookAtY}
-              min={-200}
-              max={2000}
-              step={1}
-              onChange={(lookAtY) => setOrbit({ lookAtY })}
-            />
-          </SubSection>
-
-          <SubSection label="⭐ stars">
-            <OrbitSlider
-              label="size"
-              value={stars.factor}
-              min={5}
-              max={500}
-              step={1}
-              onChange={(factor) => setStars({ factor })}
-            />
-            <OrbitSlider
-              label="radius"
-              value={stars.radius}
-              min={500}
-              max={30000}
-              step={100}
-              onChange={(radius) => setStars({ radius })}
-            />
-            <OrbitSlider
-              label="depth"
-              value={stars.depth}
-              min={50}
-              max={8000}
-              step={50}
-              onChange={(depth) => setStars({ depth })}
-            />
-            <OrbitSlider
-              label="count"
-              value={stars.count}
-              min={100}
-              max={30000}
-              step={100}
-              onChange={(count) => setStars({ count })}
-            />
-          </SubSection>
-
-          <SubSection
-            label="🌙 moon"
-            action={
-              <button
-                onClick={() => setFollowCamera(!followCamera)}
-                className={`rounded px-2 py-0.5 text-[10px] ${
-                  followCamera ? "bg-indigo-400/80 text-black" : "bg-white/10 hover:bg-white/20"
-                }`}
-                title="Moon tracks the camera so it stays opposite the city"
-              >
-                {followCamera ? "follow cam (on)" : "follow cam"}
-              </button>
-            }
-          >
-            <OrbitSlider
-              label="az°"
-              value={moon.azimuthDeg}
-              min={0}
-              max={360}
-              step={1}
-              onChange={(azimuthDeg) => setMoon({ azimuthDeg })}
-            />
-            <OrbitSlider
-              label="el°"
-              value={moon.elevationDeg}
-              min={-10}
-              max={90}
-              step={0.5}
-              onChange={(elevationDeg) => setMoon({ elevationDeg })}
-            />
-            <OrbitSlider
-              label="dist"
-              value={moon.distance}
-              min={500}
-              max={30000}
-              step={50}
-              onChange={(distance) => setMoon({ distance })}
-            />
-            <MoonReadout />
-          </SubSection>
-
-          <FogSubSection />
-        </>
-      ) : null}
-    </div>
+    <Button
+      variant="secondary"
+      size="sm"
+      onClick={onCopy}
+      title="Copy camera + orbit + moon + stars as JSON to clipboard"
+      className="bg-foreground/10 text-foreground hover:bg-foreground/20"
+    >
+      {copyState === "copied" ? "copied" : "copy"}
+    </Button>
   );
 }
 
-function FogSubSection() {
-  const fog = useSceneStore((s) => s.fog);
-  const setFog = useSceneStore((s) => s.setFog);
+function FocalIndicatorToggle() {
+  const show = useSceneStore((s) => s.showFocalIndicator);
+  const setShow = useSceneStore((s) => s.setShowFocalIndicator);
   return (
-    <div className="flex flex-col gap-1 rounded border border-white/10 bg-black/30 p-2">
-      <div className="flex items-center justify-between">
-        <span className="text-[10px] uppercase tracking-wide text-white/55">🌫️ fog</span>
-        <span className="text-[10px] text-white/35">linear, scene background</span>
-      </div>
-      <OrbitSlider
-        label="near"
-        value={fog.near}
-        min={0}
-        max={5000}
-        step={10}
-        onChange={(near) => setFog({ near })}
-      />
-      <OrbitSlider
-        label="far"
-        value={fog.far}
-        min={50}
-        max={12000}
-        step={10}
-        onChange={(far) => setFog({ far })}
-      />
-    </div>
-  );
-}
-
-function SubSection({
-  label,
-  action,
-  children,
-}: {
-  label: string;
-  action?: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-1 rounded border border-white/10 bg-black/30 p-2">
-      <div className="flex items-center justify-between">
-        <span className="text-[10px] uppercase tracking-wide text-white/55">{label}</span>
-        {action}
-      </div>
-      {children}
-    </div>
+    <Button
+      variant="secondary"
+      size="sm"
+      onClick={() => setShow(!show)}
+      title="Toggle the screen-space focal-point crosshair"
+      className={cn(
+        show
+          ? "bg-sky-400 text-black hover:bg-sky-400"
+          : "bg-foreground/10 text-foreground/80 hover:bg-foreground/20",
+      )}
+    >
+      focal point {show ? "[on]" : "[off]"}
+    </Button>
   );
 }
 
 function MoonReadout() {
   const moon = useSceneStore((s) => s.moonLive);
   return (
-    <div className="mt-1 grid grid-cols-[5rem_1fr] gap-1 border-t border-indigo-400/15 pt-1 font-mono text-[10px] text-white/70">
+    <div className="mt-1 grid grid-cols-[5rem_1fr] gap-1 border-t border-foreground/10 pt-1.5 font-mono text-xs text-foreground/70">
       <div>moon pos</div>
       <div className="tabular-nums">
         {fmt(moon.position[0], 0)} {fmt(moon.position[1], 0)} {fmt(moon.position[2], 0)}
@@ -716,13 +929,14 @@ function MoonReadout() {
   );
 }
 
-function OrbitSlider({
+function ValueSlider({
   label,
   value,
   min,
   max,
   step,
   onChange,
+  labelClass,
 }: {
   label: string;
   value: number;
@@ -730,17 +944,17 @@ function OrbitSlider({
   max: number;
   step: number;
   onChange: (v: number) => void;
+  labelClass?: string;
 }) {
   return (
     <div className="flex items-center gap-2 text-xs">
-      <span className="w-14 shrink-0 text-white/70">{label}</span>
-      <input
-        type="range"
+      <span className={cn("w-14 shrink-0 text-foreground/70", labelClass)}>{label}</span>
+      <Slider
         min={min}
         max={max}
         step={step}
         value={value}
-        onChange={(e) => onChange(parseFloat(e.target.value))}
+        onValueChange={(v) => onChange(typeof v === "number" ? v : v[0])}
         className="flex-1"
       />
       <input
@@ -748,8 +962,64 @@ function OrbitSlider({
         step={step}
         value={value}
         onChange={(e) => onChange(parseFloat(e.target.value) || min)}
-        className="w-16 rounded border border-white/15 bg-black/50 px-1.5 py-0.5 text-white tabular-nums"
+        className="w-16 rounded border border-foreground/15 bg-background/60 px-1.5 py-0.5 text-foreground tabular-nums"
       />
+    </div>
+  );
+}
+
+function Vec3Header() {
+  return (
+    <div className="flex items-center gap-2 text-xs">
+      <div className="w-16 shrink-0" />
+      {(["X", "Y", "Z"] as const).map((axis) => (
+        <span
+          key={axis}
+          className="flex-1 text-center text-[11px] font-medium uppercase tracking-wider text-foreground/40"
+        >
+          {axis}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function Vec3Input({
+  label,
+  value,
+  disabled,
+  hint,
+  step = 0.5,
+  onChange,
+}: {
+  label: string;
+  value: Vec3;
+  disabled: boolean;
+  hint?: string;
+  step?: number;
+  onChange: (v: Vec3) => void;
+}) {
+  return (
+    <div className="flex items-center gap-2 text-xs">
+      <div className="flex w-16 shrink-0 flex-col text-foreground/60">
+        <span>{label}</span>
+        {hint ? <span className="text-[10px] text-foreground/35">{hint}</span> : null}
+      </div>
+      {(["x", "y", "z"] as const).map((axis, i) => (
+        <input
+          key={axis}
+          type="number"
+          step={step}
+          disabled={disabled}
+          value={value[i]}
+          onChange={(e) => {
+            const v = [...value] as Vec3;
+            v[i] = parseFloat(e.target.value) || 0;
+            onChange(v);
+          }}
+          className="w-0 min-w-0 flex-1 rounded border border-foreground/15 bg-background/60 px-1.5 py-1 text-foreground tabular-nums disabled:opacity-50"
+        />
+      ))}
     </div>
   );
 }
@@ -768,7 +1038,7 @@ function SeedRow() {
 
   return (
     <div className="flex items-center gap-2 text-xs">
-      <span className="w-16 shrink-0 text-white/60">seed</span>
+      <span className="w-14 shrink-0 text-foreground/70">seed</span>
       <input
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
@@ -776,15 +1046,17 @@ function SeedRow() {
         onKeyDown={(e) => {
           if (e.key === "Enter") (e.target as HTMLInputElement).blur();
         }}
-        className="min-w-0 flex-1 rounded border border-white/15 bg-black/50 px-1.5 py-0.5 font-mono text-white"
+        className="min-w-0 flex-1 rounded border border-foreground/15 bg-background/60 px-1.5 py-0.5 font-mono text-foreground"
       />
-      <button
+      <Button
+        variant="secondary"
+        size="sm"
         onClick={() => setSeed(randomSeed())}
-        className="rounded bg-white/10 px-2 py-0.5 text-xs hover:bg-white/20"
         title="Reroll seed"
+        className="bg-foreground/10 text-foreground hover:bg-foreground/20"
       >
         Reroll
-      </button>
+      </Button>
     </div>
   );
 }
@@ -794,7 +1066,7 @@ function PerfReadout() {
   const fpsColor =
     perf.fps >= 55 ? "text-emerald-300" : perf.fps >= 35 ? "text-amber-300" : "text-rose-400";
   return (
-    <div className="grid grid-cols-[5rem_1fr] gap-1 font-mono text-[10px] text-white/70">
+    <div className="grid grid-cols-[5rem_1fr] gap-1 font-mono text-xs text-foreground/70">
       <div>fps</div>
       <div className={`tabular-nums ${fpsColor}`}>{Math.round(perf.fps)}</div>
       <div>triangles</div>

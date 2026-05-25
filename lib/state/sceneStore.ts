@@ -25,12 +25,13 @@ export type CameraLive = {
 };
 
 // All in meters. See wiki/research/building-sizes-real-world-references.md
+// Tuned via the in-app Save/Copy values workflow on 2026-05-25.
 export const DEFAULT_INTENT: CameraIntent = {
-  position: [0, 2, 400],
-  lookAt: [0, 2, 0],
-  rotation: [(16 * Math.PI) / 180, 0, 0],
+  position: [-3.428768842032016, 34.13166196623823, -769.0941943937339],
+  lookAt: [-3.377414762153272, 36.473654819023615, -759.3724439219319],
+  rotation: [2.9051946114622647, -0.005135430560327543, 3.140355522200459],
   fov: 45,
-  orient: "rotation",
+  orient: "lookAt",
 };
 
 export const TOP_DOWN_INTENT: CameraIntent = {
@@ -51,26 +52,32 @@ export type TweenRequest = { to: CameraIntent; durationMs: number };
 export type OrbitConfig = {
   centerX: number;
   centerZ: number;
-  lookAtY: number; // absolute Y the camera aims at
+  // Absolute world-Y of the lookAt target. Fixed in space — the camera arcs
+  // around (centerX, lookAtY, centerZ) as elevation and azimuth change.
+  lookAtY: number;
   radius: number; // 3D distance from city centre (the orbit sphere radius)
   azimuthDeg: number; // current yaw around city axis, 0 = +z
   elevationDeg: number; // angle above horizon, 0 = horizon, 90 = directly above
   periodSec: number; // seconds per full revolution
 };
 
-// elevation = asin(2 / 650) ≈ 0.18° keeps the previous near-horizon view.
+// Tuned via the in-app Save/Copy values workflow on 2026-05-25.
+// Elevation pinned at the orbit floor (0.01°) so the ground plane stays visible
+// in ortho mode; focal Y at 150 frames the lower half of the city skyline.
 export const DEFAULT_ORBIT: OrbitConfig = {
   centerX: 0,
   centerZ: -120,
-  lookAtY: 240,
+  lookAtY: 150,
   radius: 650,
-  azimuthDeg: 180,
-  elevationDeg: 0.18,
+  azimuthDeg: 3.11353259843213,
+  elevationDeg: 0.01,
   periodSec: 500,
 };
 
-export const DEFAULT_MOON = { azimuthDeg: 200, elevationDeg: 32, distance: 4500 };
-export const DEFAULT_STARS = { radius: 4500, depth: 800, count: 8000, factor: 65 };
+// Azimuth flipped 180° from the 200° tuning that paired with the old camera
+// pose: with the new defaults the camera faces +z, so the moon sits at +z too.
+export const DEFAULT_MOON = { azimuthDeg: 20, elevationDeg: 32, distance: 4500 };
+export const DEFAULT_STARS = { radius: 4500, depth: 200, count: 16000, factor: 200 };
 
 const SAVED_CONFIG_KEY = "starry-night.savedConfig";
 
@@ -85,7 +92,31 @@ function readSavedConfig(): SavedConfig | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = window.localStorage.getItem(SAVED_CONFIG_KEY);
-    return raw ? (JSON.parse(raw) as SavedConfig) : null;
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as SavedConfig & {
+      orbit?: { lookAtY?: number; cameraY?: number; lookPitchDeg?: number };
+    };
+    // Migrate legacy orbit shapes: drop cameraY (no longer stored) and project
+    // a saved lookPitchDeg back into an absolute lookAtY at the saved radius.
+    if (parsed.orbit) {
+      const o = parsed.orbit as {
+        lookAtY?: number;
+        cameraY?: number;
+        lookPitchDeg?: number;
+        radius?: number;
+        elevationDeg?: number;
+      };
+      if (o.lookAtY === undefined && o.lookPitchDeg !== undefined) {
+        const radius = o.radius ?? DEFAULT_ORBIT.radius;
+        const elRad = ((o.elevationDeg ?? 0) * Math.PI) / 180;
+        const camY = radius * Math.sin(elRad);
+        const horizR = radius * Math.cos(elRad);
+        o.lookAtY = camY + horizR * Math.tan((o.lookPitchDeg * Math.PI) / 180);
+      }
+      delete o.lookPitchDeg;
+      delete o.cameraY;
+    }
+    return parsed as SavedConfig;
   } catch {
     return null;
   }
@@ -151,8 +182,34 @@ type SceneState = {
   // while flying (UE5-style); Shift sprints at FLY_SPRINT_MULTIPLIER.
   flySpeed: number;
   setFlySpeed: (v: number) => void;
-  fog: { near: number; far: number };
-  setFog: (patch: Partial<{ near: number; far: number }>) => void;
+  fog: { enabled: boolean; near: number; far: number };
+  setFog: (patch: Partial<{ enabled: boolean; near: number; far: number }>) => void;
+  // Visibility of the orbit focal-point crosshair.
+  showFocalIndicator: boolean;
+  setShowFocalIndicator: (v: boolean) => void;
+  // Intro / wake-up sequence. progress 0..1; mode selects per-window ordering.
+  intro: {
+    progress: number;
+    playing: boolean;
+    durationSec: number;
+    mode: "random" | "district" | "outside-in" | "far-to-near" | "inside-out";
+    // Base period of the post-intro breathing cycle in seconds.
+    breathingPeriodSec: number;
+  };
+  setIntroProgress: (v: number) => void;
+  setIntroPlaying: (v: boolean) => void;
+  setIntroDuration: (v: number) => void;
+  setIntroMode: (m: SceneState["intro"]["mode"]) => void;
+  setBreathingPeriod: (v: number) => void;
+  playIntro: () => void;
+  // Runtime flag set true while the user is holding RMB in orbit mode to drag
+  // the focal Y. Used to brighten the focal indicator while editing.
+  focalDragging: boolean;
+  setFocalDragging: (v: boolean) => void;
+  // Orbit auto-revolution pause. Toggled with Space in orbit mode; useFrame
+  // skips advancing the sweep while true. Manual drag still works.
+  orbitPaused: boolean;
+  setOrbitPaused: (v: boolean) => void;
   orbit: OrbitConfig;
   setOrbit: (patch: Partial<OrbitConfig>) => void;
   perf: Perf;
@@ -210,8 +267,30 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setProjectionBlend: (projectionBlend) => set({ projectionBlend }),
   flySpeed: 14,
   setFlySpeed: (flySpeed) => set({ flySpeed }),
-  fog: { near: 220, far: 1100 },
+  fog: { enabled: true, near: 240, far: 2400 },
   setFog: (patch) => set((s) => ({ fog: { ...s.fog, ...patch } })),
+  showFocalIndicator: false,
+  setShowFocalIndicator: (showFocalIndicator) => set({ showFocalIndicator }),
+  intro: {
+    progress: 0,
+    playing: false,
+    durationSec: 7,
+    mode: "random",
+    breathingPeriodSec: 90,
+  },
+  setIntroProgress: (progress) => set((s) => ({ intro: { ...s.intro, progress } })),
+  setIntroPlaying: (playing) => set((s) => ({ intro: { ...s.intro, playing } })),
+  setIntroDuration: (durationSec) =>
+    set((s) => ({ intro: { ...s.intro, durationSec } })),
+  setIntroMode: (mode) => set((s) => ({ intro: { ...s.intro, mode } })),
+  setBreathingPeriod: (breathingPeriodSec) =>
+    set((s) => ({ intro: { ...s.intro, breathingPeriodSec } })),
+  playIntro: () =>
+    set((s) => ({ intro: { ...s.intro, progress: 0, playing: true } })),
+  focalDragging: false,
+  setFocalDragging: (focalDragging) => set({ focalDragging }),
+  orbitPaused: false,
+  setOrbitPaused: (orbitPaused) => set({ orbitPaused }),
   orbit: DEFAULT_ORBIT,
   setOrbit: (patch) => set((s) => ({ orbit: { ...s.orbit, ...patch } })),
   perf: { fps: 0, triangles: 0, calls: 0, geometries: 0, textures: 0 },

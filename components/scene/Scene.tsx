@@ -12,6 +12,8 @@ import { CameraControls } from "./CameraControls";
 import { PerfMonitor } from "./PerfMonitor";
 import { TimeTicker } from "./TimeTicker";
 import { ProjectionBlender } from "./ProjectionBlender";
+import { FocalIndicator } from "./FocalIndicator";
+import { IntroTicker } from "./IntroTicker";
 
 export function Scene() {
   const masterSeed = useSceneStore((s) => s.masterSeed);
@@ -33,9 +35,10 @@ export function Scene() {
       <ProjectionBlender />
       <PerfMonitor />
       <TimeTicker />
+      <IntroTicker />
 
       <color attach="background" args={["#0a1838"]} />
-      <fog attach="fog" args={["#0a1838", fog.near, fog.far]} />
+      {fog.enabled ? <fog attach="fog" args={["#0a1838", fog.near, fog.far]} /> : null}
       <ambientLight intensity={0.04} />
 
       <Stars
@@ -52,6 +55,7 @@ export function Scene() {
       <Ground />
       <InstancedCity masterSeed={masterSeed} />
       <Streetlights masterSeed={masterSeed} />
+      <FocalIndicator />
     </Canvas>
   );
 }

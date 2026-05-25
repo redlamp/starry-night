@@ -11,4 +11,5 @@ Map of Content for architectural and product decisions. Each decision is an atom
 - [[decision-moon-celestial-model]] — Moon parametrised as azimuth / elevation / distance, not cylinder coords
 - [[decision-orbit-spherical-controls]] — Spherical orbit + drag / pinch / wheel controls on the canvas
 - [[decision-github-pages-deploy]] — Static export to GitHub Pages on every push to main
-- [[decision-debug-panel-architecture]] — IA + master toggle + save / reset / copy values
+- [[decision-debug-panel-architecture]] — IA + master toggle + save / reset / copy values *(superseded)*
+- [[decision-settings-sidebar-shadcn]] — shadcn rewire: full-height sidebar, multi-open accordion, light/grey/dark theme tokens
