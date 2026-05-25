@@ -239,10 +239,10 @@ export function CameraControls() {
   }, [camera]);
 
   // Orbit drag state.
-  //   Bare drag        = yaw + pitch
-  //   Shift + drag     = look pitch (vertical aim) — vertical only for now
+  //   Bare drag        = yaw + elevation (camera arcs around the fixed focal point)
+  //   Shift + drag     = focal Y (lookAtY) — vertical only for now
   //   Pinch            = radius zoom
-  //   Two-finger pan   = look pitch
+  //   Two-finger pan   = focal Y
   //   Wheel            = radius zoom
   const dragging = useRef(false);
   const dragBase = useRef<{
@@ -251,20 +251,20 @@ export function CameraControls() {
     startY: number;
     azimuthDeg: number;
     elevationDeg: number;
-    lookPitchDeg: number;
+    lookAtY: number;
     shift: boolean;
   } | null>(null);
   const pinch = useRef<{
     startDist: number;
     startRadius: number;
     startMidY: number;
-    startLookPitchDeg: number;
+    startLookAtY: number;
   } | null>(null);
   const activeTouches = useRef<Map<number, { x: number; y: number }>>(new Map());
 
-  const LOOK_PITCH_SENSITIVITY = 0.1; // deg per pixel
-  const LOOK_PITCH_MIN = -30;
-  const LOOK_PITCH_MAX = 60;
+  const FOCAL_Y_SENSITIVITY_RATIO = 0.005; // multiplied by orbit.radius — pan scales with how far out we are
+  const LOOK_AT_Y_MIN = -200;
+  const LOOK_AT_Y_MAX = 2000;
 
   const lastWrite = useRef(0);
   useFrame((_, dt) => {
@@ -291,15 +291,7 @@ export function CameraControls() {
         camY,
         orbit.centerZ + Math.cos(az) * horizR,
       );
-      // lookPitchDeg is the angle above the camera's own horizon; lookAt sits
-      // on the city axis at that pitch. Near the zenith (horizR → 0) we look
-      // straight down at the city to avoid a singular target.
-      if (horizR < 1) {
-        camera.lookAt(orbit.centerX, 0, orbit.centerZ);
-      } else {
-        const lookAtY = camY + horizR * Math.tan(orbit.lookPitchDeg * DEG2RAD);
-        camera.lookAt(orbit.centerX, lookAtY, orbit.centerZ);
-      }
+      camera.lookAt(orbit.centerX, orbit.lookAtY, orbit.centerZ);
       return;
     }
 
@@ -371,7 +363,7 @@ export function CameraControls() {
             startDist: Math.hypot(dx, dy),
             startRadius: o.radius,
             startMidY: (pts[0].y + pts[1].y) / 2,
-            startLookPitchDeg: o.lookPitchDeg,
+            startLookAtY: o.lookAtY,
           };
           dragging.current = false;
           dragBase.current = null;
@@ -387,7 +379,7 @@ export function CameraControls() {
         startY: e.clientY,
         azimuthDeg: o.azimuthDeg,
         elevationDeg: o.elevationDeg,
-        lookPitchDeg: o.lookPitchDeg,
+        lookAtY: o.lookAtY,
         shift: e.shiftKey,
       };
       dom.setPointerCapture?.(e.pointerId);
@@ -407,16 +399,17 @@ export function CameraControls() {
             ORBIT_RADIUS_MIN,
             ORBIT_RADIUS_MAX,
           );
-          // Two-finger midpoint translation drives look pitch.
+          // Two-finger midpoint translation drives focal Y (lookAtY).
           // Applied on top of the radius change so a translating pinch still zooms.
           const midY = (pts[0].y + pts[1].y) / 2;
-          const newLookPitchDeg = clamp(
-            pinch.current.startLookPitchDeg -
-              (midY - pinch.current.startMidY) * LOOK_PITCH_SENSITIVITY,
-            LOOK_PITCH_MIN,
-            LOOK_PITCH_MAX,
+          const focalSpeed = newRadius * FOCAL_Y_SENSITIVITY_RATIO;
+          const newLookAtY = clamp(
+            pinch.current.startLookAtY -
+              (midY - pinch.current.startMidY) * focalSpeed,
+            LOOK_AT_Y_MIN,
+            LOOK_AT_Y_MAX,
           );
-          setOrbit({ radius: newRadius, lookPitchDeg: newLookPitchDeg });
+          setOrbit({ radius: newRadius, lookAtY: newLookAtY });
           return;
         }
       }
@@ -431,22 +424,24 @@ export function CameraControls() {
           startY: e.clientY,
           azimuthDeg: o.azimuthDeg,
           elevationDeg: o.elevationDeg,
-          lookPitchDeg: o.lookPitchDeg,
+          lookAtY: o.lookAtY,
           shift: e.shiftKey,
         };
         return;
       }
 
       if (e.shiftKey) {
-        // Vertical drag → look pitch. Horizontal axis is intentionally idle
+        // Vertical drag → focal Y. Horizontal axis is intentionally idle
         // until we wire up world-plane focal translation.
         const dy = e.clientY - dragBase.current.startY;
-        const newLookPitchDeg = clamp(
-          dragBase.current.lookPitchDeg - dy * LOOK_PITCH_SENSITIVITY,
-          LOOK_PITCH_MIN,
-          LOOK_PITCH_MAX,
+        const focalSpeed =
+          useSceneStore.getState().orbit.radius * FOCAL_Y_SENSITIVITY_RATIO;
+        const newLookAtY = clamp(
+          dragBase.current.lookAtY - dy * focalSpeed,
+          LOOK_AT_Y_MIN,
+          LOOK_AT_Y_MAX,
         );
-        setOrbit({ lookPitchDeg: newLookPitchDeg });
+        setOrbit({ lookAtY: newLookAtY });
         return;
       }
 
