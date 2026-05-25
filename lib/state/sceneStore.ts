@@ -147,6 +147,10 @@ type SceneState = {
   setProjection: (p: Projection) => void;
   setOrthoSize: (s: number) => void;
   setProjectionBlend: (b: number) => void;
+  // Fly-mode movement speed, in m/s. Mouse wheel scales it multiplicatively
+  // while flying (UE5-style); Shift sprints at FLY_SPRINT_MULTIPLIER.
+  flySpeed: number;
+  setFlySpeed: (v: number) => void;
   orbit: OrbitConfig;
   setOrbit: (patch: Partial<OrbitConfig>) => void;
   perf: Perf;
@@ -202,6 +206,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setProjection: (projection) => set({ projection }),
   setOrthoSize: (orthoSize) => set({ orthoSize }),
   setProjectionBlend: (projectionBlend) => set({ projectionBlend }),
+  flySpeed: 14,
+  setFlySpeed: (flySpeed) => set({ flySpeed }),
   orbit: DEFAULT_ORBIT,
   setOrbit: (patch) => set((s) => ({ orbit: { ...s.orbit, ...patch } })),
   perf: { fps: 0, triangles: 0, calls: 0, geometries: 0, textures: 0 },
