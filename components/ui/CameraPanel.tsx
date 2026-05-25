@@ -216,19 +216,8 @@ export function CameraPanel() {
         </div>
       </div>
 
-      {flying ? (
-        <div className="flex flex-col gap-1 rounded border border-orange-400/30 bg-orange-400/5 p-2 text-white/70">
-          <div className="text-[10px]">
-            Hold left mouse to look · WASD move · Space up · C down · Q/E roll · Shift sprint · wheel = speed · F to exit
-          </div>
-          <FlySpeedSlider />
-        </div>
-      ) : null}
-      {orbiting ? (
-        <div className="text-sky-300/80">
-          Drag to spin · Shift+drag = focal Y · pinch or wheel = zoom · two-finger pan = focal Y
-        </div>
-      ) : null}
+      <ModeDetailPanel mode={cameraMode} />
+
 
       <div className="flex items-center gap-1">
         <span className="w-16 shrink-0 text-[10px] uppercase tracking-wide text-white/40">
@@ -346,6 +335,68 @@ export function CameraPanel() {
       <div className="text-[10px] text-white/40">
         S still · F fly · G orbit · H hide
       </div>
+    </div>
+  );
+}
+
+// Same min-height for every mode so the rest of the panel doesn't jump when
+// switching modes. Each mode owns its border colour and content; the height
+// is locked by `min-h-[5.5rem]`.
+function ModeDetailPanel({ mode }: { mode: "still" | "fly" | "orbit" }) {
+  if (mode === "fly") {
+    return (
+      <div className="flex min-h-[5.5rem] flex-col gap-1 rounded border border-orange-400/30 bg-orange-400/5 p-2 text-white/70">
+        <div className="text-[10px] uppercase tracking-wide text-orange-200/80">fly</div>
+        <div className="text-[10px]">
+          Hold LMB look · WASD move · Space up · C down · Q/E roll · Shift sprint · wheel = speed · F exit
+        </div>
+        <FlySpeedSlider />
+      </div>
+    );
+  }
+  if (mode === "orbit") {
+    return (
+      <div className="flex min-h-[5.5rem] flex-col gap-1 rounded border border-sky-400/30 bg-sky-400/5 p-2 text-white/70">
+        <div className="text-[10px] uppercase tracking-wide text-sky-300/80">orbit</div>
+        <div className="text-[10px]">
+          Drag to spin · Shift+drag = look pitch · pinch or wheel = zoom · two-finger pan = look pitch
+        </div>
+        <OrbitSpeedHint />
+      </div>
+    );
+  }
+  return (
+    <div className="flex min-h-[5.5rem] flex-col gap-1 rounded border border-white/15 bg-white/5 p-2 text-white/70">
+      <div className="text-[10px] uppercase tracking-wide text-white/55">still</div>
+      <div className="text-[10px]">
+        Pose set by position / lookAt / rotation / FOV below. Tween presets to jump to common framings; switch to Fly (F) or Orbit (G) for motion.
+      </div>
+    </div>
+  );
+}
+
+function OrbitSpeedHint() {
+  const periodSec = useSceneStore((s) => s.orbit.periodSec);
+  const setOrbit = useSceneStore((s) => s.setOrbit);
+  return (
+    <div className="flex items-center gap-2 text-xs">
+      <span className="w-16 shrink-0 text-sky-200/80">speed</span>
+      <input
+        type="range"
+        min={5}
+        max={3600}
+        step={5}
+        value={periodSec}
+        onChange={(e) => setOrbit({ periodSec: parseFloat(e.target.value) })}
+        className="flex-1"
+      />
+      <input
+        type="number"
+        step={5}
+        value={periodSec}
+        onChange={(e) => setOrbit({ periodSec: parseFloat(e.target.value) || 5 })}
+        className="w-16 rounded border border-white/15 bg-black/50 px-1.5 py-0.5 text-white tabular-nums"
+      />
     </div>
   );
 }
@@ -557,12 +608,12 @@ function DebugRow() {
               onChange={(azimuthDeg) => setOrbit({ azimuthDeg })}
             />
             <OrbitSlider
-              label="lookAt y"
-              value={orbit.lookAtY}
-              min={-200}
-              max={2000}
-              step={1}
-              onChange={(lookAtY) => setOrbit({ lookAtY })}
+              label="look pitch°"
+              value={orbit.lookPitchDeg}
+              min={-30}
+              max={60}
+              step={0.5}
+              onChange={(lookPitchDeg) => setOrbit({ lookPitchDeg })}
             />
           </SubSection>
 
