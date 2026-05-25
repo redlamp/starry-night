@@ -219,6 +219,25 @@ export function CameraControls() {
         if (key === "s") setCameraMode("still");
         else if (key === "g") setCameraMode("orbit");
       }
+      // Space in orbit mode toggles auto-revolution. When pausing, settle the
+      // current azimuth into the store + reset orbitStart so resume continues
+      // from the same angle (same trick the drag handler uses).
+      if (currentMode === "orbit" && e.key === " ") {
+        e.preventDefault();
+        const s = useSceneStore.getState();
+        const next = !s.orbitPaused;
+        if (next) {
+          const now = performance.now();
+          const elapsed = (now - orbitStart.current) / 1000;
+          const sweepDeg = (elapsed / Math.max(1, s.orbit.periodSec)) * 360;
+          const az = ((s.orbit.azimuthDeg + sweepDeg) % 360 + 360) % 360;
+          s.setOrbit({ azimuthDeg: az });
+          orbitStart.current = now;
+        } else {
+          orbitStart.current = performance.now();
+        }
+        s.setOrbitPaused(next);
+      }
     };
     const onUp = (e: KeyboardEvent) => {
       const k = keyOf(e);
@@ -280,7 +299,8 @@ export function CameraControls() {
 
     // Orbit mode — spherical revolution around configured centre.
     if (mode === "orbit") {
-      const elapsed = dragging.current ? 0 : (now - orbitStart.current) / 1000;
+      const paused = useSceneStore.getState().orbitPaused;
+      const elapsed = dragging.current || paused ? 0 : (now - orbitStart.current) / 1000;
       const sweepRad = (elapsed / Math.max(1, orbit.periodSec)) * Math.PI * 2;
       const az = orbit.azimuthDeg * DEG2RAD + sweepRad;
       const el = orbit.elevationDeg * DEG2RAD;
