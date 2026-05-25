@@ -641,8 +641,39 @@ function DebugRow() {
             />
             <MoonReadout />
           </SubSection>
+
+          <FogSubSection />
         </>
       ) : null}
+    </div>
+  );
+}
+
+function FogSubSection() {
+  const fog = useSceneStore((s) => s.fog);
+  const setFog = useSceneStore((s) => s.setFog);
+  return (
+    <div className="flex flex-col gap-1 rounded border border-white/10 bg-black/30 p-2">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] uppercase tracking-wide text-white/55">🌫️ fog</span>
+        <span className="text-[10px] text-white/35">linear, scene background</span>
+      </div>
+      <OrbitSlider
+        label="near"
+        value={fog.near}
+        min={0}
+        max={5000}
+        step={10}
+        onChange={(near) => setFog({ near })}
+      />
+      <OrbitSlider
+        label="far"
+        value={fog.far}
+        min={50}
+        max={12000}
+        step={10}
+        onChange={(far) => setFog({ far })}
+      />
     </div>
   );
 }

@@ -17,6 +17,7 @@ export function Scene() {
   const masterSeed = useSceneStore((s) => s.masterSeed);
   const intent = useSceneStore((s) => s.cameraIntent);
   const stars = useSceneStore((s) => s.stars);
+  const fog = useSceneStore((s) => s.fog);
 
   return (
     <Canvas
@@ -34,7 +35,7 @@ export function Scene() {
       <TimeTicker />
 
       <color attach="background" args={["#0a1838"]} />
-      <fog attach="fog" args={["#0a1838", 220, 1100]} />
+      <fog attach="fog" args={["#0a1838", fog.near, fog.far]} />
       <ambientLight intensity={0.04} />
 
       <Stars
