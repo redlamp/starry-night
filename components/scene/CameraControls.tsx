@@ -185,15 +185,35 @@ export function CameraControls() {
   };
 
   useEffect(() => {
+    const isTyping = () => {
+      const el = typeof document !== "undefined" ? document.activeElement : null;
+      if (!el) return false;
+      const tag = el.tagName;
+      return (
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        tag === "SELECT" ||
+        (el as HTMLElement).isContentEditable
+      );
+    };
     const onDown = (e: KeyboardEvent) => {
+      const currentMode = useSceneStore.getState().cameraMode;
       const k = keyOf(e);
-      if (k) {
+      if (k && currentMode === "fly") {
         keys.current[k] = true;
         if (k === "space") e.preventDefault();
       }
-      if ((e.key === "f" || e.key === "F") && !e.repeat) {
-        if (useSceneStore.getState().cameraMode === "fly") exitFly();
+      if (e.repeat || isTyping()) return;
+      const key = e.key.toLowerCase();
+      if (key === "f") {
+        if (currentMode === "fly") exitFly();
         else setCameraMode("fly");
+        return;
+      }
+      // S and G switch modes only when NOT in fly mode (S is a movement key there).
+      if (currentMode !== "fly") {
+        if (key === "s") setCameraMode("still");
+        else if (key === "g") setCameraMode("orbit");
       }
     };
     const onUp = (e: KeyboardEvent) => {

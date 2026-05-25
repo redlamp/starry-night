@@ -146,42 +146,36 @@ export function CameraPanel() {
 
   return (
     <div className="pointer-events-auto absolute right-3 top-3 flex w-[22rem] flex-col gap-2 rounded-lg border border-white/10 bg-black/70 p-3 text-xs text-white backdrop-blur">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <span className="font-medium">Camera</span>
-        <div className="flex gap-1">
-          <button
+        <div className="flex items-center gap-1">
+          <ModeButton
+            label="Still"
+            hotkey="S"
+            active={cameraMode === "still"}
+            activeClass="bg-white/85 text-black"
+            onClick={() => {
+              if (flying) snapIntentToLive();
+              setCameraMode("still");
+            }}
+          />
+          <ModeButton
+            label="Fly"
+            hotkey="F"
+            active={flying}
+            activeClass="bg-orange-500/80 text-black"
             onClick={() => {
               if (flying) snapIntentToLive();
               setCameraMode(flying ? "still" : "fly");
             }}
-            className={`rounded px-2 py-0.5 text-xs ${
-              flying ? "bg-orange-500/80 text-black" : "bg-white/10 text-white hover:bg-white/20"
-            }`}
-          >
-            {flying ? "Stop fly (F)" : "Fly (F)"}
-          </button>
-          <button
+          />
+          <ModeButton
+            label="Orbit"
+            hotkey="G"
+            active={orbiting}
+            activeClass="bg-sky-400/80 text-black"
             onClick={() => setCameraMode(orbiting ? "still" : "orbit")}
-            className={`rounded px-2 py-0.5 text-xs ${
-              orbiting ? "bg-sky-400/80 text-black" : "bg-white/10 text-white hover:bg-white/20"
-            }`}
-          >
-            {orbiting ? "Stop orbit" : "Orbit"}
-          </button>
-          <button
-            onClick={() => saveCurrentAsDefault()}
-            className="rounded bg-emerald-400/80 px-2 py-0.5 text-black hover:bg-emerald-400"
-            title="Save current camera + orbit + moon + stars as the new Reset target"
-          >
-            Save
-          </button>
-          <button
-            onClick={() => resetCamera()}
-            className="rounded bg-white/10 px-2 py-0.5 hover:bg-white/20"
-            title="Restore last saved values (falls back to hardcoded defaults if none saved)"
-          >
-            Reset
-          </button>
+          />
           <button
             onClick={() => setHidden(true)}
             className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-base leading-none hover:bg-white/20 active:bg-white/30"
@@ -317,8 +311,55 @@ export function CameraPanel() {
 
       <PerfReadout />
 
-      <div className="text-[10px] text-white/40">H to hide · F to toggle fly</div>
+      <hr className="border-white/10" />
+
+      <div className="flex items-center justify-end gap-1">
+        <button
+          onClick={() => saveCurrentAsDefault()}
+          className="rounded bg-emerald-400/80 px-3 py-1 text-xs text-black hover:bg-emerald-400"
+          title="Snapshot current camera + orbit + moon + stars as the new Reset target"
+        >
+          Save
+        </button>
+        <button
+          onClick={() => resetCamera()}
+          className="rounded bg-white/10 px-3 py-1 text-xs hover:bg-white/20"
+          title="Restore last saved values (falls back to hardcoded defaults if none saved)"
+        >
+          Reset
+        </button>
+      </div>
+
+      <div className="text-[10px] text-white/40">
+        S still · F fly · G orbit · H hide
+      </div>
     </div>
+  );
+}
+
+function ModeButton({
+  label,
+  hotkey,
+  active,
+  activeClass,
+  onClick,
+}: {
+  label: string;
+  hotkey: string;
+  active: boolean;
+  activeClass: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`rounded px-2 py-0.5 text-xs ${
+        active ? activeClass : "bg-white/10 text-white hover:bg-white/20"
+      }`}
+      title={`${label} mode (${hotkey})`}
+    >
+      {label} <span className="text-[9px] opacity-70">({hotkey})</span>
+    </button>
   );
 }
 
