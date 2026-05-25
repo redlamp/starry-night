@@ -17,6 +17,10 @@ function lerpVec3(a: Vec3, b: Vec3, t: number): Vec3 {
   return [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
 }
 
+function clamp(v: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, v));
+}
+
 type TweenInternal = {
   from: { position: Vec3; lookAt: Vec3; fov: number };
   to: { position: Vec3; lookAt: Vec3; fov: number };
@@ -59,6 +63,16 @@ const ROLL_SPEED = 1.5;
 const POINTER_SENSITIVITY = 0.002;
 const _euler = new THREE.Euler(0, 0, 0, "YXZ");
 const HALF_PI = Math.PI / 2;
+const DEG2RAD = Math.PI / 180;
+
+// Orbit drag tuning
+const ORBIT_YAW_SENSITIVITY = 0.25; // deg per pixel
+const ORBIT_PITCH_SENSITIVITY = 0.25; // deg per pixel
+const ORBIT_WHEEL_SENSITIVITY = 0.5; // metres per wheel-delta tick
+const ORBIT_RADIUS_MIN = 50;
+const ORBIT_RADIUS_MAX = 5000;
+const ORBIT_ELEVATION_MIN = 0; // never dip below horizon
+const ORBIT_ELEVATION_MAX = 90; // can sit directly above the city, no flip-over
 
 export function CameraControls() {
   const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
@@ -77,7 +91,23 @@ export function CameraControls() {
   const tweenRequest = useSceneStore((s) => s.cameraTweenRequest);
   const clearCameraTweenRequest = useSceneStore((s) => s.clearCameraTweenRequest);
   const orbit = useSceneStore((s) => s.orbit);
+  const setOrbit = useSceneStore((s) => s.setOrbit);
   const orbitStart = useRef(performance.now());
+
+  // Track period changes so we can rebase the sweep without a visual jolt.
+  const lastPeriod = useRef(orbit.periodSec);
+  useEffect(() => {
+    if (lastPeriod.current === orbit.periodSec) return;
+    const now = performance.now();
+    const elapsed = (now - orbitStart.current) / 1000;
+    const sweepDeg = (elapsed / Math.max(1, lastPeriod.current)) * 360;
+    const currentAz =
+      ((useSceneStore.getState().orbit.azimuthDeg + sweepDeg) % 360 + 360) % 360;
+    setOrbit({ azimuthDeg: currentAz });
+    orbitStart.current = now;
+    lastPeriod.current = orbit.periodSec;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orbit.periodSec]);
 
   useEffect(() => {
     if (mode === "orbit") orbitStart.current = performance.now();
@@ -94,7 +124,6 @@ export function CameraControls() {
       }
     }
     prevMode.current = mode;
-    // captureCurrentPoseAsIntent is stable enough — listed deps would create churn.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, camera]);
 
@@ -155,11 +184,6 @@ export function CameraControls() {
     }
   };
 
-  const exitOrbit = () => {
-    captureCurrentPoseAsIntent();
-    setCameraMode("still");
-  };
-
   useEffect(() => {
     const onDown = (e: KeyboardEvent) => {
       const k = keyOf(e);
@@ -187,7 +211,23 @@ export function CameraControls() {
       window.removeEventListener("keyup", onUp);
       window.removeEventListener("blur", onBlur);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [camera]);
+
+  // Orbit drag state (pointer drag = yaw + pitch; pinch = zoom; wheel = zoom).
+  const dragging = useRef(false);
+  const dragBase = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    azimuthDeg: number;
+    elevationDeg: number;
+  } | null>(null);
+  const pinch = useRef<{
+    startDist: number;
+    startRadius: number;
+  } | null>(null);
+  const activeTouches = useRef<Map<number, { x: number; y: number }>>(new Map());
 
   const lastWrite = useRef(0);
   useFrame((_, dt) => {
@@ -201,14 +241,19 @@ export function CameraControls() {
       });
     }
 
-    // Orbit mode — autonomous revolution around configured centre.
+    // Orbit mode — spherical revolution around configured centre.
     if (mode === "orbit") {
-      const t = (now - orbitStart.current) / 1000;
-      const startRad = (orbit.startAngleDeg * Math.PI) / 180;
-      const angle = startRad + (t / Math.max(1, orbit.periodSec)) * Math.PI * 2;
-      const px = orbit.centerX + Math.sin(angle) * orbit.radius;
-      const pz = orbit.centerZ + Math.cos(angle) * orbit.radius;
-      camera.position.set(px, orbit.cameraY, pz);
+      const elapsed = dragging.current ? 0 : (now - orbitStart.current) / 1000;
+      const sweepRad = (elapsed / Math.max(1, orbit.periodSec)) * Math.PI * 2;
+      const az = orbit.azimuthDeg * DEG2RAD + sweepRad;
+      const el = orbit.elevationDeg * DEG2RAD;
+      const horizR = orbit.radius * Math.cos(el);
+      const height = orbit.radius * Math.sin(el);
+      camera.position.set(
+        orbit.centerX + Math.sin(az) * horizR,
+        height,
+        orbit.centerZ + Math.cos(az) * horizR,
+      );
       camera.lookAt(orbit.centerX, orbit.lookAtY, orbit.centerZ);
       return;
     }
@@ -250,10 +295,127 @@ export function CameraControls() {
     if (k.e) camera.rotateZ(-ROLL_SPEED * dt);
   });
 
+  // Orbit-mode pointer / touch / wheel handlers — yaw, pitch, pinch zoom.
+  // Auto-revolution pauses while the user is dragging and resumes from the
+  // newly-set azimuth on release.
+  useEffect(() => {
+    if (mode !== "orbit") return;
+    const dom = gl.domElement;
+
+    const settleAzimuthBeforeDrag = () => {
+      const now = performance.now();
+      const elapsed = (now - orbitStart.current) / 1000;
+      const sweepDeg = (elapsed / Math.max(1, orbit.periodSec)) * 360;
+      const az =
+        ((useSceneStore.getState().orbit.azimuthDeg + sweepDeg) % 360 + 360) % 360;
+      setOrbit({ azimuthDeg: az });
+      orbitStart.current = now;
+    };
+
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.pointerType === "mouse" && e.button !== 0) return;
+      if (e.pointerType === "touch") {
+        activeTouches.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (activeTouches.current.size === 2) {
+          const pts = Array.from(activeTouches.current.values());
+          const dx = pts[0].x - pts[1].x;
+          const dy = pts[0].y - pts[1].y;
+          pinch.current = {
+            startDist: Math.hypot(dx, dy),
+            startRadius: useSceneStore.getState().orbit.radius,
+          };
+          dragging.current = false;
+          dragBase.current = null;
+          return;
+        }
+      }
+      settleAzimuthBeforeDrag();
+      dragging.current = true;
+      const o = useSceneStore.getState().orbit;
+      dragBase.current = {
+        pointerId: e.pointerId,
+        startX: e.clientX,
+        startY: e.clientY,
+        azimuthDeg: o.azimuthDeg,
+        elevationDeg: o.elevationDeg,
+      };
+      dom.setPointerCapture?.(e.pointerId);
+    };
+
+    const onPointerMove = (e: PointerEvent) => {
+      if (e.pointerType === "touch" && activeTouches.current.has(e.pointerId)) {
+        activeTouches.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (pinch.current && activeTouches.current.size === 2) {
+          const pts = Array.from(activeTouches.current.values());
+          const dx = pts[0].x - pts[1].x;
+          const dy = pts[0].y - pts[1].y;
+          const dist = Math.hypot(dx, dy);
+          const scale = pinch.current.startDist / Math.max(1, dist);
+          const newRadius = clamp(
+            pinch.current.startRadius * scale,
+            ORBIT_RADIUS_MIN,
+            ORBIT_RADIUS_MAX,
+          );
+          setOrbit({ radius: newRadius });
+          return;
+        }
+      }
+      if (!dragging.current || !dragBase.current) return;
+      const dx = e.clientX - dragBase.current.startX;
+      const dy = e.clientY - dragBase.current.startY;
+      const newAz =
+        ((dragBase.current.azimuthDeg - dx * ORBIT_YAW_SENSITIVITY) % 360 + 360) % 360;
+      const newEl = clamp(
+        dragBase.current.elevationDeg + dy * ORBIT_PITCH_SENSITIVITY,
+        ORBIT_ELEVATION_MIN,
+        ORBIT_ELEVATION_MAX,
+      );
+      setOrbit({ azimuthDeg: newAz, elevationDeg: newEl });
+    };
+
+    const onPointerEnd = (e: PointerEvent) => {
+      activeTouches.current.delete(e.pointerId);
+      if (activeTouches.current.size < 2) pinch.current = null;
+      if (activeTouches.current.size === 0) {
+        dragging.current = false;
+        dragBase.current = null;
+        orbitStart.current = performance.now();
+      }
+      dom.releasePointerCapture?.(e.pointerId);
+    };
+
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const o = useSceneStore.getState().orbit;
+      const newRadius = clamp(
+        o.radius + e.deltaY * ORBIT_WHEEL_SENSITIVITY,
+        ORBIT_RADIUS_MIN,
+        ORBIT_RADIUS_MAX,
+      );
+      setOrbit({ radius: newRadius });
+    };
+
+    dom.addEventListener("pointerdown", onPointerDown);
+    dom.addEventListener("pointermove", onPointerMove);
+    dom.addEventListener("pointerup", onPointerEnd);
+    dom.addEventListener("pointercancel", onPointerEnd);
+    dom.addEventListener("wheel", onWheel, { passive: false });
+
+    return () => {
+      dom.removeEventListener("pointerdown", onPointerDown);
+      dom.removeEventListener("pointermove", onPointerMove);
+      dom.removeEventListener("pointerup", onPointerEnd);
+      dom.removeEventListener("pointercancel", onPointerEnd);
+      dom.removeEventListener("wheel", onWheel);
+      activeTouches.current.clear();
+      pinch.current = null;
+      dragging.current = false;
+      dragBase.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, gl]);
+
   // Custom pointer-lock toggle for fly mode.
-  // - First canvas click engages pointer lock + hides cursor (mouse drives yaw/pitch)
-  // - Click again (or Esc) releases the lock + restores the cursor while STAYING in fly mode
-  // - User explicitly exits fly mode via F key or the panel "Stop fly" button
   useEffect(() => {
     if (mode !== "fly") return;
     const dom = gl.domElement;
@@ -263,7 +425,6 @@ export function CameraControls() {
       if (document.pointerLockElement === dom) {
         document.exitPointerLock();
       } else {
-        // requestPointerLock can reject if called too soon after exit; ignore failure.
         dom.requestPointerLock?.();
       }
     };

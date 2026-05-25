@@ -1,8 +1,46 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useSceneStore, type Vec3, PRESETS } from "@/lib/state/sceneStore";
 import { randomSeed } from "@/lib/seed/rng";
+
+const DEBUG_VISIBLE_KEY = "starry-night.debugVisible";
+
+function useDebugVisible(): [boolean, (v: boolean) => void] {
+  const [v, setV] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setV(window.localStorage.getItem(DEBUG_VISIBLE_KEY) === "1");
+  }, []);
+  const setter = (next: boolean) => {
+    setV(next);
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.setItem(DEBUG_VISIBLE_KEY, next ? "1" : "0");
+      } catch {
+        // localStorage may be unavailable in private modes
+      }
+    }
+  };
+  return [v, setter];
+}
+
+function copyConfigToClipboard() {
+  const s = useSceneStore.getState();
+  const snippet = JSON.stringify(
+    {
+      cameraIntent: s.cameraIntent,
+      orbit: s.orbit,
+      moon: s.moon,
+      stars: s.stars,
+    },
+    null,
+    2,
+  );
+  if (typeof navigator !== "undefined" && navigator.clipboard) {
+    void navigator.clipboard.writeText(snippet);
+  }
+}
 
 const RAD2DEG = 180 / Math.PI;
 const DEG2RAD = Math.PI / 180;
@@ -59,10 +97,9 @@ export function CameraPanel() {
     setCameraMode,
     setCameraIntent,
     resetCamera,
+    saveCurrentAsDefault,
     snapIntentToLive,
     tweenCameraTo,
-    orbit,
-    setOrbit,
   } = useSceneStore();
 
   const [hidden, setHidden] = useState(false);
@@ -132,8 +169,16 @@ export function CameraPanel() {
             {orbiting ? "Stop orbit" : "Orbit"}
           </button>
           <button
+            onClick={() => saveCurrentAsDefault()}
+            className="rounded bg-emerald-400/80 px-2 py-0.5 text-black hover:bg-emerald-400"
+            title="Save current camera + orbit + moon + stars as the new Reset target"
+          >
+            Save
+          </button>
+          <button
             onClick={() => resetCamera()}
             className="rounded bg-white/10 px-2 py-0.5 hover:bg-white/20"
+            title="Restore last saved values (falls back to hardcoded defaults if none saved)"
           >
             Reset
           </button>
@@ -155,7 +200,7 @@ export function CameraPanel() {
       ) : null}
       {orbiting ? (
         <div className="text-sky-300/80">
-          Orbiting downtown · adjust radius / height / period below · Stop to freeze pose
+          Drag scene to spin · pinch or wheel to zoom · sliders + Stop below
         </div>
       ) : null}
 
@@ -223,44 +268,6 @@ export function CameraPanel() {
         }
       />
 
-      {orbiting ? (
-        <div className="flex flex-col gap-1 rounded border border-sky-400/30 bg-sky-400/5 p-2">
-          <div className="text-[10px] uppercase tracking-wide text-sky-300/80">orbit</div>
-          <OrbitSlider
-            label="period (s)"
-            value={orbit.periodSec}
-            min={5}
-            max={3600}
-            step={5}
-            onChange={(periodSec) => setOrbit({ periodSec })}
-          />
-          <OrbitSlider
-            label="radius"
-            value={orbit.radius}
-            min={20}
-            max={5000}
-            step={5}
-            onChange={(radius) => setOrbit({ radius })}
-          />
-          <OrbitSlider
-            label="camera y"
-            value={orbit.cameraY}
-            min={-50}
-            max={3000}
-            step={1}
-            onChange={(cameraY) => setOrbit({ cameraY })}
-          />
-          <OrbitSlider
-            label="lookAt y"
-            value={orbit.lookAtY}
-            min={-200}
-            max={2000}
-            step={1}
-            onChange={(lookAtY) => setOrbit({ lookAtY })}
-          />
-        </div>
-      ) : null}
-
       <div className="flex items-center gap-2">
         <span className="w-16 shrink-0 text-white/60">fov</span>
         <input
@@ -316,86 +323,186 @@ export function CameraPanel() {
 }
 
 function DebugRow() {
+  const [visible, setVisible] = useDebugVisible();
   const followCamera = useSceneStore((s) => s.moonFollowCamera);
   const setFollowCamera = useSceneStore((s) => s.setMoonFollowCamera);
   const stars = useSceneStore((s) => s.stars);
   const setStars = useSceneStore((s) => s.setStars);
   const moon = useSceneStore((s) => s.moon);
   const setMoon = useSceneStore((s) => s.setMoon);
+  const orbit = useSceneStore((s) => s.orbit);
+  const setOrbit = useSceneStore((s) => s.setOrbit);
+
+  const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
+  const onCopy = () => {
+    copyConfigToClipboard();
+    setCopyState("copied");
+    setTimeout(() => setCopyState("idle"), 1200);
+  };
 
   return (
     <div className="flex flex-col gap-1 rounded border border-indigo-400/30 bg-indigo-400/5 p-2">
       <div className="flex items-center justify-between">
-        <span className="text-[10px] uppercase tracking-wide text-indigo-300/80">debug</span>
+        <label className="flex cursor-pointer items-center gap-2 text-[10px] uppercase tracking-wide text-indigo-300/80">
+          <input
+            type="checkbox"
+            checked={visible}
+            onChange={(e) => setVisible(e.target.checked)}
+            className="h-3 w-3 accent-indigo-400"
+          />
+          debug
+        </label>
         <button
-          onClick={() => setFollowCamera(!followCamera)}
-          className={`rounded px-2 py-0.5 text-xs ${
-            followCamera ? "bg-indigo-400/80 text-black" : "bg-white/10 hover:bg-white/20"
-          }`}
-          title="Moon tracks the camera so it always sits opposite the city from where you're standing"
+          onClick={onCopy}
+          className="rounded bg-white/10 px-2 py-0.5 text-[10px] hover:bg-white/20"
+          title="Copy camera + orbit + moon + stars as JSON to clipboard"
         >
-          {followCamera ? "Follow camera (on)" : "Follow camera"}
+          {copyState === "copied" ? "copied" : "copy values"}
         </button>
       </div>
-      <OrbitSlider
-        label="star size"
-        value={stars.factor}
-        min={5}
-        max={500}
-        step={1}
-        onChange={(factor) => setStars({ factor })}
-      />
-      <OrbitSlider
-        label="star radius"
-        value={stars.radius}
-        min={500}
-        max={30000}
-        step={100}
-        onChange={(radius) => setStars({ radius })}
-      />
-      <OrbitSlider
-        label="star depth"
-        value={stars.depth}
-        min={50}
-        max={8000}
-        step={50}
-        onChange={(depth) => setStars({ depth })}
-      />
-      <OrbitSlider
-        label="star count"
-        value={stars.count}
-        min={100}
-        max={30000}
-        step={100}
-        onChange={(count) => setStars({ count })}
-      />
 
-      <OrbitSlider
-        label="moon az°"
-        value={moon.azimuthDeg}
-        min={0}
-        max={360}
-        step={1}
-        onChange={(azimuthDeg) => setMoon({ azimuthDeg })}
-      />
-      <OrbitSlider
-        label="moon el°"
-        value={moon.elevationDeg}
-        min={-10}
-        max={90}
-        step={0.5}
-        onChange={(elevationDeg) => setMoon({ elevationDeg })}
-      />
-      <OrbitSlider
-        label="moon dist"
-        value={moon.distance}
-        min={500}
-        max={30000}
-        step={50}
-        onChange={(distance) => setMoon({ distance })}
-      />
+      {visible ? (
+        <>
+          <SubSection label="🌀 orbit">
+            <OrbitSlider
+              label="speed"
+              value={orbit.periodSec}
+              min={5}
+              max={3600}
+              step={5}
+              onChange={(periodSec) => setOrbit({ periodSec })}
+            />
+            <OrbitSlider
+              label="radius"
+              value={orbit.radius}
+              min={50}
+              max={5000}
+              step={5}
+              onChange={(radius) => setOrbit({ radius })}
+            />
+            <OrbitSlider
+              label="elev°"
+              value={orbit.elevationDeg}
+              min={0}
+              max={90}
+              step={0.5}
+              onChange={(elevationDeg) => setOrbit({ elevationDeg })}
+            />
+            <OrbitSlider
+              label="azim°"
+              value={orbit.azimuthDeg}
+              min={0}
+              max={360}
+              step={1}
+              onChange={(azimuthDeg) => setOrbit({ azimuthDeg })}
+            />
+            <OrbitSlider
+              label="lookAt y"
+              value={orbit.lookAtY}
+              min={-200}
+              max={2000}
+              step={1}
+              onChange={(lookAtY) => setOrbit({ lookAtY })}
+            />
+          </SubSection>
 
-      <MoonReadout />
+          <SubSection label="⭐ stars">
+            <OrbitSlider
+              label="size"
+              value={stars.factor}
+              min={5}
+              max={500}
+              step={1}
+              onChange={(factor) => setStars({ factor })}
+            />
+            <OrbitSlider
+              label="radius"
+              value={stars.radius}
+              min={500}
+              max={30000}
+              step={100}
+              onChange={(radius) => setStars({ radius })}
+            />
+            <OrbitSlider
+              label="depth"
+              value={stars.depth}
+              min={50}
+              max={8000}
+              step={50}
+              onChange={(depth) => setStars({ depth })}
+            />
+            <OrbitSlider
+              label="count"
+              value={stars.count}
+              min={100}
+              max={30000}
+              step={100}
+              onChange={(count) => setStars({ count })}
+            />
+          </SubSection>
+
+          <SubSection
+            label="🌙 moon"
+            action={
+              <button
+                onClick={() => setFollowCamera(!followCamera)}
+                className={`rounded px-2 py-0.5 text-[10px] ${
+                  followCamera ? "bg-indigo-400/80 text-black" : "bg-white/10 hover:bg-white/20"
+                }`}
+                title="Moon tracks the camera so it stays opposite the city"
+              >
+                {followCamera ? "follow cam (on)" : "follow cam"}
+              </button>
+            }
+          >
+            <OrbitSlider
+              label="az°"
+              value={moon.azimuthDeg}
+              min={0}
+              max={360}
+              step={1}
+              onChange={(azimuthDeg) => setMoon({ azimuthDeg })}
+            />
+            <OrbitSlider
+              label="el°"
+              value={moon.elevationDeg}
+              min={-10}
+              max={90}
+              step={0.5}
+              onChange={(elevationDeg) => setMoon({ elevationDeg })}
+            />
+            <OrbitSlider
+              label="dist"
+              value={moon.distance}
+              min={500}
+              max={30000}
+              step={50}
+              onChange={(distance) => setMoon({ distance })}
+            />
+            <MoonReadout />
+          </SubSection>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function SubSection({
+  label,
+  action,
+  children,
+}: {
+  label: string;
+  action?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-1 rounded border border-white/10 bg-black/30 p-2">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] uppercase tracking-wide text-white/55">{label}</span>
+        {action}
+      </div>
+      {children}
     </div>
   );
 }

@@ -23,7 +23,7 @@ export type CameraLive = {
 };
 
 // All in meters. See wiki/research/building-sizes-real-world-references.md
-const DEFAULT_INTENT: CameraIntent = {
+export const DEFAULT_INTENT: CameraIntent = {
   position: [0, 2, 400],
   lookAt: [0, 2, 0],
   rotation: [(16 * Math.PI) / 180, 0, 0],
@@ -50,21 +50,53 @@ export type OrbitConfig = {
   centerX: number;
   centerZ: number;
   lookAtY: number; // absolute Y the camera aims at
-  cameraY: number; // absolute Y of the camera itself (independent of lookAtY)
-  radius: number;
+  radius: number; // 3D distance from city centre (the orbit sphere radius)
+  azimuthDeg: number; // current yaw around city axis, 0 = +z
+  elevationDeg: number; // angle above horizon, 0 = horizon, 90 = directly above
   periodSec: number; // seconds per full revolution
-  startAngleDeg: number; // starting angle around the circle
 };
 
-const DEFAULT_ORBIT: OrbitConfig = {
+// elevation = asin(2 / 650) ≈ 0.18° keeps the previous near-horizon view.
+export const DEFAULT_ORBIT: OrbitConfig = {
   centerX: 0,
   centerZ: -120,
   lookAtY: 240,
-  cameraY: 2,
   radius: 650,
+  azimuthDeg: 180,
+  elevationDeg: 0.18,
   periodSec: 500,
-  startAngleDeg: 180,
 };
+
+export const DEFAULT_MOON = { azimuthDeg: 200, elevationDeg: 32, distance: 4500 };
+export const DEFAULT_STARS = { radius: 4500, depth: 800, count: 8000, factor: 65 };
+
+const SAVED_CONFIG_KEY = "starry-night.savedConfig";
+
+type SavedConfig = {
+  cameraIntent: CameraIntent;
+  orbit: OrbitConfig;
+  moon: typeof DEFAULT_MOON;
+  stars: typeof DEFAULT_STARS;
+};
+
+function readSavedConfig(): SavedConfig | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(SAVED_CONFIG_KEY);
+    return raw ? (JSON.parse(raw) as SavedConfig) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeSavedConfig(snap: SavedConfig) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(SAVED_CONFIG_KEY, JSON.stringify(snap));
+  } catch {
+    // localStorage may be unavailable in private modes — saving is best effort
+  }
+}
 
 export type Perf = {
   fps: number;
@@ -115,6 +147,8 @@ type SceneState = {
   setCameraIntent: (intent: Partial<CameraIntent>) => void;
   setCameraLive: (live: CameraLive) => void;
   resetCamera: () => void;
+  saveCurrentAsDefault: () => void;
+  hasSavedConfig: () => boolean;
   snapIntentToLive: () => void;
   tweenCameraTo: (to: CameraIntent, durationMs?: number) => void;
   clearCameraTweenRequest: () => void;
@@ -129,14 +163,14 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setCaptureMode: (captureMode) => set({ captureMode }),
   moonFollowCamera: false,
   setMoonFollowCamera: (moonFollowCamera) => set({ moonFollowCamera }),
-  stars: { radius: 4500, depth: 800, count: 8000, factor: 65 },
+  stars: DEFAULT_STARS,
   setStars: (patch) => set((s) => ({ stars: { ...s.stars, ...patch } })),
   // Defaults preserve the old (3742, 2321, 200) position:
   //   distance = sqrt(3742² + 2321²) ≈ 4403
   //   elevation = asin(2321 / 4403) ≈ 31.8°
   //   azimuth   = 200°
   // Distance default sits on the star dome (4500) so moon hugs the celestial sphere.
-  moon: { azimuthDeg: 200, elevationDeg: 32, distance: 4500 },
+  moon: DEFAULT_MOON,
   setMoon: (patch) => set((s) => ({ moon: { ...s.moon, ...patch } })),
   moonLive: { position: [0, 0, 0], azimuthDeg: 0, elevationDeg: 0, distance: 0 },
   setMoonLive: (moonLive) => set({ moonLive }),
@@ -161,7 +195,36 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setCameraIntent: (intent) =>
     set((s) => ({ cameraIntent: { ...s.cameraIntent, ...intent } })),
   setCameraLive: (cameraLive) => set({ cameraLive }),
-  resetCamera: () => set({ cameraIntent: DEFAULT_INTENT, cameraMode: "still" }),
+  resetCamera: () => {
+    const snap = readSavedConfig();
+    if (snap) {
+      set({
+        cameraIntent: snap.cameraIntent ?? DEFAULT_INTENT,
+        orbit: snap.orbit ?? DEFAULT_ORBIT,
+        moon: snap.moon ?? DEFAULT_MOON,
+        stars: snap.stars ?? DEFAULT_STARS,
+        cameraMode: "still",
+      });
+      return;
+    }
+    set({
+      cameraIntent: DEFAULT_INTENT,
+      orbit: DEFAULT_ORBIT,
+      moon: DEFAULT_MOON,
+      stars: DEFAULT_STARS,
+      cameraMode: "still",
+    });
+  },
+  saveCurrentAsDefault: () => {
+    const s = get();
+    writeSavedConfig({
+      cameraIntent: s.cameraIntent,
+      orbit: s.orbit,
+      moon: s.moon,
+      stars: s.stars,
+    });
+  },
+  hasSavedConfig: () => readSavedConfig() !== null,
   tweenCameraTo: (to, durationMs = 1000) =>
     set({ cameraTweenRequest: { to, durationMs }, cameraMode: "still" }),
   clearCameraTweenRequest: () => set({ cameraTweenRequest: null }),
