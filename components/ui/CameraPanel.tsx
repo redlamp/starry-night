@@ -359,7 +359,7 @@ function ModeDetailPanel({ mode }: { mode: "still" | "fly" | "orbit" }) {
       <div className="flex min-h-[5.5rem] flex-col gap-1 rounded border border-sky-400/30 bg-sky-400/5 p-2 text-white/70">
         <div className="text-[10px] uppercase tracking-wide text-sky-300/80">orbit</div>
         <div className="text-[10px]">
-          Drag to spin · Shift+drag = focal Y · pinch or wheel = zoom · two-finger pan = focal Y
+          Drag to spin · RMB drag = focal Y · pinch or wheel = zoom · two-finger pan = focal Y
         </div>
         <OrbitSpeedHint />
       </div>
@@ -574,7 +574,10 @@ function DebugRow() {
 
       {visible ? (
         <>
-          <SubSection label="🌀 orbit">
+          <SubSection
+            label="🌀 orbit"
+            action={<FocalIndicatorToggle />}
+          >
             <OrbitSlider
               label="speed"
               value={orbit.periodSec}
@@ -697,6 +700,22 @@ function DebugRow() {
         </>
       ) : null}
     </div>
+  );
+}
+
+function FocalIndicatorToggle() {
+  const show = useSceneStore((s) => s.showFocalIndicator);
+  const setShow = useSceneStore((s) => s.setShowFocalIndicator);
+  return (
+    <button
+      onClick={() => setShow(!show)}
+      className={`rounded px-2 py-0.5 text-[10px] ${
+        show ? "bg-sky-400/80 text-black" : "bg-white/10 text-white/70 hover:bg-white/20"
+      }`}
+      title="Toggle the screen-space focal-point crosshair"
+    >
+      {show ? "focal ⊕ on" : "focal ⊕ off"}
+    </button>
   );
 }
 

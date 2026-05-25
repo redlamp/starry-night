@@ -1,7 +1,6 @@
 "use client";
 
 import { Html } from "@react-three/drei";
-import { useEffect, useState } from "react";
 import { useSceneStore } from "@/lib/state/sceneStore";
 
 // Screen-space crosshair anchored to the world position of the orbit focal
@@ -9,31 +8,17 @@ import { useSceneStore } from "@/lib/state/sceneStore";
 // point to screen px and positions the DOM element there each frame, so the
 // indicator never scales with distance — always the same on-screen size.
 //
-// Visible in orbit mode only. Dimmed by default, fully opaque while Shift is
-// held so the user gets clear feedback during a Shift+drag focal move.
+// Visible when (mode === orbit) AND showFocalIndicator is on. Brightens while
+// the user is RMB-dragging the focal Y so they get unambiguous feedback.
 export function FocalIndicator() {
   const mode = useSceneStore((s) => s.cameraMode);
+  const show = useSceneStore((s) => s.showFocalIndicator);
   const centerX = useSceneStore((s) => s.orbit.centerX);
   const centerZ = useSceneStore((s) => s.orbit.centerZ);
   const lookAtY = useSceneStore((s) => s.orbit.lookAtY);
-  const [shiftHeld, setShiftHeld] = useState(false);
+  const focalDragging = useSceneStore((s) => s.focalDragging);
 
-  useEffect(() => {
-    const onDown = (e: KeyboardEvent) => {
-      if (e.key === "Shift") setShiftHeld(true);
-    };
-    const onUp = (e: KeyboardEvent) => {
-      if (e.key === "Shift") setShiftHeld(false);
-    };
-    window.addEventListener("keydown", onDown);
-    window.addEventListener("keyup", onUp);
-    return () => {
-      window.removeEventListener("keydown", onDown);
-      window.removeEventListener("keyup", onUp);
-    };
-  }, []);
-
-  if (mode !== "orbit") return null;
+  if (mode !== "orbit" || !show) return null;
 
   return (
     <Html
@@ -44,7 +29,7 @@ export function FocalIndicator() {
     >
       <div
         style={{
-          opacity: shiftHeld ? 1 : 0.45,
+          opacity: focalDragging ? 1 : 0.45,
           transition: "opacity 120ms ease-out",
           pointerEvents: "none",
         }}

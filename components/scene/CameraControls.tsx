@@ -239,8 +239,8 @@ export function CameraControls() {
   }, [camera]);
 
   // Orbit drag state.
-  //   Bare drag        = yaw + elevation (camera arcs around the fixed focal point)
-  //   Shift + drag     = focal Y (lookAtY) — vertical only for now
+  //   LMB drag         = yaw + elevation (camera arcs around the fixed focal point)
+  //   RMB drag         = focal Y (lookAtY) — vertical only for now
   //   Pinch            = radius zoom
   //   Two-finger pan   = focal Y
   //   Wheel            = radius zoom
@@ -252,7 +252,7 @@ export function CameraControls() {
     azimuthDeg: number;
     elevationDeg: number;
     lookAtY: number;
-    shift: boolean;
+    focal: boolean;
   } | null>(null);
   const pinch = useRef<{
     startDist: number;
@@ -351,7 +351,7 @@ export function CameraControls() {
     };
 
     const onPointerDown = (e: PointerEvent) => {
-      if (e.pointerType === "mouse" && e.button !== 0) return;
+      if (e.pointerType === "mouse" && e.button !== 0 && e.button !== 2) return;
       if (e.pointerType === "touch") {
         activeTouches.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
         if (activeTouches.current.size === 2) {
@@ -370,7 +370,8 @@ export function CameraControls() {
           return;
         }
       }
-      settleAzimuthBeforeDrag();
+      const focal = e.pointerType === "mouse" && e.button === 2;
+      if (!focal) settleAzimuthBeforeDrag();
       dragging.current = true;
       const o = useSceneStore.getState().orbit;
       dragBase.current = {
@@ -380,8 +381,9 @@ export function CameraControls() {
         azimuthDeg: o.azimuthDeg,
         elevationDeg: o.elevationDeg,
         lookAtY: o.lookAtY,
-        shift: e.shiftKey,
+        focal,
       };
+      if (focal) useSceneStore.getState().setFocalDragging(true);
       dom.setPointerCapture?.(e.pointerId);
     };
 
@@ -415,24 +417,10 @@ export function CameraControls() {
       }
       if (!dragging.current || !dragBase.current) return;
 
-      // Re-anchor if Shift state changed mid-drag so neither mode jumps.
-      if (e.shiftKey !== dragBase.current.shift) {
-        const o = useSceneStore.getState().orbit;
-        dragBase.current = {
-          ...dragBase.current,
-          startX: e.clientX,
-          startY: e.clientY,
-          azimuthDeg: o.azimuthDeg,
-          elevationDeg: o.elevationDeg,
-          lookAtY: o.lookAtY,
-          shift: e.shiftKey,
-        };
-        return;
-      }
-
-      if (e.shiftKey) {
-        // Vertical drag → focal Y. Horizontal axis is intentionally idle
-        // until we wire up world-plane focal translation.
+      if (dragBase.current.focal) {
+        // RMB-drag → focal Y. Horizontal axis idle until world-plane translation
+        // arrives. Sensitivity scales with orbit.radius so far-out cameras get
+        // proportional drag distance.
         const dy = e.clientY - dragBase.current.startY;
         const focalSpeed =
           useSceneStore.getState().orbit.radius * FOCAL_Y_SENSITIVITY_RATIO;
@@ -458,6 +446,7 @@ export function CameraControls() {
     };
 
     const onPointerEnd = (e: PointerEvent) => {
+      const wasFocal = dragBase.current?.focal ?? false;
       activeTouches.current.delete(e.pointerId);
       if (activeTouches.current.size < 2) pinch.current = null;
       if (activeTouches.current.size === 0) {
@@ -465,8 +454,11 @@ export function CameraControls() {
         dragBase.current = null;
         orbitStart.current = performance.now();
       }
+      if (wasFocal) useSceneStore.getState().setFocalDragging(false);
       dom.releasePointerCapture?.(e.pointerId);
     };
+
+    const onContextMenu = (e: MouseEvent) => e.preventDefault();
 
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
@@ -484,6 +476,7 @@ export function CameraControls() {
     dom.addEventListener("pointerup", onPointerEnd);
     dom.addEventListener("pointercancel", onPointerEnd);
     dom.addEventListener("wheel", onWheel, { passive: false });
+    dom.addEventListener("contextmenu", onContextMenu);
 
     return () => {
       dom.removeEventListener("pointerdown", onPointerDown);
@@ -491,6 +484,7 @@ export function CameraControls() {
       dom.removeEventListener("pointerup", onPointerEnd);
       dom.removeEventListener("pointercancel", onPointerEnd);
       dom.removeEventListener("wheel", onWheel);
+      dom.removeEventListener("contextmenu", onContextMenu);
       activeTouches.current.clear();
       pinch.current = null;
       dragging.current = false;
