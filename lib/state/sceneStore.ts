@@ -182,6 +182,13 @@ type SceneState = {
   setFlySpeed: (v: number) => void;
   fog: { enabled: boolean; near: number; far: number };
   setFog: (patch: Partial<{ enabled: boolean; near: number; far: number }>) => void;
+  // Visibility of the orbit focal-point crosshair.
+  showFocalIndicator: boolean;
+  setShowFocalIndicator: (v: boolean) => void;
+  // Runtime flag set true while the user is holding RMB in orbit mode to drag
+  // the focal Y. Used to brighten the focal indicator while editing.
+  focalDragging: boolean;
+  setFocalDragging: (v: boolean) => void;
   orbit: OrbitConfig;
   setOrbit: (patch: Partial<OrbitConfig>) => void;
   perf: Perf;
@@ -241,6 +248,10 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setFlySpeed: (flySpeed) => set({ flySpeed }),
   fog: { enabled: true, near: 220, far: 1100 },
   setFog: (patch) => set((s) => ({ fog: { ...s.fog, ...patch } })),
+  showFocalIndicator: true,
+  setShowFocalIndicator: (showFocalIndicator) => set({ showFocalIndicator }),
+  focalDragging: false,
+  setFocalDragging: (focalDragging) => set({ focalDragging }),
   orbit: DEFAULT_ORBIT,
   setOrbit: (patch) => set((s) => ({ orbit: { ...s.orbit, ...patch } })),
   perf: { fps: 0, triangles: 0, calls: 0, geometries: 0, textures: 0 },
