@@ -71,7 +71,7 @@ const ORBIT_PITCH_SENSITIVITY = 0.25; // deg per pixel
 const ORBIT_WHEEL_SENSITIVITY = 0.5; // metres per wheel-delta tick
 const ORBIT_RADIUS_MIN = 50;
 const ORBIT_RADIUS_MAX = 5000;
-const ORBIT_ELEVATION_MIN = 0; // never dip below horizon
+const ORBIT_ELEVATION_MIN = 0.01; // hair above horizon — el = 0 clips the ground plane and culls it from the frame
 const ORBIT_ELEVATION_MAX = 90; // can sit directly above the city, no flip-over
 
 export function CameraControls() {
