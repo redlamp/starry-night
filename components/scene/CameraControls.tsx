@@ -234,7 +234,12 @@ export function CameraControls() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [camera]);
 
-  // Orbit drag state (pointer drag = yaw + pitch; pinch = zoom; wheel = zoom).
+  // Orbit drag state.
+  //   Bare drag        = yaw + pitch
+  //   Shift + drag     = focal y (lookAtY) — vertical only for now
+  //   Pinch            = radius zoom
+  //   Two-finger pan   = focal y (lookAtY)
+  //   Wheel            = radius zoom
   const dragging = useRef(false);
   const dragBase = useRef<{
     pointerId: number;
@@ -242,12 +247,20 @@ export function CameraControls() {
     startY: number;
     azimuthDeg: number;
     elevationDeg: number;
+    lookAtY: number;
+    shift: boolean;
   } | null>(null);
   const pinch = useRef<{
     startDist: number;
     startRadius: number;
+    startMidY: number;
+    startLookAtY: number;
   } | null>(null);
   const activeTouches = useRef<Map<number, { x: number; y: number }>>(new Map());
+
+  const FOCAL_Y_SENSITIVITY_RATIO = 0.005; // multiplied by orbit.radius — pan scales with how far out we are
+  const LOOK_AT_Y_MIN = -200;
+  const LOOK_AT_Y_MAX = 2000;
 
   const lastWrite = useRef(0);
   useFrame((_, dt) => {
@@ -340,9 +353,12 @@ export function CameraControls() {
           const pts = Array.from(activeTouches.current.values());
           const dx = pts[0].x - pts[1].x;
           const dy = pts[0].y - pts[1].y;
+          const o = useSceneStore.getState().orbit;
           pinch.current = {
             startDist: Math.hypot(dx, dy),
-            startRadius: useSceneStore.getState().orbit.radius,
+            startRadius: o.radius,
+            startMidY: (pts[0].y + pts[1].y) / 2,
+            startLookAtY: o.lookAtY,
           };
           dragging.current = false;
           dragBase.current = null;
@@ -358,6 +374,8 @@ export function CameraControls() {
         startY: e.clientY,
         azimuthDeg: o.azimuthDeg,
         elevationDeg: o.elevationDeg,
+        lookAtY: o.lookAtY,
+        shift: e.shiftKey,
       };
       dom.setPointerCapture?.(e.pointerId);
     };
@@ -376,11 +394,52 @@ export function CameraControls() {
             ORBIT_RADIUS_MIN,
             ORBIT_RADIUS_MAX,
           );
-          setOrbit({ radius: newRadius });
+          // Two-finger midpoint translation drives focal Y (lookAtY).
+          // Applied on top of the radius change so a translating pinch still zooms.
+          const midY = (pts[0].y + pts[1].y) / 2;
+          const focalSpeed = newRadius * FOCAL_Y_SENSITIVITY_RATIO;
+          const newLookAtY = clamp(
+            pinch.current.startLookAtY -
+              (midY - pinch.current.startMidY) * focalSpeed,
+            LOOK_AT_Y_MIN,
+            LOOK_AT_Y_MAX,
+          );
+          setOrbit({ radius: newRadius, lookAtY: newLookAtY });
           return;
         }
       }
       if (!dragging.current || !dragBase.current) return;
+
+      // Re-anchor if Shift state changed mid-drag so neither mode jumps.
+      if (e.shiftKey !== dragBase.current.shift) {
+        const o = useSceneStore.getState().orbit;
+        dragBase.current = {
+          ...dragBase.current,
+          startX: e.clientX,
+          startY: e.clientY,
+          azimuthDeg: o.azimuthDeg,
+          elevationDeg: o.elevationDeg,
+          lookAtY: o.lookAtY,
+          shift: e.shiftKey,
+        };
+        return;
+      }
+
+      if (e.shiftKey) {
+        // Vertical drag → focal Y. Horizontal axis is intentionally idle until
+        // we wire up world-plane focal translation.
+        const dy = e.clientY - dragBase.current.startY;
+        const focalSpeed =
+          useSceneStore.getState().orbit.radius * FOCAL_Y_SENSITIVITY_RATIO;
+        const newLookAtY = clamp(
+          dragBase.current.lookAtY - dy * focalSpeed,
+          LOOK_AT_Y_MIN,
+          LOOK_AT_Y_MAX,
+        );
+        setOrbit({ lookAtY: newLookAtY });
+        return;
+      }
+
       const dx = e.clientX - dragBase.current.startX;
       const dy = e.clientY - dragBase.current.startY;
       const newAz =
