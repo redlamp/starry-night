@@ -11,6 +11,7 @@ import { Streetlights } from "./Streetlights";
 import { CameraControls } from "./CameraControls";
 import { PerfMonitor } from "./PerfMonitor";
 import { TimeTicker } from "./TimeTicker";
+import { ProjectionBlender } from "./ProjectionBlender";
 
 export function Scene() {
   const masterSeed = useSceneStore((s) => s.masterSeed);
@@ -28,6 +29,7 @@ export function Scene() {
       dpr={[1, 2]}
     >
       <CameraControls />
+      <ProjectionBlender />
       <PerfMonitor />
       <TimeTicker />
 
