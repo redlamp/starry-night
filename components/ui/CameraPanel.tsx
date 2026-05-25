@@ -424,7 +424,7 @@ function DebugRow() {
             <OrbitSlider
               label="elev°"
               value={orbit.elevationDeg}
-              min={0}
+              min={0.01}
               max={90}
               step={0.5}
               onChange={(elevationDeg) => setOrbit({ elevationDeg })}
