@@ -30,6 +30,7 @@ export function Scene() {
         outputColorSpace: THREE.SRGBColorSpace,
       }}
       dpr={[1, 2]}
+      style={{ touchAction: "none" }}
     >
       <CameraControls />
       <ProjectionBlender />

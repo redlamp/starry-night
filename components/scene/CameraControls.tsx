@@ -372,6 +372,9 @@ export function CameraControls() {
 
     const onPointerDown = (e: PointerEvent) => {
       if (e.pointerType === "mouse" && e.button !== 0 && e.button !== 2) return;
+      // Prevent native gestures (pinch-zoom, double-tap zoom, scroll) on touch.
+      // The body sets `touch-action: none` so this is belt-and-braces.
+      e.preventDefault();
       if (e.pointerType === "touch") {
         activeTouches.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
         if (activeTouches.current.size === 2) {
@@ -385,8 +388,11 @@ export function CameraControls() {
             startMidY: (pts[0].y + pts[1].y) / 2,
             startLookAtY: o.lookAtY,
           };
+          // The first finger may have started a drag — cancel it so pinch owns
+          // both pointers cleanly.
           dragging.current = false;
           dragBase.current = null;
+          dom.setPointerCapture?.(e.pointerId);
           return;
         }
       }
