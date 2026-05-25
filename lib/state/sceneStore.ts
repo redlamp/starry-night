@@ -151,6 +151,8 @@ type SceneState = {
   // while flying (UE5-style); Shift sprints at FLY_SPRINT_MULTIPLIER.
   flySpeed: number;
   setFlySpeed: (v: number) => void;
+  fog: { near: number; far: number };
+  setFog: (patch: Partial<{ near: number; far: number }>) => void;
   orbit: OrbitConfig;
   setOrbit: (patch: Partial<OrbitConfig>) => void;
   perf: Perf;
@@ -208,6 +210,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setProjectionBlend: (projectionBlend) => set({ projectionBlend }),
   flySpeed: 14,
   setFlySpeed: (flySpeed) => set({ flySpeed }),
+  fog: { near: 220, far: 1100 },
+  setFog: (patch) => set((s) => ({ fog: { ...s.fog, ...patch } })),
   orbit: DEFAULT_ORBIT,
   setOrbit: (patch) => set((s) => ({ orbit: { ...s.orbit, ...patch } })),
   perf: { fps: 0, triangles: 0, calls: 0, geometries: 0, textures: 0 },
