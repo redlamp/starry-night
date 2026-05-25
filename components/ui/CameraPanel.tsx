@@ -359,7 +359,7 @@ function ModeDetailPanel({ mode }: { mode: "still" | "fly" | "orbit" }) {
       <div className="flex min-h-[5.5rem] flex-col gap-1 rounded border border-sky-400/30 bg-sky-400/5 p-2 text-white/70">
         <div className="text-[10px] uppercase tracking-wide text-sky-300/80">orbit</div>
         <div className="text-[10px]">
-          Drag to spin · Shift+drag = look pitch · pinch or wheel = zoom · two-finger pan = look pitch
+          Drag to spin · Shift+drag = focal Y · pinch or wheel = zoom · two-finger pan = focal Y
         </div>
         <OrbitSpeedHint />
       </div>
@@ -608,12 +608,12 @@ function DebugRow() {
               onChange={(azimuthDeg) => setOrbit({ azimuthDeg })}
             />
             <OrbitSlider
-              label="look pitch°"
-              value={orbit.lookPitchDeg}
-              min={-30}
-              max={60}
-              step={0.5}
-              onChange={(lookPitchDeg) => setOrbit({ lookPitchDeg })}
+              label="focal y"
+              value={orbit.lookAtY}
+              min={-200}
+              max={2000}
+              step={1}
+              onChange={(lookAtY) => setOrbit({ lookAtY })}
             />
           </SubSection>
 
@@ -707,13 +707,23 @@ function FogSubSection() {
     <div className="flex flex-col gap-1 rounded border border-white/10 bg-black/30 p-2">
       <div className="flex items-center justify-between">
         <span className="text-[10px] uppercase tracking-wide text-white/55">🌫️ fog</span>
-        <span className="text-[10px] text-white/35">linear, scene background</span>
+        <button
+          onClick={() => setFog({ enabled: !fog.enabled })}
+          className={`rounded px-2 py-0.5 text-[10px] ${
+            fog.enabled
+              ? "bg-white/85 text-black"
+              : "bg-white/10 text-white/70 hover:bg-white/20"
+          }`}
+          title="Toggle linear scene fog on/off"
+        >
+          {fog.enabled ? "on" : "off"}
+        </button>
       </div>
       <OrbitSlider
         label="near"
         value={fog.near}
         min={0}
-        max={5000}
+        max={6000}
         step={10}
         onChange={(near) => setFog({ near })}
       />
@@ -721,7 +731,7 @@ function FogSubSection() {
         label="far"
         value={fog.far}
         min={50}
-        max={12000}
+        max={6000}
         step={10}
         onChange={(far) => setFog({ far })}
       />

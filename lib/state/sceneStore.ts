@@ -51,11 +51,9 @@ export type TweenRequest = { to: CameraIntent; durationMs: number };
 export type OrbitConfig = {
   centerX: number;
   centerZ: number;
-  // Angle above the camera's own horizontal that the lookAt target sits at.
-  // 0 = look at the horizon (camera-Y plane), +20 = tilt up 20°, -20 = tilt down.
-  // Independent of camera elevation, so a low-elev camera no longer looks
-  // sharply up at the city.
-  lookPitchDeg: number;
+  // Absolute world-Y of the lookAt target. Fixed in space — the camera arcs
+  // around (centerX, lookAtY, centerZ) as elevation and azimuth change.
+  lookAtY: number;
   radius: number; // 3D distance from city centre (the orbit sphere radius)
   azimuthDeg: number; // current yaw around city axis, 0 = +z
   elevationDeg: number; // angle above horizon, 0 = horizon, 90 = directly above
@@ -63,11 +61,13 @@ export type OrbitConfig = {
 };
 
 // elevation = asin(2 / 650) ≈ 0.18° keeps the previous near-horizon view.
-// lookPitchDeg = 12 frames the city skyline without aggressively looking up.
+// lookAtY = 80 keeps the focal point a third of the way up the city skyline —
+// low enough that a ground-level camera doesn't look sharply up at the towers,
+// high enough to frame the buildings rather than the ground.
 export const DEFAULT_ORBIT: OrbitConfig = {
   centerX: 0,
   centerZ: -120,
-  lookPitchDeg: 12,
+  lookAtY: 80,
   radius: 650,
   azimuthDeg: 180,
   elevationDeg: 0.18,
@@ -94,19 +94,25 @@ function readSavedConfig(): SavedConfig | null {
     const parsed = JSON.parse(raw) as SavedConfig & {
       orbit?: { lookAtY?: number; cameraY?: number; lookPitchDeg?: number };
     };
-    // Migrate legacy orbit fields (lookAtY / cameraY) to lookPitchDeg.
-    if (parsed.orbit && parsed.orbit.lookPitchDeg === undefined) {
-      const camY = parsed.orbit.cameraY ?? 0;
-      const lookAtY = parsed.orbit.lookAtY ?? camY;
-      const horizR = Math.max(
-        1,
-        (parsed.orbit.radius ?? DEFAULT_ORBIT.radius) *
-          Math.cos(((parsed.orbit.elevationDeg ?? 0) * Math.PI) / 180),
-      );
-      parsed.orbit.lookPitchDeg =
-        (Math.atan2(lookAtY - camY, horizR) * 180) / Math.PI;
-      delete parsed.orbit.lookAtY;
-      delete parsed.orbit.cameraY;
+    // Migrate legacy orbit shapes: drop cameraY (no longer stored) and project
+    // a saved lookPitchDeg back into an absolute lookAtY at the saved radius.
+    if (parsed.orbit) {
+      const o = parsed.orbit as {
+        lookAtY?: number;
+        cameraY?: number;
+        lookPitchDeg?: number;
+        radius?: number;
+        elevationDeg?: number;
+      };
+      if (o.lookAtY === undefined && o.lookPitchDeg !== undefined) {
+        const radius = o.radius ?? DEFAULT_ORBIT.radius;
+        const elRad = ((o.elevationDeg ?? 0) * Math.PI) / 180;
+        const camY = radius * Math.sin(elRad);
+        const horizR = radius * Math.cos(elRad);
+        o.lookAtY = camY + horizR * Math.tan((o.lookPitchDeg * Math.PI) / 180);
+      }
+      delete o.lookPitchDeg;
+      delete o.cameraY;
     }
     return parsed as SavedConfig;
   } catch {
@@ -174,8 +180,8 @@ type SceneState = {
   // while flying (UE5-style); Shift sprints at FLY_SPRINT_MULTIPLIER.
   flySpeed: number;
   setFlySpeed: (v: number) => void;
-  fog: { near: number; far: number };
-  setFog: (patch: Partial<{ near: number; far: number }>) => void;
+  fog: { enabled: boolean; near: number; far: number };
+  setFog: (patch: Partial<{ enabled: boolean; near: number; far: number }>) => void;
   orbit: OrbitConfig;
   setOrbit: (patch: Partial<OrbitConfig>) => void;
   perf: Perf;
@@ -233,7 +239,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setProjectionBlend: (projectionBlend) => set({ projectionBlend }),
   flySpeed: 14,
   setFlySpeed: (flySpeed) => set({ flySpeed }),
-  fog: { near: 220, far: 1100 },
+  fog: { enabled: true, near: 220, far: 1100 },
   setFog: (patch) => set((s) => ({ fog: { ...s.fog, ...patch } })),
   orbit: DEFAULT_ORBIT,
   setOrbit: (patch) => set((s) => ({ orbit: { ...s.orbit, ...patch } })),
