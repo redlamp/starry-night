@@ -194,7 +194,7 @@ export function CameraPanel() {
       ) : null}
       {orbiting ? (
         <div className="text-sky-300/80">
-          Drag scene to spin · pinch or wheel to zoom · sliders + Stop below
+          Drag to spin · Shift+drag = focal Y · pinch or wheel = zoom · two-finger pan = focal Y
         </div>
       ) : null}
 
