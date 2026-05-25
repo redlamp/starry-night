@@ -14,6 +14,7 @@ import {
   MoonStar,
   Orbit as OrbitIcon,
   Radio,
+  Settings,
   Sparkles,
   Sprout,
   Stars,
@@ -170,7 +171,7 @@ export function CameraPanel() {
     tweenCameraTo,
   } = useSceneStore();
 
-  const [hidden, setHidden] = useState(false);
+  const [hidden, setHidden] = useState(true);
   const captureMode = useSceneStore((s) => s.captureMode);
 
   useEffect(() => {
@@ -216,7 +217,10 @@ export function CameraPanel() {
       {/* Sticky header */}
       <div className="flex shrink-0 flex-col gap-2.5 border-b border-border px-4 pt-4 pb-3">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-base font-semibold tracking-wide">Settings</span>
+          <span className="flex items-center gap-2 text-base font-semibold tracking-wide">
+            <Settings aria-hidden="true" className="size-[18px] text-foreground/80" />
+            Settings
+          </span>
           <div className="flex items-center gap-1.5">
             <ThemeToggle />
             <Button

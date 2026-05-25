@@ -13,6 +13,18 @@ body {
   background: #000;
   color: #fff;
   overflow: hidden;
+  /* Mobile: block page-level pinch-zoom + pull-to-refresh + edge bounce so
+     the scene's own pointer/pinch handlers receive every touch cleanly. */
+  touch-action: none;
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Re-enable vertical finger-scroll inside the Settings panel's ScrollArea. */
+[data-slot="scroll-area-viewport"] {
+  touch-action: pan-y;
 }
 
 #__next,
