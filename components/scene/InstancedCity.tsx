@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo } from "react";
 import * as THREE from "three";
+import { useFrame } from "@react-three/fiber";
 import { generateCity, type Archetype, type Building } from "@/lib/seed/cityGen";
 import {
   FACADE_BY_LAYER,
@@ -11,9 +12,18 @@ import {
 import { packWindowAtlas, type PackInput } from "@/lib/scene/atlasPacker";
 import { cityVertexShader, cityFragmentShader } from "@/lib/shaders/cityInstanced";
 import { sharedTime } from "@/lib/shaders/sharedTime";
+import { sharedIntroProgress, sharedIntroMode } from "@/lib/shaders/sharedIntro";
+import { useSceneStore } from "@/lib/state/sceneStore";
+
+const DISTRICT_TO_IDX: Record<string, number> = {
+  downtown: 0,
+  residential: 1,
+  industrial: 2,
+  oldtown: 3,
+};
 
 export function InstancedCity({ masterSeed }: { masterSeed: string }) {
-  const meshes = useMemo(() => buildMeshes(masterSeed), [masterSeed]);
+  const { meshes, maxRadius } = useMemo(() => buildMeshes(masterSeed), [masterSeed]);
 
   // Dispose old GPU resources when seed changes / unmounts.
   useEffect(() => {
@@ -28,6 +38,20 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
     };
   }, [meshes]);
 
+  // Per-frame: refresh the intro-related uniforms that depend on live state
+  // (camera pose for far-to-near mode, orbit centre, mode int). progress/mode
+  // values themselves point at sharedIntro singletons so no per-frame work.
+  useFrame(() => {
+    const s = useSceneStore.getState();
+    for (const m of meshes) {
+      const mat = m.material as THREE.ShaderMaterial;
+      mat.uniforms.uIntroCityCenter.value.set(s.orbit.centerX, 0, s.orbit.centerZ);
+      mat.uniforms.uIntroMaxRadius.value = maxRadius;
+      const camPos = s.cameraLive.position;
+      mat.uniforms.uIntroCamPos.value.set(camPos[0], camPos[1], camPos[2]);
+    }
+  });
+
   return (
     <>
       {meshes.map((m, i) => (
@@ -37,9 +61,17 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
   );
 }
 
-function buildMeshes(masterSeed: string): THREE.InstancedMesh[] {
+function buildMeshes(
+  masterSeed: string,
+): { meshes: THREE.InstancedMesh[]; maxRadius: number } {
   const buildings = generateCity(masterSeed);
-  if (buildings.length === 0) return [];
+  if (buildings.length === 0) return { meshes: [], maxRadius: 1 };
+
+  let maxRadius = 1;
+  for (const b of buildings) {
+    const r = Math.hypot(b.x, b.z + 120); // approximate centre offset
+    if (r > maxRadius) maxRadius = r;
+  }
 
   // 1. Generate per-building window pixels.
   const windowItems: PackInput[] = buildings.map((b) => {
@@ -88,6 +120,7 @@ function buildMeshes(masterSeed: string): THREE.InstancedMesh[] {
     const aFacadeColor = new Float32Array(N * 3);
     const aFacadeGlow = new Float32Array(N);
     const aBuildingHash = new Float32Array(N);
+    const aDistrictIdx = new Float32Array(N);
 
     const material = new THREE.ShaderMaterial({
       vertexShader: cityVertexShader,
@@ -100,13 +133,20 @@ function buildMeshes(masterSeed: string): THREE.InstancedMesh[] {
           uWindowHeight: { value: 0.5 },
           uEmissiveBoost: { value: 1.4 },
           uTime: { value: 0 },
+          uIntroProgress: { value: 0 },
+          uIntroMode: { value: 0 },
+          uIntroCamPos: { value: new THREE.Vector3() },
+          uIntroCityCenter: { value: new THREE.Vector3() },
+          uIntroMaxRadius: { value: 1 },
         },
       ]),
       fog: true,
     });
-    // UniformsUtils.merge breaks the texture / shared-time references; restore.
+    // UniformsUtils.merge breaks the texture / shared singletons; restore.
     material.uniforms.uWindowAtlas.value = atlasTex;
     material.uniforms.uTime = sharedTime;
+    material.uniforms.uIntroProgress = sharedIntroProgress;
+    material.uniforms.uIntroMode = sharedIntroMode;
 
     const mesh = new THREE.InstancedMesh(geo, material, N);
 
@@ -130,6 +170,7 @@ function buildMeshes(masterSeed: string): THREE.InstancedMesh[] {
 
       aFacadeGlow[i] = GLOW_BY_LAYER[b.layer];
       aBuildingHash[i] = b.windowSeed * 1000;
+      aDistrictIdx[i] = DISTRICT_TO_IDX[b.district] ?? 0;
 
       position.set(b.x, b.height / 2, b.z);
       euler.set(0, b.rotationY, 0);
@@ -145,11 +186,12 @@ function buildMeshes(masterSeed: string): THREE.InstancedMesh[] {
     geo.setAttribute("aFacadeColor", new THREE.InstancedBufferAttribute(aFacadeColor, 3));
     geo.setAttribute("aFacadeGlow", new THREE.InstancedBufferAttribute(aFacadeGlow, 1));
     geo.setAttribute("aBuildingHash", new THREE.InstancedBufferAttribute(aBuildingHash, 1));
+    geo.setAttribute("aDistrictIdx", new THREE.InstancedBufferAttribute(aDistrictIdx, 1));
 
     mesh.instanceMatrix.needsUpdate = true;
     mesh.frustumCulled = false; // bounds are union of all instances; cheaper to skip cull than compute.
     meshes.push(mesh);
   }
 
-  return meshes;
+  return { meshes, maxRadius };
 }

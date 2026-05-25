@@ -74,7 +74,9 @@ export const DEFAULT_ORBIT: OrbitConfig = {
   periodSec: 500,
 };
 
-export const DEFAULT_MOON = { azimuthDeg: 200, elevationDeg: 32, distance: 4500 };
+// Azimuth flipped 180° from the 200° tuning that paired with the old camera
+// pose: with the new defaults the camera faces +z, so the moon sits at +z too.
+export const DEFAULT_MOON = { azimuthDeg: 20, elevationDeg: 32, distance: 4500 };
 export const DEFAULT_STARS = { radius: 4500, depth: 200, count: 16000, factor: 200 };
 
 const SAVED_CONFIG_KEY = "starry-night.savedConfig";
@@ -185,6 +187,18 @@ type SceneState = {
   // Visibility of the orbit focal-point crosshair.
   showFocalIndicator: boolean;
   setShowFocalIndicator: (v: boolean) => void;
+  // Intro / wake-up sequence. progress 0..1; mode selects per-window ordering.
+  intro: {
+    progress: number;
+    playing: boolean;
+    durationSec: number;
+    mode: "random" | "district" | "outside-in" | "far-to-near" | "inside-out";
+  };
+  setIntroProgress: (v: number) => void;
+  setIntroPlaying: (v: boolean) => void;
+  setIntroDuration: (v: number) => void;
+  setIntroMode: (m: SceneState["intro"]["mode"]) => void;
+  playIntro: () => void;
   // Runtime flag set true while the user is holding RMB in orbit mode to drag
   // the focal Y. Used to brighten the focal indicator while editing.
   focalDragging: boolean;
@@ -248,8 +262,16 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setFlySpeed: (flySpeed) => set({ flySpeed }),
   fog: { enabled: true, near: 220, far: 1100 },
   setFog: (patch) => set((s) => ({ fog: { ...s.fog, ...patch } })),
-  showFocalIndicator: true,
+  showFocalIndicator: false,
   setShowFocalIndicator: (showFocalIndicator) => set({ showFocalIndicator }),
+  intro: { progress: 0, playing: false, durationSec: 7, mode: "random" },
+  setIntroProgress: (progress) => set((s) => ({ intro: { ...s.intro, progress } })),
+  setIntroPlaying: (playing) => set((s) => ({ intro: { ...s.intro, playing } })),
+  setIntroDuration: (durationSec) =>
+    set((s) => ({ intro: { ...s.intro, durationSec } })),
+  setIntroMode: (mode) => set((s) => ({ intro: { ...s.intro, mode } })),
+  playIntro: () =>
+    set((s) => ({ intro: { ...s.intro, progress: 0, playing: true } })),
   focalDragging: false,
   setFocalDragging: (focalDragging) => set({ focalDragging }),
   orbit: DEFAULT_ORBIT,

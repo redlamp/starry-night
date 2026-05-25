@@ -697,6 +697,7 @@ function DebugRow() {
           </SubSection>
 
           <FogSubSection />
+          <IntroSubSection />
         </>
       ) : null}
     </div>
@@ -714,8 +715,56 @@ function FocalIndicatorToggle() {
       }`}
       title="Toggle the screen-space focal-point crosshair"
     >
-      {show ? "focal ⊕ on" : "focal ⊕ off"}
+      focal point {show ? "[on]" : "[off]"}
     </button>
+  );
+}
+
+function IntroSubSection() {
+  const intro = useSceneStore((s) => s.intro);
+  const setIntroDuration = useSceneStore((s) => s.setIntroDuration);
+  const setIntroMode = useSceneStore((s) => s.setIntroMode);
+  const playIntro = useSceneStore((s) => s.playIntro);
+  const modes = ["random", "district", "outside-in", "inside-out", "far-to-near"] as const;
+  return (
+    <div className="flex flex-col gap-1 rounded border border-white/10 bg-black/30 p-2">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] uppercase tracking-wide text-white/55">✨ intro</span>
+        <button
+          onClick={() => playIntro()}
+          className="rounded bg-amber-300/80 px-2 py-0.5 text-[10px] text-black hover:bg-amber-300"
+          title="Replay the wake-up sequence from progress = 0"
+        >
+          ▶ play
+        </button>
+      </div>
+      <OrbitSlider
+        label="duration"
+        value={intro.durationSec}
+        min={1}
+        max={30}
+        step={0.5}
+        onChange={(durationSec) => setIntroDuration(durationSec)}
+      />
+      <div className="flex items-center gap-2 text-xs">
+        <span className="w-14 shrink-0 text-white/70">mode</span>
+        <select
+          value={intro.mode}
+          onChange={(e) => setIntroMode(e.target.value as typeof intro.mode)}
+          className="flex-1 rounded border border-white/15 bg-black/50 px-1.5 py-0.5 text-white"
+        >
+          {modes.map((m) => (
+            <option key={m} value={m}>
+              {m}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="grid grid-cols-[5rem_1fr] gap-1 font-mono text-[10px] text-white/70">
+        <div>progress</div>
+        <div className="tabular-nums">{fmt(intro.progress, 2)}</div>
+      </div>
+    </div>
   );
 }
 
