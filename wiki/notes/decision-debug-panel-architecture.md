@@ -1,14 +1,14 @@
 ---
 tags:
   - domain/ui
-  - status/adopted
+  - status/superseded
   - scope/m1
 ---
 
 # Decision: Debug Panel Architecture
 
 **Date:** 2026-05-25
-**Status:** Adopted
+**Status:** Superseded by [[decision-settings-sidebar-shadcn]] later the same day
 
 ## Context
 
