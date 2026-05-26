@@ -1,9 +1,10 @@
 "use client";
 
-import { useRef } from "react";
+import { useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { useSceneStore } from "@/lib/state/sceneStore";
+import { moonHaloVertexShader, moonHaloFragmentShader } from "@/lib/shaders/moonHalo";
 
 // Moon as a celestial body on a sky dome centred on the city.
 // Sliders express where it sits in the sky, not its world coords:
@@ -24,6 +25,7 @@ const RAD2DEG = 180 / Math.PI;
 
 export function Moon() {
   const meshRef = useRef<THREE.Mesh>(null);
+  const haloRef = useRef<THREE.Mesh>(null);
   const camera = useThree((s) => s.camera);
   const followCamera = useSceneStore((s) => s.moonFollowCamera);
   const starsRadius = useSceneStore((s) => s.stars.radius);
@@ -32,8 +34,30 @@ export function Moon() {
   const setMoonLive = useSceneStore((s) => s.setMoonLive);
   const lastWrite = useRef(0);
 
+  const haloMaterial = useMemo(
+    () =>
+      new THREE.ShaderMaterial({
+        vertexShader: moonHaloVertexShader,
+        fragmentShader: moonHaloFragmentShader,
+        uniforms: {
+          uColor: { value: new THREE.Color("#f7f1d8") },
+          uInnerRadius: { value: 0.08 },
+          uIntensity: { value: 1.3 },
+        },
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        fog: false,
+      }),
+    [],
+  );
+
+  const moonRadius = starsRadius * MOON_RADIUS_RATIO;
+
   useFrame(() => {
     if (!meshRef.current) return;
+    const s = useSceneStore.getState();
+    const haloCfg = s.moonHalo;
 
     let azimuth = moon.azimuthDeg * DEG2RAD;
     if (followCamera) {
@@ -52,6 +76,15 @@ export function Moon() {
       orbit.centerZ + horizontalRadius * Math.cos(azimuth),
     );
 
+    // Halo billboard: face camera + size/uniforms from store each frame.
+    if (haloRef.current) {
+      haloRef.current.lookAt(camera.position);
+      const haloSize = moonRadius * haloCfg.radiusMul * 2;
+      haloRef.current.scale.set(haloSize, haloSize, 1);
+      haloMaterial.uniforms.uInnerRadius.value = haloCfg.innerRadius;
+      haloMaterial.uniforms.uIntensity.value = haloCfg.intensity;
+    }
+
     const now = performance.now();
     if (now - lastWrite.current >= 100) {
       lastWrite.current = now;
@@ -65,12 +98,13 @@ export function Moon() {
     }
   });
 
-  const moonRadius = starsRadius * MOON_RADIUS_RATIO;
-
   return (
     <mesh ref={meshRef}>
       <sphereGeometry args={[moonRadius, 32, 32]} />
       <meshBasicMaterial color="#f7f1d8" toneMapped={false} fog={false} />
+      <mesh ref={haloRef} material={haloMaterial} renderOrder={-1}>
+        <planeGeometry args={[1, 1]} />
+      </mesh>
     </mesh>
   );
 }

@@ -1,11 +1,11 @@
 "use client";
 
 import { Canvas } from "@react-three/fiber";
-import { Stars } from "@react-three/drei";
 import * as THREE from "three";
 import { useSceneStore, QUALITY_TIERS } from "@/lib/state/sceneStore";
 import { InstancedCity } from "./InstancedCity";
 import { Moon } from "./Moon";
+import { StarField } from "./StarField";
 import { Ground } from "./Ground";
 import { Streetlights } from "./Streetlights";
 import { CameraControls } from "./CameraControls";
@@ -44,14 +44,12 @@ export function Scene() {
       {fog.enabled ? <fog attach="fog" args={["#0a1838", fog.near, fog.far]} /> : null}
       <ambientLight intensity={0.04} />
 
-      <Stars
+      <StarField
+        masterSeed={masterSeed}
         radius={stars.radius}
         depth={stars.depth}
         count={stars.count}
-        factor={stars.factor}
-        saturation={0}
-        fade
-        speed={0}
+        size={1.5}
       />
 
       <Moon />

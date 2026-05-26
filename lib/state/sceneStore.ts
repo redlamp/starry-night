@@ -95,6 +95,11 @@ export const DEFAULT_ORBIT: OrbitConfig = {
 // pose: with the new defaults the camera faces +z, so the moon sits at +z too.
 export const DEFAULT_MOON = { azimuthDeg: 20, elevationDeg: 32, distance: 4500 };
 export const DEFAULT_STARS = { radius: 4500, depth: 200, count: 16000, factor: 200 };
+// Moon halo: billboard glow around the moon disc. radiusMul scales the halo
+// plane relative to the moon radius; innerRadius is the 0..0.5 fraction of the
+// disc that stays opaque before the soft falloff; intensity multiplies the
+// emissive output (post-tonemap, so >1.0 blooms under ACES).
+export const DEFAULT_MOON_HALO = { radiusMul: 3.5, innerRadius: 0.08, intensity: 1.3 };
 
 const SAVED_CONFIG_KEY = "starry-night.savedConfig";
 
@@ -174,6 +179,12 @@ type SceneState = {
     distance: number; // radial distance from city centre; default tracks stars.radius
   };
   setMoon: (patch: Partial<SceneState["moon"]>) => void;
+  moonHalo: {
+    radiusMul: number;
+    innerRadius: number;
+    intensity: number;
+  };
+  setMoonHalo: (patch: Partial<SceneState["moonHalo"]>) => void;
   moonLive: {
     position: Vec3;
     azimuthDeg: number;
@@ -264,6 +275,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   // Distance default sits on the star dome (4500) so moon hugs the celestial sphere.
   moon: DEFAULT_MOON,
   setMoon: (patch) => set((s) => ({ moon: { ...s.moon, ...patch } })),
+  moonHalo: DEFAULT_MOON_HALO,
+  setMoonHalo: (patch) => set((s) => ({ moonHalo: { ...s.moonHalo, ...patch } })),
   moonLive: { position: [0, 0, 0], azimuthDeg: 0, elevationDeg: 0, distance: 0 },
   setMoonLive: (moonLive) => set({ moonLive }),
   // Note: cameraMode default is "orbit" — see below.
