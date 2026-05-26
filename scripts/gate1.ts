@@ -7,7 +7,7 @@
  * Checks, per seed:
  *   1. No building overlaps   — rotation-aware OBB/SAT, 0.3m penetration tolerance.
  *   2. No corridor violations — no building centre on a highway/arterial surface.
- *   3. District sanity        — 3..8 districts; every building maps to a real one.
+ *   3. District sanity        — 6..26 districts; every building maps to a real one.
  *   4. In-bounds              — every building within the city bbox + slack.
  * Plus a determinism check on the full CityData.
  *
@@ -117,8 +117,8 @@ function checkSeed(seed: string) {
   if (corridorHits > 0) failures.push(`${corridorHits} corridor violations`);
 
   // 3. District sanity.
-  if (districts.length < 3 || districts.length > 8) {
-    failures.push(`district count ${districts.length} out of [3,8]`);
+  if (districts.length < 6 || districts.length > 26) {
+    failures.push(`district count ${districts.length} out of [6,26]`);
   }
   const ids = new Set(districts.map((d) => d.id));
   const orphans = buildings.filter((b) => !ids.has(b.districtId)).length;
