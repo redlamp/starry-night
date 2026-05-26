@@ -98,6 +98,13 @@ function copyConfigToClipboard() {
       orbit: s.orbit,
       moon: s.moon,
       stars: s.stars,
+      fog: s.fog,
+      haze: s.haze,
+      cityPlanning: {
+        showHighways: s.cityPlanning.showHighways,
+        showDistrictShells: s.cityPlanning.showDistrictShells,
+        showArterials: s.cityPlanning.showArterials,
+      },
     },
     null,
     2,
@@ -574,9 +581,9 @@ function StarsSection() {
       <ValueSlider
         label="size"
         value={stars.factor}
-        min={5}
-        max={500}
-        step={1}
+        min={0.5}
+        max={60}
+        step={0.5}
         onChange={(factor) => setStars({ factor })}
       />
       <ValueSlider

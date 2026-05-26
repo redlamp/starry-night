@@ -59,7 +59,7 @@ export function Scene() {
         radius={stars.radius}
         depth={stars.depth}
         count={stars.count}
-        size={1.5}
+        size={stars.factor}
       />
 
       <Moon />

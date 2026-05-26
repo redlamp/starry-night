@@ -44,12 +44,12 @@ export type CameraLive = {
 };
 
 // All in meters. See wiki/research/building-sizes-real-world-references.md
-// Tuned via the in-app Save/Copy values workflow on 2026-05-25.
+// Tuned via the in-app Save/Copy values workflow on 2026-05-26.
 export const DEFAULT_INTENT: CameraIntent = {
-  position: [-3.428768842032016, 34.13166196623823, -769.0941943937339],
+  position: [3, 36, 720],
   lookAt: [-3.377414762153272, 36.473654819023615, -759.3724439219319],
   rotation: [2.9051946114622647, -0.005135430560327543, 3.140355522200459],
-  fov: 45,
+  fov: 28,
   orient: "lookAt",
 };
 
@@ -80,25 +80,26 @@ export type OrbitConfig = {
   periodSec: number; // seconds per full revolution
 };
 
-// Tuned via the in-app Save/Copy values workflow on 2026-05-25.
-// Elevation pinned at the orbit floor (0.01°) so the ground plane stays visible
-// in ortho mode; focal Y at 150 frames the lower half of the city skyline.
+// Tuned via the in-app Save/Copy values workflow on 2026-05-26.
+// Radius framed for the larger (~1500m) city; slow 1200s sweep just off the
+// horizon; focal Y at 160 frames the lower half of the city skyline.
 export const DEFAULT_ORBIT: OrbitConfig = {
   centerX: 0,
   centerZ: -120,
-  lookAtY: 150,
-  // Scaled up with CITY_HALF_EXTENT (500→750) so the larger city stays framed;
-  // the dense core fills the view while the sparse edges fade into fog.
-  radius: 980,
-  azimuthDeg: 3.11353259843213,
-  elevationDeg: 0.01,
-  periodSec: 500,
+  lookAtY: 160,
+  radius: 900,
+  azimuthDeg: 90,
+  elevationDeg: 0.5,
+  periodSec: 2400,
 };
 
 // Azimuth flipped 180° from the 200° tuning that paired with the old camera
 // pose: with the new defaults the camera faces +z, so the moon sits at +z too.
-export const DEFAULT_MOON = { azimuthDeg: 20, elevationDeg: 32, distance: 4500 };
-export const DEFAULT_STARS = { radius: 4500, depth: 200, count: 16000, factor: 200 };
+export const DEFAULT_MOON = { azimuthDeg: 20, elevationDeg: 16, distance: 4500 };
+// `factor` is the star base size in px (mean, before the per-star long-tail).
+// Previously a vestigial drei value (200) that nothing read; now wired to
+// StarField's size prop. Legacy large values are migrated on load.
+export const DEFAULT_STARS = { radius: 4500, depth: 360, count: 24000, factor: 36 };
 // Moon halo: billboard glow around the moon disc. radiusMul scales the halo
 // plane relative to the moon radius; innerRadius is the 0..0.5 fraction of the
 // disc that stays opaque before the soft falloff; intensity multiplies the
@@ -112,6 +113,16 @@ type SavedConfig = {
   orbit: OrbitConfig;
   moon: typeof DEFAULT_MOON;
   stars: typeof DEFAULT_STARS;
+  // Optional so configs saved before these were added still load.
+  fog?: SceneState["fog"];
+  haze?: SceneState["haze"];
+  // Only the layer-visibility toggles persist — topologyKind / arterialCount
+  // are per-seed runtime readouts, not settings.
+  cityPlanning?: {
+    showHighways: boolean;
+    showDistrictShells: boolean;
+    showArterials: boolean;
+  };
 };
 
 function readSavedConfig(): SavedConfig | null {
@@ -141,6 +152,11 @@ function readSavedConfig(): SavedConfig | null {
       }
       delete o.lookPitchDeg;
       delete o.cameraY;
+    }
+    // Migrate the legacy vestigial star `factor` (drei used ~200); it now means
+    // base size in px, so clamp absurd old values back to the default.
+    if (parsed.stars && parsed.stars.factor > 80) {
+      parsed.stars.factor = DEFAULT_STARS.factor;
     }
     return parsed as SavedConfig;
   } catch {
@@ -345,7 +361,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     mode: "linear",
     color: "#0a1838",
     near: 240,
-    far: 2400,
+    far: 4800,
     density: 0.0006,
   },
   setFog: (patch) => set((s) => ({ fog: { ...s.fog, ...patch } })),
@@ -415,13 +431,18 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   resetCamera: () => {
     const snap = readSavedConfig();
     if (snap) {
-      set({
+      set((s) => ({
         cameraIntent: snap.cameraIntent ?? DEFAULT_INTENT,
         orbit: snap.orbit ?? DEFAULT_ORBIT,
         moon: snap.moon ?? DEFAULT_MOON,
         stars: snap.stars ?? DEFAULT_STARS,
-        cameraMode: "still",
-      });
+        // Restore fog / haze / planning toggles if the snapshot has them;
+        // merge cityPlanning so the runtime readouts (topology, count) survive.
+        ...(snap.fog ? { fog: snap.fog } : {}),
+        ...(snap.haze ? { haze: snap.haze } : {}),
+        ...(snap.cityPlanning ? { cityPlanning: { ...s.cityPlanning, ...snap.cityPlanning } } : {}),
+        cameraMode: "orbit" as const,
+      }));
       return;
     }
     set({
@@ -429,7 +450,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       orbit: DEFAULT_ORBIT,
       moon: DEFAULT_MOON,
       stars: DEFAULT_STARS,
-      cameraMode: "still",
+      cameraMode: "orbit",
     });
   },
   saveCurrentAsDefault: () => {
@@ -439,6 +460,13 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       orbit: s.orbit,
       moon: s.moon,
       stars: s.stars,
+      fog: s.fog,
+      haze: s.haze,
+      cityPlanning: {
+        showHighways: s.cityPlanning.showHighways,
+        showDistrictShells: s.cityPlanning.showDistrictShells,
+        showArterials: s.cityPlanning.showArterials,
+      },
     });
   },
   hasSavedConfig: () => readSavedConfig() !== null,
