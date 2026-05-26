@@ -513,11 +513,78 @@ export function generateCity(masterSeed: string): CityData {
   return { buildings, districts: field.districts, topology, arterials };
 }
 
-export type Streetlight = { x: number; y: number; z: number };
+export type StreetlightTier = "highway" | "arterial" | "local";
 
-// Interim streetlight generator — places lights at block-corner intersections
-// inside each district shell, skipping highway corridors. PR 4 replaces this
-// with the full per-tier + per-zone planning matrix.
+export type Streetlight = {
+  x: number;
+  y: number;
+  z: number;
+  kelvin: number;
+  isFailing: boolean;
+  tier: StreetlightTier;
+};
+
+// Modern-LED streetlight matrix (decision note §Streetlight planning):
+//   highway + arterial → 4000K uniform (no variant);
+//   local → per-zone colour temperature by district character.
+const LOCAL_KELVIN: Record<DistrictCharacter, number> = {
+  downtown: 4000,
+  subcentre: 4000,
+  residential: 3000,
+  heritage: 2700,
+  industrial: 4300,
+  "mixed-use": 3500,
+};
+const HIGHWAY_KELVIN = 4000;
+const ARTERIAL_KELVIN = 4000;
+// A replaced bulb / different batch sits at one of these off-temps.
+const VARIANT_TEMPS = [2200, 3500, 5000];
+const FAILURE_RATE = 0.025; // fraction of local lights that flicker as failing
+
+function pickVariant(rng: () => number, base: number): number {
+  for (let i = 0; i < 4; i++) {
+    const t = VARIANT_TEMPS[Math.floor(rng() * VARIANT_TEMPS.length)];
+    if (Math.abs(t - base) > 200) return t;
+  }
+  return VARIANT_TEMPS[0];
+}
+
+// Emit lights in pairs along both sides of a road polyline at fixed spacing.
+function emitRoadLights(
+  rng: () => number,
+  road: RoadLike,
+  tier: StreetlightTier,
+  kelvin: number,
+  spacing: number,
+  out: Streetlight[],
+) {
+  const verts = road.vertices;
+  const last = road.closed ? verts.length : verts.length - 1;
+  const offset = road.width / 2 + 2;
+  for (let i = 0; i < last; i++) {
+    const a = verts[i];
+    const b = verts[(i + 1) % verts.length];
+    const segLen = Math.hypot(b.x - a.x, b.z - a.z);
+    if (segLen === 0) continue;
+    const ux = (b.x - a.x) / segLen;
+    const uz = (b.z - a.z) / segLen;
+    const nx = -uz;
+    const nz = ux;
+    for (let s = spacing; s < segLen; s += spacing) {
+      for (const side of [-1, 1] as const) {
+        out.push({
+          x: a.x + ux * s + nx * offset * side,
+          y: 7 + (rng() - 0.5) * 0.4,
+          z: a.z + uz * s + nz * offset * side,
+          kelvin,
+          isFailing: rng() < FAILURE_RATE,
+          tier,
+        });
+      }
+    }
+  }
+}
+
 export function generateStreetlights(masterSeed: string): Streetlight[] {
   const topology = generateTopology(masterSeed);
   const field = generateDistricts(masterSeed, topology);
@@ -525,12 +592,16 @@ export function generateStreetlights(masterSeed: string): Streetlight[] {
   const roads: RoadLike[] = [...topology.highways, ...arterials];
   const lights: Streetlight[] = [];
 
+  // Local lights — per-zone colour temperature, on a block grid inside each
+  // district shell, clear of every road corridor.
   for (const district of field.districts) {
     const grammar = GRAMMAR[district.character];
     const rng = seedrandom(`${masterSeed}::streetlights::${district.id}`);
     const colSpacing = grammar.blockW + grammar.streetW;
     const rowSpacing = grammar.blockD + grammar.streetD;
     const lightY = district.character === "heritage" ? 5 : 7;
+    const baseKelvin = LOCAL_KELVIN[district.character];
+    const variantChance = district.character === "heritage" ? 0.08 : 0.04;
 
     for (let x = district.minX; x <= district.maxX; x += colSpacing) {
       for (let z = district.minZ; z <= district.maxZ; z += rowSpacing) {
@@ -539,37 +610,27 @@ export function generateStreetlights(masterSeed: string): Streetlight[] {
         const oz = z + (rng() - 0.5) * 4;
         if (field.classify(ox, oz) !== district.index) continue;
         if (onRoadCorridor(roads, ox, oz)) continue;
-        lights.push({ x: ox, y: lightY + (rng() - 0.5) * 0.4, z: oz });
+        const kelvin = rng() < variantChance ? pickVariant(rng, baseKelvin) : baseKelvin;
+        lights.push({
+          x: ox,
+          y: lightY + (rng() - 0.5) * 0.4,
+          z: oz,
+          kelvin,
+          isFailing: rng() < FAILURE_RATE,
+          tier: "local",
+        });
       }
     }
   }
 
-  // Highway-edge lights — pairs along both sides of each highway polyline.
+  // Highway + arterial edge lights — 4000K uniform, wider spacing on highways.
   const hwRng = seedrandom(`${masterSeed}::streetlights::highways`);
   for (const hw of topology.highways) {
-    const verts = hw.vertices;
-    const last = hw.closed ? verts.length : verts.length - 1;
-    const offset = hw.width / 2 + 2;
-    const spacing = 30;
-    for (let i = 0; i < last; i++) {
-      const a = verts[i];
-      const b = verts[(i + 1) % verts.length];
-      const segLen = Math.hypot(b.x - a.x, b.z - a.z);
-      if (segLen === 0) continue;
-      const ux = (b.x - a.x) / segLen;
-      const uz = (b.z - a.z) / segLen;
-      const nx = -uz;
-      const nz = ux;
-      for (let s = spacing; s < segLen; s += spacing) {
-        for (const side of [-1, 1] as const) {
-          lights.push({
-            x: a.x + ux * s + nx * offset * side,
-            y: 7 + (hwRng() - 0.5) * 0.4,
-            z: a.z + uz * s + nz * offset * side,
-          });
-        }
-      }
-    }
+    emitRoadLights(hwRng, hw, "highway", HIGHWAY_KELVIN, 34, lights);
+  }
+  const artRng = seedrandom(`${masterSeed}::streetlights::arterials`);
+  for (const a of arterials) {
+    emitRoadLights(artRng, a, "arterial", ARTERIAL_KELVIN, 26, lights);
   }
 
   return lights;

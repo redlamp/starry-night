@@ -41,7 +41,8 @@ export function RoadsSection() {
         <div className="tabular-nums">{arterialCount}</div>
       </div>
       <p className="text-foreground/45 text-[11px] leading-snug">
-        Local streets and streetlight planning arrive in later PRs.
+        Streetlights: modern LED — 4000K on highways + arterials, per-zone temperature on local
+        streets, with a few variant + failing bulbs.
       </p>
     </>
   );
