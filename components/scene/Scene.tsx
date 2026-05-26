@@ -14,6 +14,7 @@ import { TimeTicker } from "./TimeTicker";
 import { ProjectionBlender } from "./ProjectionBlender";
 import { FocalIndicator } from "./FocalIndicator";
 import { IntroTicker } from "./IntroTicker";
+import { GroundHaze } from "./GroundHaze";
 
 export function Scene() {
   const masterSeed = useSceneStore((s) => s.masterSeed);
@@ -38,8 +39,14 @@ export function Scene() {
       <TimeTicker />
       <IntroTicker />
 
-      <color attach="background" args={["#0a1838"]} />
-      {fog.enabled ? <fog attach="fog" args={["#0a1838", fog.near, fog.far]} /> : null}
+      <color attach="background" args={[fog.color]} />
+      {fog.enabled ? (
+        fog.mode === "exp2" ? (
+          <fogExp2 attach="fog" args={[fog.color, fog.density]} />
+        ) : (
+          <fog attach="fog" args={[fog.color, fog.near, fog.far]} />
+        )
+      ) : null}
       <ambientLight intensity={0.04} />
 
       <Stars
@@ -54,6 +61,7 @@ export function Scene() {
 
       <Moon />
       <Ground />
+      <GroundHaze />
       <InstancedCity masterSeed={masterSeed} />
       <Streetlights masterSeed={masterSeed} />
       <FocalIndicator />

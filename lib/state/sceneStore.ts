@@ -182,8 +182,33 @@ type SceneState = {
   // while flying (UE5-style); Shift sprints at FLY_SPRINT_MULTIPLIER.
   flySpeed: number;
   setFlySpeed: (v: number) => void;
-  fog: { enabled: boolean; near: number; far: number };
-  setFog: (patch: Partial<{ enabled: boolean; near: number; far: number }>) => void;
+  fog: {
+    enabled: boolean;
+    mode: "linear" | "exp2";
+    color: string;
+    near: number;
+    far: number;
+    density: number;
+  };
+  setFog: (
+    patch: Partial<{
+      enabled: boolean;
+      mode: "linear" | "exp2";
+      color: string;
+      near: number;
+      far: number;
+      density: number;
+    }>,
+  ) => void;
+  haze: {
+    enabled: boolean;
+    color: string;
+    topY: number; // world Y where haze fades to zero
+    bottomY: number; // world Y where haze hits full strength
+    intensity: number; // 0..2 multiplier on emissive output
+    radius: number; // sphere radius around city centre
+  };
+  setHaze: (patch: Partial<SceneState["haze"]>) => void;
   // Visibility of the orbit focal-point crosshair.
   showFocalIndicator: boolean;
   setShowFocalIndicator: (v: boolean) => void;
@@ -267,8 +292,24 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setProjectionBlend: (projectionBlend) => set({ projectionBlend }),
   flySpeed: 14,
   setFlySpeed: (flySpeed) => set({ flySpeed }),
-  fog: { enabled: true, near: 240, far: 2400 },
+  fog: {
+    enabled: true,
+    mode: "linear",
+    color: "#0a1838",
+    near: 240,
+    far: 2400,
+    density: 0.0006,
+  },
   setFog: (patch) => set((s) => ({ fog: { ...s.fog, ...patch } })),
+  haze: {
+    enabled: false,
+    color: "#1a4070",
+    topY: 300,
+    bottomY: -10,
+    intensity: 1.0,
+    radius: 3500,
+  },
+  setHaze: (patch) => set((s) => ({ haze: { ...s.haze, ...patch } })),
   showFocalIndicator: false,
   setShowFocalIndicator: (showFocalIndicator) => set({ showFocalIndicator }),
   intro: {
