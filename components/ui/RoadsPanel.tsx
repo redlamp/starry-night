@@ -15,7 +15,9 @@ const TOPOLOGY_LABELS: Record<string, string> = {
 // Arterials + streetlight settings land in PR 3 / PR 4.
 export function RoadsSection() {
   const showHighways = useSceneStore((s) => s.cityPlanning.showHighways);
+  const showArterials = useSceneStore((s) => s.cityPlanning.showArterials);
   const topologyKind = useSceneStore((s) => s.cityPlanning.topologyKind);
+  const arterialCount = useSceneStore((s) => s.cityPlanning.arterialCount);
   const setCityPlanning = useSceneStore((s) => s.setCityPlanning);
 
   return (
@@ -25,14 +27,21 @@ export function RoadsSection() {
         on={showHighways}
         onClick={() => setCityPlanning({ showHighways: !showHighways })}
       />
+      <ToggleRow
+        label="Arterials"
+        on={showArterials}
+        onClick={() => setCityPlanning({ showArterials: !showArterials })}
+      />
       <div className="text-foreground/70 grid grid-cols-[5rem_1fr] gap-1 font-mono text-xs">
         <div>topology</div>
         <div className="tabular-nums">
           {topologyKind ? (TOPOLOGY_LABELS[topologyKind] ?? topologyKind) : "—"}
         </div>
+        <div>arterials</div>
+        <div className="tabular-nums">{arterialCount}</div>
       </div>
       <p className="text-foreground/45 text-[11px] leading-snug">
-        Arterials, local streets, and streetlight planning arrive in later PRs.
+        Local streets and streetlight planning arrive in later PRs.
       </p>
     </>
   );

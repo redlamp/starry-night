@@ -111,9 +111,8 @@ function pickMood(rng: () => number, building: Building): Mood {
   // where in the city it sits. Real apartments in a financial district feel
   // like serviced condos / lit boardrooms; corner shops on a residential
   // street feel like warm bodegas.
-  const inDowntown = building.downtownBias > 0.4;
-  const onResidentialEdge =
-    building.district === "residential" || building.district === "oldtown";
+  const inDowntown = building.coreProximity > 0.4;
+  const onResidentialEdge = building.district === "residential" || building.district === "oldtown";
 
   if (residential && inDowntown) {
     // Residential building dropped into downtown core — bias cool / neutral-white.
@@ -124,7 +123,7 @@ function pickMood(rng: () => number, building: Building): Mood {
     if (r < 0.95) return "neutral";
     return "sparse";
   }
-  if (officeStyle && onResidentialEdge && building.downtownBias < 0.25) {
+  if (officeStyle && onResidentialEdge && building.coreProximity < 0.25) {
     // Office building tucked into a residential / oldtown street — small shop,
     // mixed live-work, bias warmer + more lit.
     if (r < 0.4) return "warm";
@@ -201,7 +200,10 @@ function applyMood(p: LightingProfile, mood: Mood): LightingProfile {
   }
 }
 
-function pickKelvin(rng: () => number, profile: LightingProfile): {
+function pickKelvin(
+  rng: () => number,
+  profile: LightingProfile,
+): {
   color: THREE.Color;
   intensity: number;
   isTv: boolean;
@@ -226,10 +228,7 @@ function pickKelvin(rng: () => number, profile: LightingProfile): {
   // Bright warm — closer / brighter incandescent (range lifted from 2800-3200K)
   if (
     roll <
-    profile.tvFlickerRatio +
-      profile.officeRatio +
-      profile.neutralRatio +
-      profile.brightRatio
+    profile.tvFlickerRatio + profile.officeRatio + profile.neutralRatio + profile.brightRatio
   ) {
     return { color: lerpKelvin(rng, 3300, 3700), intensity: 0.75, isTv: false };
   }
@@ -247,10 +246,7 @@ export type WindowDataTexture = {
   rows: number;
 };
 
-export function generateWindowTexture(
-  masterSeed: string,
-  building: Building,
-): WindowDataTexture {
+export function generateWindowTexture(masterSeed: string, building: Building): WindowDataTexture {
   const rng = seedrandom(`${masterSeed}::lighting::${building.id}::${building.windowSeed}`);
   const baseProfile = profileFor(building.archetype, building.layer);
   const mood = pickMood(rng, building);
@@ -272,18 +268,9 @@ export function generateWindowTexture(
         continue;
       }
       const { color, intensity, isTv } = pickKelvin(rng, profile);
-      data[idx + 0] = Math.min(
-        255,
-        Math.floor(color.r * intensity * SCENE_WB_GAIN.x * 255),
-      );
-      data[idx + 1] = Math.min(
-        255,
-        Math.floor(color.g * intensity * SCENE_WB_GAIN.y * 255),
-      );
-      data[idx + 2] = Math.min(
-        255,
-        Math.floor(color.b * intensity * SCENE_WB_GAIN.z * 255),
-      );
+      data[idx + 0] = Math.min(255, Math.floor(color.r * intensity * SCENE_WB_GAIN.x * 255));
+      data[idx + 1] = Math.min(255, Math.floor(color.g * intensity * SCENE_WB_GAIN.y * 255));
+      data[idx + 2] = Math.min(255, Math.floor(color.b * intensity * SCENE_WB_GAIN.z * 255));
       // alpha encodes TV flag: 128 = TV (flickers), 255 = steady lit, 0 = unlit
       data[idx + 3] = isTv ? 128 : 255;
     }

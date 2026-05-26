@@ -276,9 +276,11 @@ type SceneState = {
     showDistrictShells: boolean;
     showArterials: boolean;
     topologyKind: TopologyKind | null;
+    arterialCount: number;
   };
   setCityPlanning: (patch: Partial<SceneState["cityPlanning"]>) => void;
   setTopologyKind: (kind: TopologyKind) => void;
+  setArterialCount: (n: number) => void;
   perf: Perf;
   setPerf: (perf: Perf) => void;
   setSeed: (seed: string) => void;
@@ -384,6 +386,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     showDistrictShells: false,
     showArterials: true,
     topologyKind: null,
+    arterialCount: 0,
   },
   setCityPlanning: (patch) => set((s) => ({ cityPlanning: { ...s.cityPlanning, ...patch } })),
   setTopologyKind: (topologyKind) =>
@@ -391,6 +394,12 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       s.cityPlanning.topologyKind === topologyKind
         ? s
         : { cityPlanning: { ...s.cityPlanning, topologyKind } },
+    ),
+  setArterialCount: (arterialCount) =>
+    set((s) =>
+      s.cityPlanning.arterialCount === arterialCount
+        ? s
+        : { cityPlanning: { ...s.cityPlanning, arterialCount } },
     ),
   perf: { fps: 0, triangles: 0, calls: 0, geometries: 0, textures: 0 },
   setPerf: (perf) => set({ perf }),

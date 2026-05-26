@@ -1,11 +1,16 @@
 import seedrandom from "seedrandom";
-import { generateTopology, type Highway, type Topology } from "./topology";
+import { generateTopology, type Topology } from "./topology";
 import {
   generateDistricts,
   type District,
   type DistrictCharacter,
   type DistrictField,
 } from "./district";
+import { buildSilhouette, isHighRise, type SilhouetteField } from "./silhouette";
+import { generateArterials, type Arterial } from "./arterials";
+
+// Any road tier, for the building-skip corridor test.
+type RoadLike = { vertices: Array<{ x: number; z: number }>; width: number; closed: boolean };
 
 export type Archetype =
   | "low-rise"
@@ -35,7 +40,7 @@ export type Building = {
   layer: Layer;
   district: BuildingLightingClass;
   districtId: string; // stable id of the owning District
-  downtownBias: number; // 0..1 — proximity to the city core (PR 3 → coreProximity)
+  coreProximity: number; // 0..1 — proximity to the nearest high-rise peak
   windowSeed: number;
   rowsPerFloor: number;
   colsPerFace: number;
@@ -46,6 +51,7 @@ export type CityData = {
   buildings: Building[];
   districts: District[];
   topology: Topology;
+  arterials: Arterial[];
 };
 
 // All in meters. See wiki/research/building-sizes-real-world-references.md
@@ -214,17 +220,21 @@ function isOfficeStyle(arch: Archetype) {
   return arch === "office-block" || arch === "spire" || arch === "warehouse";
 }
 
-// Core proximity for height boost + lighting bias. Centred on the city centre
-// (which the downtown district sits at in Stage 1). PR 3 swaps this for a true
-// distance-to-downtown-centroid coreProximity field.
-const DOWNTOWN_RX = 220;
-const DOWNTOWN_RZ = 190;
-const DOWNTOWN_BOOST = 1.7;
-
-function coreProximity(topo: Topology, x: number, z: number): number {
-  const dx = (x - topo.centerX) / DOWNTOWN_RX;
-  const dz = (z - topo.centerZ) / DOWNTOWN_RZ;
-  return Math.max(0, 1 - Math.sqrt(dx * dx + dz * dz));
+// Global core-proximity field: 0..1 proximity to the nearest high-rise peak
+// across every downtown/subcentre district. Drives lighting cross-pollination
+// + archetype bias (spires cluster at peaks). Replaces the old single-ellipse
+// downtownBias so polycentric cities get a height/lighting gradient around
+// each cluster, not just the geometric centre.
+function makeCoreProximity(silhouettes: SilhouetteField[]): (x: number, z: number) => number {
+  if (silhouettes.length === 0) return () => 0;
+  return (x: number, z: number) => {
+    let best = 0;
+    for (const s of silhouettes) {
+      const p = s.proximity(x, z);
+      if (p > best) best = p;
+    }
+    return best;
+  };
 }
 
 function pointSegmentDistance(
@@ -274,11 +284,11 @@ function footprintInDistrict(
   return true;
 }
 
-function onHighwayCorridor(highways: Highway[], x: number, z: number): boolean {
-  for (const hw of highways) {
-    const margin = hw.width / 2 + 5;
-    const verts = hw.vertices;
-    const last = hw.closed ? verts.length : verts.length - 1;
+function onRoadCorridor(roads: RoadLike[], x: number, z: number): boolean {
+  for (const r of roads) {
+    const margin = r.width / 2 + 5;
+    const verts = r.vertices;
+    const last = r.closed ? verts.length : verts.length - 1;
     for (let i = 0; i < last; i++) {
       const a = verts[i];
       const b = verts[(i + 1) % verts.length];
@@ -345,16 +355,18 @@ function fillStripe(
     district: District;
     character: DistrictCharacter;
     grammar: CharacterGrammar;
-    topo: Topology;
     field: DistrictField;
     rot: number;
+    silhouette: SilhouetteField | null;
+    coreProx: (x: number, z: number) => number;
+    roads: RoadLike[];
   },
   blockCx: number,
   stripeCz: number,
   blockWidth: number,
   depthBudget: number,
 ): Building[] {
-  const { district, character, grammar, topo, field, rot } = ctx;
+  const { district, character, grammar, field, rot, silhouette, coreProx, roads } = ctx;
   const cosR = Math.cos(rot);
   const sinR = Math.sin(rot);
   const buildings: Building[] = [];
@@ -367,13 +379,9 @@ function fillStripe(
   const endLx = halfBW;
 
   while (lx < endLx) {
-    const dt = (() => {
-      // Local (blockCx + lx, stripeCz) is already partly in world via the block
-      // centre; convert the local offset (lx, 0) by the district rotation.
-      const wx = blockCx + lx * cosR;
-      const wz = stripeCz + lx * sinR;
-      return coreProximity(topo, wx, wz);
-    })();
+    // Approx core proximity at the walk position, for archetype bias (spires
+    // cluster near peaks).
+    const dt = coreProx(blockCx + lx * cosR, stripeCz + lx * sinR);
 
     const archetype = pickArchetype(rng, character, dt);
     const dims = dimensionsForArchetype(archetype, rng);
@@ -404,11 +412,13 @@ function fillStripe(
     // overlap.
     if (!footprintInDistrict(field, district.index, worldX, worldZ, width, depth, cosR, sinR))
       continue;
-    if (onHighwayCorridor(topo.highways, worldX, worldZ)) continue;
+    if (onRoadCorridor(roads, worldX, worldZ)) continue;
 
-    const dt2 = coreProximity(topo, worldX, worldZ);
-    const downtownBoost = 1 + dt2 * (DOWNTOWN_BOOST - 1);
-    const height = dims.height * grammar.heightCap * downtownBoost * hJ * outlierH;
+    const prox = coreProx(worldX, worldZ);
+    // Silhouette template shapes the high-rise skyline; non-high-rise districts
+    // have no field (multiplier = 1) and keep their flat per-character cap.
+    const hm = silhouette ? silhouette.multiplier(worldX, worldZ) : 1;
+    const height = dims.height * grammar.heightCap * hm * hJ * outlierH;
 
     const floorPitch = isOfficeStyle(archetype) ? OFFICE_FLOOR_M : RESIDENTIAL_FLOOR_M;
     const floors = Math.max(2, Math.round(height / floorPitch));
@@ -426,7 +436,7 @@ function fillStripe(
       layer: layerForZ(worldZ),
       district: lightingClass,
       districtId: district.id,
-      downtownBias: dt2,
+      coreProximity: prox,
       windowSeed: rng(),
       rowsPerFloor: 1,
       colsPerFace,
@@ -440,6 +450,18 @@ function fillStripe(
 export function generateCity(masterSeed: string): CityData {
   const topology = generateTopology(masterSeed);
   const field = generateDistricts(masterSeed, topology);
+
+  // Silhouette field per high-rise district + global core-proximity from all peaks.
+  const silhouetteByIndex = new Map<number, SilhouetteField>();
+  for (const d of field.districts) {
+    if (isHighRise(d.character)) silhouetteByIndex.set(d.index, buildSilhouette(masterSeed, d));
+  }
+  const coreProx = makeCoreProximity([...silhouetteByIndex.values()]);
+
+  const arterials = generateArterials(masterSeed, topology, field);
+  // Buildings skip both road tiers so highways + arterials read as open avenues.
+  const roads: RoadLike[] = [...topology.highways, ...arterials];
+
   const buildings: Building[] = [];
   let nextId = 0;
 
@@ -450,7 +472,16 @@ export function generateCity(masterSeed: string): CityData {
     // organic, downtown the most orthogonal.
     const rotSpread = district.character === "heritage" ? 0.5 : 0.18;
     const rot = (districtRng() - 0.5) * rotSpread;
-    const ctx = { district, character: district.character, grammar, topo: topology, field, rot };
+    const ctx = {
+      district,
+      character: district.character,
+      grammar,
+      field,
+      rot,
+      silhouette: silhouetteByIndex.get(district.index) ?? null,
+      coreProx,
+      roads,
+    };
     const blocks = districtBlocks(districtRng, district, grammar, rot);
 
     for (const b of blocks) {
@@ -479,7 +510,7 @@ export function generateCity(masterSeed: string): CityData {
     }
   }
 
-  return { buildings, districts: field.districts, topology };
+  return { buildings, districts: field.districts, topology, arterials };
 }
 
 export type Streetlight = { x: number; y: number; z: number };
@@ -490,6 +521,8 @@ export type Streetlight = { x: number; y: number; z: number };
 export function generateStreetlights(masterSeed: string): Streetlight[] {
   const topology = generateTopology(masterSeed);
   const field = generateDistricts(masterSeed, topology);
+  const arterials = generateArterials(masterSeed, topology, field);
+  const roads: RoadLike[] = [...topology.highways, ...arterials];
   const lights: Streetlight[] = [];
 
   for (const district of field.districts) {
@@ -505,7 +538,7 @@ export function generateStreetlights(masterSeed: string): Streetlight[] {
         const ox = x + (rng() - 0.5) * 4;
         const oz = z + (rng() - 0.5) * 4;
         if (field.classify(ox, oz) !== district.index) continue;
-        if (onHighwayCorridor(topology.highways, ox, oz)) continue;
+        if (onRoadCorridor(roads, ox, oz)) continue;
         lights.push({ x: ox, y: lightY + (rng() - 0.5) * 0.4, z: oz });
       }
     }
