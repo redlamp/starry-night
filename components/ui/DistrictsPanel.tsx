@@ -1,14 +1,23 @@
 "use client";
 
+import { useMemo } from "react";
 import { useSceneStore } from "@/lib/state/sceneStore";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { generateTopology } from "@/lib/seed/topology";
+import { generateDistricts } from "@/lib/seed/district";
 
-// Districts layer controls (Stage 1 scaffold). District shells + colour-coded
-// fills are wired in PR 2; this scaffold establishes the panel + toggle slot.
+// Districts layer controls. Toggle the colour-coded shell overlay and list the
+// current seed's districts with their planning character + colour swatch.
 export function DistrictsSection() {
+  const masterSeed = useSceneStore((s) => s.masterSeed);
   const showShells = useSceneStore((s) => s.cityPlanning.showDistrictShells);
   const setCityPlanning = useSceneStore((s) => s.setCityPlanning);
+
+  const districts = useMemo(() => {
+    const topo = generateTopology(masterSeed);
+    return generateDistricts(masterSeed, topo).districts;
+  }, [masterSeed]);
 
   return (
     <>
@@ -16,33 +25,29 @@ export function DistrictsSection() {
         label="District shells"
         on={showShells}
         onClick={() => setCityPlanning({ showDistrictShells: !showShells })}
-        disabled
       />
-      <p className="text-foreground/45 text-[11px] leading-snug">
-        Colour-coded district shells derive from the highway network in PR 2.
-      </p>
+      <div className="flex flex-col gap-1 pt-1">
+        {districts.map((d) => (
+          <div key={d.id} className="flex items-center gap-2 text-xs">
+            <span
+              className="border-foreground/20 size-3 shrink-0 rounded-sm border"
+              style={{ backgroundColor: d.color }}
+            />
+            <span className="text-foreground/80">{d.displayName}</span>
+          </div>
+        ))}
+      </div>
     </>
   );
 }
 
-function ToggleRow({
-  label,
-  on,
-  onClick,
-  disabled,
-}: {
-  label: string;
-  on: boolean;
-  onClick: () => void;
-  disabled?: boolean;
-}) {
+function ToggleRow({ label, on, onClick }: { label: string; on: boolean; onClick: () => void }) {
   return (
     <div className="flex items-center justify-between gap-2 text-xs">
-      <span className={cn("text-foreground/70", disabled && "opacity-50")}>{label}</span>
+      <span className="text-foreground/70">{label}</span>
       <Button
         variant="secondary"
         size="sm"
-        disabled={disabled}
         onClick={onClick}
         className={cn(
           on
