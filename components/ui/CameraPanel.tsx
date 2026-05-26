@@ -581,9 +581,9 @@ function StarsSection() {
       <ValueSlider
         label="size"
         value={stars.factor}
-        min={0.3}
-        max={8}
-        step={0.1}
+        min={0.5}
+        max={60}
+        step={0.5}
         onChange={(factor) => setStars({ factor })}
       />
       <ValueSlider
