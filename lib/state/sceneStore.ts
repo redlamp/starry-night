@@ -112,6 +112,16 @@ type SavedConfig = {
   orbit: OrbitConfig;
   moon: typeof DEFAULT_MOON;
   stars: typeof DEFAULT_STARS;
+  // Optional so configs saved before these were added still load.
+  fog?: SceneState["fog"];
+  haze?: SceneState["haze"];
+  // Only the layer-visibility toggles persist — topologyKind / arterialCount
+  // are per-seed runtime readouts, not settings.
+  cityPlanning?: {
+    showHighways: boolean;
+    showDistrictShells: boolean;
+    showArterials: boolean;
+  };
 };
 
 function readSavedConfig(): SavedConfig | null {
@@ -415,13 +425,18 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   resetCamera: () => {
     const snap = readSavedConfig();
     if (snap) {
-      set({
+      set((s) => ({
         cameraIntent: snap.cameraIntent ?? DEFAULT_INTENT,
         orbit: snap.orbit ?? DEFAULT_ORBIT,
         moon: snap.moon ?? DEFAULT_MOON,
         stars: snap.stars ?? DEFAULT_STARS,
-        cameraMode: "still",
-      });
+        // Restore fog / haze / planning toggles if the snapshot has them;
+        // merge cityPlanning so the runtime readouts (topology, count) survive.
+        ...(snap.fog ? { fog: snap.fog } : {}),
+        ...(snap.haze ? { haze: snap.haze } : {}),
+        ...(snap.cityPlanning ? { cityPlanning: { ...s.cityPlanning, ...snap.cityPlanning } } : {}),
+        cameraMode: "still" as const,
+      }));
       return;
     }
     set({
@@ -439,6 +454,13 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       orbit: s.orbit,
       moon: s.moon,
       stars: s.stars,
+      fog: s.fog,
+      haze: s.haze,
+      cityPlanning: {
+        showHighways: s.cityPlanning.showHighways,
+        showDistrictShells: s.cityPlanning.showDistrictShells,
+        showArterials: s.cityPlanning.showArterials,
+      },
     });
   },
   hasSavedConfig: () => readSavedConfig() !== null,

@@ -98,6 +98,13 @@ function copyConfigToClipboard() {
       orbit: s.orbit,
       moon: s.moon,
       stars: s.stars,
+      fog: s.fog,
+      haze: s.haze,
+      cityPlanning: {
+        showHighways: s.cityPlanning.showHighways,
+        showDistrictShells: s.cityPlanning.showDistrictShells,
+        showArterials: s.cityPlanning.showArterials,
+      },
     },
     null,
     2,
