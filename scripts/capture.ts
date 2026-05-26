@@ -5,7 +5,7 @@
  *   bun run capture --random <count>
  *
  * Env:
- *   CAPTURE_URL       default http://localhost:3000
+ *   CAPTURE_URL       default http://localhost:7827
  *   CAPTURE_W         default 1920
  *   CAPTURE_H         default 1080
  *   CAPTURE_SETTLE_MS default 1500   — pause after canvas appears so scene stabilises
@@ -38,7 +38,7 @@ async function main() {
     process.exit(1);
   }
 
-  const url = process.env.CAPTURE_URL ?? "http://localhost:3000";
+  const url = process.env.CAPTURE_URL ?? "http://localhost:7827";
   const width = parseInt(process.env.CAPTURE_W ?? "1920", 10);
   const height = parseInt(process.env.CAPTURE_H ?? "1080", 10);
   const settle = parseInt(process.env.CAPTURE_SETTLE_MS ?? "1500", 10);

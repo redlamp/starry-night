@@ -2,13 +2,14 @@
 tags:
   - domain/3d
   - domain/visual-language
-  - status/adopted
+  - status/superseded
   - scope/m1
 ---
 
 # Decision: District-Based City Layout
 
 **Date**: 2026-05-21
+**Status**: Superseded 2026-05-26 by [[decision-streets-first-city-generation]] — that note inverts the generative axis (streets-first, network drives district placement) rather than districts-with-hardcoded-bboxes.
 
 ## Context
 

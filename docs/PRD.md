@@ -75,6 +75,18 @@ Socioeconomic layers, each with its own character:
 - **Classic mode**: windows that are on stay on, with occasional flicker (faithful to the original)
 - **Modern mode** (future): windows respond to a simulated night, residents go to bed, offices power down on different curves
 
+### City generation grammar
+
+The city is generated **streets-first**: highway and arterial network is laid down before buildings exist; the network's geometric closure defines where districts can form; buildings emerge inside lots bounded by streets — never overlapping, always respecting per-zone setbacks and per-district height caps.
+
+The acceptance criterion is that **different seeds produce categorically different cities**, not variations of one template. A viewer doing a slow orbit can read a city's identity at a glance: its network topology, where its centres of gravity lie, what its dominant heights look like.
+
+**Plausibility lives at the grammar level** — real urban-planning topologies (Crossroads / Bypass / Ring / Ring + radial), real zoning categories (Residential / Commercial / Industrial / Mixed-use), real silhouette templates (Tabletop / Wedding cake / Twin-peak / Landmark). Street-level details (sidewalks, awnings, ground-floor commerce, fenestration) are deliberately out of scope until a closer-camera milestone is scheduled.
+
+Determinism is preserved end-to-end: every choice (topology, district placement, character, silhouette, zone, block, lot, building) derives from sub-seeds of the master seed. *Districts* and *Roads* debug panels expose generator state in a verifiable way.
+
+Full grammar: `wiki/notes/decision-streets-first-city-generation.md`. Glossary: `CONTEXT.md`.
+
 ---
 
 ## 4. Technical Stack

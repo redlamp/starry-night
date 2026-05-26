@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect } from "react";
-import { useSceneStore } from "@/lib/state/sceneStore";
+import { useSceneStore, QUALITY_TIERS, type QualityTier } from "@/lib/state/sceneStore";
 
 /**
  * Reads URL params and hash on mount + keeps URL hash in sync with the seed.
  *
  *   ?seed=<masterSeed>   — sets master seed (used by capture script)
  *   ?capture=1           — hides UI, forces still mode (used by capture script)
+ *   ?quality=low|med|high|ultra — sets initial quality tier (DPR cap + star count)
  *   #seed=<masterSeed>   — shareable URL hash for the live app (preferred for users)
  *
  * Query-string `?seed=` wins over hash if both present.
@@ -18,9 +19,15 @@ export function CaptureBoot() {
     const querySeed = params.get("seed");
     const hashSeed = readHashSeed();
     const capture = params.get("capture") === "1";
+    const queryQuality = params.get("quality");
     const state = useSceneStore.getState();
     const initial = querySeed ?? hashSeed;
     if (initial) state.setSeed(initial);
+    if (queryQuality && queryQuality in QUALITY_TIERS) {
+      const tier = queryQuality as QualityTier;
+      state.setQualityTier(tier);
+      state.setStars({ count: QUALITY_TIERS[tier].starCount });
+    }
     if (capture) {
       state.setCaptureMode(true);
       state.setCameraMode("still");

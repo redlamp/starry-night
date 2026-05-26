@@ -4,6 +4,23 @@ export type LightingMode = "classic" | "modern";
 export type QualityTier = "low" | "med" | "high" | "ultra";
 export type CameraMode = "still" | "fly" | "orbit";
 
+// Quality tier presets. Affects the DPR ceiling passed to the R3F Canvas and
+// the suggested star count. User can still override stars.count via slider;
+// the tier sets the boot-time ceiling and the DPR cap from then on.
+//   low   — integrated GPUs, mobile-class fillrate
+//   med   — mid-range discrete or older laptops
+//   high  — modern discrete (default)
+//   ultra — 4K+ workstations
+export const QUALITY_TIERS: Record<
+  QualityTier,
+  { label: string; dprMax: number; starCount: number }
+> = {
+  low: { label: "Low", dprMax: 1, starCount: 4000 },
+  med: { label: "Medium", dprMax: 1.25, starCount: 8000 },
+  high: { label: "High", dprMax: 2, starCount: 16000 },
+  ultra: { label: "Ultra", dprMax: 3, starCount: 24000 },
+};
+
 export type Projection = "perspective" | "orthographic";
 
 export type Vec3 = [number, number, number];
@@ -78,6 +95,11 @@ export const DEFAULT_ORBIT: OrbitConfig = {
 // pose: with the new defaults the camera faces +z, so the moon sits at +z too.
 export const DEFAULT_MOON = { azimuthDeg: 20, elevationDeg: 32, distance: 4500 };
 export const DEFAULT_STARS = { radius: 4500, depth: 200, count: 16000, factor: 200 };
+// Moon halo: billboard glow around the moon disc. radiusMul scales the halo
+// plane relative to the moon radius; innerRadius is the 0..0.5 fraction of the
+// disc that stays opaque before the soft falloff; intensity multiplies the
+// emissive output (post-tonemap, so >1.0 blooms under ACES).
+export const DEFAULT_MOON_HALO = { radiusMul: 3.5, innerRadius: 0.08, intensity: 1.3 };
 
 const SAVED_CONFIG_KEY = "starry-night.savedConfig";
 
@@ -157,6 +179,12 @@ type SceneState = {
     distance: number; // radial distance from city centre; default tracks stars.radius
   };
   setMoon: (patch: Partial<SceneState["moon"]>) => void;
+  moonHalo: {
+    radiusMul: number;
+    innerRadius: number;
+    intensity: number;
+  };
+  setMoonHalo: (patch: Partial<SceneState["moonHalo"]>) => void;
   moonLive: {
     position: Vec3;
     azimuthDeg: number;
@@ -182,8 +210,33 @@ type SceneState = {
   // while flying (UE5-style); Shift sprints at FLY_SPRINT_MULTIPLIER.
   flySpeed: number;
   setFlySpeed: (v: number) => void;
-  fog: { enabled: boolean; near: number; far: number };
-  setFog: (patch: Partial<{ enabled: boolean; near: number; far: number }>) => void;
+  fog: {
+    enabled: boolean;
+    mode: "linear" | "exp2";
+    color: string;
+    near: number;
+    far: number;
+    density: number;
+  };
+  setFog: (
+    patch: Partial<{
+      enabled: boolean;
+      mode: "linear" | "exp2";
+      color: string;
+      near: number;
+      far: number;
+      density: number;
+    }>,
+  ) => void;
+  haze: {
+    enabled: boolean;
+    color: string;
+    topY: number; // world Y where haze fades to zero
+    bottomY: number; // world Y where haze hits full strength
+    intensity: number; // 0..2 multiplier on emissive output
+    radius: number; // sphere radius around city centre
+  };
+  setHaze: (patch: Partial<SceneState["haze"]>) => void;
   // Visibility of the orbit focal-point crosshair.
   showFocalIndicator: boolean;
   setShowFocalIndicator: (v: boolean) => void;
@@ -247,6 +300,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   // Distance default sits on the star dome (4500) so moon hugs the celestial sphere.
   moon: DEFAULT_MOON,
   setMoon: (patch) => set((s) => ({ moon: { ...s.moon, ...patch } })),
+  moonHalo: DEFAULT_MOON_HALO,
+  setMoonHalo: (patch) => set((s) => ({ moonHalo: { ...s.moonHalo, ...patch } })),
   moonLive: { position: [0, 0, 0], azimuthDeg: 0, elevationDeg: 0, distance: 0 },
   setMoonLive: (moonLive) => set({ moonLive }),
   // Note: cameraMode default is "orbit" — see below.
@@ -267,8 +322,24 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setProjectionBlend: (projectionBlend) => set({ projectionBlend }),
   flySpeed: 14,
   setFlySpeed: (flySpeed) => set({ flySpeed }),
-  fog: { enabled: true, near: 240, far: 2400 },
+  fog: {
+    enabled: true,
+    mode: "linear",
+    color: "#0a1838",
+    near: 240,
+    far: 2400,
+    density: 0.0006,
+  },
   setFog: (patch) => set((s) => ({ fog: { ...s.fog, ...patch } })),
+  haze: {
+    enabled: false,
+    color: "#1a4070",
+    topY: 300,
+    bottomY: -10,
+    intensity: 1.0,
+    radius: 3500,
+  },
+  setHaze: (patch) => set((s) => ({ haze: { ...s.haze, ...patch } })),
   showFocalIndicator: false,
   setShowFocalIndicator: (showFocalIndicator) => set({ showFocalIndicator }),
   intro: {

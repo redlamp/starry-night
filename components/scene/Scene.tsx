@@ -1,11 +1,11 @@
 "use client";
 
 import { Canvas } from "@react-three/fiber";
-import { Stars } from "@react-three/drei";
 import * as THREE from "three";
-import { useSceneStore } from "@/lib/state/sceneStore";
+import { useSceneStore, QUALITY_TIERS } from "@/lib/state/sceneStore";
 import { InstancedCity } from "./InstancedCity";
 import { Moon } from "./Moon";
+import { StarField } from "./StarField";
 import { Ground } from "./Ground";
 import { Streetlights } from "./Streetlights";
 import { CameraControls } from "./CameraControls";
@@ -14,12 +14,15 @@ import { TimeTicker } from "./TimeTicker";
 import { ProjectionBlender } from "./ProjectionBlender";
 import { FocalIndicator } from "./FocalIndicator";
 import { IntroTicker } from "./IntroTicker";
+import { GroundHaze } from "./GroundHaze";
 
 export function Scene() {
   const masterSeed = useSceneStore((s) => s.masterSeed);
   const intent = useSceneStore((s) => s.cameraIntent);
   const stars = useSceneStore((s) => s.stars);
   const fog = useSceneStore((s) => s.fog);
+  const qualityTier = useSceneStore((s) => s.qualityTier);
+  const dprMax = QUALITY_TIERS[qualityTier].dprMax;
 
   return (
     <Canvas
@@ -29,7 +32,7 @@ export function Scene() {
         toneMapping: THREE.ACESFilmicToneMapping,
         outputColorSpace: THREE.SRGBColorSpace,
       }}
-      dpr={[1, 2]}
+      dpr={[1, dprMax]}
       style={{ touchAction: "none" }}
     >
       <CameraControls />
@@ -38,22 +41,27 @@ export function Scene() {
       <TimeTicker />
       <IntroTicker />
 
-      <color attach="background" args={["#0a1838"]} />
-      {fog.enabled ? <fog attach="fog" args={["#0a1838", fog.near, fog.far]} /> : null}
+      <color attach="background" args={[fog.color]} />
+      {fog.enabled ? (
+        fog.mode === "exp2" ? (
+          <fogExp2 attach="fog" args={[fog.color, fog.density]} />
+        ) : (
+          <fog attach="fog" args={[fog.color, fog.near, fog.far]} />
+        )
+      ) : null}
       <ambientLight intensity={0.04} />
 
-      <Stars
+      <StarField
+        masterSeed={masterSeed}
         radius={stars.radius}
         depth={stars.depth}
         count={stars.count}
-        factor={stars.factor}
-        saturation={0}
-        fade
-        speed={0}
+        size={1.5}
       />
 
       <Moon />
       <Ground />
+      <GroundHaze />
       <InstancedCity masterSeed={masterSeed} />
       <Streetlights masterSeed={masterSeed} />
       <FocalIndicator />

@@ -2,7 +2,13 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import gsap from "gsap";
-import { useSceneStore, type Vec3, PRESETS } from "@/lib/state/sceneStore";
+import {
+  useSceneStore,
+  type Vec3,
+  type QualityTier,
+  PRESETS,
+  QUALITY_TIERS,
+} from "@/lib/state/sceneStore";
 import { randomSeed } from "@/lib/seed/rng";
 import { cn } from "@/lib/utils";
 import {
@@ -573,6 +579,8 @@ function StarsSection() {
 function MoonSection() {
   const moon = useSceneStore((s) => s.moon);
   const setMoon = useSceneStore((s) => s.setMoon);
+  const halo = useSceneStore((s) => s.moonHalo);
+  const setMoonHalo = useSceneStore((s) => s.setMoonHalo);
   const followCamera = useSceneStore((s) => s.moonFollowCamera);
   const setFollowCamera = useSceneStore((s) => s.setMoonFollowCamera);
   return (
@@ -616,6 +624,33 @@ function MoonSection() {
         step={50}
         onChange={(distance) => setMoon({ distance })}
       />
+      <div className="pt-1 text-[10px] uppercase tracking-wide text-foreground/55">
+        Halo
+      </div>
+      <ValueSlider
+        label="size×"
+        value={halo.radiusMul}
+        min={1}
+        max={8}
+        step={0.05}
+        onChange={(radiusMul) => setMoonHalo({ radiusMul })}
+      />
+      <ValueSlider
+        label="core"
+        value={halo.innerRadius}
+        min={0}
+        max={0.3}
+        step={0.005}
+        onChange={(innerRadius) => setMoonHalo({ innerRadius })}
+      />
+      <ValueSlider
+        label="glow"
+        value={halo.intensity}
+        min={0}
+        max={3}
+        step={0.05}
+        onChange={(intensity) => setMoonHalo({ intensity })}
+      />
       <MoonReadout />
     </>
   );
@@ -624,6 +659,8 @@ function MoonSection() {
 function FogSection() {
   const fog = useSceneStore((s) => s.fog);
   const setFog = useSceneStore((s) => s.setFog);
+  const haze = useSceneStore((s) => s.haze);
+  const setHaze = useSceneStore((s) => s.setHaze);
   return (
     <>
       <div className="flex items-center justify-end">
@@ -631,7 +668,7 @@ function FogSection() {
           variant="secondary"
           size="sm"
           onClick={() => setFog({ enabled: !fog.enabled })}
-          title="Toggle linear scene fog on/off"
+          title="Toggle scene fog on/off"
           className={cn(
             fog.enabled
               ? "bg-foreground text-background hover:bg-foreground"
@@ -641,22 +678,128 @@ function FogSection() {
           {fog.enabled ? "on" : "off"}
         </Button>
       </div>
-      <ValueSlider
-        label="near"
-        value={fog.near}
-        min={0}
-        max={6000}
-        step={10}
-        onChange={(near) => setFog({ near })}
-      />
-      <ValueSlider
-        label="far"
-        value={fog.far}
-        min={50}
-        max={6000}
-        step={10}
-        onChange={(far) => setFog({ far })}
-      />
+      <div className="flex items-center gap-2 text-xs">
+        <span className="w-14 shrink-0 text-foreground/70">color</span>
+        <input
+          type="color"
+          value={fog.color}
+          onChange={(e) => setFog({ color: e.target.value })}
+          className="h-7 w-12 cursor-pointer rounded border border-foreground/15 bg-transparent"
+          title="Fog colour (also drives the scene background)"
+        />
+        <code className="text-foreground/60 tabular-nums">{fog.color}</code>
+      </div>
+      <div className="flex items-center gap-2 text-xs">
+        <span className="w-14 shrink-0 text-foreground/70">mode</span>
+        <Select
+          value={fog.mode}
+          onValueChange={(v) => setFog({ mode: v as typeof fog.mode })}
+        >
+          <SelectTrigger
+            size="sm"
+            className="w-full bg-background/50 text-foreground hover:bg-background/60"
+          >
+            <SelectValue placeholder="mode" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="linear">linear (near / far)</SelectItem>
+            <SelectItem value="exp2">exp² (density)</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      {fog.mode === "linear" ? (
+        <>
+          <ValueSlider
+            label="near"
+            value={fog.near}
+            min={0}
+            max={6000}
+            step={10}
+            onChange={(near) => setFog({ near })}
+          />
+          <ValueSlider
+            label="far"
+            value={fog.far}
+            min={50}
+            max={6000}
+            step={10}
+            onChange={(far) => setFog({ far })}
+          />
+        </>
+      ) : (
+        <ValueSlider
+          label="density"
+          value={fog.density}
+          min={0}
+          max={0.005}
+          step={0.0001}
+          onChange={(density) => setFog({ density })}
+        />
+      )}
+      <div className="flex items-center justify-between pt-2">
+        <span className="text-[10px] uppercase tracking-wide text-foreground/55">
+          Ground haze
+        </span>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => setHaze({ enabled: !haze.enabled })}
+          title="Toggle ground-haze band on/off"
+          className={cn(
+            haze.enabled
+              ? "bg-foreground text-background hover:bg-foreground"
+              : "bg-foreground/10 text-foreground hover:bg-foreground/20",
+          )}
+        >
+          {haze.enabled ? "on" : "off"}
+        </Button>
+      </div>
+      {haze.enabled ? (
+        <>
+          <div className="flex items-center gap-2 text-xs">
+            <span className="w-14 shrink-0 text-foreground/70">color</span>
+            <input
+              type="color"
+              value={haze.color}
+              onChange={(e) => setHaze({ color: e.target.value })}
+              className="h-7 w-12 cursor-pointer rounded border border-foreground/15 bg-transparent"
+            />
+            <code className="text-foreground/60 tabular-nums">{haze.color}</code>
+          </div>
+          <ValueSlider
+            label="bottom"
+            value={haze.bottomY}
+            min={-200}
+            max={400}
+            step={5}
+            onChange={(bottomY) => setHaze({ bottomY })}
+          />
+          <ValueSlider
+            label="top"
+            value={haze.topY}
+            min={0}
+            max={800}
+            step={5}
+            onChange={(topY) => setHaze({ topY })}
+          />
+          <ValueSlider
+            label="strength"
+            value={haze.intensity}
+            min={0}
+            max={2}
+            step={0.05}
+            onChange={(intensity) => setHaze({ intensity })}
+          />
+          <ValueSlider
+            label="radius"
+            value={haze.radius}
+            min={500}
+            max={6000}
+            step={50}
+            onChange={(radius) => setHaze({ radius })}
+          />
+        </>
+      ) : null}
     </>
   );
 }
@@ -1076,20 +1219,53 @@ function SeedRow() {
 
 function PerfReadout() {
   const perf = useSceneStore((s) => s.perf);
+  const qualityTier = useSceneStore((s) => s.qualityTier);
+  const setQualityTier = useSceneStore((s) => s.setQualityTier);
+  const setStars = useSceneStore((s) => s.setStars);
+  const tierCfg = QUALITY_TIERS[qualityTier];
   const fpsColor =
     perf.fps >= 55 ? "text-emerald-300" : perf.fps >= 35 ? "text-amber-300" : "text-rose-400";
   return (
-    <div className="grid grid-cols-[5rem_1fr] gap-1 font-mono text-xs text-foreground/70">
-      <div>fps</div>
-      <div className={`tabular-nums ${fpsColor}`}>{Math.round(perf.fps)}</div>
-      <div>triangles</div>
-      <div className="tabular-nums">{perf.triangles.toLocaleString()}</div>
-      <div>draw calls</div>
-      <div className="tabular-nums">{perf.calls}</div>
-      <div>geometries</div>
-      <div className="tabular-nums">{perf.geometries}</div>
-      <div>textures</div>
-      <div className="tabular-nums">{perf.textures}</div>
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-2 text-xs">
+        <span className="w-14 shrink-0 text-foreground/70">quality</span>
+        <Select
+          value={qualityTier}
+          onValueChange={(v) => {
+            const tier = v as QualityTier;
+            setQualityTier(tier);
+            setStars({ count: QUALITY_TIERS[tier].starCount });
+          }}
+        >
+          <SelectTrigger
+            size="sm"
+            className="w-full bg-background/50 text-foreground hover:bg-background/60"
+          >
+            <SelectValue placeholder="tier" />
+          </SelectTrigger>
+          <SelectContent>
+            {(Object.keys(QUALITY_TIERS) as QualityTier[]).map((t) => (
+              <SelectItem key={t} value={t}>
+                {QUALITY_TIERS[t].label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="grid grid-cols-[5rem_1fr] gap-1 font-mono text-xs text-foreground/70">
+        <div>dpr cap</div>
+        <div className="tabular-nums">{tierCfg.dprMax}</div>
+        <div>fps</div>
+        <div className={`tabular-nums ${fpsColor}`}>{Math.round(perf.fps)}</div>
+        <div>triangles</div>
+        <div className="tabular-nums">{perf.triangles.toLocaleString()}</div>
+        <div>draw calls</div>
+        <div className="tabular-nums">{perf.calls}</div>
+        <div>geometries</div>
+        <div className="tabular-nums">{perf.geometries}</div>
+        <div>textures</div>
+        <div className="tabular-nums">{perf.textures}</div>
+      </div>
     </div>
   );
 }
