@@ -75,6 +75,21 @@ function tweenProjectionTo(target: "perspective" | "orthographic") {
   });
 }
 
+// Orbit top-down: tilt the orbit straight down + pause the auto-sweep, without
+// leaving orbit mode (per request — don't drop to Still). elevationDeg 90 sits
+// the camera directly above the city; orbitPaused stops the revolution.
+function tweenOrbitTopDown() {
+  const s = useSceneStore.getState();
+  s.setOrbitPaused(true);
+  const proxy = { v: s.orbit.elevationDeg };
+  gsap.to(proxy, {
+    v: 90,
+    duration: 0.8,
+    ease: "power2.inOut",
+    onUpdate: () => useSceneStore.getState().setOrbit({ elevationDeg: proxy.v }),
+  });
+}
+
 function copyConfigToClipboard() {
   const s = useSceneStore.getState();
   const snippet = JSON.stringify(
@@ -413,6 +428,7 @@ function PoseSection({
   setCameraIntent: ReturnType<typeof useSceneStore.getState>["setCameraIntent"];
   tweenCameraTo: ReturnType<typeof useSceneStore.getState>["tweenCameraTo"];
 }) {
+  const orbiting = useSceneStore((s) => s.cameraMode === "orbit");
   return (
     <>
       <div className="flex items-center gap-2">
@@ -420,18 +436,24 @@ function PoseSection({
           tween to
         </span>
         <div className="flex flex-wrap gap-1">
-          {PRESETS.map((p) => (
-            <Button
-              key={p.id}
-              variant="secondary"
-              size="sm"
-              disabled={locked}
-              onClick={() => tweenCameraTo(p.intent, 900)}
-              className="bg-foreground/10 text-foreground hover:bg-foreground/20"
-            >
-              {p.label}
-            </Button>
-          ))}
+          {PRESETS.map((p) => {
+            // In orbit mode the still-pose presets stay disabled, except
+            // "Top-down" — it tilts the orbit straight down + pauses the sweep
+            // instead of dropping to Still.
+            const orbitTopDown = orbiting && p.id === "top-down";
+            return (
+              <Button
+                key={p.id}
+                variant="secondary"
+                size="sm"
+                disabled={locked && !orbitTopDown}
+                onClick={() => (orbitTopDown ? tweenOrbitTopDown() : tweenCameraTo(p.intent, 900))}
+                className="bg-foreground/10 text-foreground hover:bg-foreground/20"
+              >
+                {p.label}
+              </Button>
+            );
+          })}
         </div>
       </div>
 
