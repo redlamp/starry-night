@@ -16,6 +16,7 @@ import { FocalIndicator } from "./FocalIndicator";
 import { IntroTicker } from "./IntroTicker";
 import { GroundHaze } from "./GroundHaze";
 import { Highways } from "./Highways";
+import { DistrictShells } from "./DistrictShells";
 import { useStage1Flag } from "@/lib/state/stageFlag";
 
 export function Scene() {
@@ -67,7 +68,12 @@ export function Scene() {
       <GroundHaze />
       <InstancedCity masterSeed={masterSeed} />
       <Streetlights masterSeed={masterSeed} />
-      {stage1 ? <Highways masterSeed={masterSeed} /> : null}
+      {stage1 ? (
+        <>
+          <DistrictShells masterSeed={masterSeed} />
+          <Highways masterSeed={masterSeed} />
+        </>
+      ) : null}
       <FocalIndicator />
     </Canvas>
   );

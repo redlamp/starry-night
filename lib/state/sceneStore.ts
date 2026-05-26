@@ -173,7 +173,9 @@ type SceneState = {
   moonFollowCamera: boolean;
   setMoonFollowCamera: (v: boolean) => void;
   stars: { radius: number; depth: number; count: number; factor: number };
-  setStars: (patch: Partial<{ radius: number; depth: number; count: number; factor: number }>) => void;
+  setStars: (
+    patch: Partial<{ radius: number; depth: number; count: number; factor: number }>,
+  ) => void;
   moon: {
     // Celestial body modelled on a sky dome around the city axis.
     azimuthDeg: number; // compass yaw, 0 = +z (north), 90 = +x (east)
@@ -363,13 +365,11 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   },
   setIntroProgress: (progress) => set((s) => ({ intro: { ...s.intro, progress } })),
   setIntroPlaying: (playing) => set((s) => ({ intro: { ...s.intro, playing } })),
-  setIntroDuration: (durationSec) =>
-    set((s) => ({ intro: { ...s.intro, durationSec } })),
+  setIntroDuration: (durationSec) => set((s) => ({ intro: { ...s.intro, durationSec } })),
   setIntroMode: (mode) => set((s) => ({ intro: { ...s.intro, mode } })),
   setBreathingPeriod: (breathingPeriodSec) =>
     set((s) => ({ intro: { ...s.intro, breathingPeriodSec } })),
-  playIntro: () =>
-    set((s) => ({ intro: { ...s.intro, progress: 0, playing: true } })),
+  playIntro: () => set((s) => ({ intro: { ...s.intro, progress: 0, playing: true } })),
   focalDragging: false,
   setFocalDragging: (focalDragging) => set({ focalDragging }),
   orbitPaused: false,
@@ -378,12 +378,14 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setOrbit: (patch) => set((s) => ({ orbit: { ...s.orbit, ...patch } })),
   cityPlanning: {
     showHighways: true,
-    showDistrictShells: true,
+    // District-fill overlay is a planning aid, not part of the ambient scene —
+    // it paints the ground as a colour carpet, so default it off. Toggle it on
+    // from the Districts panel or view it in the /plan route (PR 5).
+    showDistrictShells: false,
     showArterials: true,
     topologyKind: null,
   },
-  setCityPlanning: (patch) =>
-    set((s) => ({ cityPlanning: { ...s.cityPlanning, ...patch } })),
+  setCityPlanning: (patch) => set((s) => ({ cityPlanning: { ...s.cityPlanning, ...patch } })),
   setTopologyKind: (topologyKind) =>
     set((s) =>
       s.cityPlanning.topologyKind === topologyKind
@@ -397,8 +399,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setQualityTier: (qualityTier) => set({ qualityTier }),
   setPaused: (paused) => set({ paused }),
   setCameraMode: (cameraMode) => set({ cameraMode }),
-  setCameraIntent: (intent) =>
-    set((s) => ({ cameraIntent: { ...s.cameraIntent, ...intent } })),
+  setCameraIntent: (intent) => set((s) => ({ cameraIntent: { ...s.cameraIntent, ...intent } })),
   setCameraLive: (cameraLive) => set({ cameraLive }),
   resetCamera: () => {
     const snap = readSavedConfig();
