@@ -98,7 +98,10 @@ export const DEFAULT_ORBIT: OrbitConfig = {
 // Azimuth flipped 180° from the 200° tuning that paired with the old camera
 // pose: with the new defaults the camera faces +z, so the moon sits at +z too.
 export const DEFAULT_MOON = { azimuthDeg: 20, elevationDeg: 32, distance: 4500 };
-export const DEFAULT_STARS = { radius: 4500, depth: 200, count: 16000, factor: 200 };
+// `factor` is the star base size in px (mean, before the per-star long-tail).
+// Previously a vestigial drei value (200) that nothing read; now wired to
+// StarField's size prop. Legacy large values are migrated on load.
+export const DEFAULT_STARS = { radius: 4500, depth: 200, count: 16000, factor: 1.6 };
 // Moon halo: billboard glow around the moon disc. radiusMul scales the halo
 // plane relative to the moon radius; innerRadius is the 0..0.5 fraction of the
 // disc that stays opaque before the soft falloff; intensity multiplies the
@@ -151,6 +154,11 @@ function readSavedConfig(): SavedConfig | null {
       }
       delete o.lookPitchDeg;
       delete o.cameraY;
+    }
+    // Migrate the legacy vestigial star `factor` (drei used ~200); it now means
+    // base size in px, so clamp absurd old values back to the default.
+    if (parsed.stars && parsed.stars.factor > 20) {
+      parsed.stars.factor = DEFAULT_STARS.factor;
     }
     return parsed as SavedConfig;
   } catch {
