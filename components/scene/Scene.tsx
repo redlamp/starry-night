@@ -16,6 +16,7 @@ import { FocalIndicator } from "./FocalIndicator";
 import { IntroTicker } from "./IntroTicker";
 import { GroundHaze } from "./GroundHaze";
 import { Highways } from "./Highways";
+import { Arterials } from "./Arterials";
 import { DistrictShells } from "./DistrictShells";
 import { useStage1Flag } from "@/lib/state/stageFlag";
 
@@ -72,6 +73,7 @@ export function Scene() {
         <>
           <DistrictShells masterSeed={masterSeed} />
           <Highways masterSeed={masterSeed} />
+          <Arterials masterSeed={masterSeed} />
         </>
       ) : null}
       <FocalIndicator />
