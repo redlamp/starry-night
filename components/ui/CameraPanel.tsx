@@ -16,10 +16,12 @@ import {
   CloudFog,
   Contrast,
   Gauge,
+  Map as MapIcon,
   Moon,
   MoonStar,
   Orbit as OrbitIcon,
   Radio,
+  Route,
   Settings,
   Sparkles,
   Sprout,
@@ -43,6 +45,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useStage1Flag } from "@/lib/state/stageFlag";
+import { DistrictsSection } from "@/components/ui/DistrictsPanel";
+import { RoadsSection } from "@/components/ui/RoadsPanel";
 
 const PROJECTION_TWEEN_DURATION = 0.5;
 
@@ -179,6 +184,7 @@ export function CameraPanel() {
 
   const [hidden, setHidden] = useState(true);
   const captureMode = useSceneStore((s) => s.captureMode);
+  const stage1 = useStage1Flag();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -294,6 +300,17 @@ export function CameraPanel() {
             <Section value="orbit" icon={OrbitIcon} label="Orbit">
               <OrbitSection />
             </Section>
+
+            {stage1 ? (
+              <>
+                <Section value="districts" icon={MapIcon} label="Districts">
+                  <DistrictsSection />
+                </Section>
+                <Section value="roads" icon={Route} label="Roads">
+                  <RoadsSection />
+                </Section>
+              </>
+            ) : null}
 
             <Section value="stars" icon={Stars} label="Stars">
               <StarsSection />

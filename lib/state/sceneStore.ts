@@ -1,5 +1,7 @@
 import { create } from "zustand";
 
+import type { TopologyKind } from "@/lib/seed/topology";
+
 export type LightingMode = "classic" | "modern";
 export type QualityTier = "low" | "med" | "high" | "ultra";
 export type CameraMode = "still" | "fly" | "orbit";
@@ -265,6 +267,16 @@ type SceneState = {
   setOrbitPaused: (v: boolean) => void;
   orbit: OrbitConfig;
   setOrbit: (patch: Partial<OrbitConfig>) => void;
+  // Streets-first city-planning layer visibility + readouts (Stage 1).
+  // Gated in the UI behind the ?stage1=1 flag until the rewrite is default.
+  cityPlanning: {
+    showHighways: boolean;
+    showDistrictShells: boolean;
+    showArterials: boolean;
+    topologyKind: TopologyKind | null;
+  };
+  setCityPlanning: (patch: Partial<SceneState["cityPlanning"]>) => void;
+  setTopologyKind: (kind: TopologyKind) => void;
   perf: Perf;
   setPerf: (perf: Perf) => void;
   setSeed: (seed: string) => void;
@@ -364,6 +376,20 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setOrbitPaused: (orbitPaused) => set({ orbitPaused }),
   orbit: DEFAULT_ORBIT,
   setOrbit: (patch) => set((s) => ({ orbit: { ...s.orbit, ...patch } })),
+  cityPlanning: {
+    showHighways: true,
+    showDistrictShells: true,
+    showArterials: true,
+    topologyKind: null,
+  },
+  setCityPlanning: (patch) =>
+    set((s) => ({ cityPlanning: { ...s.cityPlanning, ...patch } })),
+  setTopologyKind: (topologyKind) =>
+    set((s) =>
+      s.cityPlanning.topologyKind === topologyKind
+        ? s
+        : { cityPlanning: { ...s.cityPlanning, topologyKind } },
+    ),
   perf: { fps: 0, triangles: 0, calls: 0, geometries: 0, textures: 0 },
   setPerf: (perf) => set({ perf }),
   setSeed: (masterSeed) => set({ masterSeed }),
