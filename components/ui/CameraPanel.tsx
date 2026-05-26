@@ -573,6 +573,8 @@ function StarsSection() {
 function MoonSection() {
   const moon = useSceneStore((s) => s.moon);
   const setMoon = useSceneStore((s) => s.setMoon);
+  const halo = useSceneStore((s) => s.moonHalo);
+  const setMoonHalo = useSceneStore((s) => s.setMoonHalo);
   const followCamera = useSceneStore((s) => s.moonFollowCamera);
   const setFollowCamera = useSceneStore((s) => s.setMoonFollowCamera);
   return (
@@ -615,6 +617,33 @@ function MoonSection() {
         max={30000}
         step={50}
         onChange={(distance) => setMoon({ distance })}
+      />
+      <div className="pt-1 text-[10px] uppercase tracking-wide text-foreground/55">
+        Halo
+      </div>
+      <ValueSlider
+        label="size×"
+        value={halo.radiusMul}
+        min={1}
+        max={8}
+        step={0.05}
+        onChange={(radiusMul) => setMoonHalo({ radiusMul })}
+      />
+      <ValueSlider
+        label="core"
+        value={halo.innerRadius}
+        min={0}
+        max={0.3}
+        step={0.005}
+        onChange={(innerRadius) => setMoonHalo({ innerRadius })}
+      />
+      <ValueSlider
+        label="glow"
+        value={halo.intensity}
+        min={0}
+        max={3}
+        step={0.05}
+        onChange={(intensity) => setMoonHalo({ intensity })}
       />
       <MoonReadout />
     </>

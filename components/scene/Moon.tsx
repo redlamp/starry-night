@@ -23,9 +23,6 @@ const MOON_RADIUS_RATIO = 0.0355;
 const DEG2RAD = Math.PI / 180;
 const RAD2DEG = 180 / Math.PI;
 
-// Halo billboard. Sized as a multiple of moon radius — bigger = softer glow.
-const HALO_RADIUS_MUL = 3.5;
-
 export function Moon() {
   const meshRef = useRef<THREE.Mesh>(null);
   const haloRef = useRef<THREE.Mesh>(null);
@@ -55,8 +52,12 @@ export function Moon() {
     [],
   );
 
+  const moonRadius = starsRadius * MOON_RADIUS_RATIO;
+
   useFrame(() => {
     if (!meshRef.current) return;
+    const s = useSceneStore.getState();
+    const haloCfg = s.moonHalo;
 
     let azimuth = moon.azimuthDeg * DEG2RAD;
     if (followCamera) {
@@ -75,9 +76,13 @@ export function Moon() {
       orbit.centerZ + horizontalRadius * Math.cos(azimuth),
     );
 
-    // Halo billboard: face camera each frame.
+    // Halo billboard: face camera + size/uniforms from store each frame.
     if (haloRef.current) {
       haloRef.current.lookAt(camera.position);
+      const haloSize = moonRadius * haloCfg.radiusMul * 2;
+      haloRef.current.scale.set(haloSize, haloSize, 1);
+      haloMaterial.uniforms.uInnerRadius.value = haloCfg.innerRadius;
+      haloMaterial.uniforms.uIntensity.value = haloCfg.intensity;
     }
 
     const now = performance.now();
@@ -93,15 +98,12 @@ export function Moon() {
     }
   });
 
-  const moonRadius = starsRadius * MOON_RADIUS_RATIO;
-  const haloSize = moonRadius * HALO_RADIUS_MUL * 2;
-
   return (
     <mesh ref={meshRef}>
       <sphereGeometry args={[moonRadius, 32, 32]} />
       <meshBasicMaterial color="#f7f1d8" toneMapped={false} fog={false} />
       <mesh ref={haloRef} material={haloMaterial} renderOrder={-1}>
-        <planeGeometry args={[haloSize, haloSize]} />
+        <planeGeometry args={[1, 1]} />
       </mesh>
     </mesh>
   );
