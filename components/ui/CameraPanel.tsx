@@ -659,6 +659,8 @@ function MoonSection() {
 function FogSection() {
   const fog = useSceneStore((s) => s.fog);
   const setFog = useSceneStore((s) => s.setFog);
+  const haze = useSceneStore((s) => s.haze);
+  const setHaze = useSceneStore((s) => s.setHaze);
   return (
     <>
       <div className="flex items-center justify-end">
@@ -666,7 +668,7 @@ function FogSection() {
           variant="secondary"
           size="sm"
           onClick={() => setFog({ enabled: !fog.enabled })}
-          title="Toggle linear scene fog on/off"
+          title="Toggle scene fog on/off"
           className={cn(
             fog.enabled
               ? "bg-foreground text-background hover:bg-foreground"
@@ -676,22 +678,128 @@ function FogSection() {
           {fog.enabled ? "on" : "off"}
         </Button>
       </div>
-      <ValueSlider
-        label="near"
-        value={fog.near}
-        min={0}
-        max={6000}
-        step={10}
-        onChange={(near) => setFog({ near })}
-      />
-      <ValueSlider
-        label="far"
-        value={fog.far}
-        min={50}
-        max={6000}
-        step={10}
-        onChange={(far) => setFog({ far })}
-      />
+      <div className="flex items-center gap-2 text-xs">
+        <span className="w-14 shrink-0 text-foreground/70">color</span>
+        <input
+          type="color"
+          value={fog.color}
+          onChange={(e) => setFog({ color: e.target.value })}
+          className="h-7 w-12 cursor-pointer rounded border border-foreground/15 bg-transparent"
+          title="Fog colour (also drives the scene background)"
+        />
+        <code className="text-foreground/60 tabular-nums">{fog.color}</code>
+      </div>
+      <div className="flex items-center gap-2 text-xs">
+        <span className="w-14 shrink-0 text-foreground/70">mode</span>
+        <Select
+          value={fog.mode}
+          onValueChange={(v) => setFog({ mode: v as typeof fog.mode })}
+        >
+          <SelectTrigger
+            size="sm"
+            className="w-full bg-background/50 text-foreground hover:bg-background/60"
+          >
+            <SelectValue placeholder="mode" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="linear">linear (near / far)</SelectItem>
+            <SelectItem value="exp2">exp² (density)</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      {fog.mode === "linear" ? (
+        <>
+          <ValueSlider
+            label="near"
+            value={fog.near}
+            min={0}
+            max={6000}
+            step={10}
+            onChange={(near) => setFog({ near })}
+          />
+          <ValueSlider
+            label="far"
+            value={fog.far}
+            min={50}
+            max={6000}
+            step={10}
+            onChange={(far) => setFog({ far })}
+          />
+        </>
+      ) : (
+        <ValueSlider
+          label="density"
+          value={fog.density}
+          min={0}
+          max={0.005}
+          step={0.0001}
+          onChange={(density) => setFog({ density })}
+        />
+      )}
+      <div className="flex items-center justify-between pt-2">
+        <span className="text-[10px] uppercase tracking-wide text-foreground/55">
+          Ground haze
+        </span>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => setHaze({ enabled: !haze.enabled })}
+          title="Toggle ground-haze band on/off"
+          className={cn(
+            haze.enabled
+              ? "bg-foreground text-background hover:bg-foreground"
+              : "bg-foreground/10 text-foreground hover:bg-foreground/20",
+          )}
+        >
+          {haze.enabled ? "on" : "off"}
+        </Button>
+      </div>
+      {haze.enabled ? (
+        <>
+          <div className="flex items-center gap-2 text-xs">
+            <span className="w-14 shrink-0 text-foreground/70">color</span>
+            <input
+              type="color"
+              value={haze.color}
+              onChange={(e) => setHaze({ color: e.target.value })}
+              className="h-7 w-12 cursor-pointer rounded border border-foreground/15 bg-transparent"
+            />
+            <code className="text-foreground/60 tabular-nums">{haze.color}</code>
+          </div>
+          <ValueSlider
+            label="bottom"
+            value={haze.bottomY}
+            min={-200}
+            max={400}
+            step={5}
+            onChange={(bottomY) => setHaze({ bottomY })}
+          />
+          <ValueSlider
+            label="top"
+            value={haze.topY}
+            min={0}
+            max={800}
+            step={5}
+            onChange={(topY) => setHaze({ topY })}
+          />
+          <ValueSlider
+            label="strength"
+            value={haze.intensity}
+            min={0}
+            max={2}
+            step={0.05}
+            onChange={(intensity) => setHaze({ intensity })}
+          />
+          <ValueSlider
+            label="radius"
+            value={haze.radius}
+            min={500}
+            max={6000}
+            step={50}
+            onChange={(radius) => setHaze({ radius })}
+          />
+        </>
+      ) : null}
     </>
   );
 }
