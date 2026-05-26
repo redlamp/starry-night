@@ -53,7 +53,7 @@ gh api -X POST repos/redlamp/starry-night/pages -f build_type=workflow
 ## Why this matters
 
 - Every merge to `main` auto-deploys without manual steps
-- Env-gated config means `bun dev` still serves at `localhost:3000/` — no `/starry-night` prefix locally
+- Env-gated config means `bun dev` still serves at `localhost:7827/` — no `/starry-night` prefix locally
 - Static export is fine for now because the project has no API routes, no server components doing dynamic work, and no `next/image`
 - `.nojekyll` stops Pages from rewriting paths starting with `_next/`
 
