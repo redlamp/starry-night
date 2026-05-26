@@ -18,7 +18,6 @@ import { GroundHaze } from "./GroundHaze";
 import { Highways } from "./Highways";
 import { Arterials } from "./Arterials";
 import { DistrictShells } from "./DistrictShells";
-import { useStage1Flag } from "@/lib/state/stageFlag";
 
 export function Scene() {
   const masterSeed = useSceneStore((s) => s.masterSeed);
@@ -27,7 +26,6 @@ export function Scene() {
   const fog = useSceneStore((s) => s.fog);
   const qualityTier = useSceneStore((s) => s.qualityTier);
   const dprMax = QUALITY_TIERS[qualityTier].dprMax;
-  const stage1 = useStage1Flag();
 
   return (
     <Canvas
@@ -69,13 +67,10 @@ export function Scene() {
       <GroundHaze />
       <InstancedCity masterSeed={masterSeed} />
       <Streetlights masterSeed={masterSeed} />
-      {stage1 ? (
-        <>
-          <DistrictShells masterSeed={masterSeed} />
-          <Highways masterSeed={masterSeed} />
-          <Arterials masterSeed={masterSeed} />
-        </>
-      ) : null}
+      {/* Planning overlays — each respects its own visibility flag (default off). */}
+      <DistrictShells masterSeed={masterSeed} />
+      <Highways masterSeed={masterSeed} />
+      <Arterials masterSeed={masterSeed} />
       <FocalIndicator />
     </Canvas>
   );

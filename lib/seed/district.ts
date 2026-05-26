@@ -291,6 +291,9 @@ export function generateDistricts(masterSeed: string, topo: Topology): DistrictF
   const m = survivorSeedToIndex.size;
 
   const classifyRaw = (x: number, z: number): number => {
+    // The city has a finite extent — Voronoi cells must not bleed past the
+    // bbox, or block-grid overshoot would place buildings off the map.
+    if (x < minX || x > maxX || z < minZ || z > maxZ) return -1;
     const raw = nearestSeed(seeds, topo, x, z);
     const survivorSeed = remapToSurvivorSeed[raw];
     return survivorSeedToIndex.get(survivorSeed) ?? -1;
