@@ -205,16 +205,17 @@ function assignCharacters(
     assigned.add(heritageIdx);
   }
 
-  // 3. Subcentres: polycentric high-rise nodes out on the ring / bypass. Scale
-  //    with city size — a big city has several, a small one one or none.
-  const subTarget =
-    topo.kind === "crossroads" ? Math.floor(n / 10) : 1 + Math.floor(n / 8);
-  const outer = order.slice(Math.floor(n / 2)).filter((o) => !assigned.has(o.i));
-  // Prefer larger outer districts as subcentres.
-  outer.sort((a, b) => b.area - a.area);
-  for (let k = 0; k < subTarget && k < outer.length; k++) {
-    chars[outer[k].i] = "subcentre";
-    assigned.add(outer[k].i);
+  // 3. Subcentres: the high-rise band clusters AROUND downtown — the innermost
+  //    unassigned districts become tall, so density concentrates centrally and
+  //    the periphery is left to residential / industrial. Scales with size.
+  const subTarget = 1 + Math.floor(n / 5);
+  let subPlaced = 0;
+  for (let rank = 1; rank < order.length && subPlaced < subTarget; rank++) {
+    const idx = order[rank].i;
+    if (assigned.has(idx)) continue;
+    chars[idx] = "subcentre";
+    assigned.add(idx);
+    subPlaced++;
   }
 
   // 4. Industrial: the furthest-from-centre districts (docks / yards on the

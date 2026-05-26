@@ -31,19 +31,20 @@ export type Topology = {
   halfExtent: number;
 };
 
-// Match the orbit default (0, -120) so the existing camera framing still works.
-// A 1000m × 1000m playing field comfortably encloses the legacy hardcoded districts.
+// Centred on the orbit default (0, -120). A large ~1500m × 1500m playing field
+// so cities sprawl well past the framed core into the fog at the edges.
 export const CITY_CENTER = { x: 0, z: -120 };
-export const CITY_HALF_EXTENT = 500;
+export const CITY_HALF_EXTENT = 750;
 
 const HIGHWAY_WIDTH = 28;
 
-// Weights from the decision note: 0.35 / 0.25 / 0.20 / 0.20.
+// Ring topologies were over-represented; weighted down here. Crossroads 0.45 /
+// Bypass 0.35 / Ring 0.10 / Ring+radial 0.10.
 export function pickTopologyKind(rng: () => number): TopologyKind {
   const r = rng();
-  if (r < 0.35) return "crossroads";
-  if (r < 0.6) return "bypass";
-  if (r < 0.8) return "ring";
+  if (r < 0.45) return "crossroads";
+  if (r < 0.8) return "bypass";
+  if (r < 0.9) return "ring";
   return "ring-radial";
 }
 

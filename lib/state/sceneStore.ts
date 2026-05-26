@@ -87,7 +87,9 @@ export const DEFAULT_ORBIT: OrbitConfig = {
   centerX: 0,
   centerZ: -120,
   lookAtY: 150,
-  radius: 650,
+  // Scaled up with CITY_HALF_EXTENT (500→750) so the larger city stays framed;
+  // the dense core fills the view while the sparse edges fade into fog.
+  radius: 980,
   azimuthDeg: 3.11353259843213,
   elevationDeg: 0.01,
   periodSec: 500,

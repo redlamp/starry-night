@@ -3,10 +3,10 @@ import type { Topology } from "./topology";
 import type { DistrictField } from "./district";
 import { isHighRise } from "./silhouette";
 
-// Arterials — the second road tier. They radiate from the high-rise cluster
-// centres: every other district is linked to its nearest cluster, and clusters
-// are linked to each other. Buildings skip the arterial corridor, so arterials
-// read as avenues cutting through the grid. 3-6 per seed (decision note).
+// Arterials — the second road tier. The spine is a set of radial spokes that
+// run from the dense downtown core out to the city edge (long, city-spanning),
+// plus a few cluster-to-cluster connectors. Buildings skip the arterial
+// corridor, so arterials read as avenues cutting across the grid.
 
 export type Arterial = {
   id: string;
@@ -16,8 +16,24 @@ export type Arterial = {
 };
 
 const ARTERIAL_WIDTH = 14;
-const MAX_ARTERIALS = 6;
-const MIN_ARTERIALS = 3;
+
+// Distance from a point along a direction until it hits the city bbox edge.
+function reachToEdge(
+  ox: number,
+  oz: number,
+  dx: number,
+  dz: number,
+  cx: number,
+  cz: number,
+  half: number,
+): number {
+  let t = Infinity;
+  if (dx > 1e-6) t = Math.min(t, (cx + half - ox) / dx);
+  else if (dx < -1e-6) t = Math.min(t, (cx - half - ox) / dx);
+  if (dz > 1e-6) t = Math.min(t, (cz + half - oz) / dz);
+  else if (dz < -1e-6) t = Math.min(t, (cz - half - oz) / dz);
+  return Number.isFinite(t) ? Math.max(0, t) : half;
+}
 
 export function generateArterials(
   masterSeed: string,
@@ -28,74 +44,70 @@ export function generateArterials(
   const districts = field.districts;
   if (districts.length < 2) return [];
 
-  const peaks = districts.filter((d) => isHighRise(d.character));
-  // Fall back to the most central district if no high-rise exists.
-  const anchors =
-    peaks.length > 0
-      ? peaks
-      : [
-          [...districts].sort(
-            (a, b) =>
-              Math.hypot(a.centroidX - topo.centerX, a.centroidZ - topo.centerZ) -
-              Math.hypot(b.centroidX - topo.centerX, b.centroidZ - topo.centerZ),
-          )[0],
-        ];
+  const cx = topo.centerX;
+  const cz = topo.centerZ;
+  const half = topo.halfExtent;
 
-  type Link = { ax: number; az: number; bx: number; bz: number; len: number; key: string };
-  const links: Link[] = [];
-  const addLink = (ax: number, az: number, bx: number, bz: number, aId: string, bId: string) => {
-    const key = aId < bId ? `${aId}|${bId}` : `${bId}|${aId}`;
-    if (links.some((l) => l.key === key)) return;
-    links.push({ ax, az, bx, bz, len: Math.hypot(bx - ax, bz - az), key });
+  const peaks = districts.filter((d) => isHighRise(d.character));
+  const byCentral = [...districts].sort(
+    (a, b) =>
+      Math.hypot(a.centroidX - cx, a.centroidZ - cz) -
+      Math.hypot(b.centroidX - cx, b.centroidZ - cz),
+  );
+  const anchors = peaks.length > 0 ? peaks : [byCentral[0]];
+  const core = byCentral[0]; // most-central district = the downtown core
+
+  const arterials: Arterial[] = [];
+  let id = 0;
+  const push = (a: { x: number; z: number }, b: { x: number; z: number }) => {
+    const len = Math.hypot(b.x - a.x, b.z - a.z);
+    const mx = (a.x + b.x) / 2 + (rng() - 0.5) * len * 0.1;
+    const mz = (a.z + b.z) / 2 + (rng() - 0.5) * len * 0.1;
+    arterials.push({
+      id: `arterial-${id++}`,
+      width: ARTERIAL_WIDTH,
+      closed: false,
+      vertices: [
+        { x: a.x, z: a.z },
+        { x: mx, z: mz },
+        { x: b.x, z: b.z },
+      ],
+    });
   };
 
-  // Cluster-to-cluster spines.
+  // 1. Radial spokes from the core out to the city edge — the long spanning
+  //    avenues that radiate from downtown.
+  const spokeCount = 6 + Math.floor(rng() * 3); // 6..8
+  const startAngle = rng() * Math.PI * 2;
+  for (let i = 0; i < spokeCount; i++) {
+    const theta = startAngle + i * ((Math.PI * 2) / spokeCount) + (rng() - 0.5) * 0.35;
+    const dx = Math.cos(theta);
+    const dz = Math.sin(theta);
+    const reach = reachToEdge(core.centroidX, core.centroidZ, dx, dz, cx, cz, half);
+    push(
+      { x: core.centroidX, z: core.centroidZ },
+      { x: core.centroidX + dx * reach * 0.96, z: core.centroidZ + dz * reach * 0.96 },
+    );
+  }
+
+  // 2. A few cluster-to-cluster connectors so high-rise nodes link to each other.
+  const links: Array<[number, number, number]> = []; // [i, j, len]
   for (let i = 0; i < anchors.length; i++) {
     for (let j = i + 1; j < anchors.length; j++) {
-      addLink(
-        anchors[i].centroidX,
-        anchors[i].centroidZ,
-        anchors[j].centroidX,
-        anchors[j].centroidZ,
-        anchors[i].id,
-        anchors[j].id,
+      const len = Math.hypot(
+        anchors[i].centroidX - anchors[j].centroidX,
+        anchors[i].centroidZ - anchors[j].centroidZ,
       );
+      links.push([i, j, len]);
     }
   }
-
-  // Each non-anchor district → its nearest anchor (a spoke into the core).
-  for (const d of districts) {
-    if (anchors.some((a) => a.id === d.id)) continue;
-    let nearest = anchors[0];
-    let bestD = Infinity;
-    for (const a of anchors) {
-      const dist = Math.hypot(a.centroidX - d.centroidX, a.centroidZ - d.centroidZ);
-      if (dist < bestD) {
-        bestD = dist;
-        nearest = a;
-      }
-    }
-    addLink(d.centroidX, d.centroidZ, nearest.centroidX, nearest.centroidZ, d.id, nearest.id);
+  links.sort((a, b) => a[2] - b[2]);
+  for (const [i, j] of links.slice(0, 4)) {
+    push(
+      { x: anchors[i].centroidX, z: anchors[i].centroidZ },
+      { x: anchors[j].centroidX, z: anchors[j].centroidZ },
+    );
   }
 
-  // Keep the shortest links (cluster spines first), capped to MAX, floored to MIN.
-  links.sort((a, b) => a.len - b.len);
-  const keepCount = Math.max(MIN_ARTERIALS, Math.min(MAX_ARTERIALS, links.length));
-  const kept = links.slice(0, keepCount);
-
-  return kept.map((l, i) => {
-    // Slight mid-point jog so arterials aren't perfectly straight.
-    const mx = (l.ax + l.bx) / 2 + (rng() - 0.5) * l.len * 0.12;
-    const mz = (l.az + l.bz) / 2 + (rng() - 0.5) * l.len * 0.12;
-    return {
-      id: `arterial-${i}`,
-      width: ARTERIAL_WIDTH,
-      closed: false as const,
-      vertices: [
-        { x: l.ax, z: l.az },
-        { x: mx, z: mz },
-        { x: l.bx, z: l.bz },
-      ],
-    };
-  });
+  return arterials;
 }
