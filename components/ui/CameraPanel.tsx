@@ -2,7 +2,13 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import gsap from "gsap";
-import { useSceneStore, type Vec3, PRESETS } from "@/lib/state/sceneStore";
+import {
+  useSceneStore,
+  type Vec3,
+  type QualityTier,
+  PRESETS,
+  QUALITY_TIERS,
+} from "@/lib/state/sceneStore";
 import { randomSeed } from "@/lib/seed/rng";
 import { cn } from "@/lib/utils";
 import {
@@ -1076,20 +1082,53 @@ function SeedRow() {
 
 function PerfReadout() {
   const perf = useSceneStore((s) => s.perf);
+  const qualityTier = useSceneStore((s) => s.qualityTier);
+  const setQualityTier = useSceneStore((s) => s.setQualityTier);
+  const setStars = useSceneStore((s) => s.setStars);
+  const tierCfg = QUALITY_TIERS[qualityTier];
   const fpsColor =
     perf.fps >= 55 ? "text-emerald-300" : perf.fps >= 35 ? "text-amber-300" : "text-rose-400";
   return (
-    <div className="grid grid-cols-[5rem_1fr] gap-1 font-mono text-xs text-foreground/70">
-      <div>fps</div>
-      <div className={`tabular-nums ${fpsColor}`}>{Math.round(perf.fps)}</div>
-      <div>triangles</div>
-      <div className="tabular-nums">{perf.triangles.toLocaleString()}</div>
-      <div>draw calls</div>
-      <div className="tabular-nums">{perf.calls}</div>
-      <div>geometries</div>
-      <div className="tabular-nums">{perf.geometries}</div>
-      <div>textures</div>
-      <div className="tabular-nums">{perf.textures}</div>
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-2 text-xs">
+        <span className="w-14 shrink-0 text-foreground/70">quality</span>
+        <Select
+          value={qualityTier}
+          onValueChange={(v) => {
+            const tier = v as QualityTier;
+            setQualityTier(tier);
+            setStars({ count: QUALITY_TIERS[tier].starCount });
+          }}
+        >
+          <SelectTrigger
+            size="sm"
+            className="w-full bg-background/50 text-foreground hover:bg-background/60"
+          >
+            <SelectValue placeholder="tier" />
+          </SelectTrigger>
+          <SelectContent>
+            {(Object.keys(QUALITY_TIERS) as QualityTier[]).map((t) => (
+              <SelectItem key={t} value={t}>
+                {QUALITY_TIERS[t].label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="grid grid-cols-[5rem_1fr] gap-1 font-mono text-xs text-foreground/70">
+        <div>dpr cap</div>
+        <div className="tabular-nums">{tierCfg.dprMax}</div>
+        <div>fps</div>
+        <div className={`tabular-nums ${fpsColor}`}>{Math.round(perf.fps)}</div>
+        <div>triangles</div>
+        <div className="tabular-nums">{perf.triangles.toLocaleString()}</div>
+        <div>draw calls</div>
+        <div className="tabular-nums">{perf.calls}</div>
+        <div>geometries</div>
+        <div className="tabular-nums">{perf.geometries}</div>
+        <div>textures</div>
+        <div className="tabular-nums">{perf.textures}</div>
+      </div>
     </div>
   );
 }
