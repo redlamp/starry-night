@@ -43,7 +43,7 @@ export type DistrictField = {
 };
 
 const GRID_STEPS = 64; // sample resolution per axis
-const MIN_SAMPLE_FRACTION = 0.012; // districts below this share of samples are merged away
+const MIN_SAMPLE_FRACTION = 0.006; // districts below this share of samples are merged away
 
 function sideOfSegment(
   x: number,
@@ -92,11 +92,11 @@ type Seed = { x: number; z: number; macro: string };
 
 function placeSeeds(rng: () => number, topo: Topology): Seed[] {
   const { centerX: cx, centerZ: cz, halfExtent: half } = topo;
-  const target = 5 + Math.floor(rng() * 4); // 5..8
-  const minDist = half * 0.32;
+  const target = 10 + Math.floor(rng() * 15); // 10..24 (merge trims to ~8..24)
+  const minDist = half * 0.13;
   const seeds: Seed[] = [];
   let attempts = 0;
-  while (seeds.length < target && attempts < 600) {
+  while (seeds.length < target && attempts < 1500) {
     attempts++;
     const ang = rng() * Math.PI * 2;
     // Bias radius toward the centre so cores cluster and the periphery is sparse.
@@ -205,24 +205,28 @@ function assignCharacters(
     assigned.add(heritageIdx);
   }
 
-  // 3. Subcentres: polycentric high-rise nodes out on the ring / bypass. More
-  //    likely for ring topologies, fewer for crossroads.
-  const subTarget = topo.kind === "crossroads" ? (rng() < 0.5 ? 1 : 0) : 1 + (rng() < 0.5 ? 1 : 0);
-  const outer = order.slice(Math.floor(n / 2)).filter((o) => !assigned.has(o.i));
-  // Prefer larger outer districts as subcentres.
-  outer.sort((a, b) => b.area - a.area);
-  for (let k = 0; k < subTarget && k < outer.length; k++) {
-    chars[outer[k].i] = "subcentre";
-    assigned.add(outer[k].i);
+  // 3. Subcentres: the high-rise band clusters AROUND downtown — the innermost
+  //    unassigned districts become tall, so density concentrates centrally and
+  //    the periphery is left to residential / industrial. Scales with size.
+  const subTarget = 1 + Math.floor(n / 5);
+  let subPlaced = 0;
+  for (let rank = 1; rank < order.length && subPlaced < subTarget; rank++) {
+    const idx = order[rank].i;
+    if (assigned.has(idx)) continue;
+    chars[idx] = "subcentre";
+    assigned.add(idx);
+    subPlaced++;
   }
 
-  // 4. Industrial: the single furthest-from-centre district (docks / yards on
-  //    the edge).
-  for (let k = order.length - 1; k >= 0; k--) {
+  // 4. Industrial: the furthest-from-centre districts (docks / yards on the
+  //    edge). Scales with city size.
+  const industrialTarget = 1 + Math.floor(n / 14);
+  let industrialAssigned = 0;
+  for (let k = order.length - 1; k >= 0 && industrialAssigned < industrialTarget; k--) {
     if (!assigned.has(order[k].i)) {
       chars[order[k].i] = "industrial";
       assigned.add(order[k].i);
-      break;
+      industrialAssigned++;
     }
   }
 

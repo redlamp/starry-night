@@ -306,6 +306,9 @@ function districtBlocks(
   district: District,
   grammar: CharacterGrammar,
   rot: number,
+  cityCx: number,
+  cityCz: number,
+  cityHalf: number,
 ): Block[] {
   const cosR = Math.cos(rot);
   const sinR = Math.sin(rot);
@@ -335,12 +338,16 @@ function districtBlocks(
       // Rotate the local block centre around the district centroid into world space.
       const cx = district.centroidX + lx * cosR - lz * sinR;
       const cz = district.centroidZ + lx * sinR + lz * cosR;
+      // Radial density falloff: blocks near the city edge are far more often
+      // empty, so the periphery thins out and the dense core stands apart.
+      const edgeFactor = Math.min(1, Math.hypot(cx - cityCx, cz - cityCz) / cityHalf);
+      const emptyProb = Math.min(0.85, grammar.emptyBlockProb + Math.pow(edgeFactor, 1.6) * 0.55);
       blocks.push({
         cx,
         cz,
         w: bw,
         d: bd,
-        empty: rng() < grammar.emptyBlockProb,
+        empty: rng() < emptyProb,
         stripes: rng() < grammar.twoStripeProb ? 2 : 1,
       });
     }
@@ -482,7 +489,15 @@ export function generateCity(masterSeed: string): CityData {
       coreProx,
       roads,
     };
-    const blocks = districtBlocks(districtRng, district, grammar, rot);
+    const blocks = districtBlocks(
+      districtRng,
+      district,
+      grammar,
+      rot,
+      topology.centerX,
+      topology.centerZ,
+      topology.halfExtent,
+    );
 
     for (const b of blocks) {
       if (b.empty) continue;
