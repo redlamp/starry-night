@@ -16,10 +16,12 @@ import {
   CloudFog,
   Contrast,
   Gauge,
+  Map as MapIcon,
   Moon,
   MoonStar,
   Orbit as OrbitIcon,
   Radio,
+  Route,
   Settings,
   Sparkles,
   Sprout,
@@ -43,6 +45,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { DistrictsSection } from "@/components/ui/DistrictsPanel";
+import { RoadsSection } from "@/components/ui/RoadsPanel";
 
 const PROJECTION_TWEEN_DURATION = 0.5;
 
@@ -71,6 +75,21 @@ function tweenProjectionTo(target: "perspective" | "orthographic") {
   });
 }
 
+// Orbit top-down: tilt the orbit straight down + pause the auto-sweep, without
+// leaving orbit mode (per request — don't drop to Still). elevationDeg 90 sits
+// the camera directly above the city; orbitPaused stops the revolution.
+function tweenOrbitTopDown() {
+  const s = useSceneStore.getState();
+  s.setOrbitPaused(true);
+  const proxy = { v: s.orbit.elevationDeg };
+  gsap.to(proxy, {
+    v: 90,
+    duration: 0.8,
+    ease: "power2.inOut",
+    onUpdate: () => useSceneStore.getState().setOrbit({ elevationDeg: proxy.v }),
+  });
+}
+
 function copyConfigToClipboard() {
   const s = useSceneStore.getState();
   const snippet = JSON.stringify(
@@ -79,6 +98,13 @@ function copyConfigToClipboard() {
       orbit: s.orbit,
       moon: s.moon,
       stars: s.stars,
+      fog: s.fog,
+      haze: s.haze,
+      cityPlanning: {
+        showHighways: s.cityPlanning.showHighways,
+        showDistrictShells: s.cityPlanning.showDistrictShells,
+        showArterials: s.cityPlanning.showArterials,
+      },
     },
     null,
     2,
@@ -132,7 +158,7 @@ function ThemeToggle() {
   useEffect(() => setMounted(true), []);
   return (
     <div
-      className="inline-flex items-center rounded-md border border-foreground/10 bg-foreground/5 p-0.5"
+      className="border-foreground/10 bg-foreground/5 inline-flex items-center rounded-md border p-0.5"
       suppressHydrationWarning
     >
       {THEME_OPTIONS.map(({ value, icon: Icon, label }) => (
@@ -194,11 +220,13 @@ export function CameraPanel() {
     return (
       <button
         onClick={() => setHidden(false)}
-        className="pointer-events-auto fixed top-3 right-3 z-30 flex size-11 items-center justify-center rounded-full bg-popover text-foreground/85 border border-foreground/10 shadow-lg active:bg-foreground/5 grey:bg-popover/70 grey:backdrop-blur-md"
+        className="bg-popover text-foreground/85 border-foreground/10 active:bg-foreground/5 grey:bg-popover/70 grey:backdrop-blur-md pointer-events-auto fixed top-3 right-3 z-30 flex size-11 items-center justify-center rounded-full border shadow-lg"
         title="Show settings (H)"
         aria-label="Show settings"
       >
-        <span aria-hidden="true" className="text-lg leading-none">⚙</span>
+        <span aria-hidden="true" className="text-lg leading-none">
+          ⚙
+        </span>
       </button>
     );
   }
@@ -219,12 +247,12 @@ export function CameraPanel() {
   ];
 
   return (
-    <div className="pointer-events-auto fixed top-0 right-0 bottom-0 z-20 flex h-screen w-[26rem] flex-col border-l border-foreground/10 bg-popover text-foreground shadow-2xl grey:bg-popover/70 grey:backdrop-blur-md">
+    <div className="border-foreground/10 bg-popover text-foreground grey:bg-popover/70 grey:backdrop-blur-md pointer-events-auto fixed top-0 right-0 bottom-0 z-20 flex h-screen w-[26rem] flex-col border-l shadow-2xl">
       {/* Sticky header */}
-      <div className="flex shrink-0 flex-col gap-2.5 border-b border-border px-4 pt-4 pb-3">
+      <div className="border-border flex shrink-0 flex-col gap-2.5 border-b px-4 pt-4 pb-3">
         <div className="flex items-center justify-between gap-2">
           <span className="flex items-center gap-2 text-base font-semibold tracking-wide">
-            <Settings aria-hidden="true" className="size-[18px] text-foreground/80" />
+            <Settings aria-hidden="true" className="text-foreground/80 size-[18px]" />
             Settings
           </span>
           <div className="flex items-center gap-1.5">
@@ -276,11 +304,7 @@ export function CameraPanel() {
       {/* Scrollable middle */}
       <ScrollArea className="min-h-0 flex-1">
         <div className="px-4 py-3">
-          <Accordion
-            multiple
-            defaultValue={["pose", "orbit"]}
-            className="flex flex-col gap-1.5"
-          >
+          <Accordion multiple defaultValue={["pose", "orbit"]} className="flex flex-col gap-1.5">
             <Section value="pose" icon={Camera} label="Camera">
               <PoseSection
                 locked={locked}
@@ -293,6 +317,13 @@ export function CameraPanel() {
 
             <Section value="orbit" icon={OrbitIcon} label="Orbit">
               <OrbitSection />
+            </Section>
+
+            <Section value="districts" icon={MapIcon} label="Districts">
+              <DistrictsSection />
+            </Section>
+            <Section value="roads" icon={Route} label="Roads">
+              <RoadsSection />
             </Section>
 
             <Section value="stars" icon={Stars} label="Stars">
@@ -312,7 +343,7 @@ export function CameraPanel() {
             </Section>
 
             <Section value="live" icon={Radio} label="Live readout">
-              <div className="grid grid-cols-[5rem_1fr] gap-1 font-mono text-xs text-foreground/70">
+              <div className="text-foreground/70 grid grid-cols-[5rem_1fr] gap-1 font-mono text-xs">
                 <div>position</div>
                 <div className="tabular-nums">
                   {fmt(livePos[0])} {fmt(livePos[1])} {fmt(livePos[2])}
@@ -338,7 +369,7 @@ export function CameraPanel() {
       </ScrollArea>
 
       {/* Sticky footer */}
-      <div className="flex shrink-0 items-center justify-between gap-2 border-t border-foreground/10 px-4 pt-3 pb-3">
+      <div className="border-foreground/10 flex shrink-0 items-center justify-between gap-2 border-t px-4 pt-3 pb-3">
         <Button
           variant="ghost"
           onClick={() => resetCamera()}
@@ -376,11 +407,11 @@ function Section({
   return (
     <AccordionItem
       value={value}
-      className="rounded-lg border border-foreground/10 bg-foreground/[0.04] not-last:border-b"
+      className="border-foreground/10 bg-foreground/[0.04] rounded-lg border not-last:border-b"
     >
-      <AccordionTrigger className="px-3 py-2.5 text-sm font-medium tracking-wide text-foreground/85 hover:no-underline">
+      <AccordionTrigger className="text-foreground/85 px-3 py-2.5 text-sm font-medium tracking-wide hover:no-underline">
         <span className="flex items-center gap-2.5">
-          <Icon aria-hidden="true" className="size-[18px] text-foreground/70" />
+          <Icon aria-hidden="true" className="text-foreground/70 size-[18px]" />
           <span>{label}</span>
         </span>
       </AccordionTrigger>
@@ -404,25 +435,32 @@ function PoseSection({
   setCameraIntent: ReturnType<typeof useSceneStore.getState>["setCameraIntent"];
   tweenCameraTo: ReturnType<typeof useSceneStore.getState>["tweenCameraTo"];
 }) {
+  const orbiting = useSceneStore((s) => s.cameraMode === "orbit");
   return (
     <>
       <div className="flex items-center gap-2">
-        <span className="w-16 shrink-0 text-xs uppercase tracking-wide text-foreground/40">
+        <span className="text-foreground/40 w-16 shrink-0 text-xs tracking-wide uppercase">
           tween to
         </span>
         <div className="flex flex-wrap gap-1">
-          {PRESETS.map((p) => (
-            <Button
-              key={p.id}
-              variant="secondary"
-              size="sm"
-              disabled={locked}
-              onClick={() => tweenCameraTo(p.intent, 900)}
-              className="bg-foreground/10 text-foreground hover:bg-foreground/20"
-            >
-              {p.label}
-            </Button>
-          ))}
+          {PRESETS.map((p) => {
+            // In orbit mode the still-pose presets stay disabled, except
+            // "Top-down" — it tilts the orbit straight down + pauses the sweep
+            // instead of dropping to Still.
+            const orbitTopDown = orbiting && p.id === "top-down";
+            return (
+              <Button
+                key={p.id}
+                variant="secondary"
+                size="sm"
+                disabled={locked && !orbitTopDown}
+                onClick={() => (orbitTopDown ? tweenOrbitTopDown() : tweenCameraTo(p.intent, 900))}
+                className="bg-foreground/10 text-foreground hover:bg-foreground/20"
+              >
+                {p.label}
+              </Button>
+            );
+          })}
         </div>
       </div>
 
@@ -435,7 +473,7 @@ function PoseSection({
       />
 
       <div className="flex items-center justify-between">
-        <span className="text-xs uppercase tracking-wide text-foreground/40">orient by</span>
+        <span className="text-foreground/40 text-xs tracking-wide uppercase">orient by</span>
         <div className="flex gap-1">
           {(["lookAt", "rotation"] as const).map((o) => (
             <Button
@@ -543,9 +581,9 @@ function StarsSection() {
       <ValueSlider
         label="size"
         value={stars.factor}
-        min={5}
-        max={500}
-        step={1}
+        min={0.5}
+        max={60}
+        step={0.5}
         onChange={(factor) => setStars({ factor })}
       />
       <ValueSlider
@@ -624,9 +662,7 @@ function MoonSection() {
         step={50}
         onChange={(distance) => setMoon({ distance })}
       />
-      <div className="pt-1 text-[10px] uppercase tracking-wide text-foreground/55">
-        Halo
-      </div>
+      <div className="text-foreground/55 pt-1 text-[10px] tracking-wide uppercase">Halo</div>
       <ValueSlider
         label="size×"
         value={halo.radiusMul}
@@ -679,25 +715,22 @@ function FogSection() {
         </Button>
       </div>
       <div className="flex items-center gap-2 text-xs">
-        <span className="w-14 shrink-0 text-foreground/70">color</span>
+        <span className="text-foreground/70 w-14 shrink-0">color</span>
         <input
           type="color"
           value={fog.color}
           onChange={(e) => setFog({ color: e.target.value })}
-          className="h-7 w-12 cursor-pointer rounded border border-foreground/15 bg-transparent"
+          className="border-foreground/15 h-7 w-12 cursor-pointer rounded border bg-transparent"
           title="Fog colour (also drives the scene background)"
         />
         <code className="text-foreground/60 tabular-nums">{fog.color}</code>
       </div>
       <div className="flex items-center gap-2 text-xs">
-        <span className="w-14 shrink-0 text-foreground/70">mode</span>
-        <Select
-          value={fog.mode}
-          onValueChange={(v) => setFog({ mode: v as typeof fog.mode })}
-        >
+        <span className="text-foreground/70 w-14 shrink-0">mode</span>
+        <Select value={fog.mode} onValueChange={(v) => setFog({ mode: v as typeof fog.mode })}>
           <SelectTrigger
             size="sm"
-            className="w-full bg-background/50 text-foreground hover:bg-background/60"
+            className="bg-background/50 text-foreground hover:bg-background/60 w-full"
           >
             <SelectValue placeholder="mode" />
           </SelectTrigger>
@@ -737,9 +770,7 @@ function FogSection() {
         />
       )}
       <div className="flex items-center justify-between pt-2">
-        <span className="text-[10px] uppercase tracking-wide text-foreground/55">
-          Ground haze
-        </span>
+        <span className="text-foreground/55 text-[10px] tracking-wide uppercase">Ground haze</span>
         <Button
           variant="secondary"
           size="sm"
@@ -757,12 +788,12 @@ function FogSection() {
       {haze.enabled ? (
         <>
           <div className="flex items-center gap-2 text-xs">
-            <span className="w-14 shrink-0 text-foreground/70">color</span>
+            <span className="text-foreground/70 w-14 shrink-0">color</span>
             <input
               type="color"
               value={haze.color}
               onChange={(e) => setHaze({ color: e.target.value })}
-              className="h-7 w-12 cursor-pointer rounded border border-foreground/15 bg-transparent"
+              className="border-foreground/15 h-7 w-12 cursor-pointer rounded border bg-transparent"
             />
             <code className="text-foreground/60 tabular-nums">{haze.color}</code>
           </div>
@@ -841,14 +872,11 @@ function IntroSection() {
         onChange={(breathingPeriodSec) => setBreathingPeriod(breathingPeriodSec)}
       />
       <div className="flex items-center gap-2 text-xs">
-        <span className="w-14 shrink-0 text-foreground/70">mode</span>
-        <Select
-          value={intro.mode}
-          onValueChange={(v) => setIntroMode(v as typeof intro.mode)}
-        >
+        <span className="text-foreground/70 w-14 shrink-0">mode</span>
+        <Select value={intro.mode} onValueChange={(v) => setIntroMode(v as typeof intro.mode)}>
           <SelectTrigger
             size="sm"
-            className="w-full bg-background/50 text-foreground hover:bg-background/60"
+            className="bg-background/50 text-foreground hover:bg-background/60 w-full"
           >
             <SelectValue placeholder="mode" />
           </SelectTrigger>
@@ -861,7 +889,7 @@ function IntroSection() {
           </SelectContent>
         </Select>
       </div>
-      <div className="grid grid-cols-[5rem_1fr] gap-1 font-mono text-xs text-foreground/70">
+      <div className="text-foreground/70 grid grid-cols-[5rem_1fr] gap-1 font-mono text-xs">
         <div>progress</div>
         <div className="tabular-nums">{fmt(intro.progress, 2)}</div>
       </div>
@@ -872,10 +900,11 @@ function IntroSection() {
 function ModeDetailPanel({ mode }: { mode: "still" | "fly" | "orbit" }) {
   if (mode === "fly") {
     return (
-      <div className="flex flex-col gap-1.5 rounded-lg border border-orange-400/30 bg-orange-400/5 p-2 text-foreground/70">
-        <div className="text-xs uppercase tracking-wide text-orange-200/80">fly</div>
+      <div className="text-foreground/70 flex flex-col gap-1.5 rounded-lg border border-orange-400/30 bg-orange-400/5 p-2">
+        <div className="text-xs tracking-wide text-orange-200/80 uppercase">fly</div>
         <div className="text-xs leading-snug">
-          Hold LMB look · WASD move · Space up · C down · Q/E roll · Shift sprint · wheel = speed · F exit
+          Hold LMB look · WASD move · Space up · C down · Q/E roll · Shift sprint · wheel = speed ·
+          F exit
         </div>
         <FlySpeedSlider />
       </div>
@@ -883,22 +912,24 @@ function ModeDetailPanel({ mode }: { mode: "still" | "fly" | "orbit" }) {
   }
   if (mode === "orbit") {
     return (
-      <div className="flex flex-col gap-1.5 rounded-lg border border-sky-400/30 bg-sky-400/5 p-2 text-foreground/70">
+      <div className="text-foreground/70 flex flex-col gap-1.5 rounded-lg border border-sky-400/30 bg-sky-400/5 p-2">
         <div className="flex items-center justify-between">
-          <span className="text-xs uppercase tracking-wide text-sky-300/80">orbit</span>
+          <span className="text-xs tracking-wide text-sky-300/80 uppercase">orbit</span>
           <OrbitPauseBadge />
         </div>
         <div className="text-xs leading-snug">
-          Drag spin · RMB drag = focal Y · pinch / wheel zoom · two-finger pan = focal Y · Space pause
+          Drag spin · RMB drag = focal Y · pinch / wheel zoom · two-finger pan = focal Y · Space
+          pause
         </div>
       </div>
     );
   }
   return (
-    <div className="flex flex-col gap-1 rounded-lg border border-foreground/15 bg-foreground/5 p-2 text-foreground/70">
-      <div className="text-xs uppercase tracking-wide text-foreground/55">still</div>
+    <div className="border-foreground/15 bg-foreground/5 text-foreground/70 flex flex-col gap-1 rounded-lg border p-2">
+      <div className="text-foreground/55 text-xs tracking-wide uppercase">still</div>
       <div className="text-xs leading-snug">
-        Pose set by position / lookAt / rotation / FOV. Tween presets to jump to common framings; switch to Fly (F) or Orbit (G) for motion.
+        Pose set by position / lookAt / rotation / FOV. Tween presets to jump to common framings;
+        switch to Fly (F) or Orbit (G) for motion.
       </div>
     </div>
   );
@@ -944,7 +975,7 @@ function ProjectionRow() {
   const projection = useSceneStore((s) => s.projection);
   return (
     <div className="flex items-center gap-2">
-      <span className="w-16 shrink-0 text-xs uppercase tracking-wide text-foreground/40">
+      <span className="text-foreground/40 w-16 shrink-0 text-xs tracking-wide uppercase">
         projection
       </span>
       <div className="flex flex-1 gap-1">
@@ -1019,7 +1050,9 @@ function ModeButton({
       size="sm"
       onClick={onClick}
       title={`${label} mode (${hotkey})`}
-      className={cn(active ? activeClass : "bg-foreground/10 text-foreground hover:bg-foreground/20")}
+      className={cn(
+        active ? activeClass : "bg-foreground/10 text-foreground hover:bg-foreground/20",
+      )}
     >
       {label}
       <span className="text-[10px] opacity-70">({hotkey})</span>
@@ -1070,7 +1103,7 @@ function FocalIndicatorToggle() {
 function MoonReadout() {
   const moon = useSceneStore((s) => s.moonLive);
   return (
-    <div className="mt-1 grid grid-cols-[5rem_1fr] gap-1 border-t border-foreground/10 pt-1.5 font-mono text-xs text-foreground/70">
+    <div className="border-foreground/10 text-foreground/70 mt-1 grid grid-cols-[5rem_1fr] gap-1 border-t pt-1.5 font-mono text-xs">
       <div>moon pos</div>
       <div className="tabular-nums">
         {fmt(moon.position[0], 0)} {fmt(moon.position[1], 0)} {fmt(moon.position[2], 0)}
@@ -1104,7 +1137,7 @@ function ValueSlider({
 }) {
   return (
     <div className="flex items-center gap-2 text-xs">
-      <span className={cn("w-14 shrink-0 text-foreground/70", labelClass)}>{label}</span>
+      <span className={cn("text-foreground/70 w-14 shrink-0", labelClass)}>{label}</span>
       <Slider
         min={min}
         max={max}
@@ -1118,7 +1151,7 @@ function ValueSlider({
         step={step}
         value={value}
         onChange={(e) => onChange(parseFloat(e.target.value) || min)}
-        className="w-16 rounded border border-foreground/15 bg-background/60 px-1.5 py-0.5 text-foreground tabular-nums"
+        className="border-foreground/15 bg-background/60 text-foreground w-16 rounded border px-1.5 py-0.5 tabular-nums"
       />
     </div>
   );
@@ -1131,7 +1164,7 @@ function Vec3Header() {
       {(["X", "Y", "Z"] as const).map((axis) => (
         <span
           key={axis}
-          className="flex-1 text-center text-[11px] font-medium uppercase tracking-wider text-foreground/40"
+          className="text-foreground/40 flex-1 text-center text-[11px] font-medium tracking-wider uppercase"
         >
           {axis}
         </span>
@@ -1157,9 +1190,9 @@ function Vec3Input({
 }) {
   return (
     <div className="flex items-center gap-2 text-xs">
-      <div className="flex w-16 shrink-0 flex-col text-foreground/60">
+      <div className="text-foreground/60 flex w-16 shrink-0 flex-col">
         <span>{label}</span>
-        {hint ? <span className="text-[10px] text-foreground/35">{hint}</span> : null}
+        {hint ? <span className="text-foreground/35 text-[10px]">{hint}</span> : null}
       </div>
       {(["x", "y", "z"] as const).map((axis, i) => (
         <input
@@ -1173,7 +1206,7 @@ function Vec3Input({
             v[i] = parseFloat(e.target.value) || 0;
             onChange(v);
           }}
-          className="w-0 min-w-0 flex-1 rounded border border-foreground/15 bg-background/60 px-1.5 py-1 text-foreground tabular-nums disabled:opacity-50"
+          className="border-foreground/15 bg-background/60 text-foreground w-0 min-w-0 flex-1 rounded border px-1.5 py-1 tabular-nums disabled:opacity-50"
         />
       ))}
     </div>
@@ -1194,7 +1227,7 @@ function SeedRow() {
 
   return (
     <div className="flex items-center gap-2 text-xs">
-      <span className="w-14 shrink-0 text-foreground/70">seed</span>
+      <span className="text-foreground/70 w-14 shrink-0">seed</span>
       <input
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
@@ -1202,7 +1235,7 @@ function SeedRow() {
         onKeyDown={(e) => {
           if (e.key === "Enter") (e.target as HTMLInputElement).blur();
         }}
-        className="min-w-0 flex-1 rounded border border-foreground/15 bg-background/60 px-1.5 py-0.5 font-mono text-foreground"
+        className="border-foreground/15 bg-background/60 text-foreground min-w-0 flex-1 rounded border px-1.5 py-0.5 font-mono"
       />
       <Button
         variant="secondary"
@@ -1228,7 +1261,7 @@ function PerfReadout() {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-2 text-xs">
-        <span className="w-14 shrink-0 text-foreground/70">quality</span>
+        <span className="text-foreground/70 w-14 shrink-0">quality</span>
         <Select
           value={qualityTier}
           onValueChange={(v) => {
@@ -1239,7 +1272,7 @@ function PerfReadout() {
         >
           <SelectTrigger
             size="sm"
-            className="w-full bg-background/50 text-foreground hover:bg-background/60"
+            className="bg-background/50 text-foreground hover:bg-background/60 w-full"
           >
             <SelectValue placeholder="tier" />
           </SelectTrigger>
@@ -1252,7 +1285,7 @@ function PerfReadout() {
           </SelectContent>
         </Select>
       </div>
-      <div className="grid grid-cols-[5rem_1fr] gap-1 font-mono text-xs text-foreground/70">
+      <div className="text-foreground/70 grid grid-cols-[5rem_1fr] gap-1 font-mono text-xs">
         <div>dpr cap</div>
         <div className="tabular-nums">{tierCfg.dprMax}</div>
         <div>fps</div>

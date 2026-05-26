@@ -15,6 +15,9 @@ import { ProjectionBlender } from "./ProjectionBlender";
 import { FocalIndicator } from "./FocalIndicator";
 import { IntroTicker } from "./IntroTicker";
 import { GroundHaze } from "./GroundHaze";
+import { Highways } from "./Highways";
+import { Arterials } from "./Arterials";
+import { DistrictShells } from "./DistrictShells";
 
 export function Scene() {
   const masterSeed = useSceneStore((s) => s.masterSeed);
@@ -56,7 +59,7 @@ export function Scene() {
         radius={stars.radius}
         depth={stars.depth}
         count={stars.count}
-        size={1.5}
+        size={stars.factor}
       />
 
       <Moon />
@@ -64,6 +67,10 @@ export function Scene() {
       <GroundHaze />
       <InstancedCity masterSeed={masterSeed} />
       <Streetlights masterSeed={masterSeed} />
+      {/* Planning overlays — each respects its own visibility flag (default off). */}
+      <DistrictShells masterSeed={masterSeed} />
+      <Highways masterSeed={masterSeed} />
+      <Arterials masterSeed={masterSeed} />
       <FocalIndicator />
     </Canvas>
   );

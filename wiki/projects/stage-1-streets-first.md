@@ -2,9 +2,25 @@
 
 Implementation plan for Stage 1 of the streets-first grammar locked in [[decision-streets-first-city-generation]].
 
-**Status**: planned, not started
+**Status**: implemented on `arch/city-planning` (2026-05-26), awaiting arch→dev merge
 **Scope**: M2 (city iteration), unblocks Stage 2/3
-**Branch convention**: off `dev`, likely `feature/streets-first-stage-1`
+**Branch convention**: feature branches off `arch/city-planning`, merged `--no-ff`, then arch→dev
+
+## Implemented (2026-05-26)
+
+All five PRs landed on `arch/city-planning` as separate `--no-ff` feature branches:
+
+1. `feature/topology-highways` — `lib/seed/topology.ts`: 4 weighted topologies (Crossroads/Bypass/Ring/Ring+radial), highway polylines, `Highways` render, planning panels.
+2. `feature/district-shells` — `lib/seed/district.ts`: highways as hard macro-boundaries + center-weighted Voronoi interior; 6-way character; colour-coded `DistrictShells` overlay. **Building-overlap bug fixed** (footprint-level district containment + per-stripe depth budget + capped block dims): 22% → 0%.
+3. `feature/cluster-placement` — `lib/seed/silhouette.ts` (Tabletop/Wedding-cake/Twin-peak/Landmark height fields) + `coreProximity` (peak-based, replaces downtownBias ellipse) + `lib/seed/arterials.ts` (radiate from clusters).
+4. `feature/streetlight-matrix` — per-tier + per-zone kelvin, variant bulbs (4%/8% heritage), 2.5% failing lamps flickering via the window TV-flicker shader path.
+5. `feature/plan-route` — `/plan` 16-seed top-down review grid + `scripts/gate1.ts` asserts; `?stage1` flag retired (streets-first is the only generator; overlays default off).
+
+**Verification**: Gate 1 PASS on 20 seeds (0 overlaps via OBB/SAT, 0 corridor violations, district sanity, in-bounds, determinism). Production build clean. ~440–575 buildings/seed.
+
+**Lesson** — `district.classify()` must bound-check to the city bbox; without it, Voronoi cells extend infinitely and block-grid overshoot places buildings off-map. Gate 1's in-bounds assert caught this.
+
+**Remaining before arch→dev**: Gate 2 Pass B (orbit-capture eyeball, ≥16/20 categorically different) + pin curated seeds in `samples/curated/stage1/`. These are human-review steps.
 
 ## Stage 1 deliverables
 

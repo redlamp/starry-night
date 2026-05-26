@@ -30,8 +30,10 @@ export function CaptureBoot() {
     }
     if (capture) {
       state.setCaptureMode(true);
-      state.setCameraMode("still");
+      // resetCamera now lands in orbit; force still afterwards so the headless
+      // screenshot is static.
       state.resetCamera();
+      state.setCameraMode("still");
     }
 
     // Sync hash on every seed change (skip while capture mode is on — we don't

@@ -3,18 +3,12 @@
 import { useMemo } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
-import seedrandom from "seedrandom";
 import { generateStreetlights } from "@/lib/seed/cityGen";
 import { kelvinToColor } from "@/lib/color/kelvin";
 import { SCENE_WB_GAIN } from "@/lib/color/whiteBalance";
 import { sharedIntroProgress } from "@/lib/shaders/sharedIntro";
+import { sharedTime } from "@/lib/shaders/sharedTime";
 import { useSceneStore } from "@/lib/state/sceneStore";
-
-// Real-city mix: 80% sodium HPS (older retrofits), 20% modern LED.
-// Per wiki/research/color-usage-night-skyline.md item 11.
-const SODIUM_K = 2000;
-const LED_K = 4000;
-const LED_RATIO = 0.2;
 
 function applyWb(c: THREE.Color): THREE.Color {
   return new THREE.Color(
@@ -31,13 +25,19 @@ uniform float uIntroProgress;
 uniform vec3 uIntroCityCenter;
 uniform float uIntroMaxRadius;
 attribute vec3 aColor;
+attribute float aFailing;
+attribute float aSeed;
 varying float vDist;
 varying vec3 vColor;
 varying float vWake;
+varying float vFailing;
+varying float vSeed;
 void main() {
   vec4 mv = modelViewMatrix * vec4(position, 1.0);
   vDist = -mv.z;
   vColor = aColor;
+  vFailing = aFailing;
+  vSeed = aSeed;
 
   // Center-out wake: closer to city centre = lights first.
   vec2 d = position.xz - uIntroCityCenter.xz;
@@ -51,16 +51,37 @@ void main() {
 `;
 
 const fragmentShader = /* glsl */ `
+uniform float uTime;
 varying float vDist;
 varying vec3 vColor;
 varying float vWake;
+varying float vFailing;
+varying float vSeed;
+
+float hash11(float p) {
+  p = fract(p * 0.1031);
+  p *= p + 33.33;
+  p *= p + p;
+  return fract(p);
+}
+
 void main() {
   vec2 c = gl_PointCoord - 0.5;
   float d = length(c);
   if (d > 0.5) discard;
   float core = smoothstep(0.5, 0.0, d);
-  float intensity = pow(core, 1.4) * 2.2 * vWake;
-  gl_FragColor = vec4(vColor * intensity, core * vWake);
+
+  // Failing lamps flicker at ~3 Hz — the same step-and-hash pattern the window
+  // TV cells use, so a dying streetlight reads like the rest of the scene.
+  float bright = 1.0;
+  if (vFailing > 0.5) {
+    float tick = floor(uTime * 3.0);
+    float n = hash11(tick + vSeed * 100.0);
+    bright = 0.18 + n * 0.82;
+  }
+
+  float intensity = pow(core, 1.4) * 2.2 * vWake * bright;
+  gl_FragColor = vec4(vColor * intensity, core * vWake * bright);
 }
 `;
 
@@ -69,25 +90,28 @@ export function Streetlights({ masterSeed }: { masterSeed: string }) {
     const lights = generateStreetlights(masterSeed);
     const positions = new Float32Array(lights.length * 3);
     const colors = new Float32Array(lights.length * 3);
-    const sodiumColor = applyWb(kelvinToColor(SODIUM_K));
-    const ledColor = applyWb(kelvinToColor(LED_K));
-    const rng = seedrandom(`${masterSeed}::streetlights::mix`);
+    const failing = new Float32Array(lights.length);
+    const seeds = new Float32Array(lights.length);
     let maxR = 1;
     for (let i = 0; i < lights.length; i++) {
-      positions[i * 3 + 0] = lights[i].x;
-      positions[i * 3 + 1] = lights[i].y;
-      positions[i * 3 + 2] = lights[i].z;
-      const r = Math.hypot(lights[i].x, lights[i].z + 120);
+      const l = lights[i];
+      positions[i * 3 + 0] = l.x;
+      positions[i * 3 + 1] = l.y;
+      positions[i * 3 + 2] = l.z;
+      const r = Math.hypot(l.x, l.z + 120);
       if (r > maxR) maxR = r;
-      const isLed = rng() < LED_RATIO;
-      const c = isLed ? ledColor : sodiumColor;
+      const c = applyWb(kelvinToColor(l.kelvin));
       colors[i * 3 + 0] = c.r;
       colors[i * 3 + 1] = c.g;
       colors[i * 3 + 2] = c.b;
+      failing[i] = l.isFailing ? 1 : 0;
+      seeds[i] = (Math.sin(i * 12.9898) * 43758.5453) % 1;
     }
     const geo = new THREE.BufferGeometry();
     geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
     geo.setAttribute("aColor", new THREE.BufferAttribute(colors, 3));
+    geo.setAttribute("aFailing", new THREE.BufferAttribute(failing, 1));
+    geo.setAttribute("aSeed", new THREE.BufferAttribute(seeds, 1));
 
     const mat = new THREE.ShaderMaterial({
       vertexShader,
@@ -100,6 +124,7 @@ export function Streetlights({ masterSeed }: { masterSeed: string }) {
         uIntroProgress: sharedIntroProgress,
         uIntroCityCenter: { value: new THREE.Vector3() },
         uIntroMaxRadius: { value: maxR },
+        uTime: sharedTime,
       },
       transparent: true,
       depthWrite: false,
