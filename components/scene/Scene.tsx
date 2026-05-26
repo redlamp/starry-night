@@ -15,6 +15,8 @@ import { ProjectionBlender } from "./ProjectionBlender";
 import { FocalIndicator } from "./FocalIndicator";
 import { IntroTicker } from "./IntroTicker";
 import { GroundHaze } from "./GroundHaze";
+import { Highways } from "./Highways";
+import { useStage1Flag } from "@/lib/state/stageFlag";
 
 export function Scene() {
   const masterSeed = useSceneStore((s) => s.masterSeed);
@@ -23,6 +25,7 @@ export function Scene() {
   const fog = useSceneStore((s) => s.fog);
   const qualityTier = useSceneStore((s) => s.qualityTier);
   const dprMax = QUALITY_TIERS[qualityTier].dprMax;
+  const stage1 = useStage1Flag();
 
   return (
     <Canvas
@@ -64,6 +67,7 @@ export function Scene() {
       <GroundHaze />
       <InstancedCity masterSeed={masterSeed} />
       <Streetlights masterSeed={masterSeed} />
+      {stage1 ? <Highways masterSeed={masterSeed} /> : null}
       <FocalIndicator />
     </Canvas>
   );
