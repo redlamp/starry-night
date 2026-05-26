@@ -1,4 +1,16 @@
 import seedrandom from "seedrandom";
+import { generateTopology, type Topology } from "./topology";
+import {
+  generateDistricts,
+  type District,
+  type DistrictCharacter,
+  type DistrictField,
+} from "./district";
+import { buildSilhouette, isHighRise, type SilhouetteField } from "./silhouette";
+import { generateArterials, type Arterial } from "./arterials";
+
+// Any road tier, for the building-skip corridor test.
+type RoadLike = { vertices: Array<{ x: number; z: number }>; width: number; closed: boolean };
 
 export type Archetype =
   | "low-rise"
@@ -10,7 +22,11 @@ export type Archetype =
   | "spire";
 
 export type Layer = "front" | "mid" | "back";
-export type DistrictCharacter = "downtown" | "residential" | "industrial" | "oldtown";
+
+// Building-level lighting class. Kept to the original 4 values so the window
+// shader (aDistrictIdx) + lightingGen mood logic stay unchanged. The richer
+// 6-way planning identity lives on the District object; we map down to this.
+export type BuildingLightingClass = "downtown" | "residential" | "industrial" | "oldtown";
 
 export type Building = {
   id: number;
@@ -22,12 +38,20 @@ export type Building = {
   rotationY: number; // radians, around Y axis
   archetype: Archetype;
   layer: Layer;
-  district: DistrictCharacter;
-  downtownBias: number; // 0..1 — how deep this building sits in the downtown ellipse
+  district: BuildingLightingClass;
+  districtId: string; // stable id of the owning District
+  coreProximity: number; // 0..1 — proximity to the nearest high-rise peak
   windowSeed: number;
   rowsPerFloor: number;
   colsPerFace: number;
   floors: number;
+};
+
+export type CityData = {
+  buildings: Building[];
+  districts: District[];
+  topology: Topology;
+  arterials: Arterial[];
 };
 
 // All in meters. See wiki/research/building-sizes-real-world-references.md
@@ -35,34 +59,33 @@ const RESIDENTIAL_FLOOR_M = 3.0;
 const OFFICE_FLOOR_M = 3.5;
 const WINDOW_PITCH_M = 3.5;
 
-type DistrictSpec = {
-  id: string;
-  character: DistrictCharacter;
-  centerX: number;
-  centerZ: number;
-  width: number; // local x extent
-  depth: number; // local z extent
-  rotationDeg: number;
+// Map the 6-way planning character to the 4-value building lighting class.
+const LIGHTING_CLASS: Record<DistrictCharacter, BuildingLightingClass> = {
+  downtown: "downtown",
+  subcentre: "downtown",
+  heritage: "oldtown",
+  residential: "residential",
+  industrial: "industrial",
+  "mixed-use": "residential",
+};
+
+// Per-character block grammar + height ceiling multiplier (applied on top of the
+// archetype's own height range). Drives both block size and how tall the
+// district reads. PR 3 layers silhouette templates over this.
+type CharacterGrammar = {
   blockW: number;
   blockD: number;
   streetW: number;
   streetD: number;
-  blockJitter: number; // 0..1 — how irregular blocks are
+  blockJitter: number;
   emptyBlockProb: number;
   superBlockProb: number;
   twoStripeProb: number;
+  heightCap: number;
 };
 
-// District composition. See wiki/notes/decision-district-based-city-layout.md
-const DISTRICTS: DistrictSpec[] = [
-  {
-    id: "downtown",
-    character: "downtown",
-    centerX: 0,
-    centerZ: -120,
-    width: 280,
-    depth: 220,
-    rotationDeg: 0,
+const GRAMMAR: Record<DistrictCharacter, CharacterGrammar> = {
+  downtown: {
     blockW: 55,
     blockD: 48,
     streetW: 14,
@@ -71,32 +94,20 @@ const DISTRICTS: DistrictSpec[] = [
     emptyBlockProb: 0.03,
     superBlockProb: 0.05,
     twoStripeProb: 0.7,
+    heightCap: 1.0,
   },
-  {
-    id: "midtown",
-    character: "downtown",
-    centerX: 30,
-    centerZ: 90,
-    width: 320,
-    depth: 140,
-    rotationDeg: -3,
-    blockW: 70,
-    blockD: 55,
+  subcentre: {
+    blockW: 60,
+    blockD: 50,
     streetW: 14,
     streetD: 18,
     blockJitter: 0.18,
     emptyBlockProb: 0.04,
-    superBlockProb: 0.04,
-    twoStripeProb: 0.6,
+    superBlockProb: 0.05,
+    twoStripeProb: 0.65,
+    heightCap: 0.8,
   },
-  {
-    id: "oldtown",
-    character: "oldtown",
-    centerX: -230,
-    centerZ: -50,
-    width: 200,
-    depth: 180,
-    rotationDeg: 22,
+  heritage: {
     blockW: 38,
     blockD: 32,
     streetW: 8,
@@ -105,93 +116,42 @@ const DISTRICTS: DistrictSpec[] = [
     emptyBlockProb: 0.07,
     superBlockProb: 0.02,
     twoStripeProb: 0.35,
+    heightCap: 0.55,
   },
-  {
-    id: "residential-west",
-    character: "residential",
-    centerX: -280,
-    centerZ: 130,
-    width: 240,
-    depth: 250,
-    rotationDeg: 12,
-    blockW: 80,
-    blockD: 60,
+  residential: {
+    blockW: 82,
+    blockD: 62,
     streetW: 12,
     streetD: 14,
-    blockJitter: 0.25,
+    blockJitter: 0.24,
     emptyBlockProb: 0.05,
     superBlockProb: 0.05,
     twoStripeProb: 0.6,
+    heightCap: 0.85,
   },
-  {
-    id: "residential-east",
-    character: "residential",
-    centerX: 290,
-    centerZ: 90,
-    width: 250,
-    depth: 250,
-    rotationDeg: -10,
-    blockW: 85,
-    blockD: 65,
-    streetW: 12,
-    streetD: 14,
-    blockJitter: 0.22,
-    emptyBlockProb: 0.05,
-    superBlockProb: 0.05,
-    twoStripeProb: 0.6,
-  },
-  {
-    id: "commercial-bridge",
-    character: "downtown",
-    centerX: -90,
-    centerZ: -280,
-    width: 260,
-    depth: 140,
-    rotationDeg: 6,
-    blockW: 70,
-    blockD: 55,
-    streetW: 14,
-    streetD: 18,
-    blockJitter: 0.2,
-    emptyBlockProb: 0.05,
-    superBlockProb: 0.05,
-    twoStripeProb: 0.65,
-  },
-  {
-    id: "industrial-south",
-    character: "industrial",
-    centerX: 80,
-    centerZ: -440,
-    width: 460,
-    depth: 200,
-    rotationDeg: 3,
-    blockW: 120,
-    blockD: 90,
+  industrial: {
+    blockW: 115,
+    blockD: 85,
     streetW: 18,
     streetD: 22,
-    blockJitter: 0.12,
+    blockJitter: 0.13,
     emptyBlockProb: 0.1,
     superBlockProb: 0.08,
     twoStripeProb: 0.45,
+    heightCap: 0.45,
   },
-  {
-    id: "harbor-east",
-    character: "industrial",
-    centerX: 320,
-    centerZ: -320,
-    width: 220,
-    depth: 200,
-    rotationDeg: -16,
-    blockW: 110,
-    blockD: 80,
-    streetW: 16,
-    streetD: 20,
-    blockJitter: 0.15,
-    emptyBlockProb: 0.1,
-    superBlockProb: 0.07,
-    twoStripeProb: 0.4,
+  "mixed-use": {
+    blockW: 64,
+    blockD: 52,
+    streetW: 12,
+    streetD: 16,
+    blockJitter: 0.3,
+    emptyBlockProb: 0.06,
+    superBlockProb: 0.05,
+    twoStripeProb: 0.55,
+    heightCap: 0.7,
   },
-];
+};
 
 function pickArchetype(
   rng: () => number,
@@ -199,8 +159,7 @@ function pickArchetype(
   downtown: number,
 ): Archetype {
   const r = rng();
-  if (character === "downtown") {
-    // Deep core (downtown > 0.7) — spires + narrow-towers dominate.
+  if (character === "downtown" || character === "subcentre") {
     if (downtown > 0.7) {
       if (r < 0.32) return "spire";
       if (r < 0.65) return "narrow-tower";
@@ -208,14 +167,13 @@ function pickArchetype(
       if (r < 0.95) return "residential-tower";
       return "mid-rise";
     }
-    // Outer downtown — original spread.
     if (downtown > 0.55 && r < 0.3) return "spire";
     if (r < 0.5) return "narrow-tower";
     if (r < 0.75) return "office-block";
     if (r < 0.9) return "residential-tower";
     return "mid-rise";
   }
-  if (character === "residential") {
+  if (character === "residential" || character === "mixed-use") {
     if (r < 0.1) return "residential-tower";
     if (r < 0.45) return "mid-rise";
     if (r < 0.8) return "low-rise";
@@ -227,7 +185,7 @@ function pickArchetype(
     if (r < 0.95) return "office-block";
     return "mid-rise";
   }
-  // oldtown
+  // heritage
   if (r < 0.62) return "low-rise";
   if (r < 0.88) return "mid-rise";
   return "warehouse";
@@ -262,86 +220,135 @@ function isOfficeStyle(arch: Archetype) {
   return arch === "office-block" || arch === "spire" || arch === "warehouse";
 }
 
-// Downtown ellipse for height boost — independent of district to allow gradient bleed across district seams.
-const DOWNTOWN_RX = 200;
-const DOWNTOWN_RZ = 170;
-const DOWNTOWN_CX = 0;
-const DOWNTOWN_CZ = -120;
-const DOWNTOWN_BOOST = 1.7;
-
-// Diagonal arterials — wide streets cutting across district grids at angles.
-// Buildings whose centre falls within an arterial corridor get skipped.
-type Arterial = { x1: number; z1: number; x2: number; z2: number; halfWidth: number };
-const ARTERIALS: Arterial[] = [
-  // NW → SE sweep, runs through downtown + east residential
-  { x1: -480, z1: 220, x2: 480, z2: -460, halfWidth: 11 },
-  // SW → NE sweep, runs through industrial + downtown + east
-  { x1: -300, z1: -500, x2: 420, z2: 260, halfWidth: 9 },
-];
-
-function pointArterialDistance(x: number, z: number, a: Arterial): number {
-  const dx = a.x2 - a.x1;
-  const dz = a.z2 - a.z1;
-  const lenSq = dx * dx + dz * dz;
-  if (lenSq === 0) return Math.hypot(x - a.x1, z - a.z1);
-  let t = ((x - a.x1) * dx + (z - a.z1) * dz) / lenSq;
-  t = Math.max(0, Math.min(1, t));
-  const projX = a.x1 + t * dx;
-  const projZ = a.z1 + t * dz;
-  return Math.hypot(x - projX, z - projZ);
+// Global core-proximity field: 0..1 proximity to the nearest high-rise peak
+// across every downtown/subcentre district. Drives lighting cross-pollination
+// + archetype bias (spires cluster at peaks). Replaces the old single-ellipse
+// downtownBias so polycentric cities get a height/lighting gradient around
+// each cluster, not just the geometric centre.
+function makeCoreProximity(silhouettes: SilhouetteField[]): (x: number, z: number) => number {
+  if (silhouettes.length === 0) return () => 0;
+  return (x: number, z: number) => {
+    let best = 0;
+    for (const s of silhouettes) {
+      const p = s.proximity(x, z);
+      if (p > best) best = p;
+    }
+    return best;
+  };
 }
 
-function inAnyArterial(x: number, z: number): boolean {
-  for (const a of ARTERIALS) {
-    if (pointArterialDistance(x, z, a) < a.halfWidth) return true;
+function pointSegmentDistance(
+  x: number,
+  z: number,
+  x1: number,
+  z1: number,
+  x2: number,
+  z2: number,
+): number {
+  const dx = x2 - x1;
+  const dz = z2 - z1;
+  const lenSq = dx * dx + dz * dz;
+  if (lenSq === 0) return Math.hypot(x - x1, z - z1);
+  let t = ((x - x1) * dx + (z - z1) * dz) / lenSq;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(x - (x1 + t * dx), z - (z1 + t * dz));
+}
+
+// True only if the building's whole rotated footprint sits inside its own
+// district. Rejecting footprints that cross a district seam leaves a street-
+// width gap between neighbouring districts, which is what prevents buildings
+// from two Voronoi-adjacent districts overlapping at the shared boundary.
+function footprintInDistrict(
+  field: DistrictField,
+  index: number,
+  x: number,
+  z: number,
+  w: number,
+  d: number,
+  cosR: number,
+  sinR: number,
+): boolean {
+  const hw = w / 2;
+  const hd = d / 2;
+  const corners: Array<[number, number]> = [
+    [-hw, -hd],
+    [hw, -hd],
+    [-hw, hd],
+    [hw, hd],
+  ];
+  for (const [lx, lz] of corners) {
+    const wx = x + lx * cosR - lz * sinR;
+    const wz = z + lx * sinR + lz * cosR;
+    if (field.classify(wx, wz) !== index) return false;
+  }
+  return true;
+}
+
+function onRoadCorridor(roads: RoadLike[], x: number, z: number): boolean {
+  for (const r of roads) {
+    const margin = r.width / 2 + 5;
+    const verts = r.vertices;
+    const last = r.closed ? verts.length : verts.length - 1;
+    for (let i = 0; i < last; i++) {
+      const a = verts[i];
+      const b = verts[(i + 1) % verts.length];
+      if (pointSegmentDistance(x, z, a.x, a.z, b.x, b.z) < margin) return true;
+    }
   }
   return false;
 }
 
-export function getArterials(): Arterial[] {
-  return ARTERIALS;
-}
+type Block = { cx: number; cz: number; w: number; d: number; empty: boolean; stripes: 1 | 2 };
 
-function downtownBias(x: number, z: number): number {
-  const dx = (x - DOWNTOWN_CX) / DOWNTOWN_RX;
-  const dz = (z - DOWNTOWN_CZ) / DOWNTOWN_RZ;
-  const d = Math.sqrt(dx * dx + dz * dz);
-  return Math.max(0, 1 - d);
-}
-
-type LocalBlock = {
-  lx: number;
-  lz: number;
-  w: number;
-  d: number;
-  empty: boolean;
-  stripes: 1 | 2;
-};
-
-function generateDistrictBlocks(rng: () => number, spec: DistrictSpec): LocalBlock[] {
-  const colSpacing = spec.blockW + spec.streetW;
-  const rowSpacing = spec.blockD + spec.streetD;
-  const cols = Math.max(1, Math.floor(spec.width / colSpacing));
-  const rows = Math.max(1, Math.floor(spec.depth / rowSpacing));
+// Lay a (slightly rotated) block grid across a district's bounding box.
+function districtBlocks(
+  rng: () => number,
+  district: District,
+  grammar: CharacterGrammar,
+  rot: number,
+  cityCx: number,
+  cityCz: number,
+  cityHalf: number,
+): Block[] {
+  const cosR = Math.cos(rot);
+  const sinR = Math.sin(rot);
+  const w = district.maxX - district.minX;
+  const d = district.maxZ - district.minZ;
+  const span = Math.max(w, d) * 1.15; // overshoot so the rotated grid covers corners
+  const colSpacing = grammar.blockW + grammar.streetW;
+  const rowSpacing = grammar.blockD + grammar.streetD;
+  const cols = Math.max(1, Math.ceil(span / colSpacing));
+  const rows = Math.max(1, Math.ceil(span / rowSpacing));
   const startX = -((cols - 1) * colSpacing) / 2;
   const startZ = -((rows - 1) * rowSpacing) / 2;
-  const posJitter = 6 * spec.blockJitter;
-  const sizeJitterW = 0.4 * spec.blockJitter;
-  const sizeJitterD = 0.3 * spec.blockJitter;
+  const posJitter = 6 * grammar.blockJitter;
+  const sizeJitterW = 0.4 * grammar.blockJitter;
+  const sizeJitterD = 0.3 * grammar.blockJitter;
 
-  const blocks: LocalBlock[] = [];
+  const blocks: Block[] = [];
   for (let j = 0; j < rows; j++) {
     for (let i = 0; i < cols; i++) {
-      const isSuper = rng() < spec.superBlockProb;
-      const w = spec.blockW * (1 - sizeJitterW * 0.5 + rng() * sizeJitterW) * (isSuper ? 1.5 : 1);
-      const d = spec.blockD * (1 - sizeJitterD * 0.5 + rng() * sizeJitterD) * (isSuper ? 1.3 : 1);
+      // Jitter block size downward only, so a block never exceeds its grid cell
+      // (blockW × blockD) and thus can't spill into the neighbouring block's
+      // street. Super-blocks are deferred to Stage 2's lot subdivision.
+      const bw = grammar.blockW * (1 - sizeJitterW * rng());
+      const bd = grammar.blockD * (1 - sizeJitterD * rng());
+      const lx = startX + i * colSpacing + (rng() - 0.5) * posJitter;
+      const lz = startZ + j * rowSpacing + (rng() - 0.5) * posJitter;
+      // Rotate the local block centre around the district centroid into world space.
+      const cx = district.centroidX + lx * cosR - lz * sinR;
+      const cz = district.centroidZ + lx * sinR + lz * cosR;
+      // Radial density falloff: blocks near the city edge are far more often
+      // empty, so the periphery thins out and the dense core stands apart.
+      const edgeFactor = Math.min(1, Math.hypot(cx - cityCx, cz - cityCz) / cityHalf);
+      const emptyProb = Math.min(0.85, grammar.emptyBlockProb + Math.pow(edgeFactor, 1.6) * 0.55);
       blocks.push({
-        lx: startX + i * colSpacing + (rng() - 0.5) * posJitter,
-        lz: startZ + j * rowSpacing + (rng() - 0.5) * posJitter,
-        w,
-        d,
-        empty: rng() < spec.emptyBlockProb,
-        stripes: rng() < spec.twoStripeProb ? 2 : 1,
+        cx,
+        cz,
+        w: bw,
+        d: bd,
+        empty: rng() < emptyProb,
+        stripes: rng() < grammar.twoStripeProb ? 2 : 1,
       });
     }
   }
@@ -351,28 +358,39 @@ function generateDistrictBlocks(rng: () => number, spec: DistrictSpec): LocalBlo
 function fillStripe(
   rng: () => number,
   startId: number,
-  spec: DistrictSpec,
-  cosR: number,
-  sinR: number,
-  localBlockX: number,
-  localStripeZ: number,
+  ctx: {
+    district: District;
+    character: DistrictCharacter;
+    grammar: CharacterGrammar;
+    field: DistrictField;
+    rot: number;
+    silhouette: SilhouetteField | null;
+    coreProx: (x: number, z: number) => number;
+    roads: RoadLike[];
+  },
+  blockCx: number,
+  stripeCz: number,
   blockWidth: number,
+  depthBudget: number,
 ): Building[] {
+  const { district, character, grammar, field, rot, silhouette, coreProx, roads } = ctx;
+  const cosR = Math.cos(rot);
+  const sinR = Math.sin(rot);
   const buildings: Building[] = [];
-  const halfBW = blockWidth / 2;
+  const lightingClass = LIGHTING_CLASS[character];
   let id = startId;
 
-  let lx = localBlockX - halfBW + rng() * 2;
-  const endLx = localBlockX + halfBW;
-  const heightCap = spec.character === "industrial" ? 0.45 : spec.character === "oldtown" ? 0.7 : 1;
+  // Walk along the stripe in district-local x, transform each candidate to world.
+  const halfBW = blockWidth / 2;
+  let lx = -halfBW + rng() * 2;
+  const endLx = halfBW;
 
   while (lx < endLx) {
-    // World position before archetype pick — district + downtown bias use world coords.
-    const wxCenter = spec.centerX + lx * cosR - localStripeZ * sinR;
-    const wzCenter = spec.centerZ + lx * sinR + localStripeZ * cosR;
-    const dt = downtownBias(wxCenter, wzCenter);
+    // Approx core proximity at the walk position, for archetype bias (spires
+    // cluster near peaks).
+    const dt = coreProx(blockCx + lx * cosR, stripeCz + lx * sinR);
 
-    const archetype = pickArchetype(rng, spec.character, dt);
+    const archetype = pickArchetype(rng, character, dt);
     const dims = dimensionsForArchetype(archetype, rng);
 
     const wJ = 0.8 + rng() * 0.4;
@@ -383,25 +401,35 @@ function fillStripe(
     const width = Math.min(dims.width * wJ, blockWidth * 0.95);
     if (lx + width > endLx) break;
 
-    const depth = dims.depth * dJ;
-    const downtownBoost = 1 + dt * (DOWNTOWN_BOOST - 1);
-    const height = dims.height * heightCap * downtownBoost * hJ * outlierH;
+    // Clamp depth to the stripe's budget so a building can't reach across the
+    // street into the next row's stripe.
+    const depth = Math.min(dims.depth * dJ, depthBudget);
+
+    // World centre of this building.
+    const lxCenter = lx + width / 2;
+    const lzJitter = (rng() - 0.5) * 1.5;
+    const worldX = blockCx + lxCenter * cosR - lzJitter * sinR;
+    const worldZ = stripeCz + lxCenter * sinR + lzJitter * cosR;
+
+    lx += width + 0.5 + rng() * 1.5;
+
+    // Containment: the building's whole footprint must lie inside this district
+    // and clear of every highway corridor. Footprint-level (not just centre)
+    // containment carves street gaps at district seams → no cross-district
+    // overlap.
+    if (!footprintInDistrict(field, district.index, worldX, worldZ, width, depth, cosR, sinR))
+      continue;
+    if (onRoadCorridor(roads, worldX, worldZ)) continue;
+
+    const prox = coreProx(worldX, worldZ);
+    // Silhouette template shapes the high-rise skyline; non-high-rise districts
+    // have no field (multiplier = 1) and keep their flat per-character cap.
+    const hm = silhouette ? silhouette.multiplier(worldX, worldZ) : 1;
+    const height = dims.height * grammar.heightCap * hm * hJ * outlierH;
 
     const floorPitch = isOfficeStyle(archetype) ? OFFICE_FLOOR_M : RESIDENTIAL_FLOOR_M;
     const floors = Math.max(2, Math.round(height / floorPitch));
     const colsPerFace = Math.max(3, Math.round(width / WINDOW_PITCH_M));
-
-    // World position for this building's centre — local (lx + width/2, localStripeZ) → rotated → translated.
-    const lxCenter = lx + width / 2;
-    const lzWithJitter = localStripeZ + (rng() - 0.5) * 1.5;
-    const worldX = spec.centerX + lxCenter * cosR - lzWithJitter * sinR;
-    const worldZ = spec.centerZ + lxCenter * sinR + lzWithJitter * cosR;
-
-    // Diagonal arterials override district grid — skip buildings caught in their corridor.
-    if (inAnyArterial(worldX, worldZ)) {
-      lx += width + 0.5 + rng() * 1.5;
-      continue;
-    }
 
     buildings.push({
       id: id++,
@@ -410,135 +438,215 @@ function fillStripe(
       width,
       depth,
       height,
-      rotationY: (spec.rotationDeg * Math.PI) / 180,
+      rotationY: rot,
       archetype,
       layer: layerForZ(worldZ),
-      district: spec.character,
-      downtownBias: dt,
+      district: lightingClass,
+      districtId: district.id,
+      coreProximity: prox,
       windowSeed: rng(),
       rowsPerFloor: 1,
       colsPerFace,
       floors,
     });
-
-    lx += width + 0.5 + rng() * 1.5;
   }
 
   return buildings;
 }
 
-export type Streetlight = { x: number; y: number; z: number };
+export function generateCity(masterSeed: string): CityData {
+  const topology = generateTopology(masterSeed);
+  const field = generateDistricts(masterSeed, topology);
 
-export function generateStreetlights(masterSeed: string): Streetlight[] {
-  const lights: Streetlight[] = [];
-  for (const spec of DISTRICTS) {
-    const rng = seedrandom(`${masterSeed}::streetlights::${spec.id}`);
-    const cosR = Math.cos((spec.rotationDeg * Math.PI) / 180);
-    const sinR = Math.sin((spec.rotationDeg * Math.PI) / 180);
-    const colSpacing = spec.blockW + spec.streetW;
-    const rowSpacing = spec.blockD + spec.streetD;
-    const cols = Math.max(1, Math.floor(spec.width / colSpacing));
-    const rows = Math.max(1, Math.floor(spec.depth / rowSpacing));
-    const startX = -((cols - 1) * colSpacing) / 2;
-    const startZ = -((rows - 1) * rowSpacing) / 2;
-    const lightY = spec.character === "oldtown" ? 5 : 7;
-
-    for (let j = 0; j < rows; j++) {
-      for (let i = 0; i < cols; i++) {
-        // Place a light at each block's 4 corners (street intersections), slightly inside.
-        const lx = startX + i * colSpacing;
-        const lz = startZ + j * rowSpacing;
-        const inset = 2.5;
-        const halfW = spec.blockW / 2 + inset;
-        const halfD = spec.blockD / 2 + inset;
-        for (const [dx, dz] of [
-          [-halfW, -halfD],
-          [halfW, -halfD],
-          [-halfW, halfD],
-          [halfW, halfD],
-        ] as const) {
-          // skip ~20% randomly so they're not perfectly regular
-          if (rng() < 0.22) continue;
-          const ox = lx + dx + (rng() - 0.5) * 1.5;
-          const oz = lz + dz + (rng() - 0.5) * 1.5;
-          const wx = spec.centerX + ox * cosR - oz * sinR;
-          const wz = spec.centerZ + ox * sinR + oz * cosR;
-          if (inAnyArterial(wx, wz)) continue;
-          lights.push({ x: wx, y: lightY + (rng() - 0.5) * 0.4, z: wz });
-        }
-      }
-    }
+  // Silhouette field per high-rise district + global core-proximity from all peaks.
+  const silhouetteByIndex = new Map<number, SilhouetteField>();
+  for (const d of field.districts) {
+    if (isHighRise(d.character)) silhouetteByIndex.set(d.index, buildSilhouette(masterSeed, d));
   }
+  const coreProx = makeCoreProximity([...silhouetteByIndex.values()]);
 
-  // Arterial streetlights — pairs along both sides of each diagonal road.
-  const arterialRng = seedrandom(`${masterSeed}::streetlights::arterials`);
-  for (const a of ARTERIALS) {
-    const dx = a.x2 - a.x1;
-    const dz = a.z2 - a.z1;
-    const len = Math.hypot(dx, dz);
-    if (len === 0) continue;
-    const ux = dx / len;
-    const uz = dz / len;
-    const nx = -uz;
-    const nz = ux;
-    const spacing = 22;
-    const offset = a.halfWidth + 1.5;
-    for (let s = spacing; s < len; s += spacing) {
-      for (const side of [-1, 1] as const) {
-        const cx = a.x1 + ux * s + nx * offset * side;
-        const cz = a.z1 + uz * s + nz * offset * side;
-        lights.push({ x: cx, y: 7 + (arterialRng() - 0.5) * 0.4, z: cz });
-      }
-    }
-  }
+  const arterials = generateArterials(masterSeed, topology, field);
+  // Buildings skip both road tiers so highways + arterials read as open avenues.
+  const roads: RoadLike[] = [...topology.highways, ...arterials];
 
-  return lights;
-}
-
-export function generateCity(masterSeed: string): Building[] {
   const buildings: Building[] = [];
   let nextId = 0;
 
-  for (const spec of DISTRICTS) {
-    const districtRng = seedrandom(`${masterSeed}::layout::${spec.id}`);
-    const cosR = Math.cos((spec.rotationDeg * Math.PI) / 180);
-    const sinR = Math.sin((spec.rotationDeg * Math.PI) / 180);
-    const blocks = generateDistrictBlocks(districtRng, spec);
+  for (const district of field.districts) {
+    const grammar = GRAMMAR[district.character];
+    const districtRng = seedrandom(`${masterSeed}::layout::${district.id}`);
+    // Per-district rotation gives each shell its own grain. Heritage is the most
+    // organic, downtown the most orthogonal.
+    const rotSpread = district.character === "heritage" ? 0.5 : 0.18;
+    const rot = (districtRng() - 0.5) * rotSpread;
+    const ctx = {
+      district,
+      character: district.character,
+      grammar,
+      field,
+      rot,
+      silhouette: silhouetteByIndex.get(district.index) ?? null,
+      coreProx,
+      roads,
+    };
+    const blocks = districtBlocks(
+      districtRng,
+      district,
+      grammar,
+      rot,
+      topology.centerX,
+      topology.centerZ,
+      topology.halfExtent,
+    );
 
     for (const b of blocks) {
       if (b.empty) continue;
-
-      const frontStripeZ = b.lz + b.d / 2 - 0.5;
-      const stripe1 = fillStripe(
-        districtRng,
-        nextId,
-        spec,
-        cosR,
-        sinR,
-        b.lx,
-        frontStripeZ,
-        b.w,
-      );
-      nextId += stripe1.length;
-      buildings.push(...stripe1);
-
+      const cosR = Math.cos(rot);
+      const sinR = Math.sin(rot);
       if (b.stripes === 2) {
-        const backStripeZ = b.lz - b.d / 2 + 0.5;
-        const stripe2 = fillStripe(
-          districtRng,
-          nextId,
-          spec,
-          cosR,
-          sinR,
-          b.lx,
-          backStripeZ,
-          b.w,
-        );
-        nextId += stripe2.length;
-        buildings.push(...stripe2);
+        // Two stripes sit at ±blockD/4; each gets a depth budget of half the
+        // block (minus a 2m margin) so the two rows of buildings + the gap
+        // between them all fit inside the block.
+        const budget = Math.max(6, b.d / 2 - 2);
+        for (const lz of [b.d / 4, -b.d / 4]) {
+          const cx = b.cx - lz * sinR;
+          const cz = b.cz + lz * cosR;
+          const stripe = fillStripe(districtRng, nextId, ctx, cx, cz, b.w, budget);
+          nextId += stripe.length;
+          buildings.push(...stripe);
+        }
+      } else {
+        // Single stripe down the block centre; depth budget is the whole block.
+        const budget = Math.max(6, b.d - 2);
+        const stripe = fillStripe(districtRng, nextId, ctx, b.cx, b.cz, b.w, budget);
+        nextId += stripe.length;
+        buildings.push(...stripe);
       }
     }
   }
 
-  return buildings;
+  return { buildings, districts: field.districts, topology, arterials };
+}
+
+export type StreetlightTier = "highway" | "arterial" | "local";
+
+export type Streetlight = {
+  x: number;
+  y: number;
+  z: number;
+  kelvin: number;
+  isFailing: boolean;
+  tier: StreetlightTier;
+};
+
+// Modern-LED streetlight matrix (decision note §Streetlight planning):
+//   highway + arterial → 4000K uniform (no variant);
+//   local → per-zone colour temperature by district character.
+const LOCAL_KELVIN: Record<DistrictCharacter, number> = {
+  downtown: 4000,
+  subcentre: 4000,
+  residential: 3000,
+  heritage: 2700,
+  industrial: 4300,
+  "mixed-use": 3500,
+};
+const HIGHWAY_KELVIN = 4000;
+const ARTERIAL_KELVIN = 4000;
+// A replaced bulb / different batch sits at one of these off-temps.
+const VARIANT_TEMPS = [2200, 3500, 5000];
+const FAILURE_RATE = 0.025; // fraction of local lights that flicker as failing
+
+function pickVariant(rng: () => number, base: number): number {
+  for (let i = 0; i < 4; i++) {
+    const t = VARIANT_TEMPS[Math.floor(rng() * VARIANT_TEMPS.length)];
+    if (Math.abs(t - base) > 200) return t;
+  }
+  return VARIANT_TEMPS[0];
+}
+
+// Emit lights in pairs along both sides of a road polyline at fixed spacing.
+function emitRoadLights(
+  rng: () => number,
+  road: RoadLike,
+  tier: StreetlightTier,
+  kelvin: number,
+  spacing: number,
+  out: Streetlight[],
+) {
+  const verts = road.vertices;
+  const last = road.closed ? verts.length : verts.length - 1;
+  const offset = road.width / 2 + 2;
+  for (let i = 0; i < last; i++) {
+    const a = verts[i];
+    const b = verts[(i + 1) % verts.length];
+    const segLen = Math.hypot(b.x - a.x, b.z - a.z);
+    if (segLen === 0) continue;
+    const ux = (b.x - a.x) / segLen;
+    const uz = (b.z - a.z) / segLen;
+    const nx = -uz;
+    const nz = ux;
+    for (let s = spacing; s < segLen; s += spacing) {
+      for (const side of [-1, 1] as const) {
+        out.push({
+          x: a.x + ux * s + nx * offset * side,
+          y: 7 + (rng() - 0.5) * 0.4,
+          z: a.z + uz * s + nz * offset * side,
+          kelvin,
+          isFailing: rng() < FAILURE_RATE,
+          tier,
+        });
+      }
+    }
+  }
+}
+
+export function generateStreetlights(masterSeed: string): Streetlight[] {
+  const topology = generateTopology(masterSeed);
+  const field = generateDistricts(masterSeed, topology);
+  const arterials = generateArterials(masterSeed, topology, field);
+  const roads: RoadLike[] = [...topology.highways, ...arterials];
+  const lights: Streetlight[] = [];
+
+  // Local lights — per-zone colour temperature, on a block grid inside each
+  // district shell, clear of every road corridor.
+  for (const district of field.districts) {
+    const grammar = GRAMMAR[district.character];
+    const rng = seedrandom(`${masterSeed}::streetlights::${district.id}`);
+    const colSpacing = grammar.blockW + grammar.streetW;
+    const rowSpacing = grammar.blockD + grammar.streetD;
+    const lightY = district.character === "heritage" ? 5 : 7;
+    const baseKelvin = LOCAL_KELVIN[district.character];
+    const variantChance = district.character === "heritage" ? 0.08 : 0.04;
+
+    for (let x = district.minX; x <= district.maxX; x += colSpacing) {
+      for (let z = district.minZ; z <= district.maxZ; z += rowSpacing) {
+        if (rng() < 0.22) continue;
+        const ox = x + (rng() - 0.5) * 4;
+        const oz = z + (rng() - 0.5) * 4;
+        if (field.classify(ox, oz) !== district.index) continue;
+        if (onRoadCorridor(roads, ox, oz)) continue;
+        const kelvin = rng() < variantChance ? pickVariant(rng, baseKelvin) : baseKelvin;
+        lights.push({
+          x: ox,
+          y: lightY + (rng() - 0.5) * 0.4,
+          z: oz,
+          kelvin,
+          isFailing: rng() < FAILURE_RATE,
+          tier: "local",
+        });
+      }
+    }
+  }
+
+  // Highway + arterial edge lights — 4000K uniform, wider spacing on highways.
+  const hwRng = seedrandom(`${masterSeed}::streetlights::highways`);
+  for (const hw of topology.highways) {
+    emitRoadLights(hwRng, hw, "highway", HIGHWAY_KELVIN, 34, lights);
+  }
+  const artRng = seedrandom(`${masterSeed}::streetlights::arterials`);
+  for (const a of arterials) {
+    emitRoadLights(artRng, a, "arterial", ARTERIAL_KELVIN, 26, lights);
+  }
+
+  return lights;
 }

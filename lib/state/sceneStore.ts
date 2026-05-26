@@ -1,5 +1,7 @@
 import { create } from "zustand";
 
+import type { TopologyKind } from "@/lib/seed/topology";
+
 export type LightingMode = "classic" | "modern";
 export type QualityTier = "low" | "med" | "high" | "ultra";
 export type CameraMode = "still" | "fly" | "orbit";
@@ -42,12 +44,12 @@ export type CameraLive = {
 };
 
 // All in meters. See wiki/research/building-sizes-real-world-references.md
-// Tuned via the in-app Save/Copy values workflow on 2026-05-25.
+// Tuned via the in-app Save/Copy values workflow on 2026-05-26.
 export const DEFAULT_INTENT: CameraIntent = {
-  position: [-3.428768842032016, 34.13166196623823, -769.0941943937339],
+  position: [3, 36, 720],
   lookAt: [-3.377414762153272, 36.473654819023615, -759.3724439219319],
   rotation: [2.9051946114622647, -0.005135430560327543, 3.140355522200459],
-  fov: 45,
+  fov: 28,
   orient: "lookAt",
 };
 
@@ -78,23 +80,26 @@ export type OrbitConfig = {
   periodSec: number; // seconds per full revolution
 };
 
-// Tuned via the in-app Save/Copy values workflow on 2026-05-25.
-// Elevation pinned at the orbit floor (0.01°) so the ground plane stays visible
-// in ortho mode; focal Y at 150 frames the lower half of the city skyline.
+// Tuned via the in-app Save/Copy values workflow on 2026-05-26.
+// Radius framed for the larger (~1500m) city; slow 1200s sweep just off the
+// horizon; focal Y at 160 frames the lower half of the city skyline.
 export const DEFAULT_ORBIT: OrbitConfig = {
   centerX: 0,
   centerZ: -120,
-  lookAtY: 150,
-  radius: 650,
-  azimuthDeg: 3.11353259843213,
-  elevationDeg: 0.01,
-  periodSec: 500,
+  lookAtY: 160,
+  radius: 900,
+  azimuthDeg: 90,
+  elevationDeg: 0.5,
+  periodSec: 2400,
 };
 
 // Azimuth flipped 180° from the 200° tuning that paired with the old camera
 // pose: with the new defaults the camera faces +z, so the moon sits at +z too.
-export const DEFAULT_MOON = { azimuthDeg: 20, elevationDeg: 32, distance: 4500 };
-export const DEFAULT_STARS = { radius: 4500, depth: 200, count: 16000, factor: 200 };
+export const DEFAULT_MOON = { azimuthDeg: 20, elevationDeg: 16, distance: 4500 };
+// `factor` is the star base size in px (mean, before the per-star long-tail).
+// Previously a vestigial drei value (200) that nothing read; now wired to
+// StarField's size prop. Legacy large values are migrated on load.
+export const DEFAULT_STARS = { radius: 4500, depth: 360, count: 24000, factor: 36 };
 // Moon halo: billboard glow around the moon disc. radiusMul scales the halo
 // plane relative to the moon radius; innerRadius is the 0..0.5 fraction of the
 // disc that stays opaque before the soft falloff; intensity multiplies the
@@ -108,6 +113,16 @@ type SavedConfig = {
   orbit: OrbitConfig;
   moon: typeof DEFAULT_MOON;
   stars: typeof DEFAULT_STARS;
+  // Optional so configs saved before these were added still load.
+  fog?: SceneState["fog"];
+  haze?: SceneState["haze"];
+  // Only the layer-visibility toggles persist — topologyKind / arterialCount
+  // are per-seed runtime readouts, not settings.
+  cityPlanning?: {
+    showHighways: boolean;
+    showDistrictShells: boolean;
+    showArterials: boolean;
+  };
 };
 
 function readSavedConfig(): SavedConfig | null {
@@ -137,6 +152,11 @@ function readSavedConfig(): SavedConfig | null {
       }
       delete o.lookPitchDeg;
       delete o.cameraY;
+    }
+    // Migrate the legacy vestigial star `factor` (drei used ~200); it now means
+    // base size in px, so clamp absurd old values back to the default.
+    if (parsed.stars && parsed.stars.factor > 80) {
+      parsed.stars.factor = DEFAULT_STARS.factor;
     }
     return parsed as SavedConfig;
   } catch {
@@ -171,7 +191,9 @@ type SceneState = {
   moonFollowCamera: boolean;
   setMoonFollowCamera: (v: boolean) => void;
   stars: { radius: number; depth: number; count: number; factor: number };
-  setStars: (patch: Partial<{ radius: number; depth: number; count: number; factor: number }>) => void;
+  setStars: (
+    patch: Partial<{ radius: number; depth: number; count: number; factor: number }>,
+  ) => void;
   moon: {
     // Celestial body modelled on a sky dome around the city axis.
     azimuthDeg: number; // compass yaw, 0 = +z (north), 90 = +x (east)
@@ -265,6 +287,18 @@ type SceneState = {
   setOrbitPaused: (v: boolean) => void;
   orbit: OrbitConfig;
   setOrbit: (patch: Partial<OrbitConfig>) => void;
+  // Streets-first city-planning layer visibility + readouts (Stage 1).
+  // Gated in the UI behind the ?stage1=1 flag until the rewrite is default.
+  cityPlanning: {
+    showHighways: boolean;
+    showDistrictShells: boolean;
+    showArterials: boolean;
+    topologyKind: TopologyKind | null;
+    arterialCount: number;
+  };
+  setCityPlanning: (patch: Partial<SceneState["cityPlanning"]>) => void;
+  setTopologyKind: (kind: TopologyKind) => void;
+  setArterialCount: (n: number) => void;
   perf: Perf;
   setPerf: (perf: Perf) => void;
   setSeed: (seed: string) => void;
@@ -327,7 +361,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     mode: "linear",
     color: "#0a1838",
     near: 240,
-    far: 2400,
+    far: 4800,
     density: 0.0006,
   },
   setFog: (patch) => set((s) => ({ fog: { ...s.fog, ...patch } })),
@@ -351,19 +385,40 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   },
   setIntroProgress: (progress) => set((s) => ({ intro: { ...s.intro, progress } })),
   setIntroPlaying: (playing) => set((s) => ({ intro: { ...s.intro, playing } })),
-  setIntroDuration: (durationSec) =>
-    set((s) => ({ intro: { ...s.intro, durationSec } })),
+  setIntroDuration: (durationSec) => set((s) => ({ intro: { ...s.intro, durationSec } })),
   setIntroMode: (mode) => set((s) => ({ intro: { ...s.intro, mode } })),
   setBreathingPeriod: (breathingPeriodSec) =>
     set((s) => ({ intro: { ...s.intro, breathingPeriodSec } })),
-  playIntro: () =>
-    set((s) => ({ intro: { ...s.intro, progress: 0, playing: true } })),
+  playIntro: () => set((s) => ({ intro: { ...s.intro, progress: 0, playing: true } })),
   focalDragging: false,
   setFocalDragging: (focalDragging) => set({ focalDragging }),
   orbitPaused: false,
   setOrbitPaused: (orbitPaused) => set({ orbitPaused }),
   orbit: DEFAULT_ORBIT,
   setOrbit: (patch) => set((s) => ({ orbit: { ...s.orbit, ...patch } })),
+  cityPlanning: {
+    // Planning overlays are review aids, not part of the ambient screensaver —
+    // the streets-first network still shapes the city, it just isn't drawn over
+    // it by default. Toggle them from the Districts/Roads panels, or use /plan.
+    showHighways: false,
+    showDistrictShells: false,
+    showArterials: false,
+    topologyKind: null,
+    arterialCount: 0,
+  },
+  setCityPlanning: (patch) => set((s) => ({ cityPlanning: { ...s.cityPlanning, ...patch } })),
+  setTopologyKind: (topologyKind) =>
+    set((s) =>
+      s.cityPlanning.topologyKind === topologyKind
+        ? s
+        : { cityPlanning: { ...s.cityPlanning, topologyKind } },
+    ),
+  setArterialCount: (arterialCount) =>
+    set((s) =>
+      s.cityPlanning.arterialCount === arterialCount
+        ? s
+        : { cityPlanning: { ...s.cityPlanning, arterialCount } },
+    ),
   perf: { fps: 0, triangles: 0, calls: 0, geometries: 0, textures: 0 },
   setPerf: (perf) => set({ perf }),
   setSeed: (masterSeed) => set({ masterSeed }),
@@ -371,19 +426,23 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setQualityTier: (qualityTier) => set({ qualityTier }),
   setPaused: (paused) => set({ paused }),
   setCameraMode: (cameraMode) => set({ cameraMode }),
-  setCameraIntent: (intent) =>
-    set((s) => ({ cameraIntent: { ...s.cameraIntent, ...intent } })),
+  setCameraIntent: (intent) => set((s) => ({ cameraIntent: { ...s.cameraIntent, ...intent } })),
   setCameraLive: (cameraLive) => set({ cameraLive }),
   resetCamera: () => {
     const snap = readSavedConfig();
     if (snap) {
-      set({
+      set((s) => ({
         cameraIntent: snap.cameraIntent ?? DEFAULT_INTENT,
         orbit: snap.orbit ?? DEFAULT_ORBIT,
         moon: snap.moon ?? DEFAULT_MOON,
         stars: snap.stars ?? DEFAULT_STARS,
-        cameraMode: "still",
-      });
+        // Restore fog / haze / planning toggles if the snapshot has them;
+        // merge cityPlanning so the runtime readouts (topology, count) survive.
+        ...(snap.fog ? { fog: snap.fog } : {}),
+        ...(snap.haze ? { haze: snap.haze } : {}),
+        ...(snap.cityPlanning ? { cityPlanning: { ...s.cityPlanning, ...snap.cityPlanning } } : {}),
+        cameraMode: "orbit" as const,
+      }));
       return;
     }
     set({
@@ -391,7 +450,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       orbit: DEFAULT_ORBIT,
       moon: DEFAULT_MOON,
       stars: DEFAULT_STARS,
-      cameraMode: "still",
+      cameraMode: "orbit",
     });
   },
   saveCurrentAsDefault: () => {
@@ -401,6 +460,13 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       orbit: s.orbit,
       moon: s.moon,
       stars: s.stars,
+      fog: s.fog,
+      haze: s.haze,
+      cityPlanning: {
+        showHighways: s.cityPlanning.showHighways,
+        showDistrictShells: s.cityPlanning.showDistrictShells,
+        showArterials: s.cityPlanning.showArterials,
+      },
     });
   },
   hasSavedConfig: () => readSavedConfig() !== null,

@@ -4,11 +4,7 @@ import { useEffect, useMemo } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 import { generateCity, type Archetype, type Building } from "@/lib/seed/cityGen";
-import {
-  FACADE_BY_LAYER,
-  GLOW_BY_LAYER,
-  generateWindowTexture,
-} from "@/lib/seed/lightingGen";
+import { FACADE_BY_LAYER, GLOW_BY_LAYER, generateWindowTexture } from "@/lib/seed/lightingGen";
 import { packWindowAtlas, type PackInput } from "@/lib/scene/atlasPacker";
 import { cityVertexShader, cityFragmentShader } from "@/lib/shaders/cityInstanced";
 import { sharedTime } from "@/lib/shaders/sharedTime";
@@ -87,10 +83,8 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
   );
 }
 
-function buildMeshes(
-  masterSeed: string,
-): { meshes: THREE.InstancedMesh[]; maxRadius: number } {
-  const buildings = generateCity(masterSeed);
+function buildMeshes(masterSeed: string): { meshes: THREE.InstancedMesh[]; maxRadius: number } {
+  const { buildings } = generateCity(masterSeed);
   if (buildings.length === 0) return { meshes: [], maxRadius: 1 };
 
   let maxRadius = 1;
@@ -220,10 +214,7 @@ function buildMeshes(
     geo.setAttribute("aFacadeGlow", new THREE.InstancedBufferAttribute(aFacadeGlow, 1));
     geo.setAttribute("aBuildingHash", new THREE.InstancedBufferAttribute(aBuildingHash, 1));
     geo.setAttribute("aDistrictIdx", new THREE.InstancedBufferAttribute(aDistrictIdx, 1));
-    geo.setAttribute(
-      "aCorrelationMode",
-      new THREE.InstancedBufferAttribute(aCorrelationMode, 1),
-    );
+    geo.setAttribute("aCorrelationMode", new THREE.InstancedBufferAttribute(aCorrelationMode, 1));
 
     mesh.instanceMatrix.needsUpdate = true;
     mesh.frustumCulled = false; // bounds are union of all instances; cheaper to skip cull than compute.
