@@ -379,12 +379,12 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   orbit: DEFAULT_ORBIT,
   setOrbit: (patch) => set((s) => ({ orbit: { ...s.orbit, ...patch } })),
   cityPlanning: {
-    showHighways: true,
-    // District-fill overlay is a planning aid, not part of the ambient scene —
-    // it paints the ground as a colour carpet, so default it off. Toggle it on
-    // from the Districts panel or view it in the /plan route (PR 5).
+    // Planning overlays are review aids, not part of the ambient screensaver —
+    // the streets-first network still shapes the city, it just isn't drawn over
+    // it by default. Toggle them from the Districts/Roads panels, or use /plan.
+    showHighways: false,
     showDistrictShells: false,
-    showArterials: true,
+    showArterials: false,
     topologyKind: null,
     arterialCount: 0,
   },
