@@ -4,6 +4,23 @@ export type LightingMode = "classic" | "modern";
 export type QualityTier = "low" | "med" | "high" | "ultra";
 export type CameraMode = "still" | "fly" | "orbit";
 
+// Quality tier presets. Affects the DPR ceiling passed to the R3F Canvas and
+// the suggested star count. User can still override stars.count via slider;
+// the tier sets the boot-time ceiling and the DPR cap from then on.
+//   low   — integrated GPUs, mobile-class fillrate
+//   med   — mid-range discrete or older laptops
+//   high  — modern discrete (default)
+//   ultra — 4K+ workstations
+export const QUALITY_TIERS: Record<
+  QualityTier,
+  { label: string; dprMax: number; starCount: number }
+> = {
+  low: { label: "Low", dprMax: 1, starCount: 4000 },
+  med: { label: "Medium", dprMax: 1.25, starCount: 8000 },
+  high: { label: "High", dprMax: 2, starCount: 16000 },
+  ultra: { label: "Ultra", dprMax: 3, starCount: 24000 },
+};
+
 export type Projection = "perspective" | "orthographic";
 
 export type Vec3 = [number, number, number];

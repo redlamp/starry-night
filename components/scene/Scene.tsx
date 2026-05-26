@@ -3,7 +3,7 @@
 import { Canvas } from "@react-three/fiber";
 import { Stars } from "@react-three/drei";
 import * as THREE from "three";
-import { useSceneStore } from "@/lib/state/sceneStore";
+import { useSceneStore, QUALITY_TIERS } from "@/lib/state/sceneStore";
 import { InstancedCity } from "./InstancedCity";
 import { Moon } from "./Moon";
 import { Ground } from "./Ground";
@@ -20,6 +20,8 @@ export function Scene() {
   const intent = useSceneStore((s) => s.cameraIntent);
   const stars = useSceneStore((s) => s.stars);
   const fog = useSceneStore((s) => s.fog);
+  const qualityTier = useSceneStore((s) => s.qualityTier);
+  const dprMax = QUALITY_TIERS[qualityTier].dprMax;
 
   return (
     <Canvas
@@ -29,7 +31,7 @@ export function Scene() {
         toneMapping: THREE.ACESFilmicToneMapping,
         outputColorSpace: THREE.SRGBColorSpace,
       }}
-      dpr={[1, 2]}
+      dpr={[1, dprMax]}
       style={{ touchAction: "none" }}
     >
       <CameraControls />
