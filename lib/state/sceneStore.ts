@@ -90,7 +90,7 @@ export const DEFAULT_ORBIT: OrbitConfig = {
   radius: 900,
   azimuthDeg: 90,
   elevationDeg: 0.5,
-  periodSec: 1200,
+  periodSec: 2400,
 };
 
 // Azimuth flipped 180° from the 200° tuning that paired with the old camera
@@ -441,7 +441,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         ...(snap.fog ? { fog: snap.fog } : {}),
         ...(snap.haze ? { haze: snap.haze } : {}),
         ...(snap.cityPlanning ? { cityPlanning: { ...s.cityPlanning, ...snap.cityPlanning } } : {}),
-        cameraMode: "still" as const,
+        cameraMode: "orbit" as const,
       }));
       return;
     }
@@ -450,7 +450,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       orbit: DEFAULT_ORBIT,
       moon: DEFAULT_MOON,
       stars: DEFAULT_STARS,
-      cameraMode: "still",
+      cameraMode: "orbit",
     });
   },
   saveCurrentAsDefault: () => {
