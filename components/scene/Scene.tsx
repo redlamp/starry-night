@@ -15,6 +15,7 @@ import { ProjectionBlender } from "./ProjectionBlender";
 import { FocalIndicator } from "./FocalIndicator";
 import { IntroTicker } from "./IntroTicker";
 import { GroundHaze } from "./GroundHaze";
+import { Roads } from "./Roads";
 import { Highways } from "./Highways";
 import { Arterials } from "./Arterials";
 import { DistrictShells } from "./DistrictShells";
@@ -64,6 +65,7 @@ export function Scene() {
 
       <Moon />
       <Ground />
+      <Roads masterSeed={masterSeed} />
       <GroundHaze />
       <InstancedCity masterSeed={masterSeed} />
       <Streetlights masterSeed={masterSeed} />
