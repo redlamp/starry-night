@@ -28,6 +28,11 @@ export type Projection = "perspective" | "orthographic";
 
 export type Vec3 = [number, number, number];
 
+// lookAt is captured from raw camera world coords (15-digit floats). Trim to
+// 3 dp so saved/copied configs stay readable. (#22)
+const round3 = (n: number): number => Math.round(n * 1000) / 1000;
+const roundVec3 = (v: Vec3): Vec3 => [round3(v[0]), round3(v[1]), round3(v[2])];
+
 export type OrientSource = "lookAt" | "rotation";
 
 export type CameraIntent = {
@@ -48,7 +53,7 @@ export type CameraLive = {
 // Tuned via the in-app Save/Copy values workflow on 2026-05-26.
 export const DEFAULT_INTENT: CameraIntent = {
   position: [3, 36, 720],
-  lookAt: [-3.377414762153272, 36.473654819023615, -759.3724439219319],
+  lookAt: [-3.377, 36.474, -759.372],
   rotation: [2.9051946114622647, -0.005135430560327543, 3.140355522200459],
   fov: 28,
   orient: "lookAt",
@@ -482,7 +487,14 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setQualityTier: (qualityTier) => set({ qualityTier }),
   setPaused: (paused) => set({ paused }),
   setCameraMode: (cameraMode) => set({ cameraMode }),
-  setCameraIntent: (intent) => set((s) => ({ cameraIntent: { ...s.cameraIntent, ...intent } })),
+  setCameraIntent: (intent) =>
+    set((s) => ({
+      cameraIntent: {
+        ...s.cameraIntent,
+        ...intent,
+        ...(intent.lookAt ? { lookAt: roundVec3(intent.lookAt) } : {}),
+      },
+    })),
   setCameraLive: (cameraLive) => set({ cameraLive }),
   resetCamera: () => {
     const snap = readSavedConfig();
