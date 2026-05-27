@@ -208,7 +208,6 @@ export function CameraPanel() {
     setCameraIntent,
     resetCamera,
     saveCurrentAsDefault,
-    snapIntentToLive,
     tweenCameraTo,
   } = useSceneStore();
 
@@ -280,31 +279,18 @@ export function CameraPanel() {
         </div>
         <div className="flex items-center gap-1.5">
           <ModeButton
-            label="Still"
-            hotkey="S"
-            active={cameraMode === "still"}
-            activeClass="bg-foreground text-background hover:bg-foreground"
-            onClick={() => {
-              if (flying) snapIntentToLive();
-              setCameraMode("still");
-            }}
-          />
-          <ModeButton
             label="Fly"
             hotkey="F"
             active={flying}
             activeClass="bg-orange-500 text-black hover:bg-orange-500"
-            onClick={() => {
-              if (flying) snapIntentToLive();
-              setCameraMode(flying ? "still" : "fly");
-            }}
+            onClick={() => setCameraMode("fly")}
           />
           <ModeButton
             label="Orbit"
             hotkey="G"
             active={orbiting}
             activeClass="bg-sky-400 text-black hover:bg-sky-400"
-            onClick={() => setCameraMode(orbiting ? "still" : "orbit")}
+            onClick={() => setCameraMode("orbit")}
           />
         </div>
         <ModeDetailPanel mode={cameraMode} />
