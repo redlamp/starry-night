@@ -21,6 +21,18 @@ export type Archetype =
   | "office-block"
   | "spire";
 
+// Stable ordering — the index used for the per-archetype window-fraction uniform
+// arrays in the city shader (cityInstanced.ts) and the Windows settings panel.
+export const ARCHETYPE_ORDER: Archetype[] = [
+  "low-rise",
+  "warehouse",
+  "mid-rise",
+  "residential-tower",
+  "narrow-tower",
+  "office-block",
+  "spire",
+];
+
 export type Layer = "front" | "mid" | "back";
 
 // Building-level lighting class. Kept to the original 4 values so the window
@@ -54,10 +66,22 @@ export type CityData = {
   arterials: Arterial[];
 };
 
-// All in meters. See wiki/research/building-sizes-real-world-references.md
-const RESIDENTIAL_FLOOR_M = 3.0;
-const OFFICE_FLOOR_M = 3.5;
-const WINDOW_PITCH_M = 3.5;
+// All in meters. See wiki/research/building-sizes-real-world-references.md.
+// Per-archetype window grid pitch — metres of facade per window column / per
+// floor. Drives colsPerFace / floors: towers get fine mullions, warehouses wide
+// bays. Heritage districts apply AGE_PITCH_SCALE (denser, smaller windows). The
+// glass-to-cell *fraction* is a live shader uniform, not baked here. See
+// wiki/notes/decision-window-proportion-by-archetype.md.
+const ARCHETYPE_PITCH: Record<Archetype, { col: number; floor: number }> = {
+  spire: { col: 3.0, floor: 3.6 },
+  "narrow-tower": { col: 3.0, floor: 3.4 },
+  "office-block": { col: 3.4, floor: 3.6 },
+  "residential-tower": { col: 3.6, floor: 3.0 },
+  "mid-rise": { col: 3.8, floor: 3.1 },
+  "low-rise": { col: 4.0, floor: 3.0 },
+  warehouse: { col: 7.5, floor: 5.0 },
+};
+const AGE_PITCH_SCALE = 0.88; // Heritage / oldtown: denser, smaller windows.
 
 // Map the 6-way planning character to the 4-value building lighting class.
 const LIGHTING_CLASS: Record<DistrictCharacter, BuildingLightingClass> = {
@@ -214,10 +238,6 @@ function layerForZ(z: number): Layer {
   if (z > 0) return "front";
   if (z > -120) return "mid";
   return "back";
-}
-
-function isOfficeStyle(arch: Archetype) {
-  return arch === "office-block" || arch === "spire" || arch === "warehouse";
 }
 
 // Global core-proximity field: 0..1 proximity to the nearest high-rise peak
@@ -427,9 +447,12 @@ function fillStripe(
     const hm = silhouette ? silhouette.multiplier(worldX, worldZ) : 1;
     const height = dims.height * grammar.heightCap * hm * hJ * outlierH;
 
-    const floorPitch = isOfficeStyle(archetype) ? OFFICE_FLOOR_M : RESIDENTIAL_FLOOR_M;
-    const floors = Math.max(2, Math.round(height / floorPitch));
-    const colsPerFace = Math.max(3, Math.round(width / WINDOW_PITCH_M));
+    const pitch = ARCHETYPE_PITCH[archetype];
+    const ageScale = lightingClass === "oldtown" ? AGE_PITCH_SCALE : 1;
+    const colJitter = 1 + (rng() - 0.5) * 0.16;
+    const floorJitter = 1 + (rng() - 0.5) * 0.16;
+    const floors = Math.max(2, Math.round(height / (pitch.floor * ageScale * floorJitter)));
+    const colsPerFace = Math.max(3, Math.round(width / (pitch.col * ageScale * colJitter)));
 
     buildings.push({
       id: id++,
