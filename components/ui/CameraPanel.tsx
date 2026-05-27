@@ -10,8 +10,11 @@ import {
   QUALITY_TIERS,
 } from "@/lib/state/sceneStore";
 import { randomSeed } from "@/lib/seed/rng";
+import { ARCHETYPE_ORDER, type Archetype } from "@/lib/seed/cityGen";
 import { cn } from "@/lib/utils";
 import {
+  AppWindow,
+  Building2,
   Camera,
   CloudFog,
   Contrast,
@@ -96,8 +99,14 @@ function copyConfigToClipboard() {
     {
       cameraIntent: s.cameraIntent,
       orbit: s.orbit,
+      projection: s.projection,
+      orthoSize: s.orthoSize,
       moon: s.moon,
       stars: s.stars,
+      windowAA: s.windowAA,
+      windowMode: s.windowMode,
+      windowSimple: s.windowSimple,
+      windowProfiles: s.windowProfiles,
       fog: s.fog,
       haze: s.haze,
       cityPlanning: {
@@ -304,7 +313,7 @@ export function CameraPanel() {
       {/* Scrollable middle */}
       <ScrollArea className="min-h-0 flex-1">
         <div className="px-4 py-3">
-          <Accordion multiple defaultValue={["pose", "orbit"]} className="flex flex-col gap-1.5">
+          <Accordion multiple defaultValue={[]} className="flex flex-col gap-1.5">
             <Section value="pose" icon={Camera} label="Camera">
               <PoseSection
                 locked={locked}
@@ -336,6 +345,14 @@ export function CameraPanel() {
 
             <Section value="fog" icon={CloudFog} label="Fog">
               <FogSection />
+            </Section>
+
+            <Section value="windows" icon={AppWindow} label="Anti-Aliasing">
+              <AntiAliasingSection />
+            </Section>
+
+            <Section value="window-profiles" icon={Building2} label="Windows">
+              <WindowsSection />
             </Section>
 
             <Section value="intro" icon={Sparkles} label="Intro">
@@ -610,6 +627,165 @@ function StarsSection() {
         step={100}
         onChange={(count) => setStars({ count })}
       />
+    </>
+  );
+}
+
+function AntiAliasingSection() {
+  const wa = useSceneStore((s) => s.windowAA);
+  const setWindowAA = useSceneStore((s) => s.setWindowAA);
+  return (
+    <>
+      <div className="text-foreground/55 text-[10px] tracking-wide uppercase">Occupancy</div>
+      <ValueSlider
+        label="lit ratio"
+        value={wa.litBias}
+        min={0}
+        max={1}
+        step={0.02}
+        onChange={(litBias) => setWindowAA({ litBias })}
+      />
+      <ValueSlider
+        label="activity"
+        value={wa.churn}
+        min={0}
+        max={1}
+        step={0.02}
+        onChange={(churn) => setWindowAA({ churn })}
+      />
+      <div className="text-foreground/55 pt-1 text-[10px] tracking-wide uppercase">
+        Anti-alias / LOD
+      </div>
+      <ValueSlider
+        label="edge AA"
+        value={wa.edge}
+        min={0.25}
+        max={3}
+        step={0.05}
+        onChange={(edge) => setWindowAA({ edge })}
+      />
+      <ValueSlider
+        label="LOD near"
+        value={wa.lodNear}
+        min={0}
+        max={1}
+        step={0.01}
+        onChange={(lodNear) => setWindowAA({ lodNear })}
+      />
+      <ValueSlider
+        label="LOD range"
+        value={wa.lodRange}
+        min={0.05}
+        max={1}
+        step={0.01}
+        onChange={(lodRange) => setWindowAA({ lodRange })}
+      />
+    </>
+  );
+}
+
+function WindowsSection() {
+  const mode = useSceneStore((s) => s.windowMode);
+  const setWindowMode = useSceneStore((s) => s.setWindowMode);
+  return (
+    <>
+      <div className="flex items-center gap-1">
+        {(["simple", "advanced"] as const).map((m) => (
+          <Button
+            key={m}
+            variant="secondary"
+            size="sm"
+            onClick={() => setWindowMode(m)}
+            title={
+              m === "simple"
+                ? "One window size shared by every building"
+                : "Window size + grid pitch per building archetype"
+            }
+            className={cn(
+              "flex-1 capitalize",
+              mode === m
+                ? "bg-foreground text-background hover:bg-foreground"
+                : "bg-foreground/10 text-foreground hover:bg-foreground/20",
+            )}
+          >
+            {m}
+          </Button>
+        ))}
+      </div>
+      {mode === "simple" ? <WindowsSimpleControls /> : <WindowProfilesSection />}
+    </>
+  );
+}
+
+function WindowsSimpleControls() {
+  const ws = useSceneStore((s) => s.windowSimple);
+  const setWindowSimple = useSceneStore((s) => s.setWindowSimple);
+  return (
+    <>
+      <div className="text-foreground/55 text-[10px] leading-snug">
+        All buildings share one window size.
+      </div>
+      <ValueSlider
+        label="width"
+        value={ws.w}
+        min={0.1}
+        max={0.95}
+        step={0.01}
+        onChange={(w) => setWindowSimple({ w })}
+      />
+      <ValueSlider
+        label="height"
+        value={ws.h}
+        min={0.1}
+        max={0.95}
+        step={0.01}
+        onChange={(h) => setWindowSimple({ h })}
+      />
+    </>
+  );
+}
+
+const ARCHETYPE_LABELS: Record<Archetype, string> = {
+  "low-rise": "Low-rise",
+  warehouse: "Warehouse",
+  "mid-rise": "Mid-rise",
+  "residential-tower": "Res. tower",
+  "narrow-tower": "Narrow tower",
+  "office-block": "Office block",
+  spire: "Spire",
+};
+
+function WindowProfilesSection() {
+  const profiles = useSceneStore((s) => s.windowProfiles);
+  const setWindowProfile = useSceneStore((s) => s.setWindowProfile);
+  return (
+    <>
+      <div className="text-foreground/55 text-[10px] leading-snug">
+        Glass-to-cell fraction per building style. Grid spacing is baked per archetype.
+      </div>
+      {ARCHETYPE_ORDER.map((arch) => (
+        <div key={arch} className="flex flex-col gap-1.5">
+          <div className="text-foreground/55 pt-1 text-[10px] tracking-wide uppercase">
+            {ARCHETYPE_LABELS[arch]}
+          </div>
+          <ValueSlider
+            label="width"
+            value={profiles[arch].w}
+            min={0.1}
+            max={0.95}
+            step={0.01}
+            onChange={(w) => setWindowProfile(arch, { w })}
+          />
+          <ValueSlider
+            label="height"
+            value={profiles[arch].h}
+            min={0.1}
+            max={0.95}
+            step={0.01}
+            onChange={(h) => setWindowProfile(arch, { h })}
+          />
+        </div>
+      ))}
     </>
   );
 }
