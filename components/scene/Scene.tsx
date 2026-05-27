@@ -6,6 +6,7 @@ import { useSceneStore, QUALITY_TIERS } from "@/lib/state/sceneStore";
 import { InstancedCity } from "./InstancedCity";
 import { Moon } from "./Moon";
 import { StarField } from "./StarField";
+import { StarPass } from "./StarPass";
 import { Ground } from "./Ground";
 import { Streetlights } from "./Streetlights";
 import { CameraControls } from "./CameraControls";
@@ -15,6 +16,7 @@ import { ProjectionBlender } from "./ProjectionBlender";
 import { FocalIndicator } from "./FocalIndicator";
 import { IntroTicker } from "./IntroTicker";
 import { GroundHaze } from "./GroundHaze";
+import { Roads } from "./Roads";
 import { Highways } from "./Highways";
 import { Arterials } from "./Arterials";
 import { DistrictShells } from "./DistrictShells";
@@ -44,7 +46,6 @@ export function Scene() {
       <TimeTicker />
       <IntroTicker />
 
-      <color attach="background" args={[fog.color]} />
       {fog.enabled ? (
         fog.mode === "exp2" ? (
           <fogExp2 attach="fog" args={[fog.color, fog.density]} />
@@ -54,16 +55,19 @@ export function Scene() {
       ) : null}
       <ambientLight intensity={0.04} />
 
-      <StarField
-        masterSeed={masterSeed}
-        radius={stars.radius}
-        depth={stars.depth}
-        count={stars.count}
-        size={stars.factor}
-      />
+      <StarPass backgroundColor={fog.color}>
+        <StarField
+          masterSeed={masterSeed}
+          radius={stars.radius}
+          depth={stars.depth}
+          count={stars.count}
+          size={stars.factor}
+        />
+      </StarPass>
 
       <Moon />
       <Ground />
+      <Roads masterSeed={masterSeed} />
       <GroundHaze />
       <InstancedCity masterSeed={masterSeed} />
       <Streetlights masterSeed={masterSeed} />

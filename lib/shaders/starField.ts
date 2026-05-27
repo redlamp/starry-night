@@ -22,6 +22,16 @@ export const starFieldVertexShader = /* glsl */ `
     float d = -mv.z;
     gl_PointSize = aSize * uPixelRatio * (300.0 / max(d, 1.0));
 
+    // Clip the dome's lower hemisphere: stars below the ground plane (world
+    // y < 0) sit "under the earth" and must not show below the horizon. The
+    // ground used to occlude them via depth test; the star field now renders
+    // in its own depthless pass, so the clip is done here instead.
+    float worldY = (modelMatrix * vec4(position, 1.0)).y;
+    if (worldY < 0.0) {
+      gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+      gl_PointSize = 0.0;
+    }
+
     // Twinkle = base 0.7 + 0.3 * sin(time*freq + 2pi*phase), gated by aTwinkle
     float t = sin(uTime * aFreq + aPhase * 6.2831853);
     vBrightness = mix(1.0, 0.7 + 0.3 * t, aTwinkle);
