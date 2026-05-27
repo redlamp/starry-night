@@ -182,7 +182,7 @@ export function CameraControls() {
 
   const exitFly = () => {
     captureCurrentPoseAsIntent();
-    setCameraMode("still");
+    setCameraMode("orbit");
     if (typeof document !== "undefined" && document.pointerLockElement) {
       document.exitPointerLock();
     }
@@ -214,10 +214,10 @@ export function CameraControls() {
         else setCameraMode("fly");
         return;
       }
-      // S and G switch modes only when NOT in fly mode (S is a movement key there).
-      if (currentMode !== "fly") {
-        if (key === "s") setCameraMode("still");
-        else if (key === "g") setCameraMode("orbit");
+      // G switches to orbit when NOT in fly mode (in fly, S/G are movement keys).
+      // Still is no longer a user-facing mode, so the old S→still binding is gone.
+      if (currentMode !== "fly" && key === "g") {
+        setCameraMode("orbit");
       }
       // Space in orbit mode toggles auto-revolution. When pausing, settle the
       // current azimuth into the store + reset orbitStart so resume continues

@@ -673,3 +673,26 @@ export function generateStreetlights(masterSeed: string): Streetlight[] {
 
   return lights;
 }
+
+export type AviationBeacon = {
+  x: number;
+  y: number; // world Y at the roof beacon
+  z: number;
+  phase: number; // 0..1 blink phase offset so towers don't flash in unison
+};
+
+// Real-world obstruction lights sit on structures tall enough to threaten
+// flight paths. Gate on absolute height so only genuine skyscrapers get a red
+// beacon — a short city has none, which is correct.
+const BEACON_MIN_HEIGHT = 100;
+
+export function generateAviationBeacons(masterSeed: string): AviationBeacon[] {
+  const { buildings } = generateCity(masterSeed);
+  const rng = seedrandom(`${masterSeed}::beacons`);
+  const beacons: AviationBeacon[] = [];
+  for (const b of buildings) {
+    if (b.height < BEACON_MIN_HEIGHT) continue;
+    beacons.push({ x: b.x, y: b.height + 3, z: b.z, phase: rng() });
+  }
+  return beacons;
+}

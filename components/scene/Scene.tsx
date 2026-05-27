@@ -9,6 +9,7 @@ import { StarField } from "./StarField";
 import { StarPass } from "./StarPass";
 import { Ground } from "./Ground";
 import { Streetlights } from "./Streetlights";
+import { Beacons } from "./Beacons";
 import { CameraControls } from "./CameraControls";
 import { PerfMonitor } from "./PerfMonitor";
 import { TimeTicker } from "./TimeTicker";
@@ -71,6 +72,7 @@ export function Scene() {
       <GroundHaze />
       <InstancedCity masterSeed={masterSeed} />
       <Streetlights masterSeed={masterSeed} />
+      <Beacons masterSeed={masterSeed} />
       {/* Planning overlays — each respects its own visibility flag (default off). */}
       <DistrictShells masterSeed={masterSeed} />
       <Highways masterSeed={masterSeed} />
