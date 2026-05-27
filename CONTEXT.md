@@ -82,6 +82,18 @@ Implicit street — the gap between adjacent blocks. Not a first-class primitive
 
 Collector-tier streets (FHWA classification between arterial and local) are folded into *Arterial* for v1.
 
+## Built form
+
+### Window proportion
+
+The per-building glass-to-wall character: how large the lit windows are relative to their facade cell, and how widely the window grid is spaced. Keyed to *Archetype*, with an *age* modifier from *Heritage* districts. Reference reads:
+
+- **Towers** (spire, narrow-tower, office-block) — near-full curtain-wall glass; fine, tightly-spaced mullions.
+- **Warehouse / industrial** — wide, short window bands; few, broad bays.
+- **Heritage / low-rise (older)** — small punched windows with a lot of surrounding wall.
+
+A deliberately coarse, archetype-level form of *fenestration* — admitted to v1 because windows demonstrably read at orbit distance. Street-level fenestration detail (individual mullion patterns, ground-floor glazing, spandrels) remains out of scope.
+
 ## Out of scope (deferred to in-city camera milestone)
 
-Street-level concepts — setbacks, FAR, lot coverage, fenestration, ground-floor commerce, sidewalk widths, awnings — do not survive at orbit distance and are deliberately absent from v1 grammar.
+Street-level concepts — setbacks, FAR, lot coverage, ground-floor commerce, sidewalk widths, awnings, and fine fenestration detail — do not survive at orbit distance and are deliberately absent from v1 grammar. (Archetype-level *Window proportion* is the one limited exception now in scope — see Built form.)

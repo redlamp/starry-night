@@ -3,7 +3,7 @@
 import { useEffect, useMemo } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
-import { generateCity, type Archetype, type Building } from "@/lib/seed/cityGen";
+import { generateCity, ARCHETYPE_ORDER, type Archetype, type Building } from "@/lib/seed/cityGen";
 import { FACADE_BY_LAYER, GLOW_BY_LAYER, generateWindowTexture } from "@/lib/seed/lightingGen";
 import { packWindowAtlas, type PackInput } from "@/lib/scene/atlasPacker";
 import { cityVertexShader, cityFragmentShader } from "@/lib/shaders/cityInstanced";
@@ -14,7 +14,7 @@ import {
   sharedIntroCompleteAt,
   sharedBreathingPeriod,
 } from "@/lib/shaders/sharedIntro";
-import { useSceneStore } from "@/lib/state/sceneStore";
+import { useSceneStore, DEFAULT_WINDOW_PROFILES } from "@/lib/state/sceneStore";
 
 const DISTRICT_TO_IDX: Record<string, number> = {
   downtown: 0,
@@ -71,6 +71,23 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
       const camPos = s.cameraLive.position;
       mat.uniforms.uIntroCamPos.value.set(camPos[0], camPos[1], camPos[2]);
       mat.uniforms.uOrthoBlend.value = s.projectionBlend;
+      const wa = s.windowAA;
+      mat.uniforms.uAaEdge.value = wa.edge;
+      mat.uniforms.uLodNear.value = wa.lodNear;
+      mat.uniforms.uLodRange.value = wa.lodRange;
+      mat.uniforms.uOccupancyBias.value = wa.litBias;
+      mat.uniforms.uChurn.value = wa.churn;
+      mat.uniforms.uWindowMode.value = s.windowMode === "advanced" ? 1 : 0;
+      mat.uniforms.uWinSimpleW.value = s.windowSimple.w;
+      mat.uniforms.uWinSimpleH.value = s.windowSimple.h;
+      const profiles = s.windowProfiles;
+      const fw = mat.uniforms.uWinFracW.value as number[];
+      const fh = mat.uniforms.uWinFracH.value as number[];
+      for (let k = 0; k < ARCHETYPE_ORDER.length; k++) {
+        const p = profiles[ARCHETYPE_ORDER[k]];
+        fw[k] = p.w;
+        fh[k] = p.h;
+      }
     }
   });
 
@@ -136,7 +153,7 @@ function buildMeshes(masterSeed: string): { meshes: THREE.InstancedMesh[]; maxRa
 
     const aAtlasOffset = new Float32Array(N * 2);
     const aAtlasSize = new Float32Array(N * 2);
-    const aGrid = new Float32Array(N * 2);
+    const aGrid = new Float32Array(N * 3); // cols, rows, archetypeIdx
     const aFacadeColor = new Float32Array(N * 3);
     const aFacadeGlow = new Float32Array(N);
     const aBuildingHash = new Float32Array(N);
@@ -150,8 +167,11 @@ function buildMeshes(masterSeed: string): { meshes: THREE.InstancedMesh[]; maxRa
         THREE.UniformsLib.fog,
         {
           uWindowAtlas: { value: null },
-          uWindowWidth: { value: 0.3 },
-          uWindowHeight: { value: 0.5 },
+          uWinFracW: { value: ARCHETYPE_ORDER.map((a) => DEFAULT_WINDOW_PROFILES[a].w) },
+          uWinFracH: { value: ARCHETYPE_ORDER.map((a) => DEFAULT_WINDOW_PROFILES[a].h) },
+          uWindowMode: { value: 1 },
+          uWinSimpleW: { value: 0.3 },
+          uWinSimpleH: { value: 0.5 },
           uEmissiveBoost: { value: 1.4 },
           uTime: { value: 0 },
           uIntroProgress: { value: 0 },
@@ -162,6 +182,11 @@ function buildMeshes(masterSeed: string): { meshes: THREE.InstancedMesh[]; maxRa
           uIntroCompleteAt: { value: 1e9 },
           uBreathingPeriod: { value: 90 },
           uOrthoBlend: { value: 0 },
+          uAaEdge: { value: 1.1 },
+          uLodNear: { value: 0.2 },
+          uLodRange: { value: 0.4 },
+          uOccupancyBias: { value: 0.7 },
+          uChurn: { value: 0.2 },
         },
       ]),
       fog: true,
@@ -186,8 +211,9 @@ function buildMeshes(masterSeed: string): { meshes: THREE.InstancedMesh[]; maxRa
       aAtlasSize[i * 2 + 0] = entry.cols / pack.width;
       aAtlasSize[i * 2 + 1] = entry.rows / pack.height;
 
-      aGrid[i * 2 + 0] = b.colsPerFace;
-      aGrid[i * 2 + 1] = b.floors;
+      aGrid[i * 3 + 0] = b.colsPerFace;
+      aGrid[i * 3 + 1] = b.floors;
+      aGrid[i * 3 + 2] = ARCHETYPE_ORDER.indexOf(b.archetype);
 
       color.set(FACADE_BY_LAYER[b.layer]);
       aFacadeColor[i * 3 + 0] = color.r;
@@ -209,7 +235,7 @@ function buildMeshes(masterSeed: string): { meshes: THREE.InstancedMesh[]; maxRa
 
     geo.setAttribute("aAtlasOffset", new THREE.InstancedBufferAttribute(aAtlasOffset, 2));
     geo.setAttribute("aAtlasSize", new THREE.InstancedBufferAttribute(aAtlasSize, 2));
-    geo.setAttribute("aGrid", new THREE.InstancedBufferAttribute(aGrid, 2));
+    geo.setAttribute("aGrid", new THREE.InstancedBufferAttribute(aGrid, 3));
     geo.setAttribute("aFacadeColor", new THREE.InstancedBufferAttribute(aFacadeColor, 3));
     geo.setAttribute("aFacadeGlow", new THREE.InstancedBufferAttribute(aFacadeGlow, 1));
     geo.setAttribute("aBuildingHash", new THREE.InstancedBufferAttribute(aBuildingHash, 1));
