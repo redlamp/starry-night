@@ -4,7 +4,7 @@ export const cityVertexShader = /* glsl */ `
 
 attribute vec2 aAtlasOffset;
 attribute vec2 aAtlasSize;
-attribute vec2 aGrid;
+attribute vec3 aGrid; // cols, rows, archetypeIdx (idx packed into .z to save an attribute slot)
 attribute vec3 aFacadeColor;
 attribute float aFacadeGlow;
 attribute float aBuildingHash;
@@ -22,14 +22,13 @@ varying vec3 vNormalLocal;     // pre-instance normal — face direction in geom
 varying vec3 vNormalWorld;     // instance-rotated normal — used for face-up detection in world space
 varying vec2 vAtlasOffset;
 varying vec2 vAtlasSize;
-varying vec2 vGrid;
+varying vec3 vGrid;
 varying vec3 vFacadeColor;
 varying float vFacadeGlow;
 varying float vBuildingHash;
 varying float vDistrictIdx;
 varying float vCorrelationMode;
 varying vec3 vBuildingCenter;  // world-space centre of this instance
-
 void main() {
   vUv = uv;
   vNormalLocal = normal;
@@ -62,8 +61,11 @@ export const cityFragmentShader = /* glsl */ `
 #include <fog_pars_fragment>
 
 uniform sampler2D uWindowAtlas;
-uniform float uWindowWidth;
-uniform float uWindowHeight;
+uniform float uWinFracW[7];     // per-archetype window width fraction (advanced mode)
+uniform float uWinFracH[7];     // per-archetype window height fraction (advanced mode)
+uniform float uWindowMode;      // 0 = simple (one shared size), 1 = advanced (per-archetype)
+uniform float uWinSimpleW;      // simple-mode shared window width fraction
+uniform float uWinSimpleH;      // simple-mode shared window height fraction
 uniform float uEmissiveBoost;
 uniform float uTime;
 
@@ -81,20 +83,24 @@ uniform float uIntroMaxRadius;
 uniform float uIntroCompleteAt; // sharedTime value when progress hit 1 (1e9 = never)
 uniform float uBreathingPeriod; // base period of the on/off cycle, seconds
 uniform float uOrthoBlend;      // 0 = perspective, 1 = orthographic; LOD bypass scales by (1-this)
+uniform float uAaEdge;          // fwidth edge-AA multiplier (window-quality panel)
+uniform float uLodNear;         // cells-per-pixel where distance wash starts
+uniform float uLodRange;        // ramp width from uLodNear to full wash
+uniform float uOccupancyBias;   // sine-threshold shift; higher = more windows lit
+uniform float uChurn;           // fraction of windows that breathe over time
 
 varying vec2 vUv;
 varying vec3 vNormalLocal;
 varying vec3 vNormalWorld;
 varying vec2 vAtlasOffset;
 varying vec2 vAtlasSize;
-varying vec2 vGrid;
+varying vec3 vGrid;
 varying vec3 vFacadeColor;
 varying float vFacadeGlow;
 varying float vBuildingHash;
 varying float vDistrictIdx;
 varying float vCorrelationMode;
 varying vec3 vBuildingCenter;
-
 float hash11(float p) {
   p = fract(p * 0.1031);
   p *= p + 33.33;
@@ -115,32 +121,58 @@ void main() {
     return;
   }
 
-  vec2 cell = vUv * vGrid;
+  vec2 cell = vUv * vGrid.xy;
   vec2 cellId = floor(cell);
   vec2 cellLocal = fract(cell);
 
   // Atlas sample: pick the centre pixel of cell (cellId+0.5), normalise by grid,
   // scale by this building's atlas slice size, then offset to the slice origin.
-  vec2 cellCentreUv = (cellId + 0.5) / vGrid;
+  vec2 cellCentreUv = (cellId + 0.5) / vGrid.xy;
   vec2 atlasUv = vAtlasOffset + cellCentreUv * vAtlasSize;
   vec4 state = texture2D(uWindowAtlas, atlasUv);
 
-  float halfW = uWindowWidth * 0.5;
-  float halfH = uWindowHeight * 0.5;
-  // Screen-space derivatives let us smooth the window/facade edge by ~1 pixel
-  // regardless of distance, killing the sub-pixel shimmer at long range while
-  // staying crisp up close.
-  // Two regimes:
-  //   - Perspective: uncapped AA band. At grazing angles fwidth(cellLocal)
-  //     grows beyond halfW and the cutout deliberately collapses, washing
-  //     distant facades into a smooth blur so cell-level Moiré doesn't appear.
-  //   - Orthographic: AA band capped at 90% of halfW so the cutout never
-  //     collapses — ortho doesn't have the grazing-foreshortening that motivates
-  //     the wash-out, and an uncapped clamp blanks every window at far zoom.
-  float fwX = max(fwidth(cellLocal.x) * 0.75, 0.001);
-  float fwY = max(fwidth(cellLocal.y) * 0.75, 0.001);
-  float aaX = mix(fwX, min(fwX, halfW * 0.9), uOrthoBlend);
-  float aaY = mix(fwY, min(fwY, halfH * 0.9), uOrthoBlend);
+  // Per-archetype window fraction, selected by archetype index. A constant-
+  // bounded loop (not dynamic uniform indexing) keeps this GLSL ES 1.00 safe.
+  // Per-building jitter (deterministic) + Heritage age scale, then clamp.
+  float fracW;
+  float fracH;
+  if (uWindowMode < 0.5) {
+    // Simple mode: one shared window size — no per-archetype / age / jitter.
+    fracW = uWinSimpleW;
+    fracH = uWinSimpleH;
+  } else {
+    int archIdx = int(vGrid.z + 0.5);
+    fracW = uWinFracW[0];
+    fracH = uWinFracH[0];
+    for (int k = 1; k < 7; k++) {
+      if (k == archIdx) {
+        fracW = uWinFracW[k];
+        fracH = uWinFracH[k];
+      }
+    }
+    // Heritage (oldtown, district index 3) gets smaller windows + per-building jitter.
+    float ageScale = abs(vDistrictIdx - 3.0) < 0.5 ? 0.7 : 1.0;
+    float winJit = 1.0 + (hash11(vBuildingHash * 1.7 + 5.0) - 0.5) * 0.3;
+    fracW *= ageScale * winJit;
+    fracH *= ageScale * winJit;
+  }
+  fracW = clamp(fracW, 0.05, 0.95);
+  fracH = clamp(fracH, 0.05, 0.95);
+  float halfW = fracW * 0.5;
+  float halfH = fracH * 0.5;
+  // Screen-space derivatives smooth the window/facade edge by ~1px regardless
+  // of distance: crisp up close, anti-aliased at range.
+  // fwidth on the CONTINUOUS grid coord, not fract(cell): fract jumps 1→0 at
+  // every cell boundary so its derivative spikes there, blowing up the AA band
+  // into a visible facade seam line at each window edge.
+  float fwX = max(fwidth(cell.x) * uAaEdge, 0.001);
+  float fwY = max(fwidth(cell.y) * uAaEdge, 0.001);
+  // Cap the AA band at 90% of the half-window in BOTH projections. Uncapped, a
+  // grazing facade (huge fwidth from foreshortening) widens the mask past the
+  // cell and lights the whole panel — window + border. Capped, the window keeps
+  // its size with a soft edge; genuine far-field wash is handled by the LOD.
+  float aaX = min(fwX, halfW * 0.9);
+  float aaY = min(fwY, halfH * 0.9);
   float wMaskX =
     smoothstep(0.5 - halfW - aaX, 0.5 - halfW + aaX, cellLocal.x) *
     (1.0 - smoothstep(0.5 + halfW - aaX, 0.5 + halfW + aaX, cellLocal.x));
@@ -207,22 +239,17 @@ void main() {
     // A small fraction (~10%) use a wide band — these are the dimmer-switch
     // cells that fade in and out. TV cells (atlas alpha 128) always stay on so
     // their existing per-frame flicker logic remains the only motion in them.
-    float dimmerSeed = hash11(cellId.x * 3.13 + cellId.y * 11.0 + vBuildingHash + 41.0);
-    bool isDimmer = dimmerSeed < 0.05;
     bool isTv = state.a > 0.2 && state.a < 0.7;
-    float occupancy;
-    if (isTv) {
-      occupancy = 1.0;
-    } else if (isDimmer) {
-      // Narrower dimmer band — still a visible fade, but quicker so it reads
-      // as someone reaching for a dimmer knob, not a slow breathing room.
-      occupancy = smoothstep(-0.4, 0.2, life);
-    } else {
-      // True wall-switch: step() flips at the zero crossing regardless of the
-      // sine's period, so the transition is one frame instead of "0.1 in life
-      // units" which scaled with the slider.
-      occupancy = step(0.0, life);
-    }
+    // Binary wall-switch occupancy — every room snaps on/off at the sine's zero
+    // crossing, no fade. uOccupancyBias shifts the threshold so a higher value
+    // leaves more windows lit at any instant (fewer rooms dark / "dimming").
+    // Only uChurn fraction of windows actually cycle over time; the rest freeze
+    // at sin(phase) so the city is mostly static with a few rooms changing —
+    // that is what keeps the per-frame flicker down. At litBias=1 nothing
+    // crosses the threshold so there is no toggling at all.
+    float breatheSeed = hash11(cellId.x * 5.7 + cellId.y * 3.1 + vBuildingHash + 71.0);
+    float occLife = (breatheSeed < uChurn) ? life : sin(phase);
+    float occupancy = isTv ? 1.0 : step(0.0, occLife + uOccupancyBias);
     // Working-late stragglers: a few cells per building stay lit even when
     // their cohort goes dark. Independent per-cell hash so a cell can be both
     // a straggler and a dimmer.
@@ -263,17 +290,24 @@ void main() {
     // atlas cell, NearestFilter sampling of the binary alpha encoding produces
     // Moiré speckle. We need to actively BYPASS per-cell sampling at distance,
     // not just tint over it, since the per-cell lit color is what flips.
-    vec2 cellSizeUv = vAtlasSize / max(vGrid, vec2(1.0));
-    vec2 atlasDeriv = vec2(fwidth(atlasUv.x), fwidth(atlasUv.y));
-    float relSpan = max(
-      atlasDeriv.x / max(cellSizeUv.x, 1e-6),
-      atlasDeriv.y / max(cellSizeUv.y, 1e-6)
-    );
+    // Cells spanned per pixel, from the CONTINUOUS grid coord. fwidth on the
+    // stepped atlasUv (sampled at cell centres) is ~0 inside a cell and spikes
+    // at boundaries, so it neither engages LOD on cell interiors (lingering
+    // moiré) nor measures footprint cleanly (seam glow). fwidth(cell) is exactly
+    // the cells-per-pixel rate and is smooth across the facade.
+    // min, not max: a grazing facade has one foreshortened axis with huge
+    // cells/pixel while the other stays resolved. max would force a full wash on
+    // grazing alone (whole panel glows); min only engages when the window is
+    // sub-resolved in BOTH dimensions, i.e. genuinely far.
+    float relSpan = min(fwidth(cell.x), fwidth(cell.y));
     // 0 below 0.12 (close, crisp), 1 above 0.45 (far / grazing, smooth glow).
     // Disabled in ortho — fwidth(atlasUv) is uniform across the ortho frustum
     // so the LOD path would mask the entire scene; ortho also doesn't have the
     // perspective-grazing Moiré that motivated the bypass in the first place.
-    float lod = clamp((relSpan - 0.12) / 0.33, 0.0, 1.0) * (1.0 - uOrthoBlend);
+    // relSpan is cells-per-pixel: ~0.2 = a 5px window (start fading), ~0.6 =
+    // sub-Nyquist ~1.5px (full glow). Stays 0 for near/mid windows so they keep
+    // crisp per-cell detail.
+    float lod = clamp((relSpan - uLodNear) / max(uLodRange, 0.001), 0.0, 1.0) * (1.0 - uOrthoBlend);
 
     // Smooth distant approximation: facade + warm glow that doesn't depend on
     // per-cell atlas state at all. Brightness scales with vFacadeGlow so the

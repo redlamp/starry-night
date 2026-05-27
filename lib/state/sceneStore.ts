@@ -1,6 +1,7 @@
 import { create } from "zustand";
 
 import type { TopologyKind } from "@/lib/seed/topology";
+import type { Archetype } from "@/lib/seed/cityGen";
 
 export type LightingMode = "classic" | "modern";
 export type QualityTier = "low" | "med" | "high" | "ultra";
@@ -80,16 +81,16 @@ export type OrbitConfig = {
   periodSec: number; // seconds per full revolution
 };
 
-// Tuned via the in-app Save/Copy values workflow on 2026-05-26.
-// Radius framed for the larger (~1500m) city; slow 1200s sweep just off the
-// horizon; focal Y at 160 frames the lower half of the city skyline.
+// Tuned via the in-app Save/Copy values workflow on 2026-05-27.
+// Wide pull-back radius (2400) frames the whole sprawl; slow 2400s sweep at a
+// gentle 7.5° elevation; focal Y at 150 frames the city skyline.
 export const DEFAULT_ORBIT: OrbitConfig = {
   centerX: 0,
   centerZ: -120,
-  lookAtY: 160,
-  radius: 900,
-  azimuthDeg: 90,
-  elevationDeg: 0.5,
+  lookAtY: 150,
+  radius: 2400,
+  azimuthDeg: 108.21494500000176,
+  elevationDeg: 7.5,
   periodSec: 2400,
 };
 
@@ -100,6 +101,37 @@ export const DEFAULT_MOON = { azimuthDeg: 20, elevationDeg: 16, distance: 4500 }
 // Previously a vestigial drei value (200) that nothing read; now wired to
 // StarField's size prop. Legacy large values are migrated on load.
 export const DEFAULT_STARS = { radius: 4500, depth: 360, count: 24000, factor: 36 };
+// Window shader AA / LOD / occupancy tuning, exposed live via the Windows panel.
+//   edge    — fwidth edge-AA multiplier (higher = softer window edges)
+//   lodNear — cells-per-pixel where the distance wash-to-glow starts
+//   lodRange— ramp width from lodNear to full wash
+//   litBias — occupancy threshold shift; higher leaves more windows lit
+//   churn   — fraction of windows that breathe over time; the rest hold a
+//             static lit/dark state. Lower = calmer city, less flicker.
+export const DEFAULT_WINDOW_AA = {
+  edge: 1.1,
+  lodNear: 0.2,
+  lodRange: 0.4,
+  litBias: 0.7,
+  churn: 0.2,
+};
+
+// Per-archetype window glass-to-cell fraction (w = width, h = height of the lit
+// pane within its facade cell). Live-tunable via the Windows panel; the shader
+// reads these by archetype index. Grid pitch is baked separately in cityGen.
+// See wiki/notes/decision-window-proportion-by-archetype.md.
+// Simple mode: one window size shared by every building (the pre-archetype
+// system). Advanced mode uses DEFAULT_WINDOW_PROFILES per archetype.
+export const DEFAULT_WINDOW_SIMPLE = { w: 0.3, h: 0.5 };
+export const DEFAULT_WINDOW_PROFILES: Record<Archetype, { w: number; h: number }> = {
+  "low-rise": { w: 0.34, h: 0.42 },
+  warehouse: { w: 0.82, h: 0.34 },
+  "mid-rise": { w: 0.42, h: 0.5 },
+  "residential-tower": { w: 0.46, h: 0.56 },
+  "narrow-tower": { w: 0.7, h: 0.72 },
+  "office-block": { w: 0.78, h: 0.6 },
+  spire: { w: 0.82, h: 0.78 },
+};
 // Moon halo: billboard glow around the moon disc. radiusMul scales the halo
 // plane relative to the moon radius; innerRadius is the 0..0.5 fraction of the
 // disc that stays opaque before the soft falloff; intensity multiplies the
@@ -116,6 +148,12 @@ type SavedConfig = {
   // Optional so configs saved before these were added still load.
   fog?: SceneState["fog"];
   haze?: SceneState["haze"];
+  projection?: Projection;
+  orthoSize?: number;
+  windowAA?: typeof DEFAULT_WINDOW_AA;
+  windowMode?: "simple" | "advanced";
+  windowSimple?: { w: number; h: number };
+  windowProfiles?: Record<Archetype, { w: number; h: number }>;
   // Only the layer-visibility toggles persist — topologyKind / arterialCount
   // are per-seed runtime readouts, not settings.
   cityPlanning?: {
@@ -194,6 +232,14 @@ type SceneState = {
   setStars: (
     patch: Partial<{ radius: number; depth: number; count: number; factor: number }>,
   ) => void;
+  windowAA: typeof DEFAULT_WINDOW_AA;
+  setWindowAA: (patch: Partial<typeof DEFAULT_WINDOW_AA>) => void;
+  windowMode: "simple" | "advanced";
+  setWindowMode: (mode: "simple" | "advanced") => void;
+  windowSimple: { w: number; h: number };
+  setWindowSimple: (patch: Partial<{ w: number; h: number }>) => void;
+  windowProfiles: Record<Archetype, { w: number; h: number }>;
+  setWindowProfile: (arch: Archetype, patch: Partial<{ w: number; h: number }>) => void;
   moon: {
     // Celestial body modelled on a sky dome around the city axis.
     azimuthDeg: number; // compass yaw, 0 = +z (north), 90 = +x (east)
@@ -327,6 +373,17 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setMoonFollowCamera: (moonFollowCamera) => set({ moonFollowCamera }),
   stars: DEFAULT_STARS,
   setStars: (patch) => set((s) => ({ stars: { ...s.stars, ...patch } })),
+  windowAA: DEFAULT_WINDOW_AA,
+  setWindowAA: (patch) => set((s) => ({ windowAA: { ...s.windowAA, ...patch } })),
+  windowMode: "advanced",
+  setWindowMode: (windowMode) => set({ windowMode }),
+  windowSimple: DEFAULT_WINDOW_SIMPLE,
+  setWindowSimple: (patch) => set((s) => ({ windowSimple: { ...s.windowSimple, ...patch } })),
+  windowProfiles: DEFAULT_WINDOW_PROFILES,
+  setWindowProfile: (arch, patch) =>
+    set((s) => ({
+      windowProfiles: { ...s.windowProfiles, [arch]: { ...s.windowProfiles[arch], ...patch } },
+    })),
   // Defaults preserve the old (3742, 2321, 200) position:
   //   distance = sqrt(3742² + 2321²) ≈ 4403
   //   elevation = asin(2321 / 4403) ≈ 31.8°
@@ -347,10 +404,9 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     fov: DEFAULT_INTENT.fov,
   },
   cameraTweenRequest: null,
-  projection: "perspective",
-  // 200 ≈ tan(45°/2) × 482 — matches the default-perspective view at the default orbit distance.
-  orthoSize: 200,
-  projectionBlend: 0,
+  projection: "orthographic",
+  orthoSize: 240,
+  projectionBlend: 1,
   setProjection: (projection) => set({ projection }),
   setOrthoSize: (orthoSize) => set({ orthoSize }),
   setProjectionBlend: (projectionBlend) => set({ projectionBlend }),
@@ -360,8 +416,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     enabled: true,
     mode: "linear",
     color: "#0a1838",
-    near: 240,
-    far: 4800,
+    near: 1280,
+    far: 6400,
     density: 0.0006,
   },
   setFog: (patch) => set((s) => ({ fog: { ...s.fog, ...patch } })),
@@ -436,6 +492,13 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         orbit: snap.orbit ?? DEFAULT_ORBIT,
         moon: snap.moon ?? DEFAULT_MOON,
         stars: snap.stars ?? DEFAULT_STARS,
+        projection: snap.projection ?? "orthographic",
+        orthoSize: snap.orthoSize ?? 240,
+        projectionBlend: (snap.projection ?? "orthographic") === "orthographic" ? 1 : 0,
+        windowAA: snap.windowAA ?? DEFAULT_WINDOW_AA,
+        windowMode: snap.windowMode ?? "advanced",
+        windowSimple: snap.windowSimple ?? DEFAULT_WINDOW_SIMPLE,
+        windowProfiles: snap.windowProfiles ?? DEFAULT_WINDOW_PROFILES,
         // Restore fog / haze / planning toggles if the snapshot has them;
         // merge cityPlanning so the runtime readouts (topology, count) survive.
         ...(snap.fog ? { fog: snap.fog } : {}),
@@ -450,6 +513,13 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       orbit: DEFAULT_ORBIT,
       moon: DEFAULT_MOON,
       stars: DEFAULT_STARS,
+      projection: "orthographic",
+      orthoSize: 240,
+      projectionBlend: 1,
+      windowAA: DEFAULT_WINDOW_AA,
+      windowMode: "advanced",
+      windowSimple: DEFAULT_WINDOW_SIMPLE,
+      windowProfiles: DEFAULT_WINDOW_PROFILES,
       cameraMode: "orbit",
     });
   },
@@ -460,6 +530,12 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       orbit: s.orbit,
       moon: s.moon,
       stars: s.stars,
+      projection: s.projection,
+      orthoSize: s.orthoSize,
+      windowAA: s.windowAA,
+      windowMode: s.windowMode,
+      windowSimple: s.windowSimple,
+      windowProfiles: s.windowProfiles,
       fog: s.fog,
       haze: s.haze,
       cityPlanning: {
