@@ -286,6 +286,7 @@ export function CameraControls() {
   const LOOK_AT_Y_MAX = 2000;
 
   const lastWrite = useRef(0);
+  const lastPaused = useRef(false);
   useFrame((_, dt) => {
     const now = performance.now();
     if (now - lastWrite.current >= 100) {
@@ -300,9 +301,27 @@ export function CameraControls() {
     // Orbit mode — spherical revolution around configured centre.
     if (mode === "orbit") {
       const paused = useSceneStore.getState().orbitPaused;
+      let azBase = orbit.azimuthDeg;
+
+      // Catch programmatic pause/resume (e.g. top-down preset / Default restore)
+      // in the same frame: bake the in-flight sweep into azimuthDeg on pause,
+      // and restart the sweep clock on resume — so the camera never snaps.
+      if (paused !== lastPaused.current) {
+        if (paused) {
+          const elapsed = (now - orbitStart.current) / 1000;
+          const sweepDeg = (elapsed / Math.max(1, orbit.periodSec)) * 360;
+          azBase = ((orbit.azimuthDeg + sweepDeg) % 360 + 360) % 360;
+          setOrbit({ azimuthDeg: azBase });
+          orbitStart.current = now;
+        } else {
+          orbitStart.current = now;
+        }
+        lastPaused.current = paused;
+      }
+
       const elapsed = dragging.current || paused ? 0 : (now - orbitStart.current) / 1000;
       const sweepRad = (elapsed / Math.max(1, orbit.periodSec)) * Math.PI * 2;
-      const az = orbit.azimuthDeg * DEG2RAD + sweepRad;
+      const az = azBase * DEG2RAD + sweepRad;
       const el = orbit.elevationDeg * DEG2RAD;
       const horizR = orbit.radius * Math.cos(el);
       const camY = orbit.radius * Math.sin(el);
