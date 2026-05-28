@@ -311,6 +311,24 @@ export function CameraControls() {
         camY,
         orbit.centerZ + Math.cos(az) * horizR,
       );
+      // While a top-down snapshot is held in orbitRestore, tip camera.up from
+      // world-Y toward world +Z (north) in lock-step with the elevation tween
+      // — at the original elevation up = (0,1,0); at 90° up = (0,0,1). This
+      // makes the screen-orientation change one continuous motion with the
+      // elevation/radius/orthoSize tween instead of snapping at the end.
+      // When no top-down is active (orbitRestore null), the user's at a normal
+      // orbit angle and the horizon stays flat.
+      const restoreSnapshot = useSceneStore.getState().orbitRestore;
+      let upT = 0;
+      if (restoreSnapshot) {
+        const range = Math.max(1, 90 - restoreSnapshot.elevationDeg);
+        upT = Math.max(
+          0,
+          Math.min(1, (orbit.elevationDeg - restoreSnapshot.elevationDeg) / range),
+        );
+      }
+      const upAng = upT * Math.PI * 0.5;
+      camera.up.set(0, Math.cos(upAng), Math.sin(upAng));
       camera.lookAt(orbit.centerX, orbit.lookAtY, orbit.centerZ);
       return;
     }
