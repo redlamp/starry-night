@@ -35,6 +35,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Accordion,
   AccordionContent,
@@ -98,22 +99,42 @@ function tweenOrbitTowards(
   const fromEl = s.orbit.elevationDeg;
   const fromR = s.orbit.radius;
   const fromOrtho = s.orthoSize;
-  const proxy = { t: 0 };
-  gsap.to(proxy, {
-    t: 1,
-    duration: ORBIT_TWEEN_MS,
-    ease: "power2.inOut",
-    onUpdate: () => {
-      const t = proxy.t;
-      const st = useSceneStore.getState();
-      st.setOrbit({
-        elevationDeg: fromEl + (targetEl - fromEl) * t,
-        radius: fromR + (targetR - fromR) * t,
-      });
-      st.setOrthoSize(fromOrtho + (targetOrtho - fromOrtho) * t);
+
+  // Two-phase swing-arm tween. The angular swing happens at constant radius
+  // first, so the camera reads as an arm pivoting around the city centre.
+  // Radius + orthoSize (zoom-out) ramp in over the late half, overlapping the
+  // tail of the swing so the whole motion still feels like one continuous arc
+  // rather than two distinct beats.
+  const tl = gsap.timeline({ onComplete });
+
+  const elProxy = { v: fromEl };
+  tl.to(
+    elProxy,
+    {
+      v: targetEl,
+      duration: ORBIT_TWEEN_MS,
+      ease: "power2.inOut",
+      onUpdate: () => useSceneStore.getState().setOrbit({ elevationDeg: elProxy.v }),
     },
-    onComplete,
-  });
+    0,
+  );
+
+  const zoomProxy = { v: 0 };
+  tl.to(
+    zoomProxy,
+    {
+      v: 1,
+      duration: ORBIT_TWEEN_MS * 0.7,
+      ease: "power2.inOut",
+      onUpdate: () => {
+        const t = zoomProxy.v;
+        const st = useSceneStore.getState();
+        st.setOrbit({ radius: fromR + (targetR - fromR) * t });
+        st.setOrthoSize(fromOrtho + (targetOrtho - fromOrtho) * t);
+      },
+    },
+    ORBIT_TWEEN_MS * 0.4,
+  );
 }
 
 function tweenOrbitTopDown() {
@@ -490,37 +511,37 @@ function PoseSection({
   const orbitRestoreSet = useSceneStore((s) => s.orbitRestore !== null);
   return (
     <>
-      <div className="flex items-center gap-2">
-        <span className="text-foreground/40 w-16 shrink-0 text-xs tracking-wide uppercase">
-          tween to
-        </span>
-        <div className="flex flex-wrap gap-1">
-          {PRESETS.map((p) => {
-            // In orbit mode the still-pose presets stay disabled, except:
-            //   "Top-down" — tilts straight down + zooms out (#18)
-            //   "Default" — restores pre-top-down state if one was captured (#19)
-            const orbitTopDown = orbiting && p.id === "top-down";
-            const orbitDefault = orbiting && p.id === "default" && orbitRestoreSet;
-            const enabledInOrbit = orbitTopDown || orbitDefault;
-            return (
-              <Button
-                key={p.id}
-                variant="secondary"
-                size="sm"
-                disabled={locked && !enabledInOrbit}
-                onClick={() => {
-                  if (orbitTopDown) tweenOrbitTopDown();
-                  else if (orbitDefault) tweenOrbitRestore();
-                  else tweenCameraTo(p.intent, 900);
-                }}
-                className="bg-foreground/10 text-foreground hover:bg-foreground/20"
-              >
-                {p.label}
-              </Button>
-            );
-          })}
-        </div>
+      <div className="flex flex-col gap-1.5">
+        <span className="text-foreground/40 text-xs tracking-wide uppercase">tween to</span>
+        <Tabs
+          value=""
+          onValueChange={(v) => {
+            const preset = PRESETS.find((p) => p.id === v);
+            if (!preset) return;
+            if (orbiting && preset.id === "top-down") tweenOrbitTopDown();
+            else if (orbiting && preset.id === "default" && orbitRestoreSet)
+              tweenOrbitRestore();
+            else tweenCameraTo(preset.intent, 900);
+          }}
+        >
+          <TabsList className="w-full">
+            {PRESETS.map((p) => {
+              const orbitTopDown = orbiting && p.id === "top-down";
+              const orbitDefault = orbiting && p.id === "default" && orbitRestoreSet;
+              const enabledInOrbit = orbitTopDown || orbitDefault;
+              const disabled = locked && !enabledInOrbit;
+              return (
+                <TabsTrigger key={p.id} value={p.id} disabled={disabled}>
+                  {p.label}
+                </TabsTrigger>
+              );
+            })}
+          </TabsList>
+        </Tabs>
       </div>
+
+      <ProjectionRow />
+      <FovOrSizeSlider />
 
       <Vec3Header />
       <Vec3Input
@@ -573,8 +594,6 @@ function PoseSection({
         }
       />
 
-      <ProjectionRow />
-      <FovOrSizeSlider />
     </>
   );
 }
@@ -1191,29 +1210,17 @@ function FlySpeedSlider() {
 function ProjectionRow() {
   const projection = useSceneStore((s) => s.projection);
   return (
-    <div className="flex items-center gap-2">
-      <span className="text-foreground/40 w-16 shrink-0 text-xs tracking-wide uppercase">
-        projection
-      </span>
-      <div className="flex flex-1 gap-1">
-        {(["perspective", "orthographic"] as const).map((p) => (
-          <Button
-            key={p}
-            variant="secondary"
-            size="sm"
-            onClick={() => tweenProjectionTo(p)}
-            title={`Switch to ${p} projection (tweens via GSAP)`}
-            className={cn(
-              "flex-1 capitalize",
-              projection === p
-                ? "bg-foreground text-background hover:bg-foreground"
-                : "bg-foreground/10 text-foreground hover:bg-foreground/20",
-            )}
-          >
-            {p}
-          </Button>
-        ))}
-      </div>
+    <div className="flex flex-col gap-1.5">
+      <span className="text-foreground/40 text-xs tracking-wide uppercase">projection</span>
+      <Tabs
+        value={projection}
+        onValueChange={(v) => tweenProjectionTo(v as "perspective" | "orthographic")}
+      >
+        <TabsList className="w-full">
+          <TabsTrigger value="perspective">Perspective</TabsTrigger>
+          <TabsTrigger value="orthographic">Orthographic</TabsTrigger>
+        </TabsList>
+      </Tabs>
     </div>
   );
 }

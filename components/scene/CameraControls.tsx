@@ -286,6 +286,7 @@ export function CameraControls() {
   const LOOK_AT_Y_MAX = 2000;
 
   const lastWrite = useRef(0);
+  const lastPaused = useRef(false);
   useFrame((_, dt) => {
     const now = performance.now();
     if (now - lastWrite.current >= 100) {
@@ -300,9 +301,27 @@ export function CameraControls() {
     // Orbit mode — spherical revolution around configured centre.
     if (mode === "orbit") {
       const paused = useSceneStore.getState().orbitPaused;
+      let azBase = orbit.azimuthDeg;
+
+      // Catch programmatic pause/resume (e.g. top-down preset / Default restore)
+      // in the same frame: bake the in-flight sweep into azimuthDeg on pause,
+      // and restart the sweep clock on resume — so the camera never snaps.
+      if (paused !== lastPaused.current) {
+        if (paused) {
+          const elapsed = (now - orbitStart.current) / 1000;
+          const sweepDeg = (elapsed / Math.max(1, orbit.periodSec)) * 360;
+          azBase = ((orbit.azimuthDeg + sweepDeg) % 360 + 360) % 360;
+          setOrbit({ azimuthDeg: azBase });
+          orbitStart.current = now;
+        } else {
+          orbitStart.current = now;
+        }
+        lastPaused.current = paused;
+      }
+
       const elapsed = dragging.current || paused ? 0 : (now - orbitStart.current) / 1000;
       const sweepRad = (elapsed / Math.max(1, orbit.periodSec)) * Math.PI * 2;
-      const az = orbit.azimuthDeg * DEG2RAD + sweepRad;
+      const az = azBase * DEG2RAD + sweepRad;
       const el = orbit.elevationDeg * DEG2RAD;
       const horizR = orbit.radius * Math.cos(el);
       const camY = orbit.radius * Math.sin(el);
@@ -311,6 +330,24 @@ export function CameraControls() {
         camY,
         orbit.centerZ + Math.cos(az) * horizR,
       );
+      // While a top-down snapshot is held in orbitRestore, tip camera.up from
+      // world-Y toward world +Z (north) in lock-step with the elevation tween
+      // — at the original elevation up = (0,1,0); at 90° up = (0,0,1). This
+      // makes the screen-orientation change one continuous motion with the
+      // elevation/radius/orthoSize tween instead of snapping at the end.
+      // When no top-down is active (orbitRestore null), the user's at a normal
+      // orbit angle and the horizon stays flat.
+      const restoreSnapshot = useSceneStore.getState().orbitRestore;
+      let upT = 0;
+      if (restoreSnapshot) {
+        const range = Math.max(1, 90 - restoreSnapshot.elevationDeg);
+        upT = Math.max(
+          0,
+          Math.min(1, (orbit.elevationDeg - restoreSnapshot.elevationDeg) / range),
+        );
+      }
+      const upAng = upT * Math.PI * 0.5;
+      camera.up.set(0, Math.cos(upAng), Math.sin(upAng));
       camera.lookAt(orbit.centerX, orbit.lookAtY, orbit.centerZ);
       return;
     }
