@@ -19,7 +19,6 @@ import { moonHaloVertexShader, moonHaloFragmentShader } from "@/lib/shaders/moon
 // "Follow camera" debug toggle: azimuth is replaced with (camera azimuth + 180°)
 // so the moon stays opposite the camera around the city. Elevation and distance
 // are untouched, so the moon orbits at the same sky height + radius.
-const MOON_RADIUS_RATIO = 0.0355;
 const DEG2RAD = Math.PI / 180;
 const RAD2DEG = 180 / Math.PI;
 
@@ -52,7 +51,7 @@ export function Moon() {
     [],
   );
 
-  const moonRadius = starsRadius * MOON_RADIUS_RATIO;
+  const moonRadius = starsRadius * moon.radiusRatio;
 
   useFrame(() => {
     if (!meshRef.current) return;

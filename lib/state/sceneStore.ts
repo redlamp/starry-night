@@ -92,16 +92,24 @@ export type OrbitConfig = {
 export const DEFAULT_ORBIT: OrbitConfig = {
   centerX: 0,
   centerZ: -120,
-  lookAtY: 150,
+  lookAtY: 222,
   radius: 2400,
-  azimuthDeg: 108.21494500000176,
-  elevationDeg: 7.5,
+  azimuthDeg: 215.9930450000195,
+  elevationDeg: 6.25,
   periodSec: 2400,
 };
 
 // Azimuth flipped 180° from the 200° tuning that paired with the old camera
 // pose: with the new defaults the camera faces +z, so the moon sits at +z too.
-export const DEFAULT_MOON = { azimuthDeg: 20, elevationDeg: 16, distance: 4500 };
+// radiusRatio: moon radius as a fraction of star shell radius (~4500m), so
+// the moon scales with the dome by default. 0.0355 ≈ 160m moon at default
+// stars radius — exposed in the Moon panel for live tuning.
+export const DEFAULT_MOON = {
+  azimuthDeg: 20,
+  elevationDeg: 16,
+  distance: 4500,
+  radiusRatio: 0.0355,
+};
 // `factor` is the star base size in px (mean, before the per-star long-tail).
 // Previously a vestigial drei value (200) that nothing read; now wired to
 // StarField's size prop. Legacy large values are migrated on load.
@@ -142,6 +150,34 @@ export const DEFAULT_WINDOW_PROFILES: Record<Archetype, { w: number; h: number }
 // disc that stays opaque before the soft falloff; intensity multiplies the
 // emissive output (post-tonemap, so >1.0 blooms under ACES).
 export const DEFAULT_MOON_HALO = { radiusMul: 3.5, innerRadius: 0.08, intensity: 1.3 };
+
+export const DEFAULT_FOG = {
+  enabled: true,
+  mode: "linear" as const,
+  color: "#0a1838",
+  near: 2400,
+  far: 6400,
+  density: 0.0006,
+};
+
+export const DEFAULT_HAZE = {
+  enabled: true,
+  color: "#1b2641",
+  topY: 360,
+  bottomY: -15,
+  intensity: 1.1,
+  radius: 1450,
+};
+
+export const DEFAULT_CITY_PLANNING_VIS = {
+  showHighways: false,
+  showDistrictShells: false,
+  showArterials: false,
+};
+
+export const DEFAULT_FLY_SPEED = 14;
+export const DEFAULT_ORTHO_SIZE = 240;
+export const DEFAULT_PROJECTION = "orthographic" as const;
 
 const SAVED_CONFIG_KEY = "starry-night.savedConfig";
 
@@ -250,6 +286,7 @@ type SceneState = {
     azimuthDeg: number; // compass yaw, 0 = +z (north), 90 = +x (east)
     elevationDeg: number; // angle above horizon, 0 = horizon, 90 = zenith
     distance: number; // radial distance from city centre; default tracks stars.radius
+    radiusRatio: number; // moon radius as a fraction of stars.radius
   };
   setMoon: (patch: Partial<SceneState["moon"]>) => void;
   moonHalo: {
@@ -425,25 +462,11 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setProjection: (projection) => set({ projection }),
   setOrthoSize: (orthoSize) => set({ orthoSize }),
   setProjectionBlend: (projectionBlend) => set({ projectionBlend }),
-  flySpeed: 14,
+  flySpeed: DEFAULT_FLY_SPEED,
   setFlySpeed: (flySpeed) => set({ flySpeed }),
-  fog: {
-    enabled: true,
-    mode: "linear",
-    color: "#0a1838",
-    near: 1280,
-    far: 6400,
-    density: 0.0006,
-  },
+  fog: DEFAULT_FOG,
   setFog: (patch) => set((s) => ({ fog: { ...s.fog, ...patch } })),
-  haze: {
-    enabled: false,
-    color: "#1a4070",
-    topY: 300,
-    bottomY: -10,
-    intensity: 1.0,
-    radius: 3500,
-  },
+  haze: DEFAULT_HAZE,
   setHaze: (patch) => set((s) => ({ haze: { ...s.haze, ...patch } })),
   showFocalIndicator: false,
   setShowFocalIndicator: (showFocalIndicator) => set({ showFocalIndicator }),
@@ -509,45 +532,33 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     })),
   setCameraLive: (cameraLive) => set({ cameraLive }),
   resetCamera: () => {
-    const snap = readSavedConfig();
-    if (snap) {
-      set((s) => ({
-        cameraIntent: snap.cameraIntent ?? DEFAULT_INTENT,
-        orbit: snap.orbit ?? DEFAULT_ORBIT,
-        moon: snap.moon ?? DEFAULT_MOON,
-        stars: snap.stars ?? DEFAULT_STARS,
-        projection: snap.projection ?? "orthographic",
-        orthoSize: snap.orthoSize ?? 240,
-        projectionBlend: (snap.projection ?? "orthographic") === "orthographic" ? 1 : 0,
-        windowAA: snap.windowAA ?? DEFAULT_WINDOW_AA,
-        windowMode: snap.windowMode ?? "advanced",
-        windowSimple: snap.windowSimple ?? DEFAULT_WINDOW_SIMPLE,
-        windowProfiles: snap.windowProfiles ?? DEFAULT_WINDOW_PROFILES,
-        // Restore fog / haze / planning toggles if the snapshot has them;
-        // merge cityPlanning so the runtime readouts (topology, count) survive.
-        ...(snap.fog ? { fog: snap.fog } : {}),
-        ...(snap.haze ? { haze: snap.haze } : {}),
-        ...(snap.cityPlanning ? { cityPlanning: { ...s.cityPlanning, ...snap.cityPlanning } } : {}),
-        cameraMode: "orbit" as const,
-        orbitRestore: null,
-      }));
-      return;
-    }
-    set({
+    // Comprehensive reset: every panel-tunable setting goes back to its
+    // hardcoded default, regardless of any localStorage SavedConfig. Runtime
+    // readouts (cityPlanning.topologyKind / arterialCount, perf, live values)
+    // are preserved.
+    set((s) => ({
       cameraIntent: DEFAULT_INTENT,
       orbit: DEFAULT_ORBIT,
       moon: DEFAULT_MOON,
+      moonHalo: DEFAULT_MOON_HALO,
+      moonFollowCamera: false,
       stars: DEFAULT_STARS,
-      orbitRestore: null,
-      projection: "orthographic",
-      orthoSize: 240,
-      projectionBlend: 1,
+      projection: DEFAULT_PROJECTION,
+      orthoSize: DEFAULT_ORTHO_SIZE,
+      projectionBlend: DEFAULT_PROJECTION === "orthographic" ? 1 : 0,
       windowAA: DEFAULT_WINDOW_AA,
-      windowMode: "advanced",
+      windowMode: "advanced" as const,
       windowSimple: DEFAULT_WINDOW_SIMPLE,
       windowProfiles: DEFAULT_WINDOW_PROFILES,
-      cameraMode: "orbit",
-    });
+      fog: DEFAULT_FOG,
+      haze: DEFAULT_HAZE,
+      cityPlanning: { ...s.cityPlanning, ...DEFAULT_CITY_PLANNING_VIS },
+      flySpeed: DEFAULT_FLY_SPEED,
+      orbitPaused: false,
+      showFocalIndicator: false,
+      cameraMode: "orbit" as const,
+      orbitRestore: null,
+    }));
   },
   saveCurrentAsDefault: () => {
     const s = get();
