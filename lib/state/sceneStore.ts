@@ -338,6 +338,16 @@ type SceneState = {
   setOrbitPaused: (v: boolean) => void;
   orbit: OrbitConfig;
   setOrbit: (patch: Partial<OrbitConfig>) => void;
+  // Snapshot of the pre-top-down orbit/projection state. Captured when the
+  // Top-down preset is triggered in orbit mode (#18); consumed by the Default
+  // preset (#19) to restore the prior framing. Null when no top-down is active.
+  orbitRestore: {
+    elevationDeg: number;
+    radius: number;
+    orthoSize: number;
+    paused: boolean;
+  } | null;
+  setOrbitRestore: (r: SceneState["orbitRestore"]) => void;
   // Streets-first city-planning layer visibility + readouts (Stage 1).
   // Gated in the UI behind the ?stage1=1 flag until the rewrite is default.
   cityPlanning: {
@@ -457,6 +467,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setOrbitPaused: (orbitPaused) => set({ orbitPaused }),
   orbit: DEFAULT_ORBIT,
   setOrbit: (patch) => set((s) => ({ orbit: { ...s.orbit, ...patch } })),
+  orbitRestore: null,
+  setOrbitRestore: (orbitRestore) => set({ orbitRestore }),
   cityPlanning: {
     // Planning overlays are review aids, not part of the ambient screensaver —
     // the streets-first network still shapes the city, it just isn't drawn over
@@ -517,6 +529,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         ...(snap.haze ? { haze: snap.haze } : {}),
         ...(snap.cityPlanning ? { cityPlanning: { ...s.cityPlanning, ...snap.cityPlanning } } : {}),
         cameraMode: "orbit" as const,
+        orbitRestore: null,
       }));
       return;
     }
@@ -525,6 +538,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       orbit: DEFAULT_ORBIT,
       moon: DEFAULT_MOON,
       stars: DEFAULT_STARS,
+      orbitRestore: null,
       projection: "orthographic",
       orthoSize: 240,
       projectionBlend: 1,
