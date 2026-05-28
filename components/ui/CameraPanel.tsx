@@ -78,18 +78,66 @@ function tweenProjectionTo(target: "perspective" | "orthographic") {
   });
 }
 
-// Orbit top-down: tilt the orbit straight down + pause the auto-sweep, without
-// leaving orbit mode (per request — don't drop to Still). elevationDeg 90 sits
-// the camera directly above the city; orbitPaused stops the revolution.
+// Orbit top-down: tilt the orbit straight down, pull the camera back, and pause
+// the auto-sweep — all without leaving orbit mode. Tweens elevation→90, radius
+// up to a city-fitting distance, and orthoSize up so the framing also works in
+// ortho (where radius alone doesn't change visible extent). The pre-top-down
+// orbit + projection state is captured into orbitRestore the first time so the
+// Default preset (#19) can put the user back where they were.
+const TOP_DOWN_RADIUS = 4500;
+const TOP_DOWN_ORTHO_SIZE = 1000;
+const ORBIT_TWEEN_MS = 0.9;
+
+function tweenOrbitTowards(
+  targetEl: number,
+  targetR: number,
+  targetOrtho: number,
+  onComplete?: () => void,
+) {
+  const s = useSceneStore.getState();
+  const fromEl = s.orbit.elevationDeg;
+  const fromR = s.orbit.radius;
+  const fromOrtho = s.orthoSize;
+  const proxy = { t: 0 };
+  gsap.to(proxy, {
+    t: 1,
+    duration: ORBIT_TWEEN_MS,
+    ease: "power2.inOut",
+    onUpdate: () => {
+      const t = proxy.t;
+      const st = useSceneStore.getState();
+      st.setOrbit({
+        elevationDeg: fromEl + (targetEl - fromEl) * t,
+        radius: fromR + (targetR - fromR) * t,
+      });
+      st.setOrthoSize(fromOrtho + (targetOrtho - fromOrtho) * t);
+    },
+    onComplete,
+  });
+}
+
 function tweenOrbitTopDown() {
   const s = useSceneStore.getState();
+  if (s.orbitRestore === null) {
+    s.setOrbitRestore({
+      elevationDeg: s.orbit.elevationDeg,
+      radius: s.orbit.radius,
+      orthoSize: s.orthoSize,
+      paused: s.orbitPaused,
+    });
+  }
   s.setOrbitPaused(true);
-  const proxy = { v: s.orbit.elevationDeg };
-  gsap.to(proxy, {
-    v: 90,
-    duration: 0.8,
-    ease: "power2.inOut",
-    onUpdate: () => useSceneStore.getState().setOrbit({ elevationDeg: proxy.v }),
+  tweenOrbitTowards(90, TOP_DOWN_RADIUS, TOP_DOWN_ORTHO_SIZE);
+}
+
+function tweenOrbitRestore() {
+  const s = useSceneStore.getState();
+  const r = s.orbitRestore;
+  if (!r) return;
+  tweenOrbitTowards(r.elevationDeg, r.radius, r.orthoSize, () => {
+    const st = useSceneStore.getState();
+    st.setOrbitPaused(r.paused);
+    st.setOrbitRestore(null);
   });
 }
 
@@ -439,6 +487,7 @@ function PoseSection({
   tweenCameraTo: ReturnType<typeof useSceneStore.getState>["tweenCameraTo"];
 }) {
   const orbiting = useSceneStore((s) => s.cameraMode === "orbit");
+  const orbitRestoreSet = useSceneStore((s) => s.orbitRestore !== null);
   return (
     <>
       <div className="flex items-center gap-2">
@@ -447,17 +496,23 @@ function PoseSection({
         </span>
         <div className="flex flex-wrap gap-1">
           {PRESETS.map((p) => {
-            // In orbit mode the still-pose presets stay disabled, except
-            // "Top-down" — it tilts the orbit straight down + pauses the sweep
-            // instead of dropping to Still.
+            // In orbit mode the still-pose presets stay disabled, except:
+            //   "Top-down" — tilts straight down + zooms out (#18)
+            //   "Default" — restores pre-top-down state if one was captured (#19)
             const orbitTopDown = orbiting && p.id === "top-down";
+            const orbitDefault = orbiting && p.id === "default" && orbitRestoreSet;
+            const enabledInOrbit = orbitTopDown || orbitDefault;
             return (
               <Button
                 key={p.id}
                 variant="secondary"
                 size="sm"
-                disabled={locked && !orbitTopDown}
-                onClick={() => (orbitTopDown ? tweenOrbitTopDown() : tweenCameraTo(p.intent, 900))}
+                disabled={locked && !enabledInOrbit}
+                onClick={() => {
+                  if (orbitTopDown) tweenOrbitTopDown();
+                  else if (orbitDefault) tweenOrbitRestore();
+                  else tweenCameraTo(p.intent, 900);
+                }}
                 className="bg-foreground/10 text-foreground hover:bg-foreground/20"
               >
                 {p.label}
