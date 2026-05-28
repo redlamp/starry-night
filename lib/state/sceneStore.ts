@@ -101,7 +101,15 @@ export const DEFAULT_ORBIT: OrbitConfig = {
 
 // Azimuth flipped 180° from the 200° tuning that paired with the old camera
 // pose: with the new defaults the camera faces +z, so the moon sits at +z too.
-export const DEFAULT_MOON = { azimuthDeg: 20, elevationDeg: 16, distance: 4500 };
+// radiusRatio: moon radius as a fraction of star shell radius (~4500m), so
+// the moon scales with the dome by default. 0.0355 ≈ 160m moon at default
+// stars radius — exposed in the Moon panel for live tuning.
+export const DEFAULT_MOON = {
+  azimuthDeg: 20,
+  elevationDeg: 16,
+  distance: 4500,
+  radiusRatio: 0.0355,
+};
 // `factor` is the star base size in px (mean, before the per-star long-tail).
 // Previously a vestigial drei value (200) that nothing read; now wired to
 // StarField's size prop. Legacy large values are migrated on load.
@@ -250,6 +258,7 @@ type SceneState = {
     azimuthDeg: number; // compass yaw, 0 = +z (north), 90 = +x (east)
     elevationDeg: number; // angle above horizon, 0 = horizon, 90 = zenith
     distance: number; // radial distance from city centre; default tracks stars.radius
+    radiusRatio: number; // moon radius as a fraction of stars.radius
   };
   setMoon: (patch: Partial<SceneState["moon"]>) => void;
   moonHalo: {
@@ -431,18 +440,18 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     enabled: true,
     mode: "linear",
     color: "#0a1838",
-    near: 1280,
+    near: 2400,
     far: 6400,
     density: 0.0006,
   },
   setFog: (patch) => set((s) => ({ fog: { ...s.fog, ...patch } })),
   haze: {
-    enabled: false,
-    color: "#1a4070",
-    topY: 300,
-    bottomY: -10,
-    intensity: 1.0,
-    radius: 3500,
+    enabled: true,
+    color: "#1b2641",
+    topY: 360,
+    bottomY: -15,
+    intensity: 1.1,
+    radius: 1450,
   },
   setHaze: (patch) => set((s) => ({ haze: { ...s.haze, ...patch } })),
   showFocalIndicator: false,
@@ -514,7 +523,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       set((s) => ({
         cameraIntent: snap.cameraIntent ?? DEFAULT_INTENT,
         orbit: snap.orbit ?? DEFAULT_ORBIT,
-        moon: snap.moon ?? DEFAULT_MOON,
+        moon: snap.moon ? { ...DEFAULT_MOON, ...snap.moon } : DEFAULT_MOON,
         stars: snap.stars ?? DEFAULT_STARS,
         projection: snap.projection ?? "orthographic",
         orthoSize: snap.orthoSize ?? 240,

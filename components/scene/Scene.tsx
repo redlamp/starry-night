@@ -56,7 +56,7 @@ export function Scene() {
       ) : null}
       <ambientLight intensity={0.04} />
 
-      <StarPass backgroundColor={fog.color}>
+      <StarPass backgroundColor={fog.color} haze={<GroundHaze />}>
         <StarField
           masterSeed={masterSeed}
           radius={stars.radius}
@@ -69,7 +69,6 @@ export function Scene() {
       <Moon />
       <Ground />
       <Roads masterSeed={masterSeed} />
-      <GroundHaze />
       <InstancedCity masterSeed={masterSeed} />
       <Streetlights masterSeed={masterSeed} />
       <Beacons masterSeed={masterSeed} />
