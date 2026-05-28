@@ -445,7 +445,7 @@ export function CameraPanel() {
         <Button
           variant="ghost"
           onClick={() => resetCamera()}
-          title="Restore last saved values (falls back to hardcoded defaults if none saved)"
+          title="Reset all settings to their hardcoded defaults"
           className="text-rose-400 hover:bg-rose-400/10 hover:text-rose-300"
         >
           Reset
