@@ -7,6 +7,7 @@ import { InstancedCity } from "./InstancedCity";
 import { Moon } from "./Moon";
 import { StarField } from "./StarField";
 import { StarPass } from "./StarPass";
+import { SkyGradient } from "./SkyGradient";
 import { Ground } from "./Ground";
 import { Streetlights } from "./Streetlights";
 import { Beacons } from "./Beacons";
@@ -56,7 +57,8 @@ export function Scene() {
       ) : null}
       <ambientLight intensity={0.04} />
 
-      <StarPass backgroundColor={fog.color}>
+      <StarPass backgroundColor={fog.color} haze={<GroundHaze />}>
+        <SkyGradient horizonColor={fog.color} zenithColor="#050a18" />
         <StarField
           masterSeed={masterSeed}
           radius={stars.radius}
@@ -69,7 +71,6 @@ export function Scene() {
       <Moon />
       <Ground />
       <Roads masterSeed={masterSeed} />
-      <GroundHaze />
       <InstancedCity masterSeed={masterSeed} />
       <Streetlights masterSeed={masterSeed} />
       <Beacons masterSeed={masterSeed} />

@@ -445,7 +445,7 @@ export function CameraPanel() {
         <Button
           variant="ghost"
           onClick={() => resetCamera()}
-          title="Restore last saved values (falls back to hardcoded defaults if none saved)"
+          title="Reset all settings to their hardcoded defaults"
           className="text-rose-400 hover:bg-rose-400/10 hover:text-rose-300"
         >
           Reset
@@ -514,7 +514,7 @@ function PoseSection({
       <div className="flex flex-col gap-1.5">
         <span className="text-foreground/40 text-xs tracking-wide uppercase">tween to</span>
         <Tabs
-          value=""
+          value={orbitRestoreSet ? "top-down" : "default"}
           onValueChange={(v) => {
             const preset = PRESETS.find((p) => p.id === v);
             if (!preset) return;
@@ -897,6 +897,14 @@ function MoonSection() {
         max={30000}
         step={50}
         onChange={(distance) => setMoon({ distance })}
+      />
+      <ValueSlider
+        label="size"
+        value={moon.radiusRatio}
+        min={0.005}
+        max={0.2}
+        step={0.001}
+        onChange={(radiusRatio) => setMoon({ radiusRatio })}
       />
       <div className="text-foreground/55 pt-1 text-[10px] tracking-wide uppercase">Halo</div>
       <ValueSlider
