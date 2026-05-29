@@ -79,25 +79,28 @@ uniform float uWinSimpleH;      // simple-mode shared window height fraction
 uniform float uEmissiveBoost;
 uniform float uTime;
 
-// Intro / wake-up uniforms.
-//   uIntroProgress: 0..1 sweep value (0 = all windows dark, 1 = all lit)
-//   uIntroMode:     0=random, 1=district, 2=outside-in, 3=far-to-near, 4=inside-out
-//   uIntroCamPos:   world-space camera position snapshot used by mode 3
-//   uIntroCityCenter:    world-space city centre used by modes 2 / 4 as the radial axis
-//   uIntroMaxRadius: largest horizontal distance from centre to any building, normaliser
-uniform float uIntroProgress;
+// Intro / wake-up uniforms (After-Dark model).
+//   uIntroMode:        0=random, 1=district, 2=outside-in, 3=far-to-near, 4=inside-out
+//   uIntroCamPos:      world-space camera position snapshot used by mode 3
+//   uIntroCityCenter:  world-space city centre used by modes 2 / 4 as the radial axis
+//   uIntroMaxRadius:   largest horizontal distance from centre, normaliser
+//   uIntroStartTime:   sharedTime when intro fired — wake = startTime + baseline * duration
+//   uIntroDuration:    full cascade duration, seconds (each cell picks t0 in [0, duration])
+//   uOffCycle:         seconds a cell stays ON after wake (per-cell jitter ±30%)
+//   uRetrigger:        seconds a cell stays OFF between ONs (per-cell jitter ±30%)
 uniform int uIntroMode;
 uniform vec3 uIntroCamPos;
 uniform vec3 uIntroCityCenter;
 uniform float uIntroMaxRadius;
-uniform float uIntroCompleteAt; // sharedTime value when progress hit 1 (1e9 = never)
-uniform float uBreathingPeriod; // base period of the on/off cycle, seconds
+uniform float uIntroStartTime;
+uniform float uIntroDuration;
+uniform float uOffCycle;
+uniform float uRetrigger;
+uniform float uCycleJitter; // 0..1 amplitude on per-window cycle randomness
 uniform float uOrthoBlend;      // 0 = perspective, 1 = orthographic; LOD bypass scales by (1-this)
 uniform float uAaEdge;          // fwidth edge-AA multiplier (window-quality panel)
 uniform float uLodNear;         // cells-per-pixel where distance wash starts
 uniform float uLodRange;        // ramp width from uLodNear to full wash
-uniform float uOccupancyBias;   // sine-threshold shift; higher = more windows lit
-uniform float uChurn;           // fraction of windows that breathe over time
 
 varying vec2 vUv;
 varying vec3 vNormalLocal;
@@ -208,9 +211,9 @@ void main() {
   if (inWindow) {
     float seed = hash11(cellId.x + cellId.y * 17.0 + vBuildingHash);
 
+    bool isTv = state.a > 0.2 && state.a < 0.7;
     vec3 lit;
     if (state.a > 0.2) {
-      bool isTv = state.a < 0.7;
       float brightness = 1.0;
       if (isTv) {
         // 3 Hz — calmer than the original 8 Hz and matches the typical scan
@@ -218,90 +221,59 @@ void main() {
         float tick = floor(uTime * 3.0);
         float n = hash11(tick + seed * 100.0);
         brightness = 0.4 + n * 0.6;
-      } else if (seed < 0.04) {
-        float phase = seed * 50.0;
-        float pulse = sin(uTime * 0.6 + phase);
-        brightness = pulse > 0.88 ? 0.25 : 1.0;
       }
       lit = state.rgb * uEmissiveBoost * brightness;
     } else {
       // Atlas-unlit cells get a default warm tungsten — slightly dimmer than
-      // the average atlas-lit window so the "all on" state still reads as a
+      // the average atlas-lit window so a full-lit moment still reads as a
       // city rather than a billboard.
       lit = vec3(1.0, 0.82, 0.55) * uEmissiveBoost * 0.55;
     }
 
-    // Post-intro breathing. Each window picks a slow sine; vCorrelationMode
-    // decides whether the phase is per-window, per-block (2..5 horizontal
-    // blocks per floor), or whole-floor. A small fraction of cells are
-    // "stragglers" (someone working late with a desk lamp) and stay lit
-    // regardless of the floor / block phase.
-    float lifeSeed;
-    if (vCorrelationMode > 1.5) {
-      // Whole-floor cohort.
-      lifeSeed = hash11(cellId.y + vBuildingHash * 13.0);
-    } else if (vCorrelationMode > 0.5) {
-      // Per-block cohort. Block count 2..5 derived from the building hash.
-      float blockCount = floor(2.0 + mod(vBuildingHash * 0.317, 4.0));
-      float blockId = floor(cellId.x / max(1.0, vGrid.x) * blockCount);
-      lifeSeed = hash11(cellId.y + blockId * 7.0 + vBuildingHash * 13.0);
-    } else {
-      // Per-window (residential default).
-      lifeSeed = hash11(cellId.x + cellId.y * 17.0 + vBuildingHash + 7.0);
-    }
-    float period = max(1.0, uBreathingPeriod + lifeSeed * uBreathingPeriod * 2.0);
-    float phase = lifeSeed * 6.2831853;
-    float life = sin(uTime / period * 6.2831853 + phase);
-    // Default: rooms snap on/off like a wall switch (tight smoothstep band).
-    // A small fraction (~10%) use a wide band — these are the dimmer-switch
-    // cells that fade in and out. TV cells (atlas alpha 128) always stay on so
-    // their existing per-frame flicker logic remains the only motion in them.
-    bool isTv = state.a > 0.2 && state.a < 0.7;
-    // Binary wall-switch occupancy — every room snaps on/off at the sine's zero
-    // crossing, no fade. uOccupancyBias shifts the threshold so a higher value
-    // leaves more windows lit at any instant (fewer rooms dark / "dimming").
-    // Only uChurn fraction of windows actually cycle over time; the rest freeze
-    // at sin(phase) so the city is mostly static with a few rooms changing —
-    // that is what keeps the per-frame flicker down. At litBias=1 nothing
-    // crosses the threshold so there is no toggling at all.
-    float breatheSeed = hash11(cellId.x * 5.7 + cellId.y * 3.1 + vBuildingHash + 71.0);
-    float occLife = (breatheSeed < uChurn) ? life : sin(phase);
-    float occupancy = isTv ? 1.0 : step(0.0, occLife + uOccupancyBias);
-    // Working-late stragglers: a few cells per building stay lit even when
-    // their cohort goes dark. Independent per-cell hash so a cell can be both
-    // a straggler and a dimmer.
-    float strugglerSeed = hash11(cellId.x * 1.7 + cellId.y * 23.0 + vBuildingHash + 19.0);
-    if (strugglerSeed < 0.06) {
-      occupancy = max(occupancy, 0.9);
-    }
-    float postIntroSec = max(0.0, uTime - uIntroCompleteAt);
-    float postIntroMix = clamp(postIntroSec / 5.0, 0.0, 1.0);
-    lit *= mix(1.0, occupancy, postIntroMix);
-
-    // Per-window intro wake mask. Baseline coefficients capped at 0.7 so that
-    // baseline (≤ 0.7) + jitter (≤ 0.15) keeps threshold ≤ 0.85; smoothstep
-    // saturates well before uIntroProgress = 1, guaranteeing every window is
-    // fully lit at intro end.
+    // After-Dark wake-and-cycle. Step 1: order cells by intro mode, pick a
+    // per-cell wake time in [0, uIntroDuration]. Step 2: after wake, alternate
+    // ON (uOffCycle ±30%) / OFF (uRetrigger ±30%) using per-cell jitter so the
+    // city doesn't pulse in unison. TV cells skip the cycle once they wake.
     float baseline = 0.0;
     if (uIntroMode == 0) {
-      baseline = seed * 0.7;
+      baseline = seed;
     } else if (uIntroMode == 1) {
-      baseline = (vDistrictIdx / 3.0) * 0.7;
+      baseline = vDistrictIdx / 3.0;
     } else if (uIntroMode == 2) {
       vec2 d = vBuildingCenter.xz - uIntroCityCenter.xz;
       float r = clamp(length(d) / max(1.0, uIntroMaxRadius), 0.0, 1.0);
-      baseline = (1.0 - r) * 0.7;
+      baseline = 1.0 - r;
     } else if (uIntroMode == 3) {
       float farD = distance(vBuildingCenter, uIntroCamPos);
       float r = clamp(farD / max(1.0, uIntroMaxRadius * 2.0), 0.0, 1.0);
-      baseline = (1.0 - r) * 0.7;
+      baseline = 1.0 - r;
     } else {
       vec2 d = vBuildingCenter.xz - uIntroCityCenter.xz;
       float r = clamp(length(d) / max(1.0, uIntroMaxRadius), 0.0, 1.0);
-      baseline = r * 0.7;
+      baseline = r;
     }
-    float threshold = baseline + seed * 0.15;
-    float wake = smoothstep(threshold, threshold + 0.08, uIntroProgress);
+    float wakeJitter = hash11(cellId.x * 1.31 + cellId.y * 11.7 + vBuildingHash + 41.0);
+    float onJitter = hash11(cellId.x * 5.7 + cellId.y * 3.1 + vBuildingHash + 71.0);
+    float offJitter = hash11(cellId.x * 1.7 + cellId.y * 23.0 + vBuildingHash + 19.0);
+    float t0 = clamp(baseline, 0.0, 1.0) * uIntroDuration +
+               wakeJitter * min(uIntroDuration * 0.04, 4.0);
+    float wakeTime = uIntroStartTime + t0;
+
+    float windowOn;
+    if (uTime < wakeTime) {
+      windowOn = 0.0;
+    } else if (isTv) {
+      windowOn = 1.0;
+    } else {
+      // (1 - jitter) .. (1 + jitter) — at jitter=0 every window cycles in
+      // lockstep; at jitter=1 multipliers span 0..2.
+      float onSec = max(0.5, uOffCycle * (1.0 - uCycleJitter + onJitter * uCycleJitter * 2.0));
+      float offSec = max(0.5, uRetrigger * (1.0 - uCycleJitter + offJitter * uCycleJitter * 2.0));
+      float elapsed = uTime - wakeTime;
+      float period = onSec + offSec;
+      float phase = mod(elapsed, period);
+      windowOn = phase < onSec ? 1.0 : 0.0;
+    }
 
     // Derivative-based LOD: when one fragment covers a sizeable chunk of an
     // atlas cell, NearestFilter sampling of the binary alpha encoding produces
@@ -333,11 +305,11 @@ void main() {
       facade +
       vec3(1.0, 0.78, 0.5) * uEmissiveBoost * 0.22 * (0.5 + vFacadeGlow);
 
-    // Up close (lod=0): full per-cell render.
-    // Far (lod=1): wMask is zero'd so no per-cell sampling reaches output;
-    // distantGlow takes over via wake. Speckle source gone.
-    vec3 nearColor = mix(facade, lit, wake * wMask);
-    vec3 farColor = mix(facade, distantGlow, wake);
+    // Up close (lod=0): per-cell render with binary on/off gating.
+    // Far (lod=1): per-cell sampling drops out, distantGlow takes over,
+    // also gated by windowOn so a building reads dark before its windows wake.
+    vec3 nearColor = mix(facade, lit, windowOn * wMask);
+    vec3 farColor = mix(facade, distantGlow, windowOn);
     color = mix(nearColor, farColor, lod);
   }
 
