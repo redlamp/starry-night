@@ -83,6 +83,24 @@ const ARCHETYPE_PITCH: Record<Archetype, { col: number; floor: number }> = {
 };
 const AGE_PITCH_SCALE = 0.88; // Heritage / oldtown: denser, smaller windows.
 
+// #7 road-facing window — front-row buildings (within ROAD_FACING_DIST of a
+// highway / arterial edge) rotate to face the road, but only when the road's
+// direction is within ROAD_FACING_ANGLE_TOL of the block grid's rotation.
+// The tolerance preserves the stripe layout's depth-budget invariant: a
+// near-perpendicular snap would push the rotated footprint into the next
+// stripe and crash gate1's overlap test.
+const ROAD_FACING_DIST = 35;
+const ROAD_FACING_ANGLE_TOL = 0.7; // rad ≈ 40°
+
+// Wrap an angle delta into [-π/2, π/2] so a building's two ends count as
+// equivalent (a rectangle facing 10° and 190° are the same orientation).
+function angleDeltaTau(a: number, b: number): number {
+  let d = a - b;
+  while (d > Math.PI / 2) d -= Math.PI;
+  while (d < -Math.PI / 2) d += Math.PI;
+  return d;
+}
+
 // Map the 6-way planning character to the 4-value building lighting class.
 const LIGHTING_CLASS: Record<DistrictCharacter, BuildingLightingClass> = {
   downtown: "downtown",
@@ -215,22 +233,45 @@ function pickArchetype(
   return "warehouse";
 }
 
+// Draw a footprint by (width, aspect=depth/width, height) instead of (w,d,h).
+// Drives #24 footprint variety: aspect < 1 = wider-than-deep (along-street
+// frontage), aspect > 1 = perpendicular slab. Three rng calls in the same
+// slots as the old form so downstream rng draws stay deterministic.
+function aspectDims(
+  rng: () => number,
+  wRange: [number, number],
+  aspectRange: [number, number],
+  hRange: [number, number],
+) {
+  const width = wRange[0] + rng() * (wRange[1] - wRange[0]);
+  const aspect = aspectRange[0] + rng() * (aspectRange[1] - aspectRange[0]);
+  const height = hRange[0] + rng() * (hRange[1] - hRange[0]);
+  return { width, depth: width * aspect, height };
+}
+
 function dimensionsForArchetype(arch: Archetype, rng: () => number) {
   switch (arch) {
     case "spire":
-      return { width: 14 + rng() * 14, depth: 14 + rng() * 14, height: 80 + rng() * 140 };
+      // Efficient core — keep ~square.
+      return aspectDims(rng, [14, 28], [0.92, 1.0], [80, 220]);
     case "narrow-tower":
-      return { width: 8 + rng() * 6, depth: 8 + rng() * 5, height: 50 + rng() * 30 };
+      // Small tower, square plan.
+      return aspectDims(rng, [8, 14], [0.9, 1.0], [50, 80]);
     case "residential-tower":
-      return { width: 16 + rng() * 14, depth: 14 + rng() * 8, height: 24 + rng() * 26 };
+      // Slab-style — wider frontage along street than depth.
+      return aspectDims(rng, [16, 30], [0.5, 0.85], [24, 50]);
     case "office-block":
-      return { width: 22 + rng() * 22, depth: 18 + rng() * 14, height: 30 + rng() * 50 };
+      // Big blocks, full mix of squat squares to long slabs.
+      return aspectDims(rng, [22, 44], [0.45, 1.0], [30, 80]);
     case "mid-rise":
-      return { width: 14 + rng() * 12, depth: 12 + rng() * 8, height: 12 + rng() * 16 };
+      // Varied — small shops to long row blocks.
+      return aspectDims(rng, [14, 26], [0.45, 1.1], [12, 28]);
     case "warehouse":
-      return { width: 28 + rng() * 25, depth: 22 + rng() * 18, height: 7 + rng() * 7 };
+      // Strip-mall style: long frontage along the street.
+      return aspectDims(rng, [28, 60], [0.35, 0.7], [7, 14]);
     case "low-rise":
-      return { width: 10 + rng() * 10, depth: 8 + rng() * 7, height: 6 + rng() * 4 };
+      // Small varied corner shops.
+      return aspectDims(rng, [10, 20], [0.5, 1.0], [6, 10]);
   }
 }
 
@@ -316,6 +357,36 @@ function onRoadCorridor(roads: RoadLike[], x: number, z: number): boolean {
     }
   }
   return false;
+}
+
+// Nearest major-road segment direction (radians around Y) within maxEdgeDist
+// metres of the point's distance-to-road-edge. Returns null if nothing close.
+// Drives #7: buildings fronting a highway / arterial rotate to face it rather
+// than the block grid.
+function nearestMajorRoadAngle(
+  roads: RoadLike[],
+  x: number,
+  z: number,
+  maxEdgeDist: number,
+): number | null {
+  let bestEdgeDist = maxEdgeDist;
+  let bestAngle: number | null = null;
+  for (const r of roads) {
+    const verts = r.vertices;
+    const last = r.closed ? verts.length : verts.length - 1;
+    const halfW = r.width / 2;
+    for (let i = 0; i < last; i++) {
+      const a = verts[i];
+      const b = verts[(i + 1) % verts.length];
+      const d = pointSegmentDistance(x, z, a.x, a.z, b.x, b.z);
+      const edge = d - halfW;
+      if (edge < bestEdgeDist) {
+        bestEdgeDist = edge;
+        bestAngle = Math.atan2(b.z - a.z, b.x - a.x);
+      }
+    }
+  }
+  return bestAngle;
 }
 
 type Block = { cx: number; cz: number; w: number; d: number; empty: boolean; stripes: 1 | 2 };
@@ -425,19 +496,50 @@ function fillStripe(
     // street into the next row's stripe.
     const depth = Math.min(dims.depth * dJ, depthBudget);
 
-    // World centre of this building.
-    const lxCenter = lx + width / 2;
     const lzJitter = (rng() - 0.5) * 1.5;
-    const worldX = blockCx + lxCenter * cosR - lzJitter * sinR;
-    const worldZ = stripeCz + lxCenter * sinR + lzJitter * cosR;
 
-    lx += width + 0.5 + rng() * 1.5;
+    // #7: probe the road network at the tentative slot centre. Snap rotation to
+    // the road only if (a) the road is within ROAD_FACING_DIST, (b) the
+    // direction is within ROAD_FACING_ANGLE_TOL of the block grain, and (c)
+    // the rotated footprint still fits the stripe's perpendicular budget.
+    const tentLxCenter = lx + width / 2;
+    const tentWorldX = blockCx + tentLxCenter * cosR - lzJitter * sinR;
+    const tentWorldZ = stripeCz + tentLxCenter * sinR + lzJitter * cosR;
+    const facingAngle = nearestMajorRoadAngle(roads, tentWorldX, tentWorldZ, ROAD_FACING_DIST);
+    const rotDelta = facingAngle !== null ? angleDeltaTau(facingAngle, rot) : 0;
+    const cosDA = Math.cos(rotDelta);
+    const sinDA = Math.sin(rotDelta);
+    const perpStripe = Math.abs(width * sinDA) + Math.abs(depth * cosDA);
+    const useFacing =
+      facingAngle !== null &&
+      Math.abs(rotDelta) < ROAD_FACING_ANGLE_TOL &&
+      perpStripe <= depthBudget;
+    const rotY = useFacing ? (facingAngle as number) : rot;
+    const rcosR = useFacing ? Math.cos(rotY) : cosR;
+    const rsinR = useFacing ? Math.sin(rotY) : sinR;
+
+    // Stride along the stripe = rotated footprint's projection on stripe-x.
+    // alongStripe ≥ width when |cosDA|<1, so successive buildings can't clip.
+    const alongStripe = useFacing
+      ? Math.abs(width * cosDA) + Math.abs(depth * sinDA)
+      : width;
+    const lxCenter = useFacing ? lx + alongStripe / 2 : tentLxCenter;
+    if (useFacing && lxCenter + alongStripe / 2 > endLx) break;
+
+    const worldX = useFacing
+      ? blockCx + lxCenter * cosR - lzJitter * sinR
+      : tentWorldX;
+    const worldZ = useFacing
+      ? stripeCz + lxCenter * sinR + lzJitter * cosR
+      : tentWorldZ;
+
+    lx += alongStripe + 0.5 + rng() * 1.5;
 
     // Containment: the building's whole footprint must lie inside this district
     // and clear of every highway corridor. Footprint-level (not just centre)
     // containment carves street gaps at district seams → no cross-district
     // overlap.
-    if (!footprintInDistrict(field, district.index, worldX, worldZ, width, depth, cosR, sinR))
+    if (!footprintInDistrict(field, district.index, worldX, worldZ, width, depth, rcosR, rsinR))
       continue;
     if (onRoadCorridor(roads, worldX, worldZ)) continue;
 
@@ -461,7 +563,7 @@ function fillStripe(
       width,
       depth,
       height,
-      rotationY: rot,
+      rotationY: rotY,
       archetype,
       layer: layerForZ(worldZ),
       district: lightingClass,
