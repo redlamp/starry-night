@@ -29,9 +29,19 @@ varying float vBuildingHash;
 varying float vDistrictIdx;
 varying float vCorrelationMode;
 varying vec3 vBuildingCenter;  // world-space centre of this instance
+// #25: vertical face id (0=+X, 1=-X, 2=+Z, 3=-Z), constant per face thanks to
+// BoxGeometry's per-face normal duplication. Drives a per-face shift of which
+// atlas pixels each vertical face samples so the 4 sides aren't identical.
+varying float vFaceId;
 void main() {
   vUv = uv;
   vNormalLocal = normal;
+  vFaceId = 0.0;
+  if (abs(normal.x) > 0.5) {
+    vFaceId = normal.x > 0.0 ? 0.0 : 1.0;
+  } else if (abs(normal.z) > 0.5) {
+    vFaceId = normal.z > 0.0 ? 2.0 : 3.0;
+  }
 
   // Instance includes scale + rotation. For face-up detection we only care about
   // direction in world space (after instance rotation, before camera). Strip scale.
@@ -101,6 +111,7 @@ varying float vBuildingHash;
 varying float vDistrictIdx;
 varying float vCorrelationMode;
 varying vec3 vBuildingCenter;
+varying float vFaceId;
 float hash11(float p) {
   p = fract(p * 0.1031);
   p *= p + 33.33;
@@ -122,12 +133,18 @@ void main() {
   }
 
   vec2 cell = vUv * vGrid.xy;
-  vec2 cellId = floor(cell);
   vec2 cellLocal = fract(cell);
-
-  // Atlas sample: pick the centre pixel of cell (cellId+0.5), normalise by grid,
-  // scale by this building's atlas slice size, then offset to the slice origin.
-  vec2 cellCentreUv = (cellId + 0.5) / vGrid.xy;
+  // #25 per-face uniqueness: shift cellId by (faceId*7, faceId*11) BEFORE all
+  // per-cell math (atlas sample, hashes, breathing seed, intro wake). Using
+  // the shifted id everywhere means each face has its own atlas pattern AND
+  // its own independent on/off schedule — otherwise the same rows light up
+  // at the same time on all 4 sides and the building still reads as identical.
+  // Physical cellLocal stays unshifted so window position within a cell is
+  // correct on every face. Coprime offsets (7, 11) keep the 4 patterns
+  // distinct across typical grid sizes (3..20).
+  vec2 cellId = floor(cell) + vec2(vFaceId * 7.0, vFaceId * 11.0);
+  vec2 atlasCell = mod(cellId, vGrid.xy);
+  vec2 cellCentreUv = (atlasCell + 0.5) / vGrid.xy;
   vec2 atlasUv = vAtlasOffset + cellCentreUv * vAtlasSize;
   vec4 state = texture2D(uWindowAtlas, atlasUv);
 
