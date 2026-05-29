@@ -10,7 +10,21 @@
 export const sharedIntroProgress: { value: number } = { value: 0 };
 export const sharedIntroMode: { value: number } = { value: 0 };
 export const sharedIntroCompleteAt: { value: number } = { value: 1e9 };
-// Base period of the post-intro breathing cycle in seconds. Per-window period
-// derived in the shader as: base + lifeSeed * base * 2, so smaller = faster
-// city-wide on/off rhythm.
-export const sharedBreathingPeriod: { value: number } = { value: 90 };
+// After-Dark wake-up model. Each window picks a random t0 in [0, duration],
+// turns on at t0, then alternates: ON for offCycle (±30% per-window jitter),
+// OFF for retrigger (±30%), repeating. sharedIntroStartTime is sharedTime at
+// the moment the intro fires — windows compute their absolute wake from
+// (startTime + baseline * duration). All in seconds.
+export const sharedIntroStartTime: { value: number } = { value: 0 };
+export const sharedIntroDuration: { value: number } = { value: 60 };
+export const sharedOffCycle: { value: number } = { value: 60 };
+export const sharedRetrigger: { value: number } = { value: 30 };
+// Per-window jitter amplitude on the on/off cycle: 0 = lockstep, 0.5 = ±50%.
+export const sharedCycleJitter: { value: number } = { value: 0.3 };
+
+// Star-intro shared uniforms — independent from the window intro so stars can
+// wake on their own timeline + ordering. Mode index: 0=random per-star,
+// 1=bright-first, 2=horizon-first (stars near horizon wake first),
+// 3=zenith-first (stars near zenith wake first).
+export const sharedStarIntroProgress: { value: number } = { value: 0 };
+export const sharedStarIntroMode: { value: number } = { value: 0 };

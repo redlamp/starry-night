@@ -696,24 +696,7 @@ function AntiAliasingSection() {
   const setWindowAA = useSceneStore((s) => s.setWindowAA);
   return (
     <>
-      <div className="text-foreground/55 text-[10px] tracking-wide uppercase">Occupancy</div>
-      <ValueSlider
-        label="lit ratio"
-        value={wa.litBias}
-        min={0}
-        max={1}
-        step={0.02}
-        onChange={(litBias) => setWindowAA({ litBias })}
-      />
-      <ValueSlider
-        label="activity"
-        value={wa.churn}
-        min={0}
-        max={1}
-        step={0.02}
-        onChange={(churn) => setWindowAA({ churn })}
-      />
-      <div className="text-foreground/55 pt-1 text-[10px] tracking-wide uppercase">
+      <div className="text-foreground/55 text-[10px] tracking-wide uppercase">
         Anti-alias / LOD
       </div>
       <ValueSlider
@@ -1081,63 +1064,135 @@ function FogSection() {
 
 function IntroSection() {
   const intro = useSceneStore((s) => s.intro);
+  const starIntro = useSceneStore((s) => s.starIntro);
   const setIntroDuration = useSceneStore((s) => s.setIntroDuration);
   const setIntroMode = useSceneStore((s) => s.setIntroMode);
-  const setBreathingPeriod = useSceneStore((s) => s.setBreathingPeriod);
-  const playIntro = useSceneStore((s) => s.playIntro);
-  const modes = ["random", "district", "outside-in", "inside-out", "far-to-near"] as const;
+  const setOffCycle = useSceneStore((s) => s.setOffCycle);
+  const setRetrigger = useSceneStore((s) => s.setRetrigger);
+  const setCycleJitter = useSceneStore((s) => s.setCycleJitter);
+  const setStarIntroDuration = useSceneStore((s) => s.setStarIntroDuration);
+  const setStarIntroMode = useSceneStore((s) => s.setStarIntroMode);
+  const playAllIntros = useSceneStore((s) => s.playAllIntros);
+  const windowModes = ["random", "district", "outside-in", "inside-out", "far-to-near"] as const;
+  const starModes = ["random", "bright-first", "horizon-first", "zenith-first"] as const;
   return (
     <>
       <div className="flex items-center justify-end">
         <Button
           variant="secondary"
           size="sm"
-          onClick={() => playIntro()}
-          title="Replay the wake-up sequence from progress = 0"
+          onClick={() => playAllIntros()}
+          title="Replay both wake-up sequences from progress = 0"
           className="bg-amber-300 text-black hover:bg-amber-300/90"
         >
           ▶ play
         </Button>
       </div>
+
+      <SubHeader label="Windows" />
       <ValueSlider
         label="duration"
         value={intro.durationSec}
         min={1}
-        max={30}
-        step={0.5}
+        max={480}
+        step={1}
         onChange={(durationSec) => setIntroDuration(durationSec)}
       />
       <ValueSlider
         label="off cycle"
-        value={intro.breathingPeriodSec}
-        min={3}
-        max={600}
+        value={intro.offCycleSec}
+        min={1}
+        max={480}
         step={1}
-        onChange={(breathingPeriodSec) => setBreathingPeriod(breathingPeriodSec)}
+        onChange={(offCycleSec) => setOffCycle(offCycleSec)}
       />
-      <div className="flex items-center gap-2 text-xs">
-        <span className="text-foreground/70 w-14 shrink-0">mode</span>
-        <Select value={intro.mode} onValueChange={(v) => setIntroMode(v as typeof intro.mode)}>
-          <SelectTrigger
-            size="sm"
-            className="bg-background/50 text-foreground hover:bg-background/60 w-full"
-          >
-            <SelectValue placeholder="mode" />
-          </SelectTrigger>
-          <SelectContent>
-            {modes.map((m) => (
-              <SelectItem key={m} value={m}>
-                {m}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <div className="text-foreground/70 grid grid-cols-[5rem_1fr] gap-1 font-mono text-xs">
-        <div>progress</div>
-        <div className="tabular-nums">{fmt(intro.progress, 2)}</div>
-      </div>
+      <ValueSlider
+        label="retrigger"
+        value={intro.retriggerSec}
+        min={1}
+        max={480}
+        step={1}
+        onChange={(retriggerSec) => setRetrigger(retriggerSec)}
+      />
+      <ValueSlider
+        label="jitter"
+        value={intro.cycleJitter}
+        min={0}
+        max={1}
+        step={0.02}
+        onChange={(cycleJitter) => setCycleJitter(cycleJitter)}
+      />
+      <ModeSelect
+        value={intro.mode}
+        modes={windowModes}
+        onChange={(v) => setIntroMode(v as typeof intro.mode)}
+      />
+      <ProgressRow label="progress" value={intro.progress} />
+
+      <SubHeader label="Stars" />
+      <ValueSlider
+        label="duration"
+        value={starIntro.durationSec}
+        min={1}
+        max={480}
+        step={1}
+        onChange={(durationSec) => setStarIntroDuration(durationSec)}
+      />
+      <ModeSelect
+        value={starIntro.mode}
+        modes={starModes}
+        onChange={(v) => setStarIntroMode(v as typeof starIntro.mode)}
+      />
+      <ProgressRow label="progress" value={starIntro.progress} />
     </>
+  );
+}
+
+function SubHeader({ label }: { label: string }) {
+  return (
+    <div className="text-foreground/55 mt-1 border-t border-white/10 pt-2 text-[11px] font-medium tracking-wide uppercase">
+      {label}
+    </div>
+  );
+}
+
+function ModeSelect<T extends string>({
+  value,
+  modes,
+  onChange,
+}: {
+  value: T;
+  modes: readonly T[];
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="flex items-center gap-2 text-xs">
+      <span className="text-foreground/70 w-14 shrink-0">mode</span>
+      <Select value={value} onValueChange={(v) => v && onChange(v)}>
+        <SelectTrigger
+          size="sm"
+          className="bg-background/50 text-foreground hover:bg-background/60 w-full"
+        >
+          <SelectValue placeholder="mode" />
+        </SelectTrigger>
+        <SelectContent>
+          {modes.map((m) => (
+            <SelectItem key={m} value={m}>
+              {m}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+function ProgressRow({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="text-foreground/70 grid grid-cols-[5rem_1fr] gap-1 font-mono text-xs">
+      <div>{label}</div>
+      <div className="tabular-nums">{fmt(value, 2)}</div>
+    </div>
   );
 }
 

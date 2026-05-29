@@ -9,10 +9,12 @@ import { packWindowAtlas, type PackInput } from "@/lib/scene/atlasPacker";
 import { cityVertexShader, cityFragmentShader } from "@/lib/shaders/cityInstanced";
 import { sharedTime } from "@/lib/shaders/sharedTime";
 import {
-  sharedIntroProgress,
   sharedIntroMode,
-  sharedIntroCompleteAt,
-  sharedBreathingPeriod,
+  sharedIntroStartTime,
+  sharedIntroDuration,
+  sharedOffCycle,
+  sharedRetrigger,
+  sharedCycleJitter,
 } from "@/lib/shaders/sharedIntro";
 import { useSceneStore, DEFAULT_WINDOW_PROFILES } from "@/lib/state/sceneStore";
 
@@ -75,8 +77,6 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
       mat.uniforms.uAaEdge.value = wa.edge;
       mat.uniforms.uLodNear.value = wa.lodNear;
       mat.uniforms.uLodRange.value = wa.lodRange;
-      mat.uniforms.uOccupancyBias.value = wa.litBias;
-      mat.uniforms.uChurn.value = wa.churn;
       mat.uniforms.uWindowMode.value = s.windowMode === "advanced" ? 1 : 0;
       mat.uniforms.uWinSimpleW.value = s.windowSimple.w;
       mat.uniforms.uWinSimpleH.value = s.windowSimple.h;
@@ -174,19 +174,19 @@ function buildMeshes(masterSeed: string): { meshes: THREE.InstancedMesh[]; maxRa
           uWinSimpleH: { value: 0.5 },
           uEmissiveBoost: { value: 1.4 },
           uTime: { value: 0 },
-          uIntroProgress: { value: 0 },
           uIntroMode: { value: 0 },
           uIntroCamPos: { value: new THREE.Vector3() },
           uIntroCityCenter: { value: new THREE.Vector3() },
           uIntroMaxRadius: { value: 1 },
-          uIntroCompleteAt: { value: 1e9 },
-          uBreathingPeriod: { value: 90 },
+          uIntroStartTime: { value: 0 },
+          uIntroDuration: { value: 60 },
+          uOffCycle: { value: 60 },
+          uRetrigger: { value: 30 },
+          uCycleJitter: { value: 0.3 },
           uOrthoBlend: { value: 0 },
           uAaEdge: { value: 1.1 },
           uLodNear: { value: 0.2 },
           uLodRange: { value: 0.4 },
-          uOccupancyBias: { value: 0.7 },
-          uChurn: { value: 0.2 },
         },
       ]),
       fog: true,
@@ -194,10 +194,12 @@ function buildMeshes(masterSeed: string): { meshes: THREE.InstancedMesh[]; maxRa
     // UniformsUtils.merge breaks the texture / shared singletons; restore.
     material.uniforms.uWindowAtlas.value = atlasTex;
     material.uniforms.uTime = sharedTime;
-    material.uniforms.uIntroProgress = sharedIntroProgress;
     material.uniforms.uIntroMode = sharedIntroMode;
-    material.uniforms.uIntroCompleteAt = sharedIntroCompleteAt;
-    material.uniforms.uBreathingPeriod = sharedBreathingPeriod;
+    material.uniforms.uIntroStartTime = sharedIntroStartTime;
+    material.uniforms.uIntroDuration = sharedIntroDuration;
+    material.uniforms.uOffCycle = sharedOffCycle;
+    material.uniforms.uRetrigger = sharedRetrigger;
+    material.uniforms.uCycleJitter = sharedCycleJitter;
 
     const mesh = new THREE.InstancedMesh(geo, material, N);
 

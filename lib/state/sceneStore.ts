@@ -350,21 +350,44 @@ type SceneState = {
   // Visibility of the orbit focal-point crosshair.
   showFocalIndicator: boolean;
   setShowFocalIndicator: (v: boolean) => void;
-  // Intro / wake-up sequence. progress 0..1; mode selects per-window ordering.
+  // Intro / wake-up sequence (After-Dark model). progress 0..1 = cascade
+  // completion for the UI readout; the actual wake / on-off cycle is
+  // time-driven in the shader. mode selects ordering across cells.
   intro: {
     progress: number;
     playing: boolean;
     durationSec: number;
     mode: "random" | "district" | "outside-in" | "far-to-near" | "inside-out";
-    // Base period of the post-intro breathing cycle in seconds.
-    breathingPeriodSec: number;
+    // Seconds a window stays ON after wake (per-cell jitter applied).
+    offCycleSec: number;
+    // Seconds a window stays OFF between ONs (per-cell jitter applied).
+    retriggerSec: number;
+    // Per-window jitter amplitude on offCycle + retrigger: 0 = every window
+    // cycles in lockstep, 1 = each window's cycle length ranges 0..2× base.
+    cycleJitter: number;
+  };
+  // Star intro — independent from the window intro so stars can wake on their
+  // own timing + ordering.
+  starIntro: {
+    progress: number;
+    playing: boolean;
+    durationSec: number;
+    mode: "random" | "bright-first" | "horizon-first" | "zenith-first";
   };
   setIntroProgress: (v: number) => void;
   setIntroPlaying: (v: boolean) => void;
   setIntroDuration: (v: number) => void;
   setIntroMode: (m: SceneState["intro"]["mode"]) => void;
-  setBreathingPeriod: (v: number) => void;
+  setOffCycle: (v: number) => void;
+  setRetrigger: (v: number) => void;
+  setCycleJitter: (v: number) => void;
   playIntro: () => void;
+  setStarIntroProgress: (v: number) => void;
+  setStarIntroPlaying: (v: boolean) => void;
+  setStarIntroDuration: (v: number) => void;
+  setStarIntroMode: (m: SceneState["starIntro"]["mode"]) => void;
+  playStarIntro: () => void;
+  playAllIntros: () => void;
   // Runtime flag set true while the user is holding RMB in orbit mode to drag
   // the focal Y. Used to brighten the focal indicator while editing.
   focalDragging: boolean;
@@ -473,17 +496,39 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   intro: {
     progress: 0,
     playing: false,
-    durationSec: 24,
+    durationSec: 60,
     mode: "random",
-    breathingPeriodSec: 240,
+    offCycleSec: 90,
+    retriggerSec: 45,
+    cycleJitter: 0.3,
+  },
+  starIntro: {
+    progress: 0,
+    playing: false,
+    durationSec: 30,
+    mode: "random",
   },
   setIntroProgress: (progress) => set((s) => ({ intro: { ...s.intro, progress } })),
   setIntroPlaying: (playing) => set((s) => ({ intro: { ...s.intro, playing } })),
   setIntroDuration: (durationSec) => set((s) => ({ intro: { ...s.intro, durationSec } })),
   setIntroMode: (mode) => set((s) => ({ intro: { ...s.intro, mode } })),
-  setBreathingPeriod: (breathingPeriodSec) =>
-    set((s) => ({ intro: { ...s.intro, breathingPeriodSec } })),
+  setOffCycle: (offCycleSec) => set((s) => ({ intro: { ...s.intro, offCycleSec } })),
+  setRetrigger: (retriggerSec) => set((s) => ({ intro: { ...s.intro, retriggerSec } })),
+  setCycleJitter: (cycleJitter) => set((s) => ({ intro: { ...s.intro, cycleJitter } })),
   playIntro: () => set((s) => ({ intro: { ...s.intro, progress: 0, playing: true } })),
+  setStarIntroProgress: (progress) =>
+    set((s) => ({ starIntro: { ...s.starIntro, progress } })),
+  setStarIntroPlaying: (playing) => set((s) => ({ starIntro: { ...s.starIntro, playing } })),
+  setStarIntroDuration: (durationSec) =>
+    set((s) => ({ starIntro: { ...s.starIntro, durationSec } })),
+  setStarIntroMode: (mode) => set((s) => ({ starIntro: { ...s.starIntro, mode } })),
+  playStarIntro: () =>
+    set((s) => ({ starIntro: { ...s.starIntro, progress: 0, playing: true } })),
+  playAllIntros: () =>
+    set((s) => ({
+      intro: { ...s.intro, progress: 0, playing: true },
+      starIntro: { ...s.starIntro, progress: 0, playing: true },
+    })),
   focalDragging: false,
   setFocalDragging: (focalDragging) => set({ focalDragging }),
   orbitPaused: false,

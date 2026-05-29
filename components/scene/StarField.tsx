@@ -4,6 +4,7 @@ import { useEffect, useMemo } from "react";
 import * as THREE from "three";
 import { deriveSeed } from "@/lib/seed/rng";
 import { sharedTime } from "@/lib/shaders/sharedTime";
+import { sharedStarIntroProgress, sharedStarIntroMode } from "@/lib/shaders/sharedIntro";
 import {
   starFieldVertexShader,
   starFieldFragmentShader,
@@ -45,6 +46,12 @@ export function StarField({
     const phases = new Float32Array(count);
     const freqs = new Float32Array(count);
     const twinkles = new Float32Array(count);
+    // Intro-mode baselines packed per-star:
+    //   .x = random       (aPhase already, kept here for shader convenience)
+    //   .y = 1 - sizeRank (brightness: big stars = low baseline = wake early)
+    //   .z = heightNorm   (y on sphere normalised to 0..1; 0=south pole, 1=zenith)
+    // The shader picks one component (and inverts .z for zenith-first) per mode.
+    const introBaselines = new Float32Array(count * 3);
 
     for (let i = 0; i < count; i++) {
       // Spherical sample with upper-hemisphere bias (sqrt(u) makes y skew up).
@@ -67,9 +74,14 @@ export function StarField({
       const s = Math.pow(rng(), 3.0);
       sizes[i] = size * (0.55 + 1.6 * s);
 
-      phases[i] = rng();
+      const phase = rng();
+      phases[i] = phase;
       freqs[i] = 0.4 + rng() * 1.0;
       twinkles[i] = rng() < twinkleRatio ? 0.6 + rng() * 0.4 : 0.0;
+
+      introBaselines[i * 3 + 0] = phase;
+      introBaselines[i * 3 + 1] = 1 - s; // brightness: big stars (s near 1) first
+      introBaselines[i * 3 + 2] = Math.max(0, Math.min(1, (y / r + 1) * 0.5));
     }
 
     const geo = new THREE.BufferGeometry();
@@ -78,6 +90,7 @@ export function StarField({
     geo.setAttribute("aPhase", new THREE.BufferAttribute(phases, 1));
     geo.setAttribute("aFreq", new THREE.BufferAttribute(freqs, 1));
     geo.setAttribute("aTwinkle", new THREE.BufferAttribute(twinkles, 1));
+    geo.setAttribute("aIntroBaselines", new THREE.BufferAttribute(introBaselines, 3));
 
     const mat = new THREE.ShaderMaterial({
       vertexShader: starFieldVertexShader,
@@ -87,6 +100,8 @@ export function StarField({
         uPixelRatio: {
           value: typeof window !== "undefined" ? Math.min(window.devicePixelRatio, 2) : 1,
         },
+        uStarIntroProgress: sharedStarIntroProgress,
+        uStarIntroMode: sharedStarIntroMode,
       },
       transparent: true,
       depthWrite: false,
