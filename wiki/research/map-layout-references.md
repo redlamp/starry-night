@@ -2,94 +2,159 @@
 tags:
   - domain/3d
   - domain/visual-language
-  - status/draft
+  - status/verified
   - origin/external-research
 ---
 
 # Map Layout References
 
-Visual + textual references for grounding the grid-first city rework
-([[decision-grid-first-city-generation]], [[plan-grid-first-rework]]) in real
-city plans. Seeded 2026-05-30 while gathering Google-Maps screenshots; the
-design-critical question is how differently-oriented grids actually *meet*.
+Real city-plan screenshots (captured 2026-05-30) + textual references for
+grounding the grid-first city rework ([[decision-grid-first-city-generation]],
+[[plan-grid-first-rework]]). Images live in `assets/`.
 
-## The design-critical finding (seam streets, issue #33)
+## Seam fork — RESOLVED (tiered / seam-as-arterial)
 
-The grid-first plan promotes **every** Voronoi district boundary to a thin
-(~14m) "seam street." Real cities frequently do the opposite: a single **wide
-shared boulevard** reconciles two clashing grids, and it is often **diagonal**.
+The plan's open question: promote **every** Voronoi district boundary to a thin
+~14m seam street, or only the major ones? **The screenshots settle it: tiered.**
 
-**San Francisco — Market Street** is the canonical case. Two grids (SoMa runs
-parallel to Market; downtown is ~9° off cardinal) were laid by separate owners
-and were geometrically incompatible. Engineer Jasper O'Farrell united them in
-1847 with a single **120-ft (≈37m) diagonal boulevard** (Market St) aimed at
-Twin Peaks — explicitly "a transition between the two opposing street grids."
-Source: [Market Street (San Francisco) — Wikipedia](https://en.wikipedia.org/wiki/Market_Street_(San_Francisco)).
+What real cities show, without exception:
 
-**Implication for the rework:** the biggest seams may want to be **promoted to
-wide avenues**, and the largest of those *are* the legacy diagonals (#34) — i.e.
-#33 (seam streets) and #34 (diagonals) overlap at the major boundaries. Open
-fork to resolve from the screenshots:
+1. **Grids meet along a few MAJOR existing through-streets — not a lane per
+   boundary.** SF's two grids join at the single diagonal **Market St**.
+   Manhattan's Commissioners grid vs the older Village/downtown core transitions
+   along a handful of streets, with **Broadway** slicing through as one diagonal.
+2. **The big seams are usually DIAGONAL** and double as arterials — Market St,
+   Broadway, DC's radial avenues, Chicago's Milwaukee/Clybourn/Lincoln. So #33
+   (seams) and #34 (legacy diagonals) are the **same heavy through-network** at
+   the largest scale.
+3. **A city has a HANDFUL of large coherent grid zones**, each with its own
+   constant orientation — not dozens of small cells. Orientation changes are
+   **discrete steps at a seam**, not a continuous warp.
 
-1. **As-spec** — every Voronoi boundary → thin ~14m seam street (many seams).
-2. **Tiered** — only the major boundaries promoted to wider avenues; minor
-   boundaries stay as the existing footprint gap (no drawn street).
-3. **Seam-as-diagonal** — the dominant seam per macro-region *is* a diagonal
-   boulevard (#33 + #34 merge), the rest are thin gaps.
+### Implications for implementation
 
-## Screenshot shot list (open the links, capture north-up, scale bar visible)
+- **#33** — do NOT draw a street on every Voronoi boundary (reads as confetti).
+  Promote only the **major** boundaries to wider shared avenues; leave minor
+  boundaries as the existing footprint gap. The heaviest promoted seams should
+  align with / become the diagonals.
+- **#34** — diagonals are the wedge/flatiron makers (DC, Chicago six-corners,
+  the Flatiron). They are wide named avenues cutting across the grid.
+- **Drift field (the held MED)** — real grid grain is **per-zone constant with a
+  step at the seam**, not the current smooth radial ramp. The fix should make
+  orientation **discrete per district** (bigger inter-district deltas) rather
+  than a continuous distance-based bend. This upgrades the MED from "tweak
+  GRID_RESIDUAL_SPREAD" to "give each district its own zone orientation."
+- **Radial routes are FREEWAYS, not street-level spokes** (Houston, Columbus).
+  Validates the rework: radial structure belongs to the **highway** tier
+  (topology ring-radial), arterials stay as grid lines — the old street-level
+  starburst was the bug.
 
-Drop captures into `wiki/research/assets/` (create as needed) and I'll annotate
-each here with what it demonstrates. A satellite shot of the same spot helps —
-it shows block *fill* (solid/void), not just street centrelines.
+## Gallery
 
-### Seams — two grids meeting (priority, issue #33)
+### Seams — how grids meet
 
-| # | Place | OSM link | Shows |
-|---|---|---|---|
-| 1 | SF, Market St | [map](https://www.openstreetmap.org/#map=16/37.7875/-122.4060) | SoMa grid vs downtown grid at one diagonal boulevard — the seam archetype |
-| 2 | Manhattan, West Village | [map](https://www.openstreetmap.org/#map=16/40.7339/-74.0011) | Commissioners' grid vs older irregular Village grid — messy seam |
-| 3 | SF, Castro/Mission | [map](https://www.openstreetmap.org/#map=15/37.7625/-122.4350) | several small grids colliding at Market |
-| 4 | Tokyo, Shibuya | [map](https://www.openstreetmap.org/#map=15/35.6618/139.7041) | organic, non-orthogonal multi-grid seams (non-American case) |
+**San Francisco (downtown / SoMa).** Market St = one diagonal boulevard uniting
+the off-cardinal downtown grid (NW) and the 45°-rotated SoMa grid (SE); local
+streets T-junction into it from both sides. The textbook tiered seam.
 
-### Block proportions (confirm [[block-proportions]] bands)
+![[San Francisco 1 California.jpg]]
 
-| # | Place | OSM link | Shows |
-|---|---|---|---|
-| 5 | Manhattan, midtown | [map](https://www.openstreetmap.org/#map=16/40.7549/-73.9840) | ~3:1 elongated blocks |
-| 6 | Chicago, Loop + Lincoln Park | [map](https://www.openstreetmap.org/#map=15/41.8807/-87.6300) | ~2:1 standard module |
-| 7 | Sun City, AZ | [map](https://www.openstreetmap.org/#map=14/33.5975/-112.2772) | curvilinear suburban contrast (anti-grid) |
+**San Francisco (whole city).** Many neighbourhood grids at different
+orientations (Sunset, Mission, the central diagonals) meeting at major streets
+or breaking around hills/parks — a patchwork of large coherent zones, not a
+smooth field.
 
-### Diagonals + wedge blocks (issues #34, Stage 7 flatiron)
+![[San Francisco 2 California.jpg]]
 
-| # | Place | OSM link | Shows |
-|---|---|---|---|
-| 8 | Washington DC | [map](https://www.openstreetmap.org/#map=14/38.8951/-77.0364) | L'Enfant diagonals + triangular wedge blocks |
-| 9 | Manhattan, Flatiron | [map](https://www.openstreetmap.org/#map=17/40.7411/-73.9897) | the literal wedge lot (Broadway × 5th × 23rd) |
+**Manhattan (lower/mid).** One dominant Commissioners grid (~29° off cardinal);
+the irregular older core sits below 14th; **Broadway** is the lone diagonal
+slicing through and making wedge lots (the Flatiron).
 
-### Ring roads / scale (issue #14 — current rings too small)
+![[Manhattan 1 New York.jpg]]
 
-| # | Place | OSM link | Shows |
-|---|---|---|---|
-| 10 | Columbus, OH (I-270) | [map](https://www.openstreetmap.org/#map=11/39.9612/-82.9988) | beltway-to-built-extent ratio |
-| 11 | Houston (610 + Beltway 8) | [map](https://www.openstreetmap.org/#map=10/29.7600/-95.3700) | two concentric rings at metro scale |
+**Manhattan (upper).** The grid runs uniform for miles, stepping orientation
+only at the north end; Central Park is a large void. Few, large zones.
+
+![[Manhattan 2 New York.jpg]]
+
+**Tokyo (Shibuya).** The non-American case: largely organic mesh structured by
+rail corridors + arterials, only patchy local grids. Our grid-first model won't
+mimic this, but it confirms major routes/rail as the structuring seams.
+
+![[Tokyo Shibuya Japan.jpg]]
+
+### Diagonals + wedge blocks (#34, Stage 7 flatiron)
+
+**Washington DC (L'Enfant).** Orthogonal grid overlaid with radial diagonal
+avenues meeting at circles/squares — triangular wedge lots at nearly every
+diagonal×grid crossing. The prime reference for diagonals + the wedge archetype.
+
+![[Washington DC.jpg]]
+
+**Chicago.** Uniform elongated grid (~2:1 blocks) with diagonal arterials
+(Milwaukee, Clybourn, Lincoln) cutting across and creating six-corner wedge
+intersections.
+
+![[Chicago Illinois.jpg]]
+
+### Block proportions ([[block-proportions]])
+
+**Savannah.** Colonial grid punctuated by the famous ward squares; moderately
+elongated blocks, organic outskirts.
+
+![[Savannah Georgia.jpg]]
+
+(Manhattan ~3:1 and Chicago ~2:1 above confirm the elongated-rectangle bands;
+near-square blocks are the exception.)
+
+### Curvilinear / anti-grid + arterial spacing
+
+**Phoenix / Sun City, AZ.** A rigid 1-mile arterial grid (arterials ~1.6km
+apart) with local streets — including Sun City's concentric circular
+subdivision — filling between. Shows arterial spacing + a curvilinear contrast.
+
+![[Phoenix Sun City Arizona.jpg]]
+
+**San Diego.** Downtown grid rotated ~45° to the bay meeting inland cardinal
+grids; freeways + canyons break the fabric — another grid-seam case.
+
+![[San Diego California.jpg]]
+
+### Ring roads / scale (#14 — rings were too small)
+
+**Columbus, OH.** Inner freeway belt + downtown grid; the full I-270 outerbelt
+sits far outside this frame — beltways encircle the *whole* metro.
+
+![[Columbus Ohio.jpg]]
+
+**Houston.** Radial freeways spoking from downtown to the 610 Loop and beyond
+(Beltway 8, Grand Parkway) — rings at true metro radius. Confirms **Ring A**
+(push radius to the edge) and that a real beltway is even larger relative to the
+core (the case for option B / partial-ring at bigger city scale).
+
+![[Houston Texas.jpg]]
+
+## OSM links (north-up, open to re-shoot)
+
+| Place | OSM link |
+|---|---|
+| SF Market St | [map](https://www.openstreetmap.org/#map=16/37.7875/-122.4060) |
+| Manhattan West Village | [map](https://www.openstreetmap.org/#map=16/40.7339/-74.0011) |
+| Tokyo Shibuya | [map](https://www.openstreetmap.org/#map=15/35.6618/139.7041) |
+| Chicago Loop + Lincoln Park | [map](https://www.openstreetmap.org/#map=15/41.8807/-87.6300) |
+| Washington DC | [map](https://www.openstreetmap.org/#map=14/38.8951/-77.0364) |
+| Houston (610 + Beltway 8) | [map](https://www.openstreetmap.org/#map=10/29.7600/-95.3700) |
 
 ## Background references
 
-- **Figure-ground / Nolli plan** — solid (built) vs void (open) mapping; the
-  right lens for block *fill* density (Stages 5–6), less so for street seams.
-  [Wikipedia](https://en.wikipedia.org/wiki/Figure-ground_diagram) ·
-  [MORPHOCODE intro](https://morphocode.com/figure-ground-diagram/).
-- **Orthogonal grids from above, 17 cities** — comparative aerial set.
-  [ArchDaily](https://www.archdaily.com/949094/orthogonal-grids-and-their-variations-in-17-cities-viewed-from-above).
-- **Street-network orientation & entropy** — quantifies grid coherence vs
-  disorder; useful for the drift-field (`DEFAULT_DRIFT_DEG`).
-  [Boeing 2019, Applied Network Science](https://link.springer.com/article/10.1007/s41109-019-0189-1).
-- **Evolution of US street-network planning** — grid → cul-de-sac → back.
-  [arXiv 2010.04771](https://arxiv.org/pdf/2010.04771).
+- **Figure-ground / Nolli plan** — solid/void mapping; the lens for block *fill*
+  density (Stages 5–6). [Wikipedia](https://en.wikipedia.org/wiki/Figure-ground_diagram) ·
+  [MORPHOCODE](https://morphocode.com/figure-ground-diagram/).
+- **Orthogonal grids from above, 17 cities** — [ArchDaily](https://www.archdaily.com/949094/orthogonal-grids-and-their-variations-in-17-cities-viewed-from-above).
+- **Street-network orientation & entropy** — [Boeing 2019](https://link.springer.com/article/10.1007/s41109-019-0189-1).
+- **SF Market St history** (two grids → one diagonal boulevard) — [Wikipedia](https://en.wikipedia.org/wiki/Market_Street_(San_Francisco)).
 
 ## Cross-links
 
-- [[plan-grid-first-rework]] — the implementation plan this informs (Stage 3 = seams)
-- [[decision-grid-first-city-generation]] — the architecture decision
+- [[plan-grid-first-rework]] · [[decision-grid-first-city-generation]]
 - [[city-planning-references]] · [[block-proportions]] · [[voronoi-diagrams]] · [[taxicab-geometry]]
