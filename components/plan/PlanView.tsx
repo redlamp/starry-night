@@ -4,7 +4,12 @@ import { useEffect, useMemo, useRef } from "react";
 import { generateTopology, CITY_CENTER, CITY_HALF_EXTENT } from "@/lib/seed/topology";
 import { generateDistricts } from "@/lib/seed/district";
 import { generateArterials } from "@/lib/seed/arterials";
-import { generateCity, generateStreetlights } from "@/lib/seed/cityGen";
+import {
+  generateCity,
+  generateStreetlights,
+  DEFAULT_TUNING,
+  type GridTuning,
+} from "@/lib/seed/cityGen";
 import { stripGridFirst, gridFirst, computeLattice } from "@/lib/seed/lattice";
 
 export type PlanLayers = {
@@ -21,9 +26,10 @@ type Props = {
   seed: string;
   size: number;
   layers: PlanLayers;
+  tuning?: GridTuning;
 };
 
-export function PlanView({ seed, size, layers }: Props) {
+export function PlanView({ seed, size, layers, tuning = DEFAULT_TUNING }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const data = useMemo(() => {
@@ -38,10 +44,10 @@ export function PlanView({ seed, size, layers }: Props) {
     const topo = generateTopology(base);
     const field = generateDistricts(base, topo, useGrid, theta0);
     const arts = generateArterials(base, topo, field, useGrid, theta0);
-    const city = generateCity(seed);
-    const lights = generateStreetlights(seed);
+    const city = generateCity(seed, tuning);
+    const lights = generateStreetlights(seed, tuning);
     return { topo, field, arts, city, lights };
-  }, [seed]);
+  }, [seed, tuning]);
 
   useEffect(() => {
     const canvas = canvasRef.current;

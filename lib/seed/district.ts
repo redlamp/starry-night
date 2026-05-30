@@ -454,6 +454,8 @@ export type SeamPolyline = {
 export function seamSegments(
   field: DistrictField,
   districtRot: Map<number, number>,
+  maxCount: number = SEAM_MAX,
+  minAngle: number = SEAM_MIN_ANGLE,
 ): SeamPolyline[] {
   if (field.districts.length < 2) return [];
   const { minX, maxX, minZ } = field.bounds;
@@ -638,10 +640,10 @@ export function seamSegments(
       if (c.poly.vertices.length < 2 || c.len < minLen) return false;
       const ra = districtRot.get(c.poly.districtPair[0]);
       const rb = districtRot.get(c.poly.districtPair[1]);
-      return ra !== undefined && rb !== undefined && angDiff(ra, rb) >= SEAM_MIN_ANGLE;
+      return ra !== undefined && rb !== undefined && angDiff(ra, rb) >= minAngle;
     })
     .sort((a, b) => b.len - a.len)
-    .slice(0, SEAM_MAX)
+    .slice(0, maxCount)
     .map((c, i) => ({ ...c.poly, id: `seam-${i}` }));
 }
 

@@ -109,13 +109,26 @@ const AGE_PITCH_SCALE = 0.88; // Heritage / oldtown: denser, smaller windows.
 const ROAD_FACING_DIST = 35;
 const ROAD_FACING_ANGLE_TOL = 0.7; // rad ≈ 40°
 
-// Grid-first per-district orientation spread. Each district draws one value (rj)
-// and rotates by ±GRID_ZONE_SPREAD/2 around the lattice base, so ADJACENT
-// districts read as a patchwork of distinctly-angled grids (the real-map look,
-// e.g. SF's neighbourhood grids) instead of one smooth radial warp. ±~14°
-// matches how neighbouring city grids actually differ without tipping into
-// confetti. Was ±1.4° (too small — the field read as a single bend).
-const GRID_ZONE_SPREAD = 0.5; // rad ≈ ±14° per district
+// Grid-first tuning — exposed live on /plan so the look can be dialled without
+// editing source. DEFAULT_TUNING reproduces the baked behaviour exactly, so the
+// 3D scene + gate1 (which pass no tuning) stay byte-identical. zoneSpread: each
+// district draws one value and rotates ±spread/2 around the lattice base, so
+// adjacent districts read as a patchwork of distinctly-angled grids (not one
+// smooth warp). blockAspect multiplies the W:D block-elongation bands.
+export type GridTuning = {
+  zoneSpread: number; // per-district orientation spread (rad)
+  driftDeg: number; // global centre→edge drift (deg)
+  blockAspect: number; // multiplier on the block W:D elongation bands
+  seamMaxCount: number; // max promoted seam avenues
+  seamMinAngle: number; // min grid-clash angle to promote a seam (rad)
+};
+export const DEFAULT_TUNING: GridTuning = {
+  zoneSpread: 0.5,
+  driftDeg: 20,
+  blockAspect: 1,
+  seamMaxCount: 8,
+  seamMinAngle: 0.2,
+};
 
 // Wrap an angle delta into [-π/2, π/2] so a building's two ends count as
 // equivalent (a rectangle facing 10° and 190° are the same orientation).
@@ -440,6 +453,7 @@ function districtBlocks(
   cityCz: number,
   cityHalf: number,
   useGrid: boolean,
+  blockAspect: number,
 ): Block[] {
   const cosR = Math.cos(rot);
   const sinR = Math.sin(rot);
@@ -450,7 +464,9 @@ function districtBlocks(
   // a real W:D band so the long axis runs with the grid (no more near-squares).
   // Legacy keeps the square-ish grammar.blockD (flag-OFF byte-identical).
   const [aMin, aMax] = BLOCK_ASPECT[district.character];
-  const blockD = useGrid ? grammar.blockW / (aMin + rng() * (aMax - aMin)) : grammar.blockD;
+  const blockD = useGrid
+    ? grammar.blockW / ((aMin + rng() * (aMax - aMin)) * blockAspect)
+    : grammar.blockD;
   const rowSpacing = blockD + grammar.streetD;
   // Cover the axis-aligned district bbox even when the grid is rotated. Grid-
   // first rotates to any angle (θ0 ± zone spread), where the old max(w,d)*1.15
@@ -643,6 +659,7 @@ function districtOrientations(
   field: DistrictField,
   useGrid: boolean,
   lattice: Lattice | null,
+  zoneSpread: number,
 ): Map<number, number> {
   const rot = new Map<number, number>();
   for (const d of field.districts) {
@@ -651,14 +668,14 @@ function districtOrientations(
     rot.set(
       d.index,
       useGrid && lattice
-        ? lattice.orientationAt(d.centroidX, d.centroidZ) + (rj - 0.5) * GRID_ZONE_SPREAD
+        ? lattice.orientationAt(d.centroidX, d.centroidZ) + (rj - 0.5) * zoneSpread
         : (rj - 0.5) * rotSpread,
     );
   }
   return rot;
 }
 
-export function generateCity(rawSeed: string): CityData {
+export function generateCity(rawSeed: string, tuning: GridTuning = DEFAULT_TUNING): CityData {
   // Strip the grid-first flag sentinel before any RNG key is derived (Stage 0).
   const masterSeed = stripGridFirst(rawSeed);
   // Grid-first rework — Stage 1. Read the flag from the raw seed and compute the
@@ -667,7 +684,7 @@ export function generateCity(rawSeed: string): CityData {
   const useGrid = gridFirst(rawSeed);
   // Compute the lattice once when grid-first is on; reused for both the district
   // metric frame (θ0) and the per-district grid grain (orientationAt, Stage 2).
-  const lattice = useGrid ? computeLattice(masterSeed) : null;
+  const lattice = useGrid ? computeLattice(masterSeed, tuning.driftDeg) : null;
   const theta0 = lattice ? lattice.theta0 : 0;
   const topology = generateTopology(masterSeed);
   const field = generateDistricts(masterSeed, topology, useGrid, theta0);
@@ -682,8 +699,10 @@ export function generateCity(rawSeed: string): CityData {
   const arterials = generateArterials(masterSeed, topology, field, useGrid, theta0);
   // Tiered seam streets (grid-first only): the major district boundaries promoted
   // to avenues. Buildings skip every road tier so they read as open avenues.
-  const districtRot = districtOrientations(masterSeed, field, useGrid, lattice);
-  const seams: SeamPolyline[] = useGrid ? seamSegments(field, districtRot) : [];
+  const districtRot = districtOrientations(masterSeed, field, useGrid, lattice, tuning.zoneSpread);
+  const seams: SeamPolyline[] = useGrid
+    ? seamSegments(field, districtRot, tuning.seamMaxCount, tuning.seamMinAngle)
+    : [];
   const roads: RoadLike[] = [...topology.highways, ...arterials, ...seams];
 
   const buildings: Building[] = [];
@@ -719,6 +738,7 @@ export function generateCity(rawSeed: string): CityData {
       topology.centerZ,
       topology.halfExtent,
       useGrid,
+      tuning.blockAspect,
     );
 
     for (const b of blocks) {
@@ -834,17 +854,22 @@ function emitRoadLights(
   }
 }
 
-export function generateStreetlights(rawSeed: string): Streetlight[] {
+export function generateStreetlights(
+  rawSeed: string,
+  tuning: GridTuning = DEFAULT_TUNING,
+): Streetlight[] {
   const masterSeed = stripGridFirst(rawSeed);
   // Grid-first — streetlights follow the new arterials/districts when on.
   const useGrid = gridFirst(rawSeed);
-  const lattice = useGrid ? computeLattice(masterSeed) : null;
+  const lattice = useGrid ? computeLattice(masterSeed, tuning.driftDeg) : null;
   const theta0 = lattice ? lattice.theta0 : 0;
   const topology = generateTopology(masterSeed);
   const field = generateDistricts(masterSeed, topology, useGrid, theta0);
   const arterials = generateArterials(masterSeed, topology, field, useGrid, theta0);
-  const districtRot = districtOrientations(masterSeed, field, useGrid, lattice);
-  const seams: SeamPolyline[] = useGrid ? seamSegments(field, districtRot) : [];
+  const districtRot = districtOrientations(masterSeed, field, useGrid, lattice, tuning.zoneSpread);
+  const seams: SeamPolyline[] = useGrid
+    ? seamSegments(field, districtRot, tuning.seamMaxCount, tuning.seamMinAngle)
+    : [];
   const roads: RoadLike[] = [...topology.highways, ...arterials, ...seams];
   const lights: Streetlight[] = [];
 

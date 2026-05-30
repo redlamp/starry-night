@@ -11,12 +11,15 @@ import {
   Spline,
   Grid3x3,
   Maximize2,
+  SlidersHorizontal,
   X,
 } from "lucide-react";
 import { PlanView, type PlanLayers } from "@/components/plan/PlanView";
+import { DEFAULT_TUNING, type GridTuning } from "@/lib/seed/cityGen";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 
 const LAYER_KEYS: (keyof PlanLayers)[] = [
@@ -42,6 +45,22 @@ const LAYER_ICONS: Record<keyof PlanLayers, React.ReactNode> = {
 const CELL_SIZE = 320;
 const TILE_GAP = 12;
 
+// Live grid-first tuning sliders. Maps GridTuning fields to control ranges.
+const TUNE: {
+  key: keyof GridTuning;
+  label: string;
+  min: number;
+  max: number;
+  step: number;
+  fmt: (v: number) => string;
+}[] = [
+  { key: "zoneSpread", label: "patchwork", min: 0, max: 1.2, step: 0.02, fmt: (v) => `${((v * 180) / Math.PI).toFixed(0)}°` },
+  { key: "driftDeg", label: "drift", min: 0, max: 45, step: 1, fmt: (v) => `${v.toFixed(0)}°` },
+  { key: "blockAspect", label: "elongation", min: 0.5, max: 3, step: 0.1, fmt: (v) => `${v.toFixed(1)}×` },
+  { key: "seamMaxCount", label: "seams", min: 0, max: 16, step: 1, fmt: (v) => `${v}` },
+  { key: "seamMinAngle", label: "seam clash", min: 0, max: 0.6, step: 0.02, fmt: (v) => `${((v * 180) / Math.PI).toFixed(0)}°` },
+];
+
 export default function PlanPage() {
   const [baseSeed, setBaseSeed] = useState("plan");
   const [seedCount, setSeedCount] = useState(16);
@@ -57,6 +76,8 @@ export default function PlanPage() {
     streetlights: true,
   });
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const [tuning, setTuning] = useState<GridTuning>(DEFAULT_TUNING);
+  const [showTuning, setShowTuning] = useState(false);
 
   // Measure the toolbar's viewport-bottom + window size so the tile grid can
   // auto-fill and the lightbox can pin the square plan to the smaller side.
@@ -125,76 +146,113 @@ export default function PlanPage() {
     >
       <div
         ref={barRef}
-        className="sticky top-0 z-50 mb-4 flex flex-wrap items-center gap-x-5 gap-y-3 bg-[#080c18]/95 py-3 backdrop-blur"
+        className="sticky top-0 z-50 mb-4 flex flex-col gap-3 bg-[#080c18]/95 py-3 backdrop-blur"
       >
-        <h1 className="shrink-0 font-mono text-sm text-zinc-300">
-          Plan view — streets-first review
-        </h1>
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+          <h1 className="shrink-0 font-mono text-sm text-zinc-300">
+            Plan view — streets-first review
+          </h1>
 
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          {LAYER_KEYS.map((key) => (
-            <Label
-              key={key}
-              className="cursor-pointer gap-2 text-sm text-zinc-200 capitalize"
-            >
-              <Switch checked={layers[key]} onCheckedChange={() => toggleLayer(key)} />
-              <span className="text-zinc-400">{LAYER_ICONS[key]}</span>
-              {key}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            {LAYER_KEYS.map((key) => (
+              <Label
+                key={key}
+                className="cursor-pointer gap-2 text-sm text-zinc-200 capitalize"
+              >
+                <Switch checked={layers[key]} onCheckedChange={() => toggleLayer(key)} />
+                <span className="text-zinc-400">{LAYER_ICONS[key]}</span>
+                {key}
+              </Label>
+            ))}
+            <span className="mx-1 h-5 w-px shrink-0 bg-zinc-700" aria-hidden />
+            <Label className="cursor-pointer gap-2 text-sm text-zinc-200">
+              <Switch checked={gridFirst} onCheckedChange={setGridFirst} />
+              <span className="text-zinc-400">
+                <Grid3x3 size={16} />
+              </span>
+              grid-first
             </Label>
-          ))}
-          <span className="mx-1 h-5 w-px shrink-0 bg-zinc-700" aria-hidden />
-          <Label className="cursor-pointer gap-2 text-sm text-zinc-200">
-            <Switch checked={gridFirst} onCheckedChange={setGridFirst} />
-            <span className="text-zinc-400">
-              <Grid3x3 size={16} />
-            </span>
-            grid-first
-          </Label>
+          </div>
+
+          <div className="ml-auto flex flex-wrap items-center gap-3">
+            <Label className="gap-2 text-sm text-zinc-300">
+              seed
+              <Input
+                value={baseSeed}
+                onChange={(e) => setBaseSeed(e.target.value)}
+                className="h-8 w-32 font-mono text-sm"
+              />
+            </Label>
+            <Label className="gap-2 text-sm text-zinc-300">
+              count
+              <Input
+                type="number"
+                min={1}
+                max={64}
+                step={1}
+                value={effectiveCount}
+                onChange={(e) => {
+                  setAutoFill(false);
+                  setSeedCount(Math.max(1, Math.min(64, parseInt(e.target.value) || 1)));
+                }}
+                className="h-8 w-20 font-mono text-sm"
+              />
+            </Label>
+            <Button
+              variant={autoFill ? "secondary" : "outline"}
+              size="icon"
+              onClick={() => setAutoFill(true)}
+              title="Fill the view with tiles"
+              aria-label="Fill the view with tiles"
+            >
+              <Maximize2 size={16} />
+            </Button>
+            <Button
+              variant={showTuning ? "secondary" : "outline"}
+              size="icon"
+              onClick={() => setShowTuning((v) => !v)}
+              title="Grid-first tuning"
+              aria-label="Grid-first tuning"
+            >
+              <SlidersHorizontal size={16} />
+            </Button>
+            <Button variant="outline" onClick={reroll}>
+              Reroll
+            </Button>
+            <a
+              href="/"
+              className="text-sm text-zinc-400 underline-offset-4 hover:text-white hover:underline"
+            >
+              ← scene
+            </a>
+          </div>
         </div>
 
-        <div className="ml-auto flex flex-wrap items-center gap-3">
-          <Label className="gap-2 text-sm text-zinc-300">
-            seed
-            <Input
-              value={baseSeed}
-              onChange={(e) => setBaseSeed(e.target.value)}
-              className="h-8 w-32 font-mono text-sm"
-            />
-          </Label>
-          <Label className="gap-2 text-sm text-zinc-300">
-            count
-            <Input
-              type="number"
-              min={1}
-              max={64}
-              step={1}
-              value={effectiveCount}
-              onChange={(e) => {
-                setAutoFill(false);
-                setSeedCount(Math.max(1, Math.min(64, parseInt(e.target.value) || 1)));
-              }}
-              className="h-8 w-20 font-mono text-sm"
-            />
-          </Label>
-          <Button
-            variant={autoFill ? "secondary" : "outline"}
-            size="icon"
-            onClick={() => setAutoFill(true)}
-            title="Fill the view with tiles"
-            aria-label="Fill the view with tiles"
-          >
-            <Maximize2 size={16} />
-          </Button>
-          <Button variant="outline" onClick={reroll}>
-            Reroll
-          </Button>
-          <a
-            href="/"
-            className="text-sm text-zinc-400 underline-offset-4 hover:text-white hover:underline"
-          >
-            ← scene
-          </a>
-        </div>
+        {showTuning && (
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-zinc-800 pt-3">
+            {TUNE.map((t) => (
+              <label key={t.key} className="flex items-center gap-2 text-xs text-zinc-300">
+                <span className="w-20 shrink-0 text-zinc-400">{t.label}</span>
+                <Slider
+                  className="w-32"
+                  value={[tuning[t.key]]}
+                  min={t.min}
+                  max={t.max}
+                  step={t.step}
+                  onValueChange={(v) =>
+                    setTuning((s) => ({ ...s, [t.key]: Array.isArray(v) ? v[0] : v }))
+                  }
+                />
+                <span className="w-9 shrink-0 text-right tabular-nums text-zinc-400">
+                  {t.fmt(tuning[t.key])}
+                </span>
+              </label>
+            ))}
+            <Button variant="ghost" size="sm" onClick={() => setTuning(DEFAULT_TUNING)}>
+              reset tuning
+            </Button>
+          </div>
+        )}
       </div>
 
       <div className="flex flex-wrap gap-3">
@@ -207,7 +265,7 @@ export default function PlanPage() {
             title={`Click to enlarge: ${seed}`}
             aria-label={`Enlarge seed ${seed}`}
           >
-            <PlanView seed={seed} size={CELL_SIZE} layers={layers} />
+            <PlanView seed={seed} size={CELL_SIZE} layers={layers} tuning={tuning} />
           </button>
         ))}
       </div>
@@ -239,7 +297,7 @@ export default function PlanPage() {
                   <X size={16} />
                 </Button>
               </div>
-              <PlanView seed={activeSeed} size={lightboxSize} layers={layers} />
+              <PlanView seed={activeSeed} size={lightboxSize} layers={layers} tuning={tuning} />
             </div>
           </div>
         </>
