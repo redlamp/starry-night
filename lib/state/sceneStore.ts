@@ -102,13 +102,14 @@ export const DEFAULT_ORBIT: OrbitConfig = {
 // Azimuth flipped 180° from the 200° tuning that paired with the old camera
 // pose: with the new defaults the camera faces +z, so the moon sits at +z too.
 // radiusRatio: moon radius as a fraction of star shell radius (~4500m), so
-// the moon scales with the dome by default. 0.0355 ≈ 160m moon at default
-// stars radius — exposed in the Moon panel for live tuning.
+// the moon scales with the dome by default. 0.02 ≈ 90m moon at default stars
+// radius, sitting just above the horizon (elevation 1°) — exposed in the Moon
+// panel for live tuning.
 export const DEFAULT_MOON = {
   azimuthDeg: 20,
-  elevationDeg: 16,
+  elevationDeg: 1,
   distance: 4500,
-  radiusRatio: 0.0355,
+  radiusRatio: 0.02,
 };
 // `factor` is the star base size in px (mean, before the per-star long-tail).
 // Previously a vestigial drei value (200) that nothing read; now wired to
@@ -187,6 +188,12 @@ export const DEFAULT_PROJECTION = "orthographic" as const;
 // their field lists from `persist: true` entries. Adding a new field here
 // automatically wires it into all four actions.
 //
+// POLICY: any setting a user adjusts that affects the scene's look or behaviour
+// MUST be persist:true so Copy / Save / Revert include it. persist:false is
+// reserved for TRANSIENT runtime state only — currently: projectionBlend (the
+// derived perspective↔ortho tween), orbitPaused, cameraMode, orbitRestore. When
+// adding a setting, default to persist:true and add it to the SavedConfig type.
+//
 // NOTE: cityPlanning is handled specially — only the three visibility toggles
 // participate (showHighways/showDistrictShells/showArterials), not the runtime
 // readouts (topologyKind/arterialCount). The `cityPlanningVis` pseudo-key
@@ -226,8 +233,8 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "cameraIntent", defaultValue: DEFAULT_INTENT, persist: true },
   { key: "orbit", defaultValue: DEFAULT_ORBIT, persist: true },
   { key: "moon", defaultValue: DEFAULT_MOON, persist: true },
-  { key: "moonHalo", defaultValue: DEFAULT_MOON_HALO, persist: false },
-  { key: "moonFollowCamera", defaultValue: false as const, persist: false },
+  { key: "moonHalo", defaultValue: DEFAULT_MOON_HALO, persist: true },
+  { key: "moonFollowCamera", defaultValue: false as const, persist: true },
   { key: "stars", defaultValue: DEFAULT_STARS, persist: true },
   { key: "projection", defaultValue: DEFAULT_PROJECTION, persist: true },
   { key: "orthoSize", defaultValue: DEFAULT_ORTHO_SIZE, persist: true },
@@ -242,9 +249,9 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "windowProfiles", defaultValue: DEFAULT_WINDOW_PROFILES, persist: true },
   { key: "fog", defaultValue: DEFAULT_FOG, persist: true },
   { key: "haze", defaultValue: DEFAULT_HAZE, persist: true },
-  { key: "flySpeed", defaultValue: DEFAULT_FLY_SPEED, persist: false },
+  { key: "flySpeed", defaultValue: DEFAULT_FLY_SPEED, persist: true },
   { key: "orbitPaused", defaultValue: false as const, persist: false },
-  { key: "showFocalIndicator", defaultValue: false as const, persist: false },
+  { key: "showFocalIndicator", defaultValue: false as const, persist: true },
   { key: "cameraMode", defaultValue: "orbit" as const, persist: false },
   { key: "orbitRestore", defaultValue: null as SceneState["orbitRestore"], persist: false },
 ];
@@ -270,6 +277,10 @@ type SavedConfig = {
   windowMode?: "simple" | "advanced";
   windowSimple?: { w: number; h: number };
   windowProfiles?: Record<Archetype, { w: number; h: number }>;
+  moonHalo?: typeof DEFAULT_MOON_HALO;
+  moonFollowCamera?: boolean;
+  flySpeed?: number;
+  showFocalIndicator?: boolean;
   // Only the layer-visibility toggles persist — topologyKind / arterialCount
   // are per-seed runtime readouts, not settings.
   cityPlanning?: {
