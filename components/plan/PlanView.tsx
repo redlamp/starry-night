@@ -10,6 +10,7 @@ import { stripGridFirst, gridFirst, computeLattice } from "@/lib/seed/lattice";
 export type PlanLayers = {
   districts: boolean;
   buildings: boolean;
+  blocks: boolean;
   highways: boolean;
   arterials: boolean;
   seams: boolean;
@@ -107,6 +108,27 @@ export function PlanView({ seed, size, layers }: Props) {
         ctx.restore();
       }
       ctx.globalAlpha = 1;
+      ctx.restore();
+    }
+
+    // 3b. Block outlines — the local street grid (gaps between blocks = streets).
+    // Makes block proportions + per-district grid orientation legible.
+    if (layers.blocks) {
+      ctx.save();
+      ctx.strokeStyle = "rgba(170,195,230,0.45)";
+      ctx.lineWidth = 1;
+      for (const b of city.blocks) {
+        if (b.empty) continue;
+        const px = toX(b.cx);
+        const py = toY(b.cz);
+        const pw = worldWToPx(b.w);
+        const pd = worldWToPx(b.d);
+        ctx.save();
+        ctx.translate(px, py);
+        ctx.rotate(b.rotationY);
+        ctx.strokeRect(-pw / 2, -pd / 2, pw, pd);
+        ctx.restore();
+      }
       ctx.restore();
     }
 

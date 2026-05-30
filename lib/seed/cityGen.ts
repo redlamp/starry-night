@@ -62,12 +62,25 @@ export type Building = {
   floors: number;
 };
 
+// A city block footprint (rotated rect) — exposed for the /plan street-grid
+// overlay so blocks + their orientation are legible. Not used by the 3D scene.
+export type PlanBlock = {
+  cx: number;
+  cz: number;
+  w: number;
+  d: number;
+  rotationY: number;
+  districtId: string;
+  empty: boolean;
+};
+
 export type CityData = {
   buildings: Building[];
   districts: District[];
   topology: Topology;
   arterials: Arterial[];
   seams: SeamPolyline[];
+  blocks: PlanBlock[];
 };
 
 // All in meters. See wiki/research/building-sizes-real-world-references.md.
@@ -674,6 +687,7 @@ export function generateCity(rawSeed: string): CityData {
   const roads: RoadLike[] = [...topology.highways, ...arterials, ...seams];
 
   const buildings: Building[] = [];
+  const planBlocks: PlanBlock[] = [];
   let nextId = 0;
 
   for (const district of field.districts) {
@@ -708,6 +722,18 @@ export function generateCity(rawSeed: string): CityData {
     );
 
     for (const b of blocks) {
+      planBlocks.push({
+        cx: b.cx,
+        cz: b.cz,
+        w: b.w,
+        d: b.d,
+        rotationY: rot,
+        districtId: district.id,
+        empty: b.empty,
+      });
+    }
+
+    for (const b of blocks) {
       if (b.empty) continue;
       const cosR = Math.cos(rot);
       const sinR = Math.sin(rot);
@@ -733,7 +759,7 @@ export function generateCity(rawSeed: string): CityData {
     }
   }
 
-  return { buildings, districts: field.districts, topology, arterials, seams };
+  return { buildings, districts: field.districts, topology, arterials, seams, blocks: planBlocks };
 }
 
 export type StreetlightTier = "highway" | "arterial" | "local";

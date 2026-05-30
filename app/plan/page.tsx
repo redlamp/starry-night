@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   LayoutGrid,
   Building2,
+  Grid2x2,
   Milestone,
   Route,
   Lightbulb,
@@ -21,6 +22,7 @@ import { Switch } from "@/components/ui/switch";
 const LAYER_KEYS: (keyof PlanLayers)[] = [
   "districts",
   "buildings",
+  "blocks",
   "highways",
   "arterials",
   "seams",
@@ -30,6 +32,7 @@ const LAYER_KEYS: (keyof PlanLayers)[] = [
 const LAYER_ICONS: Record<keyof PlanLayers, React.ReactNode> = {
   districts: <LayoutGrid size={16} />,
   buildings: <Building2 size={16} />,
+  blocks: <Grid2x2 size={16} />,
   highways: <Milestone size={16} />,
   arterials: <Route size={16} />,
   seams: <Spline size={16} />,
@@ -47,6 +50,7 @@ export default function PlanPage() {
   const [layers, setLayers] = useState<PlanLayers>({
     districts: true,
     buildings: true,
+    blocks: true,
     highways: true,
     arterials: true,
     seams: true,
