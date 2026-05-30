@@ -1,24 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   LayoutGrid,
   Building2,
   Milestone,
   Route,
   Lightbulb,
+  Grid3x3,
+  Maximize2,
   X,
 } from "lucide-react";
 import { PlanView, type PlanLayers } from "@/components/plan/PlanView";
-import {
-  Dialog,
-  DialogBackdrop,
-  DialogClose,
-  DialogContent,
-  DialogPopup,
-  DialogPortal,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 
 const LAYER_KEYS: (keyof PlanLayers)[] = [
   "districts",
@@ -29,19 +26,20 @@ const LAYER_KEYS: (keyof PlanLayers)[] = [
 ];
 
 const LAYER_ICONS: Record<keyof PlanLayers, React.ReactNode> = {
-  districts: <LayoutGrid size={12} />,
-  buildings: <Building2 size={12} />,
-  highways: <Milestone size={12} />,
-  arterials: <Route size={12} />,
-  streetlights: <Lightbulb size={12} />,
+  districts: <LayoutGrid size={16} />,
+  buildings: <Building2 size={16} />,
+  highways: <Milestone size={16} />,
+  arterials: <Route size={16} />,
+  streetlights: <Lightbulb size={16} />,
 };
 
 const CELL_SIZE = 320;
-const LIGHTBOX_SIZE = 720;
+const TILE_GAP = 12;
 
 export default function PlanPage() {
   const [baseSeed, setBaseSeed] = useState("plan");
   const [seedCount, setSeedCount] = useState(16);
+  const [autoFill, setAutoFill] = useState(true);
   const [gridFirst, setGridFirst] = useState(false);
   const [layers, setLayers] = useState<PlanLayers>({
     districts: true,
@@ -50,12 +48,52 @@ export default function PlanPage() {
     arterials: true,
     streetlights: true,
   });
-  const [activeSeed, setActiveSeed] = useState<string | null>(null);
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
-  const seeds = Array.from({ length: seedCount }, (_, i) => {
-    const seed = `${baseSeed}-${i}`;
-    return gridFirst ? `${seed}::gridfirst` : seed;
-  });
+  // Measure the toolbar's viewport-bottom + window size so the tile grid can
+  // auto-fill and the lightbox can pin the square plan to the smaller side.
+  const barRef = useRef<HTMLDivElement>(null);
+  const [barBottom, setBarBottom] = useState(72);
+  const [vp, setVp] = useState({ w: 1280, h: 800 });
+
+  useEffect(() => {
+    const measure = () => {
+      setVp({ w: window.innerWidth, h: window.innerHeight });
+      if (barRef.current) setBarBottom(barRef.current.getBoundingClientRect().bottom);
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
+
+  // Auto-fill: enough tiles to cover the area below the toolbar — cols floor so
+  // the row never h-scrolls, rows ceil so there's no empty band at the bottom.
+  // Editing `count` switches to a manual override; the Fill button re-enables it.
+  const cols = Math.max(1, Math.floor((vp.w - 32) / (CELL_SIZE + TILE_GAP)));
+  const rows = Math.max(1, Math.ceil((vp.h - barBottom - 24) / (CELL_SIZE + TILE_GAP)));
+  const fillCount = Math.min(64, cols * rows);
+  const effectiveCount = autoFill ? fillCount : seedCount;
+
+  // Lightbox tracks the tile INDEX, not a frozen seed string, so toggling
+  // grid-first or rerolling updates the enlarged view live.
+  const seedFor = (i: number) =>
+    gridFirst ? `${baseSeed}-${i}::gridfirst` : `${baseSeed}-${i}`;
+  const seeds = Array.from({ length: effectiveCount }, (_, i) => seedFor(i));
+  const activeSeed = activeIndex !== null ? seedFor(activeIndex) : null;
+
+  // Lightbox keyboard nav: Esc closes, Left/Right step (wrapping) through tiles.
+  useEffect(() => {
+    if (activeIndex === null) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setActiveIndex(null);
+      else if (e.key === "ArrowRight")
+        setActiveIndex((i) => (i === null ? i : (i + 1) % effectiveCount));
+      else if (e.key === "ArrowLeft")
+        setActiveIndex((i) => (i === null ? i : (i - 1 + effectiveCount) % effectiveCount));
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [activeIndex, effectiveCount]);
 
   function toggleLayer(key: keyof PlanLayers) {
     setLayers((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -65,87 +103,97 @@ export default function PlanPage() {
     setBaseSeed(Math.random().toString(36).slice(2, 8));
   }
 
+  // Lightbox square: fill the area below the toolbar, pinning the smaller side
+  // (−~44px header, −48px padding) so the whole panel stays on screen.
+  const lightboxSize = Math.max(
+    240,
+    Math.floor(Math.min(vp.w - 48, vp.h - barBottom - 100)),
+  );
+
   return (
     <main
       className="min-h-screen bg-[#080c18] p-4 text-white"
       style={{ position: "fixed", inset: 0, overflow: "auto" }}
     >
-      <div className="sticky top-0 z-10 mb-4 flex flex-wrap items-center gap-4 bg-[#080c18]/95 py-2 backdrop-blur">
+      <div
+        ref={barRef}
+        className="sticky top-0 z-50 mb-4 flex flex-wrap items-center gap-x-5 gap-y-3 bg-[#080c18]/95 py-3 backdrop-blur"
+      >
         <h1 className="shrink-0 font-mono text-sm text-zinc-300">
           Plan view — streets-first review
         </h1>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           {LAYER_KEYS.map((key) => (
-            <label
+            <Label
               key={key}
-              className="flex cursor-pointer items-center gap-1.5 text-xs select-none"
+              className="cursor-pointer gap-2 text-sm text-zinc-200 capitalize"
             >
-              <input
-                type="checkbox"
-                checked={layers[key]}
-                onChange={() => toggleLayer(key)}
-                className="accent-sky-400"
-              />
-              <span className="flex items-center gap-1 text-zinc-300">
-                <span className="text-zinc-500">{LAYER_ICONS[key]}</span>
-                {key}
-              </span>
-            </label>
+              <Switch checked={layers[key]} onCheckedChange={() => toggleLayer(key)} />
+              <span className="text-zinc-400">{LAYER_ICONS[key]}</span>
+              {key}
+            </Label>
           ))}
+          <span className="mx-1 h-5 w-px shrink-0 bg-zinc-700" aria-hidden />
+          <Label className="cursor-pointer gap-2 text-sm text-zinc-200">
+            <Switch checked={gridFirst} onCheckedChange={setGridFirst} />
+            <span className="text-zinc-400">
+              <Grid3x3 size={16} />
+            </span>
+            grid-first
+          </Label>
         </div>
 
-        <div className="ml-auto flex items-center gap-2">
-          <label className="flex items-center gap-1.5 text-xs">
-            <span className="text-zinc-400">seed</span>
-            <input
+        <div className="ml-auto flex flex-wrap items-center gap-3">
+          <Label className="gap-2 text-sm text-zinc-300">
+            seed
+            <Input
               value={baseSeed}
               onChange={(e) => setBaseSeed(e.target.value)}
-              className="w-28 rounded border border-zinc-700 bg-zinc-900 px-2 py-0.5 font-mono text-xs"
+              className="h-8 w-32 font-mono text-sm"
             />
-          </label>
-          <label className="flex items-center gap-1.5 text-xs">
-            <span className="text-zinc-400">count</span>
-            <input
+          </Label>
+          <Label className="gap-2 text-sm text-zinc-300">
+            count
+            <Input
               type="number"
-              min="1"
-              max="64"
-              step="1"
-              value={seedCount}
-              onChange={(e) =>
-                setSeedCount(
-                  Math.max(1, Math.min(64, parseInt(e.target.value) || 1)),
-                )
-              }
-              className="w-16 rounded border border-zinc-700 bg-zinc-900 px-2 py-0.5 font-mono text-xs"
+              min={1}
+              max={64}
+              step={1}
+              value={effectiveCount}
+              onChange={(e) => {
+                setAutoFill(false);
+                setSeedCount(Math.max(1, Math.min(64, parseInt(e.target.value) || 1)));
+              }}
+              className="h-8 w-20 font-mono text-sm"
             />
-          </label>
-          <label className="flex cursor-pointer items-center gap-1.5 text-xs select-none">
-            <input
-              type="checkbox"
-              checked={gridFirst}
-              onChange={() => setGridFirst(!gridFirst)}
-              className="accent-sky-400"
-            />
-            <span className="text-zinc-300">grid-first</span>
-          </label>
-          <button
-            onClick={reroll}
-            className="rounded border border-zinc-700 bg-zinc-800 px-3 py-1 text-xs hover:bg-zinc-700"
+          </Label>
+          <Button
+            variant={autoFill ? "secondary" : "outline"}
+            size="icon"
+            onClick={() => setAutoFill(true)}
+            title="Fill the view with tiles"
+            aria-label="Fill the view with tiles"
           >
+            <Maximize2 size={16} />
+          </Button>
+          <Button variant="outline" onClick={reroll}>
             Reroll
-          </button>
-          <a href="/" className="text-xs text-zinc-500 underline hover:text-white">
-            &larr; scene
+          </Button>
+          <a
+            href="/"
+            className="text-sm text-zinc-400 underline-offset-4 hover:text-white hover:underline"
+          >
+            ← scene
           </a>
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        {seeds.map((seed) => (
+      <div className="flex flex-wrap gap-3">
+        {seeds.map((seed, i) => (
           <button
             key={seed}
-            onClick={() => setActiveSeed(seed)}
+            onClick={() => setActiveIndex(i)}
             className="cursor-zoom-in overflow-hidden rounded border border-zinc-800 transition-colors hover:border-sky-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
             style={{ width: CELL_SIZE, height: CELL_SIZE }}
             title={`Click to enlarge: ${seed}`}
@@ -156,41 +204,38 @@ export default function PlanPage() {
         ))}
       </div>
 
-      {/* Lightbox dialog */}
-      <Dialog
-        open={activeSeed !== null}
-        onOpenChange={(open) => {
-          if (!open) setActiveSeed(null);
-        }}
-      >
-        <DialogPortal>
-          <DialogBackdrop />
-          <DialogPopup>
-            <DialogContent
-              style={{
-                width: `min(90vw, 90vh, ${LIGHTBOX_SIZE}px)`,
-                height: `min(90vw, 90vh, ${LIGHTBOX_SIZE}px)`,
-              }}
+      {/* Lightbox — a non-modal overlay (not a modal Dialog, which would block
+          the background): the toolbar sits at z-50 above the z-40 dim, so its
+          filters + grid-first + Reroll stay live and the enlarged view updates
+          with them. Click the dim / padding or press Esc closes; ←/→ step. */}
+      {activeSeed !== null && (
+        <>
+          <div className="fixed inset-0 z-40 bg-black/75 backdrop-blur-sm" aria-hidden />
+          <div
+            className="fixed inset-x-0 bottom-0 z-50 flex items-center justify-center p-6"
+            style={{ top: barBottom }}
+            onClick={() => setActiveIndex(null)}
+          >
+            <div
+              className="relative flex flex-col overflow-hidden rounded-lg border border-zinc-700 bg-[#0b1020] shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
             >
               <div className="flex shrink-0 items-center justify-between border-b border-zinc-800 px-3 py-2">
-                <DialogTitle>{activeSeed ?? ""}</DialogTitle>
-                <DialogClose aria-label="Close">
-                  <X size={14} />
-                </DialogClose>
+                <span className="font-mono text-sm text-zinc-300">{activeSeed}</span>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => setActiveIndex(null)}
+                  aria-label="Close"
+                >
+                  <X size={16} />
+                </Button>
               </div>
-              <div className="flex flex-1 items-center justify-center overflow-hidden">
-                {activeSeed !== null && (
-                  <PlanView
-                    seed={activeSeed}
-                    size={LIGHTBOX_SIZE}
-                    layers={layers}
-                  />
-                )}
-              </div>
-            </DialogContent>
-          </DialogPopup>
-        </DialogPortal>
-      </Dialog>
+              <PlanView seed={activeSeed} size={lightboxSize} layers={layers} />
+            </div>
+          </div>
+        </>
+      )}
     </main>
   );
 }
