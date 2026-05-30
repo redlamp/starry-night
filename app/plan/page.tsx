@@ -11,11 +11,12 @@ const LAYER_KEYS: (keyof PlanLayers)[] = [
   "streetlights",
 ];
 
-const SEED_COUNT = 16;
 const CELL_SIZE = 320;
 
 export default function PlanPage() {
   const [baseSeed, setBaseSeed] = useState("plan");
+  const [seedCount, setSeedCount] = useState(16);
+  const [gridFirst, setGridFirst] = useState(false);
   const [layers, setLayers] = useState<PlanLayers>({
     districts: true,
     buildings: true,
@@ -24,7 +25,10 @@ export default function PlanPage() {
     streetlights: true,
   });
 
-  const seeds = Array.from({ length: SEED_COUNT }, (_, i) => `${baseSeed}-${i}`);
+  const seeds = Array.from({ length: seedCount }, (_, i) => {
+    const seed = `${baseSeed}-${i}`;
+    return gridFirst ? `${seed}::gridfirst` : seed;
+  });
 
   function toggleLayer(key: keyof PlanLayers) {
     setLayers((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -70,6 +74,27 @@ export default function PlanPage() {
               className="w-28 rounded border border-zinc-700 bg-zinc-900 px-2 py-0.5 font-mono text-xs"
             />
           </label>
+          <label className="flex items-center gap-1.5 text-xs">
+            <span className="text-zinc-400">count</span>
+            <input
+              type="number"
+              min="1"
+              max="64"
+              step="1"
+              value={seedCount}
+              onChange={(e) => setSeedCount(Math.max(1, Math.min(64, parseInt(e.target.value) || 1)))}
+              className="w-16 rounded border border-zinc-700 bg-zinc-900 px-2 py-0.5 font-mono text-xs"
+            />
+          </label>
+          <label className="flex cursor-pointer items-center gap-1.5 text-xs select-none">
+            <input
+              type="checkbox"
+              checked={gridFirst}
+              onChange={() => setGridFirst(!gridFirst)}
+              className="accent-sky-400"
+            />
+            <span className="text-zinc-300">grid-first</span>
+          </label>
           <button
             onClick={reroll}
             className="rounded border border-zinc-700 bg-zinc-800 px-3 py-1 text-xs hover:bg-zinc-700"
@@ -82,7 +107,7 @@ export default function PlanPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+      <div className="flex flex-wrap gap-2">
         {seeds.map((seed) => (
           <div
             key={seed}
