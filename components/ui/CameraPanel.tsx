@@ -164,29 +164,7 @@ function tweenOrbitRestore() {
 
 function copyConfigToClipboard() {
   const s = useSceneStore.getState();
-  const snippet = JSON.stringify(
-    {
-      cameraIntent: s.cameraIntent,
-      orbit: s.orbit,
-      projection: s.projection,
-      orthoSize: s.orthoSize,
-      moon: s.moon,
-      stars: s.stars,
-      windowAA: s.windowAA,
-      windowMode: s.windowMode,
-      windowSimple: s.windowSimple,
-      windowProfiles: s.windowProfiles,
-      fog: s.fog,
-      haze: s.haze,
-      cityPlanning: {
-        showHighways: s.cityPlanning.showHighways,
-        showDistrictShells: s.cityPlanning.showDistrictShells,
-        showArterials: s.cityPlanning.showArterials,
-      },
-    },
-    null,
-    2,
-  );
+  const snippet = JSON.stringify(s.copyableConfig(), null, 2);
   if (typeof navigator !== "undefined" && navigator.clipboard) {
     void navigator.clipboard.writeText(snippet);
   }
@@ -277,10 +255,13 @@ export function CameraPanel() {
     setCameraIntent,
     resetCamera,
     saveCurrentAsDefault,
+    revertToSaved,
+    hasSavedConfig,
     tweenCameraTo,
   } = useSceneStore();
 
   const [hidden, setHidden] = useState(true);
+  const [savedExists, setSavedExists] = useState(() => hasSavedConfig());
   const captureMode = useSceneStore((s) => s.captureMode);
 
   useEffect(() => {
@@ -442,18 +423,33 @@ export function CameraPanel() {
 
       {/* Sticky footer */}
       <div className="border-foreground/10 flex shrink-0 items-center justify-between gap-2 border-t px-4 pt-3 pb-3">
-        <Button
-          variant="ghost"
-          onClick={() => resetCamera()}
-          title="Reset all settings to their hardcoded defaults"
-          className="text-rose-400 hover:bg-rose-400/10 hover:text-rose-300"
-        >
-          Reset
-        </Button>
+        <div className="flex items-center gap-1.5">
+          <Button
+            variant="ghost"
+            onClick={() => resetCamera()}
+            title="Reset all settings to their hardcoded defaults"
+            className="text-rose-400 hover:bg-rose-400/10 hover:text-rose-300"
+          >
+            Reset
+          </Button>
+          {savedExists && (
+            <Button
+              variant="ghost"
+              onClick={() => revertToSaved()}
+              title="Restore the last locally-saved config"
+              className="text-amber-400 hover:bg-amber-400/10 hover:text-amber-300"
+            >
+              Revert
+            </Button>
+          )}
+        </div>
         <div className="flex items-center gap-1.5">
           <CopyButton />
           <Button
-            onClick={() => saveCurrentAsDefault()}
+            onClick={() => {
+              saveCurrentAsDefault();
+              setSavedExists(true);
+            }}
             title="Snapshot current camera + orbit + moon + stars as the new Reset target"
             className="bg-emerald-400 text-black hover:bg-emerald-400/90"
           >
