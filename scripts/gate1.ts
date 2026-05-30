@@ -16,6 +16,7 @@
  */
 import { generateCity, type Building } from "@/lib/seed/cityGen";
 import { CITY_CENTER, CITY_HALF_EXTENT } from "@/lib/seed/topology";
+import { computeLattice } from "@/lib/seed/lattice";
 
 type Vec = { x: number; z: number };
 
@@ -158,6 +159,34 @@ function main() {
   const detOk = d1 === d2;
   console.log(`\ndeterminism: ${detOk ? "PASS" : "FAIL"}`);
   if (!detOk) failed++;
+
+  // Stage 0 — flag transport must be sentinel-invariant: the ::gridfirst flag
+  // must NOT perturb any RNG stream (flag-ON is the same city until a later
+  // stage branches on it). This is what keeps the /plan A/B harness meaningful.
+  const flagOk =
+    JSON.stringify(generateCity("gate1-det")) ===
+    JSON.stringify(generateCity("gate1-det::gridfirst"));
+  console.log(`flag transport (sentinel-invariant): ${flagOk ? "PASS" : "FAIL"}`);
+  if (!flagOk) failed++;
+
+  // Stage 0 — the lattice is a pure deterministic function with a
+  // center-anchored orientation field whose neighbour-delta stays small.
+  const L1 = computeLattice("gate1-det");
+  const L2 = computeLattice("gate1-det");
+  let latticeOk = L1.theta0 === L2.theta0 && L1.driftMag === L2.driftMag;
+  let maxDelta = 0;
+  for (let x = -700; x <= 700; x += 100) {
+    for (let z = -820; z <= 580; z += 100) {
+      if (L1.orientationAt(x, z) !== L2.orientationAt(x, z)) latticeOk = false;
+      const d = Math.abs(L1.orientationAt(x, z) - L1.orientationAt(x + 50, z));
+      if (d > maxDelta) maxDelta = d;
+    }
+  }
+  const neighbourOk = maxDelta < L1.driftMag;
+  console.log(
+    `lattice: determinism ${latticeOk ? "PASS" : "FAIL"}; neighbour-delta ${maxDelta.toFixed(4)} (< ${L1.driftMag.toFixed(4)}) ${neighbourOk ? "PASS" : "FAIL"}`,
+  );
+  if (!latticeOk || !neighbourOk) failed++;
 
   console.log(`\n${failed === 0 ? "GATE 1 PASS" : `GATE 1 FAIL (${failed} seed(s))`}`);
   process.exit(failed === 0 ? 0 : 1);

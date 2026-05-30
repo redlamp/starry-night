@@ -8,6 +8,7 @@ import {
 } from "./district";
 import { buildSilhouette, isHighRise, type SilhouetteField } from "./silhouette";
 import { generateArterials, type Arterial } from "./arterials";
+import { stripGridFirst } from "./lattice";
 
 // Any road tier, for the building-skip corridor test.
 type RoadLike = { vertices: Array<{ x: number; z: number }>; width: number; closed: boolean };
@@ -579,7 +580,9 @@ function fillStripe(
   return buildings;
 }
 
-export function generateCity(masterSeed: string): CityData {
+export function generateCity(rawSeed: string): CityData {
+  // Strip the grid-first flag sentinel before any RNG key is derived (Stage 0).
+  const masterSeed = stripGridFirst(rawSeed);
   const topology = generateTopology(masterSeed);
   const field = generateDistricts(masterSeed, topology);
 
@@ -725,7 +728,8 @@ function emitRoadLights(
   }
 }
 
-export function generateStreetlights(masterSeed: string): Streetlight[] {
+export function generateStreetlights(rawSeed: string): Streetlight[] {
+  const masterSeed = stripGridFirst(rawSeed);
   const topology = generateTopology(masterSeed);
   const field = generateDistricts(masterSeed, topology);
   const arterials = generateArterials(masterSeed, topology, field);
@@ -788,7 +792,8 @@ export type AviationBeacon = {
 // beacon — a short city has none, which is correct.
 const BEACON_MIN_HEIGHT = 100;
 
-export function generateAviationBeacons(masterSeed: string): AviationBeacon[] {
+export function generateAviationBeacons(rawSeed: string): AviationBeacon[] {
+  const masterSeed = stripGridFirst(rawSeed);
   const { buildings } = generateCity(masterSeed);
   const rng = seedrandom(`${masterSeed}::beacons`);
   const beacons: AviationBeacon[] = [];
