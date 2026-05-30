@@ -93,6 +93,11 @@ const AGE_PITCH_SCALE = 0.88; // Heritage / oldtown: denser, smaller windows.
 const ROAD_FACING_DIST = 35;
 const ROAD_FACING_ANGLE_TOL = 0.7; // rad ≈ 40°
 
+// Stage 2 (grid-first): residual per-district jitter layered on top of the
+// lattice orientation field, so districts in the same neighbourhood read as a
+// patchwork of slightly-off grids rather than one rigid plane. Kept small.
+const GRID_RESIDUAL_SPREAD = 0.05; // rad ≈ ±1.4° (half-spread)
+
 // Wrap an angle delta into [-π/2, π/2] so a building's two ends count as
 // equivalent (a rectangle facing 10° and 190° are the same orientation).
 function angleDeltaTau(a: number, b: number): number {
@@ -587,7 +592,10 @@ export function generateCity(rawSeed: string): CityData {
   // lattice θ0 once; both feed the L∞ district metric + grid-line arterials.
   // Flag-OFF leaves every path byte-identical to pre-rework behaviour.
   const useGrid = gridFirst(rawSeed);
-  const theta0 = useGrid ? computeLattice(masterSeed).theta0 : 0;
+  // Compute the lattice once when grid-first is on; reused for both the district
+  // metric frame (θ0) and the per-district grid grain (orientationAt, Stage 2).
+  const lattice = useGrid ? computeLattice(masterSeed) : null;
+  const theta0 = lattice ? lattice.theta0 : 0;
   const topology = generateTopology(masterSeed);
   const field = generateDistricts(masterSeed, topology, useGrid, theta0);
 
@@ -611,7 +619,18 @@ export function generateCity(rawSeed: string): CityData {
     // Per-district rotation gives each shell its own grain. Heritage is the most
     // organic, downtown the most orthogonal.
     const rotSpread = district.character === "heritage" ? 0.5 : 0.18;
-    const rot = (districtRng() - 0.5) * rotSpread;
+    // Stage 2: grid-first anchors the grain to the lattice orientation field at
+    // the district centroid (neighbours differ only slightly — patchwork, not
+    // confetti) plus a small per-character residual jitter. The legacy path keeps
+    // its independent rotation. CRITICAL: both branches consume the SAME single
+    // districtRng() draw, so every downstream draw (archetype, dims, windowSeed)
+    // is byte-identical to before — proven by the gate1 building-count assert.
+    const rj = districtRng();
+    const rot =
+      useGrid && lattice
+        ? lattice.orientationAt(district.centroidX, district.centroidZ) +
+          (rj - 0.5) * GRID_RESIDUAL_SPREAD
+        : (rj - 0.5) * rotSpread;
     const ctx = {
       district,
       character: district.character,
