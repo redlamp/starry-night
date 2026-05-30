@@ -5,6 +5,7 @@ import { generateTopology, CITY_CENTER, CITY_HALF_EXTENT } from "@/lib/seed/topo
 import { generateDistricts } from "@/lib/seed/district";
 import { generateArterials } from "@/lib/seed/arterials";
 import { generateCity, generateStreetlights } from "@/lib/seed/cityGen";
+import { stripGridFirst, gridFirst, computeLattice } from "@/lib/seed/lattice";
 
 export type PlanLayers = {
   districts: boolean;
@@ -24,9 +25,17 @@ export function PlanView({ seed, size, layers }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const data = useMemo(() => {
-    const topo = generateTopology(seed);
-    const field = generateDistricts(seed, topo);
-    const arts = generateArterials(seed, topo, field);
+    // The ::gridfirst sentinel selects the grid-first path. generateCity /
+    // generateStreetlights strip the sentinel + branch internally, so they take
+    // the raw seed. generateTopology / generateDistricts / generateArterials do
+    // NOT, so derive base + useGrid + θ0 here and pass them through — matching
+    // exactly what generateCity computes internally, so every layer agrees.
+    const base = stripGridFirst(seed);
+    const useGrid = gridFirst(seed);
+    const theta0 = useGrid ? computeLattice(base).theta0 : 0;
+    const topo = generateTopology(base);
+    const field = generateDistricts(base, topo, useGrid, theta0);
+    const arts = generateArterials(base, topo, field, useGrid, theta0);
     const city = generateCity(seed);
     const lights = generateStreetlights(seed);
     return { topo, field, arts, city, lights };
