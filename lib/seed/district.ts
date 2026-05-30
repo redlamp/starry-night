@@ -578,9 +578,36 @@ export function seamSegments(
       }
       merged.push(pts[i]);
     }
+    // Closed loops: the chain ends are cyclic neighbours, so also drop a
+    // collinear join (the linear pass above never tests the two endpoints).
+    if (closedLoop) {
+      while (merged.length >= 3) {
+        const a = merged[merged.length - 1];
+        const b = merged[0];
+        const c = merged[1];
+        if (Math.abs((b.x - a.x) * (c.z - a.z) - (b.z - a.z) * (c.x - a.x)) < 1e-6 * step * step)
+          merged.shift();
+        else break;
+      }
+      while (merged.length >= 3) {
+        const a = merged[merged.length - 2];
+        const b = merged[merged.length - 1];
+        const c = merged[0];
+        if (Math.abs((b.x - a.x) * (c.z - a.z) - (b.z - a.z) * (c.x - a.x)) < 1e-6 * step * step)
+          merged.pop();
+        else break;
+      }
+    }
     let len = 0;
     for (let i = 1; i < merged.length; i++) {
       len += Math.hypot(merged[i].x - merged[i - 1].x, merged[i].z - merged[i - 1].z);
+    }
+    // Closed loops: count the closing segment too, so the tier length is correct.
+    if (closedLoop && merged.length >= 2) {
+      len += Math.hypot(
+        merged[0].x - merged[merged.length - 1].x,
+        merged[0].z - merged[merged.length - 1].z,
+      );
     }
     const da = Math.floor(pair / 100000);
     const db = pair % 100000;
