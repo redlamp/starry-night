@@ -18,6 +18,7 @@ Map of Content for external references that shape direction.
 
 - [[voronoi-diagrams]] — proximity partition behind the district shells; how the distance metric reshapes the cells
 - [[taxicab-geometry]] — Manhattan (L1) / Chebyshev (L∞) vs Euclidean; rectilinear, map-like seams for the grid rework
+- [[block-proportions]] — real-world block aspect ratios (1:2–1:3 downtown, 1:1.5–1:2 residential); recommended W:D bands per GRAMMAR character; how to apply in grid-first block formation (issue #33)
 
 ## Colour references
 
