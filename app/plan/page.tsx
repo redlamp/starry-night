@@ -1,7 +1,23 @@
 "use client";
 
 import { useState } from "react";
+import {
+  LayoutGrid,
+  Building2,
+  Milestone,
+  Route,
+  Lightbulb,
+  X,
+} from "lucide-react";
 import { PlanView, type PlanLayers } from "@/components/plan/PlanView";
+import {
+  Dialog,
+  DialogBackdrop,
+  DialogClose,
+  DialogContent,
+  DialogPopup,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const LAYER_KEYS: (keyof PlanLayers)[] = [
   "districts",
@@ -11,7 +27,16 @@ const LAYER_KEYS: (keyof PlanLayers)[] = [
   "streetlights",
 ];
 
+const LAYER_ICONS: Record<keyof PlanLayers, React.ReactNode> = {
+  districts: <LayoutGrid size={12} />,
+  buildings: <Building2 size={12} />,
+  highways: <Milestone size={12} />,
+  arterials: <Route size={12} />,
+  streetlights: <Lightbulb size={12} />,
+};
+
 const CELL_SIZE = 320;
+const LIGHTBOX_SIZE = 720;
 
 export default function PlanPage() {
   const [baseSeed, setBaseSeed] = useState("plan");
@@ -24,6 +49,7 @@ export default function PlanPage() {
     arterials: true,
     streetlights: true,
   });
+  const [activeSeed, setActiveSeed] = useState<string | null>(null);
 
   const seeds = Array.from({ length: seedCount }, (_, i) => {
     const seed = `${baseSeed}-${i}`;
@@ -60,7 +86,10 @@ export default function PlanPage() {
                 onChange={() => toggleLayer(key)}
                 className="accent-sky-400"
               />
-              <span className="text-zinc-300">{key}</span>
+              <span className="flex items-center gap-1 text-zinc-300">
+                <span className="text-zinc-500">{LAYER_ICONS[key]}</span>
+                {key}
+              </span>
             </label>
           ))}
         </div>
@@ -82,7 +111,11 @@ export default function PlanPage() {
               max="64"
               step="1"
               value={seedCount}
-              onChange={(e) => setSeedCount(Math.max(1, Math.min(64, parseInt(e.target.value) || 1)))}
+              onChange={(e) =>
+                setSeedCount(
+                  Math.max(1, Math.min(64, parseInt(e.target.value) || 1)),
+                )
+              }
               className="w-16 rounded border border-zinc-700 bg-zinc-900 px-2 py-0.5 font-mono text-xs"
             />
           </label>
@@ -109,15 +142,52 @@ export default function PlanPage() {
 
       <div className="flex flex-wrap gap-2">
         {seeds.map((seed) => (
-          <div
+          <button
             key={seed}
-            className="overflow-hidden rounded border border-zinc-800"
+            onClick={() => setActiveSeed(seed)}
+            className="cursor-zoom-in overflow-hidden rounded border border-zinc-800 transition-colors hover:border-sky-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
             style={{ width: CELL_SIZE, height: CELL_SIZE }}
+            title={`Click to enlarge: ${seed}`}
+            aria-label={`Enlarge seed ${seed}`}
           >
             <PlanView seed={seed} size={CELL_SIZE} layers={layers} />
-          </div>
+          </button>
         ))}
       </div>
+
+      {/* Lightbox dialog */}
+      <Dialog
+        open={activeSeed !== null}
+        onOpenChange={(open) => {
+          if (!open) setActiveSeed(null);
+        }}
+      >
+        <DialogBackdrop />
+        <DialogPopup>
+          <DialogContent
+            style={{
+              width: `min(90vw, 90vh, ${LIGHTBOX_SIZE}px)`,
+              height: `min(90vw, 90vh, ${LIGHTBOX_SIZE}px)`,
+            }}
+          >
+            <div className="flex shrink-0 items-center justify-between border-b border-zinc-800 px-3 py-2">
+              <DialogTitle>{activeSeed ?? ""}</DialogTitle>
+              <DialogClose aria-label="Close">
+                <X size={14} />
+              </DialogClose>
+            </div>
+            <div className="flex flex-1 items-center justify-center overflow-hidden">
+              {activeSeed !== null && (
+                <PlanView
+                  seed={activeSeed}
+                  size={LIGHTBOX_SIZE}
+                  layers={layers}
+                />
+              )}
+            </div>
+          </DialogContent>
+        </DialogPopup>
+      </Dialog>
     </main>
   );
 }
