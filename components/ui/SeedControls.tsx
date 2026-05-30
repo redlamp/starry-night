@@ -43,12 +43,12 @@ export function SeedControls() {
   if (captureMode) return null;
 
   return (
-    <div className="pointer-events-auto absolute bottom-3 left-3 flex items-center gap-2 rounded-lg border border-white/10 bg-black/70 px-3 py-2 text-xs text-white backdrop-blur">
+    <div className="group pointer-events-auto absolute bottom-3 left-3 flex items-center gap-2 rounded-lg border border-white/10 bg-black/70 px-3 py-2 text-xs text-white opacity-40 backdrop-blur transition-opacity duration-200 hover:opacity-100">
       <span className="text-white/50">seed</span>
       <code className="rounded bg-white/10 px-2 py-0.5 font-mono text-white">{seed}</code>
       <button
         onClick={onCopy}
-        className={`rounded px-2 py-0.5 text-xs ${
+        className={`hidden rounded px-2 py-0.5 text-xs group-hover:inline-flex ${
           copied ? "bg-emerald-400/80 text-black" : "bg-white/10 hover:bg-white/20"
         }`}
         title="Copy shareable URL"
@@ -57,7 +57,7 @@ export function SeedControls() {
       </button>
       <button
         onClick={() => setSeed(randomSeed())}
-        className="rounded bg-white/10 px-2 py-0.5 hover:bg-white/20"
+        className="hidden rounded bg-white/10 px-2 py-0.5 hover:bg-white/20 group-hover:inline-flex"
         title="Generate new random seed"
       >
         Regenerate
