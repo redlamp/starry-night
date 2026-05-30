@@ -821,7 +821,11 @@ const BEACON_MIN_HEIGHT = 100;
 
 export function generateAviationBeacons(rawSeed: string): AviationBeacon[] {
   const masterSeed = stripGridFirst(rawSeed);
-  const { buildings } = generateCity(masterSeed);
+  // Pass the RAW seed: generateCity reads the ::gridfirst flag from its own
+  // argument, so the beacon building set must come from the unstripped seed —
+  // otherwise beacons land on the legacy layout while the scene renders grid-
+  // first. masterSeed (sentinel stripped) is only the RNG-key base below.
+  const { buildings } = generateCity(rawSeed);
   const rng = seedrandom(`${masterSeed}::beacons`);
   const beacons: AviationBeacon[] = [];
   for (const b of buildings) {

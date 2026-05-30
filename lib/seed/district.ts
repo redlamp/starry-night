@@ -128,8 +128,11 @@ type Seed = { x: number; z: number; macro: string };
 function placeSeeds(rng: () => number, topo: Topology, useGrid: boolean, theta0: number): Seed[] {
   const { centerX: cx, centerZ: cz, halfExtent: half } = topo;
   const target = 10 + Math.floor(rng() * 15); // 10..24 (merge trims to ~8..24)
-  // L∞ cells pack tighter, so a wider min-spacing counters the higher district
-  // count under the flag (keeps the [6,26] gate green).
+  // Same 0.13 factor as the L2 path — NOT wider. The square L∞ exclusion zone
+  // is already ~27% larger in area than the L2 circle at equal radius, so L∞
+  // naturally limits the district count; no re-tune was needed (flag-ON counts
+  // land in [11,24], inside the [6,26] gate, across 20 seeds). Kept as a single
+  // knob to re-tune reactively if a future seed-set trips the band.
   const minDist = half * (useGrid ? GRID_MIN_DIST_FACTOR : 0.13);
   const minDistSq = minDist * minDist;
   const seeds: Seed[] = [];
