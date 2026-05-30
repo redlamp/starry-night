@@ -2,13 +2,15 @@ import seedrandom from "seedrandom";
 import { generateTopology, type Topology } from "./topology";
 import {
   generateDistricts,
+  seamSegments,
   type District,
   type DistrictCharacter,
   type DistrictField,
+  type SeamPolyline,
 } from "./district";
 import { buildSilhouette, isHighRise, type SilhouetteField } from "./silhouette";
 import { generateArterials, type Arterial } from "./arterials";
-import { stripGridFirst, gridFirst, computeLattice } from "./lattice";
+import { stripGridFirst, gridFirst, computeLattice, type Lattice } from "./lattice";
 
 // Any road tier, for the building-skip corridor test.
 type RoadLike = { vertices: Array<{ x: number; z: number }>; width: number; closed: boolean };
@@ -65,6 +67,7 @@ export type CityData = {
   districts: District[];
   topology: Topology;
   arterials: Arterial[];
+  seams: SeamPolyline[];
 };
 
 // All in meters. See wiki/research/building-sizes-real-world-references.md.
@@ -618,6 +621,30 @@ function fillStripe(
   return buildings;
 }
 
+// Per-district grid orientation (radians). Precomputed so seam tiering can
+// compare neighbours' grain. Each value is the FIRST draw of that district's
+// own `::layout::` stream — exactly what the building loop re-derives — so the
+// two never diverge and flag-OFF stays byte-identical.
+function districtOrientations(
+  masterSeed: string,
+  field: DistrictField,
+  useGrid: boolean,
+  lattice: Lattice | null,
+): Map<number, number> {
+  const rot = new Map<number, number>();
+  for (const d of field.districts) {
+    const rj = seedrandom(`${masterSeed}::layout::${d.id}`)();
+    const rotSpread = d.character === "heritage" ? 0.5 : 0.18;
+    rot.set(
+      d.index,
+      useGrid && lattice
+        ? lattice.orientationAt(d.centroidX, d.centroidZ) + (rj - 0.5) * GRID_ZONE_SPREAD
+        : (rj - 0.5) * rotSpread,
+    );
+  }
+  return rot;
+}
+
 export function generateCity(rawSeed: string): CityData {
   // Strip the grid-first flag sentinel before any RNG key is derived (Stage 0).
   const masterSeed = stripGridFirst(rawSeed);
@@ -640,8 +667,11 @@ export function generateCity(rawSeed: string): CityData {
   const coreProx = makeCoreProximity([...silhouetteByIndex.values()]);
 
   const arterials = generateArterials(masterSeed, topology, field, useGrid, theta0);
-  // Buildings skip both road tiers so highways + arterials read as open avenues.
-  const roads: RoadLike[] = [...topology.highways, ...arterials];
+  // Tiered seam streets (grid-first only): the major district boundaries promoted
+  // to avenues. Buildings skip every road tier so they read as open avenues.
+  const districtRot = districtOrientations(masterSeed, field, useGrid, lattice);
+  const seams: SeamPolyline[] = useGrid ? seamSegments(field, districtRot) : [];
+  const roads: RoadLike[] = [...topology.highways, ...arterials, ...seams];
 
   const buildings: Building[] = [];
   let nextId = 0;
@@ -649,21 +679,13 @@ export function generateCity(rawSeed: string): CityData {
   for (const district of field.districts) {
     const grammar = GRAMMAR[district.character];
     const districtRng = seedrandom(`${masterSeed}::layout::${district.id}`);
-    // Per-district rotation gives each shell its own grain. Heritage is the most
-    // organic, downtown the most orthogonal.
-    const rotSpread = district.character === "heritage" ? 0.5 : 0.18;
-    // Stage 2: grid-first anchors the grain to the lattice orientation field at
-    // the district centroid (neighbours differ only slightly — patchwork, not
-    // confetti) plus a small per-character residual jitter. The legacy path keeps
-    // its independent rotation. CRITICAL: both branches consume the SAME single
-    // districtRng() draw, so every downstream draw (archetype, dims, windowSeed)
-    // is byte-identical to before — proven by the gate1 building-count assert.
-    const rj = districtRng();
-    const rot =
-      useGrid && lattice
-        ? lattice.orientationAt(district.centroidX, district.centroidZ) +
-          (rj - 0.5) * GRID_ZONE_SPREAD
-        : (rj - 0.5) * rotSpread;
+    // Grain orientation is precomputed in districtRot (so seam tiering can
+    // compare neighbours). Advance this stream by the SAME single draw the
+    // precompute consumed, so every downstream draw (archetype, dims,
+    // windowSeed) stays byte-identical — proven by the gate1 building-count
+    // assert. The legacy path's grain lives in districtRot too.
+    districtRng();
+    const rot = districtRot.get(district.index) ?? 0;
     const ctx = {
       district,
       character: district.character,
@@ -711,7 +733,7 @@ export function generateCity(rawSeed: string): CityData {
     }
   }
 
-  return { buildings, districts: field.districts, topology, arterials };
+  return { buildings, districts: field.districts, topology, arterials, seams };
 }
 
 export type StreetlightTier = "highway" | "arterial" | "local";
@@ -790,11 +812,14 @@ export function generateStreetlights(rawSeed: string): Streetlight[] {
   const masterSeed = stripGridFirst(rawSeed);
   // Grid-first — streetlights follow the new arterials/districts when on.
   const useGrid = gridFirst(rawSeed);
-  const theta0 = useGrid ? computeLattice(masterSeed).theta0 : 0;
+  const lattice = useGrid ? computeLattice(masterSeed) : null;
+  const theta0 = lattice ? lattice.theta0 : 0;
   const topology = generateTopology(masterSeed);
   const field = generateDistricts(masterSeed, topology, useGrid, theta0);
   const arterials = generateArterials(masterSeed, topology, field, useGrid, theta0);
-  const roads: RoadLike[] = [...topology.highways, ...arterials];
+  const districtRot = districtOrientations(masterSeed, field, useGrid, lattice);
+  const seams: SeamPolyline[] = useGrid ? seamSegments(field, districtRot) : [];
+  const roads: RoadLike[] = [...topology.highways, ...arterials, ...seams];
   const lights: Streetlight[] = [];
 
   // Local lights — per-zone colour temperature, on a block grid inside each
@@ -836,6 +861,11 @@ export function generateStreetlights(rawSeed: string): Streetlight[] {
   const artRng = seedrandom(`${masterSeed}::streetlights::arterials`);
   for (const a of arterials) {
     emitRoadLights(artRng, a, "arterial", ARTERIAL_KELVIN, 26, lights);
+  }
+  // Seam avenues light like arterials (reuse the tier; distinct RNG key).
+  const seamRng = seedrandom(`${masterSeed}::streetlights::seams`);
+  for (const s of seams) {
+    emitRoadLights(seamRng, s, "arterial", ARTERIAL_KELVIN, 26, lights);
   }
 
   return lights;

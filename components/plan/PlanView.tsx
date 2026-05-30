@@ -12,6 +12,7 @@ export type PlanLayers = {
   buildings: boolean;
   highways: boolean;
   arterials: boolean;
+  seams: boolean;
   streetlights: boolean;
 };
 
@@ -144,6 +145,16 @@ export function PlanView({ seed, size, layers }: Props) {
       for (const art of arts) {
         const lw = Math.max(1.5, worldWToPx(art.width));
         drawPolyline(art.vertices, art.closed, "#7fa8d0", lw);
+      }
+      ctx.restore();
+    }
+
+    // 5b. Seam streets (grid-first) — promoted major district boundaries.
+    if (layers.seams) {
+      ctx.save();
+      for (const s of city.seams) {
+        const lw = Math.max(2, worldWToPx(s.width));
+        drawPolyline(s.vertices, s.closed, "#9fe0c0", lw);
       }
       ctx.restore();
     }

@@ -7,6 +7,7 @@ import {
   Milestone,
   Route,
   Lightbulb,
+  Spline,
   Grid3x3,
   Maximize2,
   X,
@@ -22,6 +23,7 @@ const LAYER_KEYS: (keyof PlanLayers)[] = [
   "buildings",
   "highways",
   "arterials",
+  "seams",
   "streetlights",
 ];
 
@@ -30,6 +32,7 @@ const LAYER_ICONS: Record<keyof PlanLayers, React.ReactNode> = {
   buildings: <Building2 size={16} />,
   highways: <Milestone size={16} />,
   arterials: <Route size={16} />,
+  seams: <Spline size={16} />,
   streetlights: <Lightbulb size={16} />,
 };
 
@@ -40,12 +43,13 @@ export default function PlanPage() {
   const [baseSeed, setBaseSeed] = useState("plan");
   const [seedCount, setSeedCount] = useState(16);
   const [autoFill, setAutoFill] = useState(true);
-  const [gridFirst, setGridFirst] = useState(false);
+  const [gridFirst, setGridFirst] = useState(true);
   const [layers, setLayers] = useState<PlanLayers>({
     districts: true,
     buildings: true,
     highways: true,
     arterials: true,
+    seams: true,
     streetlights: true,
   });
   const [activeIndex, setActiveIndex] = useState<number | null>(null);

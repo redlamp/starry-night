@@ -426,4 +426,196 @@ export function generateDistricts(
   };
 }
 
+// ---------------------------------------------------------------------------
+// Seam streets (issue #33) — TIERED.
+// ---------------------------------------------------------------------------
+// The full Voronoi boundary network is extracted from the classify grid via
+// marching-squares crack-chaining, then only the MAJOR boundaries (long
+// through-runs) are promoted to drawn avenues. Real cities join differently-
+// oriented grids along a few shared streets — usually one major boundary, often
+// diagonal — not a lane per Voronoi edge (wiki/research/map-layout-references.md).
+// Minor boundaries stay as the street-width gap footprintInDistrict already
+// leaves. Pure + deterministic: reads classify + sampleCount, consumes no RNG.
+
+export const SEAM_STREET_WIDTH = 16;
+const SEAM_MIN_CELLS = 4; // clamp: skip seams touching a sub-4-cell district
+const SEAM_MIN_LENGTH_FACTOR = 0.3; // promote boundaries longer than half * this
+const SEAM_MIN_ANGLE = 0.2; // rad ≈ 11.5° — only where adjacent grids truly clash
+const SEAM_MAX = 8; // cap to a handful of major avenues, never a lane per boundary
+
+export type SeamPolyline = {
+  id: string;
+  vertices: Array<{ x: number; z: number }>;
+  width: number;
+  closed: boolean;
+  districtPair: [number, number];
+};
+
+export function seamSegments(
+  field: DistrictField,
+  districtRot: Map<number, number>,
+): SeamPolyline[] {
+  if (field.districts.length < 2) return [];
+  const { minX, maxX, minZ } = field.bounds;
+  const N = GRID_STEPS;
+  const step = (maxX - minX) / N;
+  const half = (maxX - minX) / 2;
+
+  // Label cache at cell centres — one classify call per cell (matches the grid
+  // sampleCount was accumulated on, so the clamp is exact).
+  const label = new Int16Array(N * N);
+  for (let gx = 0; gx < N; gx++) {
+    for (let gz = 0; gz < N; gz++) {
+      label[gx * N + gz] = field.classify(minX + (gx + 0.5) * step, minZ + (gz + 0.5) * step);
+    }
+  }
+  const sampleCount = field.districts.map((d) => d.sampleCount);
+  const bigEnough = (lab: number) => lab >= 0 && (sampleCount[lab] ?? 0) >= SEAM_MIN_CELLS;
+
+  // Cracks on shared cell edges. Vertex (i,j) = world (minX+i*step, minZ+j*step),
+  // i,j in [0,N]; a crack joins two adjacent vertices (the exact L∞ boundary
+  // line between two differing cell centres). Tagged with the unordered pair.
+  const vKey = (i: number, j: number) => i * (N + 1) + j;
+  const pairKey = (p: number, q: number) => (p < q ? p * 100000 + q : q * 100000 + p);
+  const cracks: Array<{ a: number; b: number; pair: number }> = [];
+  // x-neighbours → vertical boundary line at i = gx+1
+  for (let gx = 0; gx < N - 1; gx++) {
+    for (let gz = 0; gz < N; gz++) {
+      const la = label[gx * N + gz];
+      const lb = label[(gx + 1) * N + gz];
+      if (la === lb || !bigEnough(la) || !bigEnough(lb)) continue;
+      cracks.push({ a: vKey(gx + 1, gz), b: vKey(gx + 1, gz + 1), pair: pairKey(la, lb) });
+    }
+  }
+  // z-neighbours → horizontal boundary line at j = gz+1
+  for (let gx = 0; gx < N; gx++) {
+    for (let gz = 0; gz < N - 1; gz++) {
+      const la = label[gx * N + gz];
+      const lb = label[gx * N + gz + 1];
+      if (la === lb || !bigEnough(la) || !bigEnough(lb)) continue;
+      cracks.push({ a: vKey(gx, gz + 1), b: vKey(gx + 1, gz + 1), pair: pairKey(la, lb) });
+    }
+  }
+
+  const adj = new Map<number, number[]>();
+  for (let ci = 0; ci < cracks.length; ci++) {
+    for (const v of [cracks[ci].a, cracks[ci].b]) {
+      const l = adj.get(v);
+      if (l) l.push(ci);
+      else adj.set(v, [ci]);
+    }
+  }
+  const vToXZ = (v: number) => {
+    const i = Math.floor(v / (N + 1));
+    return { x: minX + i * step, z: minZ + (v - i * (N + 1)) * step };
+  };
+  // Continue only through a clean degree-2 vertex of the SAME pair — so a seam
+  // passes straight/around corners but DEAD-ENDS (T-junction) where a third
+  // district meets, never line-matching the neighbour grid.
+  const continuation = (v: number, fromCi: number, pair: number): number => {
+    const list = adj.get(v);
+    if (!list) return -1;
+    let other = -1;
+    let count = 0;
+    for (const ci of list) {
+      if (cracks[ci].pair !== pair) continue;
+      count++;
+      if (ci !== fromCi) other = ci;
+    }
+    return count === 2 ? other : -1;
+  };
+
+  const visited = new Array<boolean>(cracks.length).fill(false);
+  const collected: Array<{ poly: SeamPolyline; len: number }> = [];
+  let sid = 0;
+  for (let start = 0; start < cracks.length; start++) {
+    if (visited[start]) continue;
+    visited[start] = true;
+    const pair = cracks[start].pair;
+    const chain: number[] = [cracks[start].a, cracks[start].b];
+    // Walk forward from b, then backward from a, through degree-2 same-pair vertices.
+    let curV = cracks[start].b;
+    let curCi = start;
+    let closedLoop = false;
+    for (;;) {
+      const next = continuation(curV, curCi, pair);
+      if (next < 0 || visited[next]) break;
+      visited[next] = true;
+      const far = cracks[next].a === curV ? cracks[next].b : cracks[next].a;
+      chain.push(far);
+      curV = far;
+      curCi = next;
+      if (curV === cracks[start].a) {
+        closedLoop = true;
+        break;
+      }
+    }
+    if (!closedLoop) {
+      curV = cracks[start].a;
+      curCi = start;
+      for (;;) {
+        const next = continuation(curV, curCi, pair);
+        if (next < 0 || visited[next]) break;
+        visited[next] = true;
+        const far = cracks[next].a === curV ? cracks[next].b : cracks[next].a;
+        chain.unshift(far);
+        curV = far;
+        curCi = next;
+      }
+    }
+    if (closedLoop) chain.pop(); // drop the duplicate closing vertex
+
+    // Collinear-merge (lossless on the rectilinear grid) + to world.
+    const pts = chain.map(vToXZ);
+    const merged: Array<{ x: number; z: number }> = [];
+    for (let i = 0; i < pts.length; i++) {
+      if (i > 0 && i < pts.length - 1) {
+        const a = pts[i - 1];
+        const b = pts[i];
+        const c = pts[i + 1];
+        const cross = (b.x - a.x) * (c.z - a.z) - (b.z - a.z) * (c.x - a.x);
+        if (Math.abs(cross) < 1e-6 * step * step) continue;
+      }
+      merged.push(pts[i]);
+    }
+    let len = 0;
+    for (let i = 1; i < merged.length; i++) {
+      len += Math.hypot(merged[i].x - merged[i - 1].x, merged[i].z - merged[i - 1].z);
+    }
+    const da = Math.floor(pair / 100000);
+    const db = pair % 100000;
+    collected.push({
+      poly: {
+        id: `seam-${sid++}`,
+        vertices: merged,
+        width: SEAM_STREET_WIDTH,
+        closed: closedLoop,
+        districtPair: [da, db],
+      },
+      len,
+    });
+  }
+
+  // Tier: a seam street is warranted only where two adjacent grids genuinely
+  // CLASH in orientation (a reconciling avenue, like SF's Market St) AND the
+  // boundary is a long through-run. Cap to the few longest so the result reads
+  // as a handful of major avenues, not a lane per Voronoi edge.
+  const angDiff = (a: number, b: number) => {
+    let d = Math.abs(a - b) % Math.PI;
+    if (d > Math.PI / 2) d = Math.PI - d;
+    return d;
+  };
+  const minLen = half * SEAM_MIN_LENGTH_FACTOR;
+  return collected
+    .filter((c) => {
+      if (c.poly.vertices.length < 2 || c.len < minLen) return false;
+      const ra = districtRot.get(c.poly.districtPair[0]);
+      const rb = districtRot.get(c.poly.districtPair[1]);
+      return ra !== undefined && rb !== undefined && angDiff(ra, rb) >= SEAM_MIN_ANGLE;
+    })
+    .sort((a, b) => b.len - a.len)
+    .slice(0, SEAM_MAX)
+    .map((c, i) => ({ ...c.poly, id: `seam-${i}` }));
+}
+
 export { CHARACTER_COLOR };

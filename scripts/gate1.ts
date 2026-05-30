@@ -75,7 +75,7 @@ function pointSegDist(x: number, z: number, ax: number, az: number, bx: number, 
 const OVERLAP_TOL = 0.3; // m of penetration we tolerate (rounding noise)
 
 function checkSeed(seed: string) {
-  const { buildings, districts, topology, arterials } = generateCity(seed);
+  const { buildings, districts, topology, arterials, seams } = generateCity(seed);
   const failures: string[] = [];
 
   // 1. Overlaps (broad-phase by centre distance, then OBB/SAT).
@@ -94,7 +94,7 @@ function checkSeed(seed: string) {
   if (overlaps > 0) failures.push(`${overlaps} building overlaps`);
 
   // 2. Corridor violations — building centre on a road surface.
-  const roads = [...topology.highways, ...arterials];
+  const roads = [...topology.highways, ...arterials, ...seams];
   let corridorHits = 0;
   for (const bld of buildings) {
     for (const r of roads) {
@@ -197,6 +197,21 @@ function main() {
   const topoInvariantOk = topoOff === topoOn;
   console.log(`topology invariance (flag base seed): ${topoInvariantOk ? "PASS" : "FAIL"}`);
   if (!topoInvariantOk) failed++;
+
+  // Stage 3 — seam streets: flag-OFF emits none (byte-identity), flag-ON is
+  // deterministic and actually produces promoted seams across the seed set.
+  const seamOff = generateCity("gate1-det").seams;
+  const sOn1 = JSON.stringify(generateCity("gate1-det::gridfirst").seams);
+  const sOn2 = JSON.stringify(generateCity("gate1-det::gridfirst").seams);
+  let seamTotal = 0;
+  for (const s of ["gate1-2", "gate1-5", "gate1-9", "gate1-13", "gate1-16"]) {
+    seamTotal += generateCity(`${s}::gridfirst`).seams.length;
+  }
+  const seamOk = seamOff.length === 0 && sOn1 === sOn2 && seamTotal > 0;
+  console.log(
+    `seams: flag-OFF empty ${seamOff.length === 0 ? "PASS" : "FAIL"}; determinism ${sOn1 === sOn2 ? "PASS" : "FAIL"}; flag-ON present (${seamTotal} across 5 seeds) ${seamTotal > 0 ? "PASS" : "FAIL"}`,
+  );
+  if (!seamOk) failed++;
 
   // Stage 0 — the lattice is a pure deterministic function with a
   // center-anchored orientation field whose neighbour-delta stays small.
