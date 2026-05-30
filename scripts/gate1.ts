@@ -140,7 +140,10 @@ function main() {
   const seeds = args.length > 0 ? args : Array.from({ length: 20 }, (_, i) => `gate1-${i}`);
   let failed = 0;
 
-  console.log("Gate 1 — streets-first generator asserts\n");
+  console.log("Gate 1 — grid-first generator asserts\n");
+
+  // Flag-OFF 20-seed loop (must match the pre-rework baseline exactly).
+  console.log("flag-OFF (legacy radial)");
   console.log("seed           buildings  districts  result");
   for (const seed of seeds) {
     const r = checkSeed(seed);
@@ -153,21 +156,47 @@ function main() {
     );
   }
 
-  // Determinism.
+  // Flag-ON 20-seed loop — the SAME seeds with the ::gridfirst sentinel, so the
+  // grid-first path (L∞ districts + grid-line arterials) clears every gate1
+  // assert too, district count stays in [6,26] included.
+  console.log("\nflag-ON (grid-first)");
+  console.log("seed                     buildings  districts  result");
+  for (const seed of seeds) {
+    const gseed = `${seed}::gridfirst`;
+    const r = checkSeed(gseed);
+    const ok = r.failures.length === 0;
+    if (!ok) failed++;
+    console.log(
+      `${gseed.padEnd(24)} ${String(r.buildings).padStart(8)} ${String(r.districts).padStart(10)}  ${
+        ok ? "PASS" : "FAIL — " + r.failures.join("; ")
+      }`,
+    );
+  }
+
+  // Determinism (flag-OFF).
   const d1 = JSON.stringify(generateCity("gate1-det"));
   const d2 = JSON.stringify(generateCity("gate1-det"));
   const detOk = d1 === d2;
-  console.log(`\ndeterminism: ${detOk ? "PASS" : "FAIL"}`);
+  console.log(`\ndeterminism (flag-OFF): ${detOk ? "PASS" : "FAIL"}`);
   if (!detOk) failed++;
 
-  // Stage 0 — flag transport must be sentinel-invariant: the ::gridfirst flag
-  // must NOT perturb any RNG stream (flag-ON is the same city until a later
-  // stage branches on it). This is what keeps the /plan A/B harness meaningful.
-  const flagOk =
-    JSON.stringify(generateCity("gate1-det")) ===
-    JSON.stringify(generateCity("gate1-det::gridfirst"));
-  console.log(`flag transport (sentinel-invariant): ${flagOk ? "PASS" : "FAIL"}`);
-  if (!flagOk) failed++;
+  // Stage 1 — flag-ON determinism: the grid-first city is a pure function of the
+  // seed and reproduces byte-for-byte across runs.
+  const g1 = JSON.stringify(generateCity("gate1-det::gridfirst"));
+  const g2 = JSON.stringify(generateCity("gate1-det::gridfirst"));
+  const detGridOk = g1 === g2;
+  console.log(`determinism (flag-ON): ${detGridOk ? "PASS" : "FAIL"}`);
+  if (!detGridOk) failed++;
+
+  // Stage 1 — TOPOLOGY invariance: flag-ON differs from flag-OFF BY DESIGN
+  // (L∞ districts + grid arterials), but the topology must be identical — it
+  // derives from the base seed, proving the sentinel still strips before any
+  // RNG key is keyed.
+  const topoOff = JSON.stringify(generateCity("gate1-det").topology);
+  const topoOn = JSON.stringify(generateCity("gate1-det::gridfirst").topology);
+  const topoInvariantOk = topoOff === topoOn;
+  console.log(`topology invariance (flag base seed): ${topoInvariantOk ? "PASS" : "FAIL"}`);
+  if (!topoInvariantOk) failed++;
 
   // Stage 0 — the lattice is a pure deterministic function with a
   // center-anchored orientation field whose neighbour-delta stays small.

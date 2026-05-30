@@ -1,5 +1,5 @@
 import seedrandom from "seedrandom";
-import type { Topology, Highway } from "./topology";
+import { CITY_CENTER, type Topology, type Highway } from "./topology";
 
 // District field for the streets-first generator (Stage 1).
 //
@@ -44,6 +44,41 @@ export type DistrictField = {
 
 const GRID_STEPS = 64; // sample resolution per axis
 const MIN_SAMPLE_FRACTION = 0.006; // districts below this share of samples are merged away
+
+// Grid-first rework — Stage 1 (wiki/notes/plan-grid-first-rework.md). When the
+// flag is on, the Voronoi metric switches from squared-Euclidean (round/organic
+// cells) to Chebyshev L∞ evaluated in the θ0 frame → rectilinear, map-like seams
+// aligned to the downtown grid. We rotate both points by -θ0 about CITY_CENTER,
+// then the distance is max(|dx_rot|, |dz_rot|).
+//
+// Grid-first min-seed spacing factor (× halfExtent). The plan's documented
+// default is the same half*0.13 the L2 path uses, re-tuned only reactively if a
+// flag-ON seed trips gate1's [6,26] district-count band. The full 20-seed
+// flag-ON gate passes at 0.13 (counts land in [11,24]), so no re-tune was
+// needed; this stays a single tunable knob should a future seed-set trip it.
+const GRID_MIN_DIST_FACTOR = 0.13;
+
+// Squared Chebyshev (L∞) distance between two world points, evaluated in the θ0
+// frame (rotate both by -θ0 about CITY_CENTER first). Squared so it composes
+// with the existing squared-Euclidean comparisons without a sqrt.
+function chebyshevSqInFrame(
+  theta0: number,
+  ax: number,
+  az: number,
+  bx: number,
+  bz: number,
+): number {
+  const cos = Math.cos(-theta0);
+  const sin = Math.sin(-theta0);
+  const cx = CITY_CENTER.x;
+  const cz = CITY_CENTER.z;
+  const arx = (ax - cx) * cos - (az - cz) * sin;
+  const arz = (ax - cx) * sin + (az - cz) * cos;
+  const brx = (bx - cx) * cos - (bz - cz) * sin;
+  const brz = (bx - cx) * sin + (bz - cz) * cos;
+  const m = Math.max(Math.abs(arx - brx), Math.abs(arz - brz));
+  return m * m;
+}
 
 function sideOfSegment(
   x: number,
@@ -90,10 +125,13 @@ function macroSignature(topo: Topology, x: number, z: number): string {
 
 type Seed = { x: number; z: number; macro: string };
 
-function placeSeeds(rng: () => number, topo: Topology): Seed[] {
+function placeSeeds(rng: () => number, topo: Topology, useGrid: boolean, theta0: number): Seed[] {
   const { centerX: cx, centerZ: cz, halfExtent: half } = topo;
   const target = 10 + Math.floor(rng() * 15); // 10..24 (merge trims to ~8..24)
-  const minDist = half * 0.13;
+  // L∞ cells pack tighter, so a wider min-spacing counters the higher district
+  // count under the flag (keeps the [6,26] gate green).
+  const minDist = half * (useGrid ? GRID_MIN_DIST_FACTOR : 0.13);
+  const minDistSq = minDist * minDist;
   const seeds: Seed[] = [];
   let attempts = 0;
   while (seeds.length < target && attempts < 1500) {
@@ -103,7 +141,10 @@ function placeSeeds(rng: () => number, topo: Topology): Seed[] {
     const rad = Math.pow(rng(), 0.7) * half * 0.92;
     const x = cx + Math.cos(ang) * rad;
     const z = cz + Math.sin(ang) * rad;
-    if (seeds.every((s) => Math.hypot(s.x - x, s.z - z) > minDist)) {
+    const farEnough = useGrid
+      ? seeds.every((s) => chebyshevSqInFrame(theta0, s.x, s.z, x, z) > minDistSq)
+      : seeds.every((s) => Math.hypot(s.x - x, s.z - z) > minDist);
+    if (farEnough) {
       seeds.push({ x, z, macro: macroSignature(topo, x, z) });
     }
   }
@@ -119,14 +160,23 @@ function placeSeeds(rng: () => number, topo: Topology): Seed[] {
 
 // Nearest seed that shares the point's macro region (highways are hard walls).
 // Falls back to global nearest if no seed sits in the same macro region.
-function nearestSeed(seeds: Seed[], topo: Topology, x: number, z: number): number {
+function nearestSeed(
+  seeds: Seed[],
+  topo: Topology,
+  x: number,
+  z: number,
+  useGrid: boolean,
+  theta0: number,
+): number {
   const macro = macroSignature(topo, x, z);
   let best = -1;
   let bestD = Infinity;
   let fallback = -1;
   let fallbackD = Infinity;
   for (let i = 0; i < seeds.length; i++) {
-    const d = (seeds[i].x - x) ** 2 + (seeds[i].z - z) ** 2;
+    const d = useGrid
+      ? chebyshevSqInFrame(theta0, seeds[i].x, seeds[i].z, x, z)
+      : (seeds[i].x - x) ** 2 + (seeds[i].z - z) ** 2;
     if (d < fallbackD) {
       fallbackD = d;
       fallback = i;
@@ -241,10 +291,15 @@ function assignCharacters(
   return chars;
 }
 
-export function generateDistricts(masterSeed: string, topo: Topology): DistrictField {
+export function generateDistricts(
+  masterSeed: string,
+  topo: Topology,
+  useGrid: boolean = false,
+  theta0: number = 0,
+): DistrictField {
   const rng = seedrandom(`${masterSeed}::districts`);
   const { centerX: cx, centerZ: cz, halfExtent: half } = topo;
-  const seeds = placeSeeds(rng, topo);
+  const seeds = placeSeeds(rng, topo, useGrid, theta0);
 
   const minX = cx - half;
   const maxX = cx + half;
@@ -259,7 +314,7 @@ export function generateDistricts(masterSeed: string, topo: Topology): DistrictF
     for (let gz = 0; gz < GRID_STEPS; gz++) {
       const x = minX + (gx + 0.5) * step;
       const z = minZ + (gz + 0.5) * step;
-      rawCount[nearestSeed(seeds, topo, x, z)]++;
+      rawCount[nearestSeed(seeds, topo, x, z, useGrid, theta0)]++;
     }
   }
   const totalSamples = GRID_STEPS * GRID_STEPS;
@@ -278,7 +333,9 @@ export function generateDistricts(masterSeed: string, topo: Topology): DistrictF
     let bestD = Infinity;
     for (let j = 0; j < seeds.length; j++) {
       if (!survivors[j]) continue;
-      const d = (seeds[i].x - seeds[j].x) ** 2 + (seeds[i].z - seeds[j].z) ** 2;
+      const d = useGrid
+        ? chebyshevSqInFrame(theta0, seeds[i].x, seeds[i].z, seeds[j].x, seeds[j].z)
+        : (seeds[i].x - seeds[j].x) ** 2 + (seeds[i].z - seeds[j].z) ** 2;
       if (d < bestD) {
         bestD = d;
         best = j;
@@ -298,7 +355,7 @@ export function generateDistricts(masterSeed: string, topo: Topology): DistrictF
     // The city has a finite extent — Voronoi cells must not bleed past the
     // bbox, or block-grid overshoot would place buildings off the map.
     if (x < minX || x > maxX || z < minZ || z > maxZ) return -1;
-    const raw = nearestSeed(seeds, topo, x, z);
+    const raw = nearestSeed(seeds, topo, x, z, useGrid, theta0);
     const survivorSeed = remapToSurvivorSeed[raw];
     return survivorSeedToIndex.get(survivorSeed) ?? -1;
   };

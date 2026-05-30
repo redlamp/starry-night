@@ -8,7 +8,7 @@ import {
 } from "./district";
 import { buildSilhouette, isHighRise, type SilhouetteField } from "./silhouette";
 import { generateArterials, type Arterial } from "./arterials";
-import { stripGridFirst } from "./lattice";
+import { stripGridFirst, gridFirst, computeLattice } from "./lattice";
 
 // Any road tier, for the building-skip corridor test.
 type RoadLike = { vertices: Array<{ x: number; z: number }>; width: number; closed: boolean };
@@ -583,8 +583,13 @@ function fillStripe(
 export function generateCity(rawSeed: string): CityData {
   // Strip the grid-first flag sentinel before any RNG key is derived (Stage 0).
   const masterSeed = stripGridFirst(rawSeed);
+  // Grid-first rework — Stage 1. Read the flag from the raw seed and compute the
+  // lattice θ0 once; both feed the L∞ district metric + grid-line arterials.
+  // Flag-OFF leaves every path byte-identical to pre-rework behaviour.
+  const useGrid = gridFirst(rawSeed);
+  const theta0 = useGrid ? computeLattice(masterSeed).theta0 : 0;
   const topology = generateTopology(masterSeed);
-  const field = generateDistricts(masterSeed, topology);
+  const field = generateDistricts(masterSeed, topology, useGrid, theta0);
 
   // Silhouette field per high-rise district + global core-proximity from all peaks.
   const silhouetteByIndex = new Map<number, SilhouetteField>();
@@ -593,7 +598,7 @@ export function generateCity(rawSeed: string): CityData {
   }
   const coreProx = makeCoreProximity([...silhouetteByIndex.values()]);
 
-  const arterials = generateArterials(masterSeed, topology, field);
+  const arterials = generateArterials(masterSeed, topology, field, useGrid, theta0);
   // Buildings skip both road tiers so highways + arterials read as open avenues.
   const roads: RoadLike[] = [...topology.highways, ...arterials];
 
@@ -730,9 +735,12 @@ function emitRoadLights(
 
 export function generateStreetlights(rawSeed: string): Streetlight[] {
   const masterSeed = stripGridFirst(rawSeed);
+  // Grid-first — streetlights follow the new arterials/districts when on.
+  const useGrid = gridFirst(rawSeed);
+  const theta0 = useGrid ? computeLattice(masterSeed).theta0 : 0;
   const topology = generateTopology(masterSeed);
-  const field = generateDistricts(masterSeed, topology);
-  const arterials = generateArterials(masterSeed, topology, field);
+  const field = generateDistricts(masterSeed, topology, useGrid, theta0);
+  const arterials = generateArterials(masterSeed, topology, field, useGrid, theta0);
   const roads: RoadLike[] = [...topology.highways, ...arterials];
   const lights: Streetlight[] = [];
 
