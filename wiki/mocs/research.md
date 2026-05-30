@@ -5,6 +5,7 @@ Map of Content for external references that shape direction.
 ## Visual references
 
 - [[streets-of-rage-intro]] — Sega 1991 intro screen; primary direct color/shape/layout anchor for v1 (see [[decision-streets-of-rage-direction]])
+- [[map-layout-references]] — real city-plan screenshots + OSM links + figure-ground refs; the seam-street fork (SF Market St = one shared diagonal boulevard, not per-boundary lanes) for issues #33/#34
 
 ## Scale references
 
