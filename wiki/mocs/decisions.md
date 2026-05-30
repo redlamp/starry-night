@@ -8,7 +8,8 @@ Map of Content for architectural and product decisions. Each decision is an atom
 - [[decision-streets-of-rage-direction]] — Streets of Rage 1991 intro adopted as primary direct visual anchor
 - [[decision-1-unit-equals-1-meter]] — World units = meters, with derived archetype dimensions
 - [[decision-district-based-city-layout]] — City composes from rotated districts with own grid angles and characters *(superseded)*
-- [[decision-streets-first-city-generation]] — Streets-first hybrid: highways and arterials drawn first, districts form between them, blocks/lots emerge from network closure
+- [[decision-streets-first-city-generation]] — Streets-first hybrid: highways and arterials drawn first, districts form between them, blocks/lots emerge from network closure *(road mechanism partially superseded)*
+- [[decision-grid-first-city-generation]] — Grid-first rework: coherent grid substrate, patchwork via center-anchored orientation field, continuous seam streets, arterials = heavy grid lines (kills the radial starburst), zone-driven hybrid fill
 - [[decision-window-proportion-by-archetype]] — Per-archetype window size + grid pitch (skyscraper glass / warehouse bays / heritage punched windows); admits archetype-level fenestration to v1
 - [[decision-moon-celestial-model]] — Moon parametrised as azimuth / elevation / distance, not cylinder coords
 - [[decision-orbit-spherical-controls]] — Spherical orbit + drag / pinch / wheel controls on the canvas

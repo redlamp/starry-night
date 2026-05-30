@@ -14,6 +14,11 @@ Map of Content for external references that shape direction.
 
 - [[city-planning-references]] — real-world city plan patterns (multi-grid, diagonal arterials, organic cores, geo distortion) + GIS/OSM data options
 
+## Generation techniques / math
+
+- [[voronoi-diagrams]] — proximity partition behind the district shells; how the distance metric reshapes the cells
+- [[taxicab-geometry]] — Manhattan (L1) / Chebyshev (L∞) vs Euclidean; rectilinear, map-like seams for the grid rework
+
 ## Colour references
 
 - [[color-usage-night-skyline]] — kelvin distribution per source kind, what real night-skyline windows actually look like, where current palette skews wrong, recalibration plan

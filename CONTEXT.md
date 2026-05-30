@@ -70,7 +70,9 @@ First-class limited-access road. Polyline, may curve. 1–2 per seed (possibly i
 
 ### Arterial
 
-First-class major surface road. Polyline, straight or near-straight. 3–6 per seed. Buildings excluded from corridor (narrower than Highway). Cluster centers nucleate preferentially at arterial intersections (high betweenness). Real planning term from FHWA functional classification.
+First-class major surface road: the **heavy through-streets of the grid** — wider, longer-running grid lines that carry traffic across districts. Straight or near-straight, follows the grid orientation. Buildings excluded from corridor (narrower than Highway). Real planning term from FHWA functional classification.
+
+_Avoid_: radial spoke, starburst arm. An arterial is **not** a line radiating from a central point — that hub-and-spoke pattern is a removed bug, not the definition.
 
 ### Network topology
 
@@ -78,9 +80,25 @@ The macro shape of the highway + arterial network for a given seed. Drawn from a
 
 ### Local street
 
-Implicit street — the gap between adjacent blocks. Not a first-class primitive; block boundaries are local-street centerlines. Invisible as geometry at orbit distance.
+The fine lines of the **Street grid** — gaps between adjacent blocks. Block boundaries are local-street centerlines. Reads at orbit distance only as the dark gaps between lit blocks. Collector-tier streets (FHWA classification between arterial and local) are folded into *Arterial* for v1.
 
-Collector-tier streets (FHWA classification between arterial and local) are folded into *Arterial* for v1.
+### Street grid
+
+The continuous platted grid that is the **primary network substrate** — laid before buildings, shared across the city. *Arterials* are its heavy lines; *Local streets* its fine lines. Districts are zones painted over the grid; blocks are its cells. Connectivity is structural: every street meets every cross-street.
+
+### Seam street
+
+The boundary street where two *District* grids of different orientation meet (Patchwork model). A real street that absorbs the angle change so neighbouring grids stitch instead of clashing. Often promoted to an *Arterial*.
+
+### Legacy diagonal
+
+A rare (0–3 per city) pre-grid road that survives and cuts across the grid at an angle, crossing grid lines at real intersections. Reference: Broadway (Manhattan), Chicago plank-road avenues, Detroit's Woodward. The only sanctioned non-grid surface line — the controlled source of diagonal interest, distinct from the removed radial *starburst*.
+
+### Cross-hatch (anti-pattern)
+
+The failure mode to avoid: road segments that form isolated "+" crossings which don't line up into a continuous network — scattered, like cross-hatching in a drawing, rather than a connected street plan. Cause is *intersection-first* generation (place crosses, hope the stubs meet). Forbidden structurally by the **lines-first** rule: roads are continuous lines, and intersections + blocks are emergent overlaps of those lines, so every street connects by construction. See [[decision-streets-first-city-generation]].
+
+_Avoid_: hash (earlier informal name for this; ambiguous, retired in favour of *cross-hatch*).
 
 ## Built form
 
@@ -94,6 +112,10 @@ The per-building glass-to-wall character: how large the lit windows are relative
 
 A deliberately coarse, archetype-level form of *fenestration* — admitted to v1 because windows demonstrably read at orbit distance. Street-level fenestration detail (individual mullion patterns, ground-floor glazing, spandrels) remains out of scope.
 
+### Flatiron / wedge building
+
+A tapered building that fills a triangular lot left where a *Legacy diagonal* or steep *Seam street* cuts the grid. Kept as a **four-sided trapezoidal box** — one short end face (fewer window columns across it) and two slightly slanted sides — rather than a true triangular prism, so it reuses the standard per-face window machinery unchanged. **Downtown only**: anomalous wedges are admitted in the dense core where diagonals slice the coherent grid; in outer / residential grids the leftover slivers stay open (plaza / park) instead. Reference: Manhattan Flatiron, Times Square wedges.
+
 ## Out of scope (deferred to in-city camera milestone)
 
-Street-level concepts — setbacks, FAR, lot coverage, ground-floor commerce, sidewalk widths, awnings, and fine fenestration detail — do not survive at orbit distance and are deliberately absent from v1 grammar. (Archetype-level *Window proportion* is the one limited exception now in scope — see Built form.)
+Street-level concepts — FAR, lot coverage, ground-floor commerce, awnings, and fine fenestration detail — do not survive at orbit distance and are deliberately absent from v1 grammar. Two limited exceptions are now in scope because they read at orbit distance: archetype-level *Window proportion* (see Built form), and a **coarse sidewalk setback** — a small, consistent per-zone frontage gap (~2–8 m, wider in high-foot-traffic cores) that makes buildings form a street wall set back from the kerb. The earlier 15–30 m standoff was a corridor-rejection bug, not a sidewalk.
