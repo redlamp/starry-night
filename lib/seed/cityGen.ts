@@ -93,10 +93,13 @@ const AGE_PITCH_SCALE = 0.88; // Heritage / oldtown: denser, smaller windows.
 const ROAD_FACING_DIST = 35;
 const ROAD_FACING_ANGLE_TOL = 0.7; // rad ≈ 40°
 
-// Stage 2 (grid-first): residual per-district jitter layered on top of the
-// lattice orientation field, so districts in the same neighbourhood read as a
-// patchwork of slightly-off grids rather than one rigid plane. Kept small.
-const GRID_RESIDUAL_SPREAD = 0.05; // rad ≈ ±1.4° (half-spread)
+// Grid-first per-district orientation spread. Each district draws one value (rj)
+// and rotates by ±GRID_ZONE_SPREAD/2 around the lattice base, so ADJACENT
+// districts read as a patchwork of distinctly-angled grids (the real-map look,
+// e.g. SF's neighbourhood grids) instead of one smooth radial warp. ±~14°
+// matches how neighbouring city grids actually differ without tipping into
+// confetti. Was ±1.4° (too small — the field read as a single bend).
+const GRID_ZONE_SPREAD = 0.5; // rad ≈ ±14° per district
 
 // Wrap an angle delta into [-π/2, π/2] so a building's two ends count as
 // equivalent (a rectangle facing 10° and 190° are the same orientation).
@@ -199,6 +202,20 @@ const GRAMMAR: Record<DistrictCharacter, CharacterGrammar> = {
     twoStripeProb: 0.55,
     heightCap: 0.7,
   },
+};
+
+// Grid-first block aspect (W:D) bands per character — real city blocks are
+// elongated, not square (wiki/research/block-proportions.md). Grid-first derives
+// blockD = blockW / sampled-aspect so the long axis runs with the street grid;
+// the legacy path keeps the hard-coded grammar.blockD (flag-OFF byte-identical).
+// Downtown ≈ Manhattan 2-2.5:1; residential / industrial ≈ 1.6-2:1.
+const BLOCK_ASPECT: Record<DistrictCharacter, [number, number]> = {
+  downtown: [2.0, 2.5],
+  subcentre: [1.6, 2.0],
+  heritage: [1.35, 1.6],
+  residential: [1.6, 2.0],
+  industrial: [1.6, 2.1],
+  "mixed-use": [1.45, 1.8],
 };
 
 function pickArchetype(
@@ -406,14 +423,30 @@ function districtBlocks(
   cityCx: number,
   cityCz: number,
   cityHalf: number,
+  useGrid: boolean,
 ): Block[] {
   const cosR = Math.cos(rot);
   const sinR = Math.sin(rot);
   const w = district.maxX - district.minX;
   const d = district.maxZ - district.minZ;
-  const span = Math.max(w, d) * 1.15; // overshoot so the rotated grid covers corners
   const colSpacing = grammar.blockW + grammar.streetW;
-  const rowSpacing = grammar.blockD + grammar.streetD;
+  // Grid-first elongates the block: hold the frontage width, shrink the depth to
+  // a real W:D band so the long axis runs with the grid (no more near-squares).
+  // Legacy keeps the square-ish grammar.blockD (flag-OFF byte-identical).
+  const [aMin, aMax] = BLOCK_ASPECT[district.character];
+  const blockD = useGrid ? grammar.blockW / (aMin + rng() * (aMax - aMin)) : grammar.blockD;
+  const rowSpacing = blockD + grammar.streetD;
+  // Cover the axis-aligned district bbox even when the grid is rotated. Grid-
+  // first rotates to any angle (θ0 ± zone spread), where the old max(w,d)*1.15
+  // undershoots the corners (a 45° grid needs √2≈1.41) and leaves empty wedges;
+  // use the exact rotated half-span. Legacy keeps the cheap 1.15 factor.
+  const hw = w / 2;
+  const hd = d / 2;
+  const cosA = Math.abs(cosR);
+  const sinA = Math.abs(sinR);
+  const span = useGrid
+    ? 2 * Math.max(hw * cosA + hd * sinA, hw * sinA + hd * cosA) + colSpacing
+    : Math.max(w, d) * 1.15;
   const cols = Math.max(1, Math.ceil(span / colSpacing));
   const rows = Math.max(1, Math.ceil(span / rowSpacing));
   const startX = -((cols - 1) * colSpacing) / 2;
@@ -429,7 +462,7 @@ function districtBlocks(
       // (blockW × blockD) and thus can't spill into the neighbouring block's
       // street. Super-blocks are deferred to Stage 2's lot subdivision.
       const bw = grammar.blockW * (1 - sizeJitterW * rng());
-      const bd = grammar.blockD * (1 - sizeJitterD * rng());
+      const bd = blockD * (1 - sizeJitterD * rng());
       const lx = startX + i * colSpacing + (rng() - 0.5) * posJitter;
       const lz = startZ + j * rowSpacing + (rng() - 0.5) * posJitter;
       // Rotate the local block centre around the district centroid into world space.
@@ -629,7 +662,7 @@ export function generateCity(rawSeed: string): CityData {
     const rot =
       useGrid && lattice
         ? lattice.orientationAt(district.centroidX, district.centroidZ) +
-          (rj - 0.5) * GRID_RESIDUAL_SPREAD
+          (rj - 0.5) * GRID_ZONE_SPREAD
         : (rj - 0.5) * rotSpread;
     const ctx = {
       district,
@@ -649,6 +682,7 @@ export function generateCity(rawSeed: string): CityData {
       topology.centerX,
       topology.centerZ,
       topology.halfExtent,
+      useGrid,
     );
 
     for (const b of blocks) {
