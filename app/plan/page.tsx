@@ -16,6 +16,7 @@ import {
   DialogClose,
   DialogContent,
   DialogPopup,
+  DialogPortal,
   DialogTitle,
 } from "@/components/ui/dialog";
 
@@ -162,31 +163,33 @@ export default function PlanPage() {
           if (!open) setActiveSeed(null);
         }}
       >
-        <DialogBackdrop />
-        <DialogPopup>
-          <DialogContent
-            style={{
-              width: `min(90vw, 90vh, ${LIGHTBOX_SIZE}px)`,
-              height: `min(90vw, 90vh, ${LIGHTBOX_SIZE}px)`,
-            }}
-          >
-            <div className="flex shrink-0 items-center justify-between border-b border-zinc-800 px-3 py-2">
-              <DialogTitle>{activeSeed ?? ""}</DialogTitle>
-              <DialogClose aria-label="Close">
-                <X size={14} />
-              </DialogClose>
-            </div>
-            <div className="flex flex-1 items-center justify-center overflow-hidden">
-              {activeSeed !== null && (
-                <PlanView
-                  seed={activeSeed}
-                  size={LIGHTBOX_SIZE}
-                  layers={layers}
-                />
-              )}
-            </div>
-          </DialogContent>
-        </DialogPopup>
+        <DialogPortal>
+          <DialogBackdrop />
+          <DialogPopup>
+            <DialogContent
+              style={{
+                width: `min(90vw, 90vh, ${LIGHTBOX_SIZE}px)`,
+                height: `min(90vw, 90vh, ${LIGHTBOX_SIZE}px)`,
+              }}
+            >
+              <div className="flex shrink-0 items-center justify-between border-b border-zinc-800 px-3 py-2">
+                <DialogTitle>{activeSeed ?? ""}</DialogTitle>
+                <DialogClose aria-label="Close">
+                  <X size={14} />
+                </DialogClose>
+              </div>
+              <div className="flex flex-1 items-center justify-center overflow-hidden">
+                {activeSeed !== null && (
+                  <PlanView
+                    seed={activeSeed}
+                    size={LIGHTBOX_SIZE}
+                    layers={layers}
+                  />
+                )}
+              </div>
+            </DialogContent>
+          </DialogPopup>
+        </DialogPortal>
       </Dialog>
     </main>
   );
