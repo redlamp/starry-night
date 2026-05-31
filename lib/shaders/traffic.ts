@@ -21,6 +21,7 @@ attribute float aSpeed; // segment-fractions per second
 attribute vec3 aColor;  // headlight colour (bulb-pool pick)
 attribute vec3 aTail;   // taillight colour
 attribute float aHead;  // 1 = flows headlight-first (top-down ribbon fallback)
+attribute float aReveal; // per-car intro reveal time 0..1 (density ramp)
 attribute float aSize;
 
 varying vec3 vColor;
@@ -35,13 +36,14 @@ void main() {
   // Fade in/out at the segment ends so the loop wrap doesn't pop.
   vAlpha = smoothstep(0.0, 0.06, t) * (1.0 - smoothstep(0.92, 1.0, t));
 
-  // Center-out intro wake, sharing the streetlights' progress + spread so the
-  // traffic eases in on the same timeline (#45 follow-up). Cars near the city
-  // centre light up first.
+  // Intro density ramp, sharing the streetlights' progress (#45 follow-up):
+  // each car has its own reveal time = a center-out radial term plus a random
+  // per-car jitter, so the roads fill from sparse to the full default rate over
+  // the intro rather than every car fading in together.
   vec2 dc = p.xz - uIntroCenter.xz;
   float rr = clamp(length(dc) / max(1.0, uIntroMaxRadius), 0.0, 1.0);
-  float thr = rr * 0.7;
-  vAlpha *= smoothstep(thr, thr + 0.08, uIntro);
+  float thr = rr * 0.3 + aReveal * 0.6;
+  vAlpha *= smoothstep(thr, thr + 0.06, uIntro);
 
   // Camera-relative head/tail (#45): a car driving toward the camera shows white
   // headlights, one driving away shows red tails. heading = travel direction.

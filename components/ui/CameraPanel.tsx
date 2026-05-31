@@ -13,6 +13,7 @@ import {
 } from "@/lib/state/sceneStore";
 import { randomSeed } from "@/lib/seed/rng";
 import { ARCHETYPE_ORDER, type Archetype } from "@/lib/seed/cityGen";
+import { CITY_SHAPES, type CityShapeSetting } from "@/lib/seed/cityShape";
 import { cn } from "@/lib/utils";
 import {
   AppWindow,
@@ -1095,6 +1096,7 @@ function SubHeader({ label }: { label: string }) {
 }
 
 const TINT_MODES = ["off", "district", "landuse", "archetype", "depth", "height"] as const;
+const CITY_SHAPE_MODES = ["auto", ...CITY_SHAPES] as const;
 const RENDER_GROUP_LABELS: Record<RenderGroup, string> = {
   buildings: "Buildings",
   roads: "Roads",
@@ -1112,12 +1114,35 @@ function DebugSection() {
   const setRenderMode = useSceneStore((s) => s.setRenderMode);
   const setAllRenderModes = useSceneStore((s) => s.setAllRenderModes);
   const setShowTensorField = useSceneStore((s) => s.setShowTensorField);
+  const cityShape = useSceneStore((s) => s.cityShape);
+  const setCityShape = useSceneStore((s) => s.setCityShape);
+  const cityShapeScale = useSceneStore((s) => s.cityShapeScale);
+  const setCityShapeScale = useSceneStore((s) => s.setCityShapeScale);
   // "all" tab reflects a shared mode, or sits blank when groups differ.
   const allMode = RENDER_GROUPS.every((g) => renderModes[g] === renderModes.buildings)
     ? renderModes.buildings
     : "";
   return (
     <>
+      <SubHeader label="City shape" />
+      <ModeSelect
+        value={cityShape}
+        modes={CITY_SHAPE_MODES}
+        onChange={(v) => setCityShape(v as CityShapeSetting)}
+      />
+      <ValueSlider
+        label="size"
+        value={cityShapeScale}
+        min={0.4}
+        max={1.4}
+        step={0.05}
+        onChange={setCityShapeScale}
+      />
+      <div className="text-foreground/45 text-[11px] leading-snug">
+        Footprint mask. auto = each seed picks; square = full field. size scales the circle
+        radius (1.0 ≈ map edges, 1.4 ≈ corners). Changing either regenerates the city.
+      </div>
+
       <SubHeader label="Building tint" />
       <ModeSelect
         value={tint.mode}

@@ -10,6 +10,7 @@ import {
   type Archetype,
   type Building,
 } from "@/lib/seed/cityGen";
+import type { CityShapeSetting } from "@/lib/seed/cityShape";
 import { FACADE_BY_LAYER, GLOW_BY_LAYER, generateWindowTexture } from "@/lib/seed/lightingGen";
 import { packWindowAtlas, type PackInput } from "@/lib/scene/atlasPacker";
 import { cityVertexShader, cityFragmentShader } from "@/lib/shaders/cityInstanced";
@@ -78,7 +79,12 @@ function pickCorrelationMode(b: Building): number {
 }
 
 export function InstancedCity({ masterSeed }: { masterSeed: string }) {
-  const { meshes, maxRadius } = useMemo(() => buildMeshes(masterSeed), [masterSeed]);
+  const cityShape = useSceneStore((s) => s.cityShape);
+  const cityShapeScale = useSceneStore((s) => s.cityShapeScale);
+  const { meshes, maxRadius } = useMemo(
+    () => buildMeshes(masterSeed, cityShape, cityShapeScale),
+    [masterSeed, cityShape, cityShapeScale],
+  );
   const hidden = useSceneStore((s) => s.debug.renderModes.buildings === "hidden");
 
   // Dispose old GPU resources when seed changes / unmounts.
@@ -140,8 +146,12 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
   );
 }
 
-function buildMeshes(masterSeed: string): { meshes: THREE.InstancedMesh[]; maxRadius: number } {
-  const { buildings } = generateCity(masterSeed);
+function buildMeshes(
+  masterSeed: string,
+  shape: CityShapeSetting,
+  shapeScale: number,
+): { meshes: THREE.InstancedMesh[]; maxRadius: number } {
+  const { buildings } = generateCity(masterSeed, shape, shapeScale);
   if (buildings.length === 0) return { meshes: [], maxRadius: 1 };
 
   let maxRadius = 1;

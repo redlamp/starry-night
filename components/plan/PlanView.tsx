@@ -8,6 +8,7 @@ import {
   tensorDistrictField,
   dropRadialSpokes,
 } from "@/lib/seed/cityGen";
+import { useSceneStore } from "@/lib/state/sceneStore";
 
 export type PlanLayers = {
   districts: boolean;
@@ -26,6 +27,8 @@ type Props = {
 
 export function PlanView({ seed, size, layers }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const cityShape = useSceneStore((s) => s.cityShape);
+  const cityShapeScale = useSceneStore((s) => s.cityShapeScale);
 
   const data = useMemo(() => {
     // Tensor is the only city model. Districts follow the arterial network
@@ -33,10 +36,10 @@ export function PlanView({ seed, size, layers }: Props) {
     // matches where the buildings were placed.
     const topo = dropRadialSpokes(generateTopology(seed));
     const field = tensorDistrictField(seed);
-    const city = generateCity(seed);
-    const lights = generateStreetlights(seed);
+    const city = generateCity(seed, cityShape, cityShapeScale);
+    const lights = generateStreetlights(seed, cityShape, cityShapeScale);
     return { topo, field, city, lights };
-  }, [seed]);
+  }, [seed, cityShape, cityShapeScale]);
 
   useEffect(() => {
     const canvas = canvasRef.current;

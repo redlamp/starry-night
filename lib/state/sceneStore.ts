@@ -1,6 +1,7 @@
 import { create } from "zustand";
 
-import type { TopologyKind } from "@/lib/seed/topology";
+import { CITY_SCALE, type TopologyKind } from "@/lib/seed/topology";
+import type { CityShapeSetting } from "@/lib/seed/cityShape";
 import type { Archetype } from "@/lib/seed/cityGen";
 
 export type LightingMode = "classic" | "modern";
@@ -87,16 +88,17 @@ export type OrbitConfig = {
 };
 
 // Tuned via the in-app Save/Copy values workflow (last 2026-05-31).
-// Wide pull-back radius (2400) frames the whole sprawl; 1200s sweep (0.3°/s) at a
-// gentle 9.25° elevation; focal Y at 114 sits the skyline a touch higher in frame.
+// Radius scales with city width (CITY_SCALE); 1800s sweep (0.2°/s) at a gentle 9°
+// elevation. lookAtY (focal HEIGHT) is NOT scaled — building heights are fixed
+// across size tiers, so the skyline sits at the same Y regardless of extent.
 export const DEFAULT_ORBIT: OrbitConfig = {
   centerX: 0,
   centerZ: -120,
-  lookAtY: 114,
-  radius: 2400,
-  azimuthDeg: 239.53946000002315,
-  elevationDeg: 9.25,
-  periodSec: 1200,
+  lookAtY: 130,
+  radius: 2400 * CITY_SCALE,
+  azimuthDeg: 6,
+  elevationDeg: 9,
+  periodSec: 1800,
 };
 
 // Azimuth flipped 180° from the 200° tuning that paired with the old camera
@@ -108,13 +110,18 @@ export const DEFAULT_ORBIT: OrbitConfig = {
 export const DEFAULT_MOON = {
   azimuthDeg: 20,
   elevationDeg: 1,
-  distance: 4500,
+  distance: 4500 * CITY_SCALE,
   radiusRatio: 0.02,
 };
 // `factor` is the star base size in px (mean, before the per-star long-tail).
 // Previously a vestigial drei value (200) that nothing read; now wired to
 // StarField's size prop. Legacy large values are migrated on load.
-export const DEFAULT_STARS = { radius: 4500, depth: 360, count: 24000, factor: 36 };
+export const DEFAULT_STARS = {
+  radius: 4500 * CITY_SCALE,
+  depth: 360 * CITY_SCALE,
+  count: 24000,
+  factor: 36,
+};
 // Window shader AA / LOD / occupancy tuning, exposed live via the Windows panel.
 //   edge    — fwidth edge-AA multiplier (higher = softer window edges)
 //   lodNear — cells-per-pixel where the distance wash-to-glow starts
@@ -150,24 +157,24 @@ export const DEFAULT_WINDOW_PROFILES: Record<Archetype, { w: number; h: number }
 // plane relative to the moon radius; innerRadius is the 0..0.5 fraction of the
 // disc that stays opaque before the soft falloff; intensity multiplies the
 // emissive output (post-tonemap, so >1.0 blooms under ACES).
-export const DEFAULT_MOON_HALO = { radiusMul: 3.5, innerRadius: 0.08, intensity: 1.3 };
+export const DEFAULT_MOON_HALO = { radiusMul: 2.5, innerRadius: 0.05, intensity: 1.1 };
 
 export const DEFAULT_FOG = {
   enabled: true,
   mode: "linear" as const,
   color: "#0a1838",
-  near: 2400,
-  far: 6400,
+  near: 2400 * CITY_SCALE,
+  far: 6400 * CITY_SCALE,
   density: 0.0006,
 };
 
 export const DEFAULT_HAZE = {
   enabled: true,
   color: "#1b2641",
-  topY: 360,
-  bottomY: -15,
+  topY: 360 * CITY_SCALE,
+  bottomY: -15 * CITY_SCALE,
   intensity: 1.1,
-  radius: 1450,
+  radius: 1450 * CITY_SCALE,
 };
 
 // Intro wake-up sequence defaults. Durations are the "Default" speed preset
@@ -238,8 +245,18 @@ export const DEFAULT_TRAFFIC = { enabled: true, density: 1, highway: 4, arterial
 // Streetlights along the road network. On by default; toggled from the Roads panel.
 export const DEFAULT_STREETLIGHTS = { enabled: true };
 
+// Organic city footprint (#14). `square` = the original full-square field (safe
+// default, byte-identical). `auto` lets each seed pick its own shape; the other
+// values force one shape (the debug switcher). See lib/seed/cityShape.ts.
+export const DEFAULT_CITY_SHAPE: CityShapeSetting = "square";
+// Circle-mask radius as a fraction of the city half-extent. 1.0 touches the
+// square's edge midpoints; ~1.4 reaches the corners (full content). Only affects
+// the `circle` shape. Tunable via the City shape size slider.
+export const DEFAULT_CITY_SHAPE_SCALE = 1.0;
+
 export const DEFAULT_FLY_SPEED = 14;
-export const DEFAULT_ORTHO_SIZE = 300;
+// 360 at the City size (1500); base scales with the size knob via CITY_SCALE.
+export const DEFAULT_ORTHO_SIZE = 180 * CITY_SCALE;
 export const DEFAULT_PROJECTION = "orthographic" as const;
 
 // ---------------------------------------------------------------------------
@@ -296,7 +313,9 @@ type AnySettingEntry =
   | SettingEntry<"starIntro">
   | SettingEntry<"debug">
   | SettingEntry<"traffic">
-  | SettingEntry<"streetlights">;
+  | SettingEntry<"streetlights">
+  | SettingEntry<"cityShape">
+  | SettingEntry<"cityShapeScale">;
 
 export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "cameraIntent", defaultValue: DEFAULT_INTENT, persist: true },
@@ -332,6 +351,8 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "debug", defaultValue: DEFAULT_DEBUG, persist: false },
   { key: "traffic", defaultValue: DEFAULT_TRAFFIC, persist: true },
   { key: "streetlights", defaultValue: DEFAULT_STREETLIGHTS, persist: true },
+  { key: "cityShape", defaultValue: DEFAULT_CITY_SHAPE, persist: true },
+  { key: "cityShapeScale", defaultValue: DEFAULT_CITY_SHAPE_SCALE, persist: true },
 ];
 
 // cityPlanning visibility toggles — persisted separately because `cityPlanning`
@@ -363,6 +384,8 @@ type SavedConfig = {
   starIntro?: SceneState["starIntro"];
   traffic?: SceneState["traffic"];
   streetlights?: SceneState["streetlights"];
+  cityShape?: CityShapeSetting;
+  cityShapeScale?: number;
   // Only the layer-visibility toggles persist — topologyKind / arterialCount
   // are per-seed runtime readouts, not settings.
   cityPlanning?: {
@@ -611,6 +634,11 @@ type SceneState = {
   setAllRenderModes: (mode: RenderMode) => void;
   setRenderModes: (modes: Record<RenderGroup, RenderMode>) => void;
   setShowTensorField: (v: boolean) => void;
+  // Organic city footprint (#14) — gen input; changing it regenerates the city.
+  cityShape: CityShapeSetting;
+  setCityShape: (cityShape: CityShapeSetting) => void;
+  cityShapeScale: number;
+  setCityShapeScale: (cityShapeScale: number) => void;
   // Ambient traffic (research D) — opt-in car head/tail-lights.
   traffic: typeof DEFAULT_TRAFFIC;
   setTraffic: (patch: Partial<typeof DEFAULT_TRAFFIC>) => void;
@@ -677,8 +705,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     fov: DEFAULT_INTENT.fov,
   },
   cameraTweenRequest: null,
-  projection: "orthographic",
-  orthoSize: 240,
+  projection: DEFAULT_PROJECTION,
+  orthoSize: DEFAULT_ORTHO_SIZE,
   projectionBlend: 1,
   setProjection: (projection) => set({ projection }),
   setOrthoSize: (orthoSize) => set({ orthoSize }),
@@ -778,6 +806,10 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     })),
   setRenderModes: (renderModes) => set((s) => ({ debug: { ...s.debug, renderModes } })),
   setShowTensorField: (v) => set((s) => ({ debug: { ...s.debug, showTensorField: v } })),
+  cityShape: DEFAULT_CITY_SHAPE,
+  setCityShape: (cityShape) => set({ cityShape }),
+  cityShapeScale: DEFAULT_CITY_SHAPE_SCALE,
+  setCityShapeScale: (cityShapeScale) => set({ cityShapeScale }),
   traffic: DEFAULT_TRAFFIC,
   setTraffic: (patch) => set((s) => ({ traffic: { ...s.traffic, ...patch } })),
   streetlights: DEFAULT_STREETLIGHTS,
