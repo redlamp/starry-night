@@ -20,6 +20,7 @@ import { IntroTicker } from "./IntroTicker";
 import { GroundHaze } from "./GroundHaze";
 import { Roads } from "./Roads";
 import { DistrictShells } from "./DistrictShells";
+import { TensorFieldOverlay } from "./TensorFieldOverlay";
 
 export function Scene() {
   const masterSeed = useSceneStore((s) => s.masterSeed);
@@ -75,6 +76,7 @@ export function Scene() {
       {/* Planning overlays — each respects its own visibility flag (default off).
           Highway/arterial/street tier tinting now lives in <Roads/>. */}
       <DistrictShells masterSeed={masterSeed} />
+      <TensorFieldOverlay masterSeed={masterSeed} />
       <FocalIndicator />
     </Canvas>
   );

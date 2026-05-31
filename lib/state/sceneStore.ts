@@ -216,6 +216,8 @@ export const DEFAULT_DEBUG = {
     sky: "rendered" as RenderMode,
     moon: "rendered" as RenderMode,
   } as Record<RenderGroup, RenderMode>,
+  // Tensor Field view (#40 Phase 1): overlay the road-shaping direction field.
+  showTensorField: false,
 };
 
 // Default wireframe stroke colour — a bright blue used where a group has no
@@ -573,6 +575,7 @@ type SceneState = {
   setBuildingTint: (patch: Partial<{ mode: BuildingTintMode; intensity: number }>) => void;
   setRenderMode: (group: RenderGroup, mode: RenderMode) => void;
   setAllRenderModes: (mode: RenderMode) => void;
+  setShowTensorField: (v: boolean) => void;
   perf: Perf;
   setPerf: (perf: Perf) => void;
   setSeed: (seed: string) => void;
@@ -715,6 +718,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         renderModes: { buildings: mode, roads: mode, ground: mode, sky: mode, moon: mode },
       },
     })),
+  setShowTensorField: (v) => set((s) => ({ debug: { ...s.debug, showTensorField: v } })),
   perf: { fps: 0, triangles: 0, calls: 0, geometries: 0, textures: 0 },
   setPerf: (perf) => set({ perf }),
   setSeed: (masterSeed) => set({ masterSeed }),

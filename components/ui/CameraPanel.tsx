@@ -42,6 +42,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -1085,9 +1086,11 @@ const RENDER_GROUP_LABELS: Record<RenderGroup, string> = {
 function DebugSection() {
   const tint = useSceneStore((s) => s.debug.buildingTint);
   const renderModes = useSceneStore((s) => s.debug.renderModes);
+  const showTensorField = useSceneStore((s) => s.debug.showTensorField);
   const setBuildingTint = useSceneStore((s) => s.setBuildingTint);
   const setRenderMode = useSceneStore((s) => s.setRenderMode);
   const setAllRenderModes = useSceneStore((s) => s.setAllRenderModes);
+  const setShowTensorField = useSceneStore((s) => s.setShowTensorField);
   // "all" tab reflects a shared mode, or sits blank when groups differ.
   const allMode = RENDER_GROUPS.every((g) => renderModes[g] === renderModes.buildings)
     ? renderModes.buildings
@@ -1125,6 +1128,15 @@ function DebugSection() {
       ))}
       <div className="text-foreground/45 text-[11px] leading-snug">
         Wireframe applies to mesh geometry; it&apos;s a no-op for Sky + Stars.
+      </div>
+
+      <SubHeader label="Tensor field" />
+      <label className="flex cursor-pointer items-center justify-between gap-2 text-xs">
+        <span className="text-foreground/70">grain direction overlay</span>
+        <Switch checked={showTensorField} onCheckedChange={setShowTensorField} />
+      </label>
+      <div className="text-foreground/45 text-[11px] leading-snug">
+        The major-eigenvector field the roads follow — ticks coloured by grain angle.
       </div>
     </>
   );
