@@ -22,6 +22,7 @@ export function Roads({ masterSeed }: { masterSeed: string }) {
   const showHighways = useSceneStore((s) => s.cityPlanning.showHighways);
   const showArterials = useSceneStore((s) => s.cityPlanning.showArterials);
   const showStreets = useSceneStore((s) => s.cityPlanning.showStreets);
+  const roadsMode = useSceneStore((s) => s.debug.renderModes.roads);
   const setTopologyKind = useSceneStore((s) => s.setTopologyKind);
   const setArterialCount = useSceneStore((s) => s.setArterialCount);
 
@@ -64,20 +65,33 @@ export function Roads({ masterSeed }: { masterSeed: string }) {
     };
   }, [geometries]);
 
+  // Debug "roads" group (Slice B): Hidden drops the whole network; Wireframe
+  // renders the ribbon geometry as edges.
+  const wireframe = roadsMode === "wireframe";
+  // In wireframe each tier strokes in its highlight colour (the same tint the
+  // Roads panel toggles apply), regardless of the show toggles — so the network
+  // reads by tier on the dark ground.
   return (
-    <>
-      <RoadTier geometry={geometries.streets} color={showStreets ? STREET_COLOR : ASPHALT} order={1} />
+    <group visible={roadsMode !== "hidden"}>
+      <RoadTier
+        geometry={geometries.streets}
+        color={wireframe || showStreets ? STREET_COLOR : ASPHALT}
+        order={1}
+        wireframe={wireframe}
+      />
       <RoadTier
         geometry={geometries.arterials}
-        color={showArterials ? ARTERIAL_COLOR : ASPHALT}
+        color={wireframe || showArterials ? ARTERIAL_COLOR : ASPHALT}
         order={2}
+        wireframe={wireframe}
       />
       <RoadTier
         geometry={geometries.highways}
-        color={showHighways ? HIGHWAY_COLOR : ASPHALT}
+        color={wireframe || showHighways ? HIGHWAY_COLOR : ASPHALT}
         order={3}
+        wireframe={wireframe}
       />
-    </>
+    </group>
   );
 }
 
@@ -85,10 +99,12 @@ function RoadTier({
   geometry,
   color,
   order,
+  wireframe,
 }: {
   geometry: THREE.BufferGeometry;
   color: string;
   order: number;
+  wireframe: boolean;
 }) {
   return (
     <mesh geometry={geometry} position={[0, ROAD_Y, 0]} renderOrder={order}>
@@ -103,6 +119,7 @@ function RoadTier({
         polygonOffsetFactor={-2}
         polygonOffsetUnits={-2}
         depthWrite={false}
+        wireframe={wireframe}
       />
     </mesh>
   );

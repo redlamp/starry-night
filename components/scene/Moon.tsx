@@ -30,6 +30,7 @@ export function Moon() {
   const starsRadius = useSceneStore((s) => s.stars.radius);
   const orbit = useSceneStore((s) => s.orbit);
   const moon = useSceneStore((s) => s.moon);
+  const moonMode = useSceneStore((s) => s.debug.renderModes.moon);
   const setMoonLive = useSceneStore((s) => s.setMoonLive);
   const lastWrite = useRef(0);
 
@@ -97,10 +98,17 @@ export function Moon() {
     }
   });
 
+  // Debug "moon" group (Slice B): Hidden drops the moon + halo; Wireframe
+  // renders the lunar sphere as edges (halo billboard left as-is).
   return (
-    <mesh ref={meshRef}>
+    <mesh ref={meshRef} visible={moonMode !== "hidden"}>
       <sphereGeometry args={[moonRadius, 32, 32]} />
-      <meshBasicMaterial color="#f7f1d8" toneMapped={false} fog={false} />
+      <meshBasicMaterial
+        color="#f7f1d8"
+        toneMapped={false}
+        fog={false}
+        wireframe={moonMode === "wireframe"}
+      />
       <mesh ref={haloRef} material={haloMaterial} renderOrder={-1}>
         <planeGeometry args={[1, 1]} />
       </mesh>

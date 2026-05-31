@@ -3,7 +3,13 @@
 import { useEffect, useMemo } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
-import { generateCity, ARCHETYPE_ORDER, type Archetype, type Building } from "@/lib/seed/cityGen";
+import {
+  generateCity,
+  ARCHETYPE_ORDER,
+  tensorDistrictField,
+  type Archetype,
+  type Building,
+} from "@/lib/seed/cityGen";
 import { FACADE_BY_LAYER, GLOW_BY_LAYER, generateWindowTexture } from "@/lib/seed/lightingGen";
 import { packWindowAtlas, type PackInput } from "@/lib/scene/atlasPacker";
 import { cityVertexShader, cityFragmentShader } from "@/lib/shaders/cityInstanced";
@@ -16,7 +22,7 @@ import {
   sharedRetrigger,
   sharedCycleJitter,
 } from "@/lib/shaders/sharedIntro";
-import { useSceneStore, DEFAULT_WINDOW_PROFILES } from "@/lib/state/sceneStore";
+import { useSceneStore, DEFAULT_WINDOW_PROFILES, DEBUG_WIRE_COLOR } from "@/lib/state/sceneStore";
 
 const DISTRICT_TO_IDX: Record<string, number> = {
   downtown: 0,
@@ -24,6 +30,32 @@ const DISTRICT_TO_IDX: Record<string, number> = {
   industrial: 2,
   oldtown: 3,
 };
+
+const LAYER_TO_IDX: Record<string, number> = { front: 0, mid: 1, back: 2 };
+
+// Debug tint mode → shader uDebugMode float (see cityInstanced fragment).
+const TINT_MODE_IDX: Record<string, number> = {
+  off: 0,
+  district: 1,
+  landuse: 2,
+  archetype: 3,
+  depth: 4,
+  height: 5,
+};
+
+// Flat, distinct debug palettes (THREE.Color → linear, matching the facade
+// colour convention; uploaded as vec3 arrays to the shader).
+const TINT_LANDUSE = ["#3fd0e0", "#5fcf7a", "#e0913f", "#b07fe0"].map((c) => new THREE.Color(c)); // downtown / residential / industrial / oldtown
+const TINT_ARCHETYPE = [
+  "#ff6b6b",
+  "#ffd166",
+  "#06d6a0",
+  "#4ea8de",
+  "#b388ff",
+  "#f78fb3",
+  "#90be6d",
+].map((c) => new THREE.Color(c)); // ARCHETYPE_ORDER index
+const TINT_DEPTH = ["#ff5a5a", "#ffd24a", "#5a9bff"].map((c) => new THREE.Color(c)); // front / mid / back
 
 // Archetypes that may use office-style correlated lighting (per-block or
 // whole-floor). For these, we pick a per-building cohort: most stay per-window,
@@ -47,6 +79,7 @@ function pickCorrelationMode(b: Building): number {
 
 export function InstancedCity({ masterSeed }: { masterSeed: string }) {
   const { meshes, maxRadius } = useMemo(() => buildMeshes(masterSeed), [masterSeed]);
+  const hidden = useSceneStore((s) => s.debug.renderModes.buildings === "hidden");
 
   // Dispose old GPU resources when seed changes / unmounts.
   useEffect(() => {
@@ -88,15 +121,22 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
         fw[k] = p.w;
         fh[k] = p.h;
       }
+      // Debug view (Slice A tint + Slice B wireframe) — uniform / flag only.
+      const tint = s.debug.buildingTint;
+      mat.uniforms.uDebugMode.value = TINT_MODE_IDX[tint.mode] ?? 0;
+      mat.uniforms.uDebugTint.value = tint.mode === "off" ? 0 : tint.intensity;
+      const wire = s.debug.renderModes.buildings === "wireframe";
+      mat.wireframe = wire;
+      mat.uniforms.uWireframe.value = wire ? 1 : 0;
     }
   });
 
   return (
-    <>
+    <group visible={!hidden}>
       {meshes.map((m, i) => (
         <primitive key={i} object={m} />
       ))}
-    </>
+    </group>
   );
 }
 
@@ -105,10 +145,17 @@ function buildMeshes(masterSeed: string): { meshes: THREE.InstancedMesh[]; maxRa
   if (buildings.length === 0) return { meshes: [], maxRadius: 1 };
 
   let maxRadius = 1;
+  let maxHeight = 1;
   for (const b of buildings) {
     const r = Math.hypot(b.x, b.z + 120); // approximate centre offset
     if (r > maxRadius) maxRadius = r;
+    if (b.height > maxHeight) maxHeight = b.height;
   }
+
+  // Parcel id → plan colour (the DistrictShells palette) for the district tint
+  // debug mode. tensorDistrictField is cached, so this is a cheap shared read.
+  const parcelColor = new Map<string, string>();
+  for (const d of tensorDistrictField(masterSeed).districts) parcelColor.set(d.id, d.color);
 
   // 1. Generate per-building window pixels.
   const windowItems: PackInput[] = buildings.map((b) => {
@@ -157,8 +204,8 @@ function buildMeshes(masterSeed: string): { meshes: THREE.InstancedMesh[]; maxRa
     const aFacadeColor = new Float32Array(N * 3);
     const aFacadeGlow = new Float32Array(N);
     const aBuildingHash = new Float32Array(N);
-    const aDistrictIdx = new Float32Array(N);
-    const aCorrelationMode = new Float32Array(N);
+    const aMisc = new Float32Array(N * 3); // x=districtIdx, y=correlationMode, z=layerIdx
+    const aDebugDistrictColor = new Float32Array(N * 3);
 
     const material = new THREE.ShaderMaterial({
       vertexShader: cityVertexShader,
@@ -187,11 +234,20 @@ function buildMeshes(masterSeed: string): { meshes: THREE.InstancedMesh[]; maxRa
           uAaEdge: { value: 1.1 },
           uLodNear: { value: 0.2 },
           uLodRange: { value: 0.4 },
+          uDebugMode: { value: 0 },
+          uDebugTint: { value: 0 },
+          uMaxHeight: { value: 1 },
+          uLandusePalette: { value: [] },
+          uArchetypePalette: { value: [] },
+          uDepthPalette: { value: [] },
+          uWireframe: { value: 0 },
+          uWireColor: { value: new THREE.Color() },
         },
       ]),
       fog: true,
     });
-    // UniformsUtils.merge breaks the texture / shared singletons; restore.
+    // UniformsUtils.merge breaks the texture / shared singletons + clones the
+    // debug palette arrays; restore all by reference.
     material.uniforms.uWindowAtlas.value = atlasTex;
     material.uniforms.uTime = sharedTime;
     material.uniforms.uIntroMode = sharedIntroMode;
@@ -200,6 +256,11 @@ function buildMeshes(masterSeed: string): { meshes: THREE.InstancedMesh[]; maxRa
     material.uniforms.uOffCycle = sharedOffCycle;
     material.uniforms.uRetrigger = sharedRetrigger;
     material.uniforms.uCycleJitter = sharedCycleJitter;
+    material.uniforms.uMaxHeight.value = maxHeight;
+    material.uniforms.uLandusePalette.value = TINT_LANDUSE;
+    material.uniforms.uArchetypePalette.value = TINT_ARCHETYPE;
+    material.uniforms.uDepthPalette.value = TINT_DEPTH;
+    material.uniforms.uWireColor.value.set(DEBUG_WIRE_COLOR);
 
     const mesh = new THREE.InstancedMesh(geo, material, N);
 
@@ -224,8 +285,14 @@ function buildMeshes(masterSeed: string): { meshes: THREE.InstancedMesh[]; maxRa
 
       aFacadeGlow[i] = GLOW_BY_LAYER[b.layer];
       aBuildingHash[i] = b.windowSeed * 1000;
-      aDistrictIdx[i] = DISTRICT_TO_IDX[b.district] ?? 0;
-      aCorrelationMode[i] = pickCorrelationMode(b);
+      aMisc[i * 3 + 0] = DISTRICT_TO_IDX[b.district] ?? 0;
+      aMisc[i * 3 + 1] = pickCorrelationMode(b);
+      aMisc[i * 3 + 2] = LAYER_TO_IDX[b.layer] ?? 1;
+
+      color.set(parcelColor.get(b.districtId) ?? "#888888");
+      aDebugDistrictColor[i * 3 + 0] = color.r;
+      aDebugDistrictColor[i * 3 + 1] = color.g;
+      aDebugDistrictColor[i * 3 + 2] = color.b;
 
       position.set(b.x, b.height / 2, b.z);
       euler.set(0, b.rotationY, 0);
@@ -241,8 +308,11 @@ function buildMeshes(masterSeed: string): { meshes: THREE.InstancedMesh[]; maxRa
     geo.setAttribute("aFacadeColor", new THREE.InstancedBufferAttribute(aFacadeColor, 3));
     geo.setAttribute("aFacadeGlow", new THREE.InstancedBufferAttribute(aFacadeGlow, 1));
     geo.setAttribute("aBuildingHash", new THREE.InstancedBufferAttribute(aBuildingHash, 1));
-    geo.setAttribute("aDistrictIdx", new THREE.InstancedBufferAttribute(aDistrictIdx, 1));
-    geo.setAttribute("aCorrelationMode", new THREE.InstancedBufferAttribute(aCorrelationMode, 1));
+    geo.setAttribute("aMisc", new THREE.InstancedBufferAttribute(aMisc, 3));
+    geo.setAttribute(
+      "aDebugDistrictColor",
+      new THREE.InstancedBufferAttribute(aDebugDistrictColor, 3),
+    );
 
     mesh.instanceMatrix.needsUpdate = true;
     mesh.frustumCulled = false; // bounds are union of all instances; cheaper to skip cull than compute.

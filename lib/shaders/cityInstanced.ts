@@ -8,14 +8,15 @@ attribute vec3 aGrid; // cols, rows, archetypeIdx (idx packed into .z to save an
 attribute vec3 aFacadeColor;
 attribute float aFacadeGlow;
 attribute float aBuildingHash;
-attribute float aDistrictIdx; // 0=downtown, 1=residential, 2=industrial, 3=oldtown
-// Post-intro window breathing correlation per building:
-//   0 = per-window (each cell independent — residential default)
-//   1 = per-block  (a floor is split into 2..5 horizontal blocks, each block phases together)
-//   2 = whole-floor (every cell on a floor shares one phase)
-// Office archetypes pick from {0,1,2} per building so the city has a mix; the
-// hand-wave / working-late "stragglers" override below keeps every mode dynamic.
-attribute float aCorrelationMode;
+// Packed per-instance scalars — keeps us under the hard ~16 vertex-attribute
+// cap (GL_MAX_VERTEX_ATTRIBS). Components:
+//   x = district idx        (0=downtown, 1=residential, 2=industrial, 3=oldtown)
+//   y = breathing correlation (0=per-window, 1=per-block, 2=whole-floor; office
+//       archetypes pick {0,1,2} per building so the city has a mix)
+//   z = depth band          (0=front, 1=mid, 2=back) — drives the depth tint mode
+attribute vec3 aMisc;
+// Debug-view tint (Slice A): the parcel's plan colour (matches DistrictShells).
+attribute vec3 aDebugDistrictColor;
 
 varying vec2 vUv;
 varying vec3 vNormalLocal;     // pre-instance normal — face direction in geometry-local space
@@ -29,6 +30,9 @@ varying float vBuildingHash;
 varying float vDistrictIdx;
 varying float vCorrelationMode;
 varying vec3 vBuildingCenter;  // world-space centre of this instance
+varying vec3 vDebugDistrictColor;
+varying float vLayerIdx;
+varying float vBuildingHeight;  // world height (instance scale.y), for the height tint ramp
 // #25: vertical face id (0=+X, 1=-X, 2=+Z, 3=-Z), constant per face thanks to
 // BoxGeometry's per-face normal duplication. Drives a per-face shift of which
 // atlas pixels each vertical face samples so the 4 sides aren't identical.
@@ -56,9 +60,12 @@ void main() {
   vFacadeColor = aFacadeColor;
   vFacadeGlow = aFacadeGlow;
   vBuildingHash = aBuildingHash;
-  vDistrictIdx = aDistrictIdx;
-  vCorrelationMode = aCorrelationMode;
+  vDistrictIdx = aMisc.x;
+  vCorrelationMode = aMisc.y;
+  vLayerIdx = aMisc.z;
   vBuildingCenter = (modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+  vDebugDistrictColor = aDebugDistrictColor;
+  vBuildingHeight = scaleVec.y; // instance Y scale == building height
 
   vec4 mvPosition = modelViewMatrix * instanceMatrix * vec4(position, 1.0);
   gl_Position = projectionMatrix * mvPosition;
@@ -102,6 +109,20 @@ uniform float uAaEdge;          // fwidth edge-AA multiplier (window-quality pan
 uniform float uLodNear;         // cells-per-pixel where distance wash starts
 uniform float uLodRange;        // ramp width from uLodNear to full wash
 
+// Debug building tint (Slice A). uDebugMode: 0 off, 1 district(parcel),
+// 2 land-use, 3 archetype, 4 depth band, 5 height. uDebugTint = mix amount
+// (0 → scene byte-identical to off). Palettes are flat distinct debug colours.
+uniform float uDebugMode;
+uniform float uDebugTint;
+uniform float uMaxHeight;
+uniform vec3 uLandusePalette[4];
+uniform vec3 uArchetypePalette[7];
+uniform vec3 uDepthPalette[3];
+// Slice B wireframe: when on, output a flat bright stroke colour (no fog) so the
+// edges read against the dark night background instead of the near-black facade.
+uniform float uWireframe;
+uniform vec3 uWireColor;
+
 varying vec2 vUv;
 varying vec3 vNormalLocal;
 varying vec3 vNormalWorld;
@@ -115,6 +136,9 @@ varying float vDistrictIdx;
 varying float vCorrelationMode;
 varying vec3 vBuildingCenter;
 varying float vFaceId;
+varying vec3 vDebugDistrictColor;
+varying float vLayerIdx;
+varying float vBuildingHeight;
 float hash11(float p) {
   p = fract(p * 0.1031);
   p *= p + 33.33;
@@ -122,7 +146,46 @@ float hash11(float p) {
   return fract(p);
 }
 
+// Per-instance debug tint colour by category. Palette indexing uses constant-
+// bounded loops (not dynamic uniform indexing) to stay GLSL ES 1.00 safe, same
+// pattern as the per-archetype window-fraction lookup.
+vec3 debugTintColor() {
+  if (uDebugMode < 1.5) {
+    return vDebugDistrictColor;                      // 1: district parcel (plan palette)
+  } else if (uDebugMode < 2.5) {                     // 2: land-use type
+    int idx = int(vDistrictIdx + 0.5);
+    vec3 c = uLandusePalette[0];
+    for (int k = 1; k < 4; k++) { if (k == idx) c = uLandusePalette[k]; }
+    return c;
+  } else if (uDebugMode < 3.5) {                     // 3: archetype
+    int idx = int(vGrid.z + 0.5);
+    vec3 c = uArchetypePalette[0];
+    for (int k = 1; k < 7; k++) { if (k == idx) c = uArchetypePalette[k]; }
+    return c;
+  } else if (uDebugMode < 4.5) {                     // 4: depth band (front/mid/back)
+    int idx = int(vLayerIdx + 0.5);
+    vec3 c = uDepthPalette[0];
+    for (int k = 1; k < 3; k++) { if (k == idx) c = uDepthPalette[k]; }
+    return c;
+  }
+  // 5: height — blue (low) → green → amber → red (tall)
+  float t = clamp(vBuildingHeight / max(uMaxHeight, 1.0), 0.0, 1.0);
+  vec3 c = mix(vec3(0.15, 0.30, 0.90), vec3(0.20, 0.95, 0.60), smoothstep(0.0, 0.4, t));
+  c = mix(c, vec3(1.0, 0.85, 0.20), smoothstep(0.35, 0.75, t));
+  c = mix(c, vec3(1.0, 0.25, 0.20), smoothstep(0.70, 1.0, t));
+  return c;
+}
+
 void main() {
+  // Wireframe (Slice B): flat stroke, no window math, no fog. Colour matches the
+  // building tint mode — blue default (uWireColor) when no mode is active, else
+  // the active mode's per-instance colour, so the wireframe reads like the tint.
+  if (uWireframe > 0.5) {
+    vec3 wireC = uDebugMode > 0.5 ? debugTintColor() : uWireColor;
+    gl_FragColor = vec4(wireC, 1.0);
+    return;
+  }
+
   vec3 facade = vFacadeColor * (1.0 + vFacadeGlow);
 
   // Top + bottom faces: solid facade — detect via the geometry-local normal
@@ -130,7 +193,9 @@ void main() {
   // always have local normal ±Y).
   float upDotLocal = abs(vNormalLocal.y);
   if (upDotLocal > 0.5) {
-    gl_FragColor = vec4(facade, 1.0);
+    vec3 topc = facade;
+    if (uDebugTint > 0.0001) topc = mix(topc, debugTintColor(), uDebugTint);
+    gl_FragColor = vec4(topc, 1.0);
     #include <fog_fragment>
     return;
   }
@@ -313,6 +378,7 @@ void main() {
     color = mix(nearColor, farColor, lod);
   }
 
+  if (uDebugTint > 0.0001) color = mix(color, debugTintColor(), uDebugTint);
   gl_FragColor = vec4(color, 1.0);
   #include <fog_fragment>
 }

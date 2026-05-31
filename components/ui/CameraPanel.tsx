@@ -6,12 +6,17 @@ import {
   type Vec3,
   type QualityTier,
   QUALITY_TIERS,
+  RENDER_GROUPS,
+  type RenderGroup,
+  type RenderMode,
+  type BuildingTintMode,
 } from "@/lib/state/sceneStore";
 import { randomSeed } from "@/lib/seed/rng";
 import { ARCHETYPE_ORDER, type Archetype } from "@/lib/seed/cityGen";
 import { cn } from "@/lib/utils";
 import {
   AppWindow,
+  Bug,
   Building2,
   Camera,
   Check,
@@ -321,6 +326,10 @@ export function CameraPanel() {
 
             <Section value="perf" icon={Gauge} label="Performance">
               <PerfReadout />
+            </Section>
+
+            <Section value="debug" icon={Bug} label="Debug View">
+              <DebugSection />
             </Section>
           </Accordion>
         </div>
@@ -1059,6 +1068,87 @@ function SubHeader({ label }: { label: string }) {
   return (
     <div className="text-foreground/55 mt-1 border-t border-white/10 pt-2 text-[11px] font-medium tracking-wide uppercase">
       {label}
+    </div>
+  );
+}
+
+const TINT_MODES = ["off", "district", "landuse", "archetype", "depth", "height"] as const;
+const RENDER_GROUP_LABELS: Record<RenderGroup, string> = {
+  buildings: "Buildings",
+  roads: "Roads",
+  ground: "Ground",
+  sky: "Sky + Stars",
+  moon: "Moon",
+};
+
+// Debug View (#39): building tint (Slice A) + per-group render mode (Slice B).
+function DebugSection() {
+  const tint = useSceneStore((s) => s.debug.buildingTint);
+  const renderModes = useSceneStore((s) => s.debug.renderModes);
+  const setBuildingTint = useSceneStore((s) => s.setBuildingTint);
+  const setRenderMode = useSceneStore((s) => s.setRenderMode);
+  const setAllRenderModes = useSceneStore((s) => s.setAllRenderModes);
+  // "all" tab reflects a shared mode, or sits blank when groups differ.
+  const allMode = RENDER_GROUPS.every((g) => renderModes[g] === renderModes.buildings)
+    ? renderModes.buildings
+    : "";
+  return (
+    <>
+      <SubHeader label="Building tint" />
+      <ModeSelect
+        value={tint.mode}
+        modes={TINT_MODES}
+        onChange={(v) => setBuildingTint({ mode: v as BuildingTintMode })}
+      />
+      <ValueSlider
+        label="intensity"
+        value={tint.intensity}
+        min={0}
+        max={1}
+        step={0.05}
+        onChange={(intensity) => setBuildingTint({ intensity })}
+      />
+
+      <SubHeader label="Render modes" />
+      <RenderModeTabs
+        label="all"
+        value={allMode}
+        onChange={(v) => setAllRenderModes(v as RenderMode)}
+      />
+      {RENDER_GROUPS.map((g) => (
+        <RenderModeTabs
+          key={g}
+          label={RENDER_GROUP_LABELS[g]}
+          value={renderModes[g]}
+          onChange={(v) => setRenderMode(g, v as RenderMode)}
+        />
+      ))}
+      <div className="text-foreground/45 text-[11px] leading-snug">
+        Wireframe applies to mesh geometry; it&apos;s a no-op for Sky + Stars.
+      </div>
+    </>
+  );
+}
+
+function RenderModeTabs({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-foreground/40 text-xs tracking-wide uppercase">{label}</span>
+      <Tabs value={value} onValueChange={(v) => v && onChange(v)}>
+        <TabsList className="w-full">
+          <TabsTrigger value="rendered">Rendered</TabsTrigger>
+          <TabsTrigger value="wireframe">Wireframe</TabsTrigger>
+          <TabsTrigger value="hidden">Hidden</TabsTrigger>
+        </TabsList>
+      </Tabs>
     </div>
   );
 }

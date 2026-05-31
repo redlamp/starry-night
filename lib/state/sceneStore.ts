@@ -196,6 +196,34 @@ export const DEFAULT_CITY_PLANNING_VIS = {
   showStreets: false,
 };
 
+// ---------------------------------------------------------------------------
+// Debug view modes
+// ---------------------------------------------------------------------------
+// Building tint washes the 3D massing by a chosen category (plan-view-style),
+// driven by a shader uniform mix — no mesh rebuild. Render modes flip each
+// scene group between Rendered / Wireframe / Hidden. All runtime UI state.
+export type BuildingTintMode = "off" | "district" | "landuse" | "archetype" | "depth" | "height";
+export type RenderGroup = "buildings" | "roads" | "ground" | "sky" | "moon";
+export type RenderMode = "rendered" | "wireframe" | "hidden";
+export const RENDER_GROUPS: RenderGroup[] = ["buildings", "roads", "ground", "sky", "moon"];
+
+export const DEFAULT_DEBUG = {
+  buildingTint: { mode: "off" as BuildingTintMode, intensity: 0.85 },
+  renderModes: {
+    buildings: "rendered" as RenderMode,
+    roads: "rendered" as RenderMode,
+    ground: "rendered" as RenderMode,
+    sky: "rendered" as RenderMode,
+    moon: "rendered" as RenderMode,
+  } as Record<RenderGroup, RenderMode>,
+};
+
+// Default wireframe stroke colour — a bright blue used where a group has no
+// semantic source colour to match: buildings with tint OFF, and the ground.
+// (Buildings with a tint mode stroke in that mode's colour; road tiers stroke
+// in their highlight colours; the moon strokes in its own material colour.)
+export const DEBUG_WIRE_COLOR = "#4d9fff";
+
 export const DEFAULT_FLY_SPEED = 14;
 export const DEFAULT_ORTHO_SIZE = 240;
 export const DEFAULT_PROJECTION = "orthographic" as const;
@@ -211,8 +239,9 @@ export const DEFAULT_PROJECTION = "orthographic" as const;
 // POLICY: any setting a user adjusts that affects the scene's look or behaviour
 // MUST be persist:true so Copy / Save / Revert include it. persist:false is
 // reserved for TRANSIENT runtime state only — currently: projectionBlend (the
-// derived perspective↔ortho tween), orbitPaused, cameraMode, orbitRestore. When
-// adding a setting, default to persist:true and add it to the SavedConfig type.
+// derived perspective↔ortho tween), orbitPaused, cameraMode, orbitRestore, and
+// debug (inspection view modes). When adding a setting, default to persist:true
+// and add it to the SavedConfig type.
 //
 // NOTE: cityPlanning is handled specially — only the three visibility toggles
 // participate (showHighways/showDistrictShells/showArterials), not the runtime
@@ -249,7 +278,8 @@ type AnySettingEntry =
   | SettingEntry<"cameraMode">
   | SettingEntry<"orbitRestore">
   | SettingEntry<"intro">
-  | SettingEntry<"starIntro">;
+  | SettingEntry<"starIntro">
+  | SettingEntry<"debug">;
 
 export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "cameraIntent", defaultValue: DEFAULT_INTENT, persist: true },
@@ -278,6 +308,10 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "orbitRestore", defaultValue: null as SceneState["orbitRestore"], persist: false },
   { key: "intro", defaultValue: DEFAULT_INTRO, persist: true },
   { key: "starIntro", defaultValue: DEFAULT_STAR_INTRO, persist: true },
+  // persist:false — debug view modes are transient inspection state (wireframe /
+  // hidden / tint), not look-and-feel a user would Save/Copy/Revert into a
+  // default. Reset still clears them (resetCamera iterates every entry).
+  { key: "debug", defaultValue: DEFAULT_DEBUG, persist: false },
 ];
 
 // cityPlanning visibility toggles — persisted separately because `cityPlanning`
@@ -534,6 +568,11 @@ type SceneState = {
   setCityPlanning: (patch: Partial<SceneState["cityPlanning"]>) => void;
   setTopologyKind: (kind: TopologyKind) => void;
   setArterialCount: (n: number) => void;
+  // Debug view modes — building tint + per-group render mode (Slices A/B).
+  debug: typeof DEFAULT_DEBUG;
+  setBuildingTint: (patch: Partial<{ mode: BuildingTintMode; intensity: number }>) => void;
+  setRenderMode: (group: RenderGroup, mode: RenderMode) => void;
+  setAllRenderModes: (mode: RenderMode) => void;
   perf: Perf;
   setPerf: (perf: Perf) => void;
   setSeed: (seed: string) => void;
@@ -664,6 +703,18 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         ? s
         : { cityPlanning: { ...s.cityPlanning, arterialCount } },
     ),
+  debug: DEFAULT_DEBUG,
+  setBuildingTint: (patch) =>
+    set((s) => ({ debug: { ...s.debug, buildingTint: { ...s.debug.buildingTint, ...patch } } })),
+  setRenderMode: (group, mode) =>
+    set((s) => ({ debug: { ...s.debug, renderModes: { ...s.debug.renderModes, [group]: mode } } })),
+  setAllRenderModes: (mode) =>
+    set((s) => ({
+      debug: {
+        ...s.debug,
+        renderModes: { buildings: mode, roads: mode, ground: mode, sky: mode, moon: mode },
+      },
+    })),
   perf: { fps: 0, triangles: 0, calls: 0, geometries: 0, textures: 0 },
   setPerf: (perf) => set({ perf }),
   setSeed: (masterSeed) => set({ masterSeed }),
