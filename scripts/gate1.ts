@@ -75,7 +75,7 @@ function pointSegDist(x: number, z: number, ax: number, az: number, bx: number, 
 const OVERLAP_TOL = 0.3; // m of penetration we tolerate (rounding noise)
 
 function checkSeed(seed: string) {
-  const { buildings, districts, topology, arterials, seams, streets } = generateCity(seed);
+  const { buildings, districts, topology, arterials, streets } = generateCity(seed);
   const failures: string[] = [];
 
   // 1. Overlaps (broad-phase by centre distance, then OBB/SAT).
@@ -93,9 +93,8 @@ function checkSeed(seed: string) {
   }
   if (overlaps > 0) failures.push(`${overlaps} building overlaps`);
 
-  // 2. Corridor violations — building centre on a road surface. Includes the
-  // grid's minor streets (the new path) and seams (legacy, now empty).
-  const roads = [...topology.highways, ...arterials, ...streets, ...seams];
+  // 2. Corridor violations — building centre on a road surface (every road tier).
+  const roads = [...topology.highways, ...arterials, ...streets];
   let corridorHits = 0;
   for (const bld of buildings) {
     for (const r of roads) {

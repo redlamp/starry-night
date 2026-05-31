@@ -7,15 +7,11 @@ import {
   generateStreetlights,
   tensorDistrictField,
   dropRadialSpokes,
-  DEFAULT_TUNING,
-  type GridTuning,
 } from "@/lib/seed/cityGen";
-import { stripGridFirst } from "@/lib/seed/lattice";
 
 export type PlanLayers = {
   districts: boolean;
   buildings: boolean;
-  blocks: boolean;
   highways: boolean;
   arterials: boolean;
   streets: boolean;
@@ -26,31 +22,21 @@ type Props = {
   seed: string;
   size: number;
   layers: PlanLayers;
-  tuning?: GridTuning;
 };
 
-export function PlanView({ seed, size, layers, tuning = DEFAULT_TUNING }: Props) {
+export function PlanView({ seed, size, layers }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const data = useMemo(() => {
-    // The ::gridfirst sentinel selects the grid-first path. generateCity /
-    // generateStreetlights strip the sentinel + branch internally, so they take
-    // the raw seed. generateTopology / generateDistricts / generateArterials do
-    // NOT, so derive base + useGrid + θ0 here and pass them through — matching
-    // exactly what generateCity computes internally, so every layer agrees.
-    const base = stripGridFirst(seed);
-    // Tensor is the only city model now: drop radial spokes + L∞ districts in the
-    // θ0=0 frame, matching generateCity exactly so the overlay agrees with it.
-    const topo = dropRadialSpokes(generateTopology(base));
-    // Districts now follow the arterial network (built inside generateCity);
-    // read that exact field so the overlay matches where the buildings sit.
-    const field = tensorDistrictField(base);
-    // Roads come off the city artifact (city.arterials + city.streets) so /plan
-    // draws the exact same network the buildings were derived from.
-    const city = generateCity(seed, tuning);
-    const lights = generateStreetlights(seed, tuning);
+    // Tensor is the only city model. Districts follow the arterial network
+    // (built inside generateCity); read that exact field + roads so the overlay
+    // matches where the buildings were placed.
+    const topo = dropRadialSpokes(generateTopology(seed));
+    const field = tensorDistrictField(seed);
+    const city = generateCity(seed);
+    const lights = generateStreetlights(seed);
     return { topo, field, city, lights };
-  }, [seed, tuning]);
+  }, [seed]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -76,8 +62,8 @@ export function PlanView({ seed, size, layers, tuning = DEFAULT_TUNING }: Props)
     ctx.fillStyle = "#0b1020";
     ctx.fillRect(0, 0, size, size);
 
-    // Draw order (bottom → top): districts, blocks, streets, arterials,
-    // highways, buildings, streetlights.
+    // Draw order (bottom → top): districts, streets, arterials, highways,
+    // buildings, streetlights.
 
     // Districts — sampled fill (very bottom).
     if (layers.districts) {
@@ -116,26 +102,6 @@ export function PlanView({ seed, size, layers, tuning = DEFAULT_TUNING }: Props)
       ctx.lineWidth = lineWidth;
       ctx.stroke();
     };
-
-    // Block outlines (above districts, below roads). Empty on the tensor path.
-    if (layers.blocks) {
-      ctx.save();
-      ctx.strokeStyle = "rgba(170,195,230,0.45)";
-      ctx.lineWidth = 1;
-      for (const b of city.blocks) {
-        if (b.empty) continue;
-        const px = toX(b.cx);
-        const py = toY(b.cz);
-        const pw = worldWToPx(b.w);
-        const pd = worldWToPx(b.d);
-        ctx.save();
-        ctx.translate(px, py);
-        ctx.rotate(b.rotationY);
-        ctx.strokeRect(-pw / 2, -pd / 2, pw, pd);
-        ctx.restore();
-      }
-      ctx.restore();
-    }
 
     // Minor (local) streets — bottom road tier.
     if (layers.streets) {
