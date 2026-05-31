@@ -24,9 +24,11 @@ export function Traffic({ masterSeed }: { masterSeed: string }) {
   const highway = useSceneStore((s) => s.traffic.highway);
   const arterial = useSceneStore((s) => s.traffic.arterial);
   const minor = useSceneStore((s) => s.traffic.minor);
+  const cityShape = useSceneStore((s) => s.cityShape);
+  const cityShapeScale = useSceneStore((s) => s.cityShapeScale);
 
   const points = useMemo(() => {
-    const t = buildTraffic(masterSeed, density, { highway, arterial, minor });
+    const t = buildTraffic(masterSeed, density, { highway, arterial, minor }, cityShape, cityShapeScale);
     const geo = new THREE.BufferGeometry();
     // `position` only defines the draw count; the real location is computed in
     // the vertex shader from aA/aB. Use aA so any bounds query is sane.
@@ -38,6 +40,7 @@ export function Traffic({ masterSeed }: { masterSeed: string }) {
     geo.setAttribute("aColor", new THREE.BufferAttribute(t.aColor, 3));
     geo.setAttribute("aTail", new THREE.BufferAttribute(t.aTail, 3));
     geo.setAttribute("aHead", new THREE.BufferAttribute(t.aHead, 1));
+    geo.setAttribute("aReveal", new THREE.BufferAttribute(t.aReveal, 1));
     geo.setAttribute("aSize", new THREE.BufferAttribute(t.aSize, 1));
 
     const mat = new THREE.ShaderMaterial({
@@ -65,7 +68,7 @@ export function Traffic({ masterSeed }: { masterSeed: string }) {
     const pts = new THREE.Points(geo, mat);
     pts.frustumCulled = false; // positions live in the shader; bounds are unknown
     return pts;
-  }, [masterSeed, density, highway, arterial, minor]);
+  }, [masterSeed, density, highway, arterial, minor, cityShape, cityShapeScale]);
 
   useEffect(() => {
     return () => {

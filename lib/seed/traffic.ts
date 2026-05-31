@@ -1,5 +1,6 @@
 import seedrandom from "seedrandom";
 import { generateCity } from "./cityGen";
+import type { CityShapeSetting } from "./cityShape";
 
 // Deterministic car head/tail-light placement (research strand D). Each "car" is
 // a point pinned to ONE road segment; it slides start→end via the shader using
@@ -18,6 +19,7 @@ export type TrafficData = {
   aColor: Float32Array; // n·3 — per-car HEADLIGHT colour (bulb-pool pick)
   aTail: Float32Array; // n·3 — per-car TAILLIGHT colour
   aHead: Float32Array; // n  — 1 if car flows "headlight-first" (top-down ribbon read)
+  aReveal: Float32Array; // n  — per-car intro reveal time 0..1 (density ramp)
   aSize: Float32Array; // n  — base point size (px, before attenuation)
   maxRadius: number; // furthest car from city centre — normalises the center-out wake
 };
@@ -88,9 +90,11 @@ export function buildTraffic(
     arterial: 1,
     minor: 1,
   },
+  shape: CityShapeSetting = "square",
+  shapeScale = 1,
 ): TrafficData {
   const rng = seedrandom(`${masterSeed}::traffic`);
-  const city = generateCity(masterSeed);
+  const city = generateCity(masterSeed, shape, shapeScale);
 
   type Seg = { ax: number; az: number; bx: number; bz: number; len: number; cfg: TierCfg; mult: number };
   const segs: Seg[] = [];
@@ -137,6 +141,7 @@ export function buildTraffic(
   const aColor = new Float32Array(total * 3);
   const aTail = new Float32Array(total * 3);
   const aHead = new Float32Array(total);
+  const aReveal = new Float32Array(total);
   const aSize = new Float32Array(total);
 
   let c = 0;
@@ -179,6 +184,7 @@ export function buildTraffic(
       aTail[c * 3 + 1] = tail[1];
       aTail[c * 3 + 2] = tail[2];
       aHead[c] = dir > 0 ? 1 : 0;
+      aReveal[c] = rng(); // intro reveal time — drives the density ramp
       aSize[c] = s.cfg.size * (0.85 + rng() * 0.3);
       const r1 = Math.hypot(sx, sz + 120);
       const r2 = Math.hypot(ex, ez + 120);
@@ -188,5 +194,5 @@ export function buildTraffic(
     }
   }
 
-  return { count: total, aA, aB, aPhase, aSpeed, aColor, aTail, aHead, aSize, maxRadius };
+  return { count: total, aA, aB, aPhase, aSpeed, aColor, aTail, aHead, aReveal, aSize, maxRadius };
 }

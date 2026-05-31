@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useSceneStore, QUALITY_TIERS, type QualityTier } from "@/lib/state/sceneStore";
+import { CITY_SHAPES, type CityShapeSetting } from "@/lib/seed/cityShape";
 
 /**
  * Reads URL params and hash on mount + keeps URL hash in sync with the seed.
@@ -9,6 +10,7 @@ import { useSceneStore, QUALITY_TIERS, type QualityTier } from "@/lib/state/scen
  *   ?seed=<masterSeed>   — sets master seed (used by capture script)
  *   ?capture=1           — hides UI, forces still mode (used by capture script)
  *   ?quality=low|med|high|ultra — sets initial quality tier (DPR cap + star count)
+ *   ?shape=auto|square|circle|blob|coastline — forces the city footprint shape
  *   #seed=<masterSeed>   — shareable URL hash for the live app (preferred for users)
  *
  * Query-string `?seed=` wins over hash if both present.
@@ -20,6 +22,7 @@ export function CaptureBoot() {
     const hashSeed = readHashSeed();
     const capture = params.get("capture") === "1";
     const queryQuality = params.get("quality");
+    const queryShape = params.get("shape");
     const state = useSceneStore.getState();
     const initial = querySeed ?? hashSeed;
     if (initial) state.setSeed(initial);
@@ -34,6 +37,14 @@ export function CaptureBoot() {
       // screenshot is static.
       state.resetCamera();
       state.setCameraMode("still");
+    }
+    // AFTER resetCamera — it resets every persisted setting (incl. cityShape) to
+    // its default, so applying the shape override here keeps it from being clobbered.
+    if (
+      queryShape &&
+      (queryShape === "auto" || (CITY_SHAPES as readonly string[]).includes(queryShape))
+    ) {
+      state.setCityShape(queryShape as CityShapeSetting);
     }
 
     // Sync hash on every seed change (skip while capture mode is on — we don't

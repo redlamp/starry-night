@@ -2,6 +2,8 @@ import seedrandom from "seedrandom";
 import { computeLattice } from "./lattice";
 import { buildTensorField, alignDir, type TensorField, type Vec2 } from "./tensorField";
 import type { RoadPoly, RoadTier } from "./streets";
+import { CITY_SCALE } from "./topology";
+import type { ShapeMask } from "./cityShape";
 
 // Tensor-field streets. Roads are streamlines of the tensor field. Both the
 // MAJOR and MINOR eigenvector families are traced at TWO separation scales:
@@ -16,7 +18,7 @@ import type { RoadPoly, RoadTier } from "./streets";
 // arterial-endpoint queue with no PRNG, then a seeded PRNG fallback).
 
 const DSTEP = 4;
-const MAX_PTS = 420;
+const MAX_PTS = Math.round(420 * CITY_SCALE); // streamline point cap — scales so long roads don't truncate
 const MIN_PTS = 6;
 const SEED_TRIES = 200;
 
@@ -86,7 +88,14 @@ function rk4(field: TensorField, p: Vec2, prevDir: Vec2, major: boolean): Vec2 |
 
 // Trace one streamline through `seed`, stopping at the bbox or where `sep`
 // blocks it (a same-family road too close).
-function trace(field: TensorField, seed: Vec2, major: boolean, sep: Sep[], b: BBox): Vec2[] {
+function trace(
+  field: TensorField,
+  seed: Vec2,
+  major: boolean,
+  sep: Sep[],
+  b: BBox,
+  mask: ShapeMask,
+): Vec2[] {
   const grow = (sign: number): Vec2[] => {
     const pts: Vec2[] = [];
     let prev = alignDir(field.sample(seed.x, seed.z, major), null);
@@ -98,6 +107,7 @@ function trace(field: TensorField, seed: Vec2, major: boolean, sep: Sep[], b: BB
       if (!dir) break;
       const next = { x: p.x + dir.x * DSTEP, z: p.z + dir.z * DSTEP };
       if (!inBounds(next, b)) break;
+      if (mask(next.x, next.z) < 0.5) break; // left the organic city footprint
       if (blocked(sep, next)) break;
       pts.push(next);
       prev = dir;
@@ -117,11 +127,13 @@ function traceTier(
   seedQueue: Vec2[],
   own: GridStorage,
   sep: Sep[],
+  mask: ShapeMask,
 ): Vec2[][] {
   const lines: Vec2[][] = [];
   const accept = (seed: Vec2): boolean => {
+    if (mask(seed.x, seed.z) < 0.5) return false; // seed outside the footprint
     if (!own.isFree(seed, dsep)) return false;
-    const line = trace(field, seed, major, sep, b);
+    const line = trace(field, seed, major, sep, b, mask);
     if (line.length < MIN_PTS) return false;
     for (const p of line) own.add(p);
     lines.push(line);
@@ -168,6 +180,7 @@ function toPolys(lines: Vec2[][], width: number, tier: RoadTier, prefix: string)
 export function generateTensorStreets(
   masterSeed: string,
   bounds: BBox,
+  mask: ShapeMask = () => 1,
 ): { arterials: RoadPoly[]; minorStreets: RoadPoly[] } {
   const lattice = computeLattice(masterSeed);
   const tf = buildTensorField(masterSeed, lattice);
@@ -183,22 +196,42 @@ export function generateTensorStreets(
   const stRng = seedrandom(`${masterSeed}::tensor::seeds::st`);
 
   // Arterials — both families, wide separation → a coarse criss-cross grid.
-  const majA = traceTier(tf, true, ART_DSEP, artRng, b, [], SmajA, [{ s: SmajA, d: ART_DTEST }]);
-  const minA = traceTier(tf, false, ART_DSEP, artRng, b, [], SminA, [{ s: SminA, d: ART_DTEST }]);
+  const majA = traceTier(tf, true, ART_DSEP, artRng, b, [], SmajA, [{ s: SmajA, d: ART_DTEST }], mask);
+  const minA = traceTier(tf, false, ART_DSEP, artRng, b, [], SminA, [{ s: SminA, d: ART_DTEST }], mask);
 
   // Streets — both families, fine separation, seeded off arterial endpoints so
   // they branch from the arterials. Each street separates from same-family
   // streets AND same-family arterials (parallel spacing), but crosses the
   // perpendicular family freely → a fine criss-cross street grid between arterials.
   const artEnds = endpointsSorted(majA, minA);
-  const majS = traceTier(tf, true, ST_DSEP, stRng, b, artEnds, SmajS, [
-    { s: SmajS, d: ST_DTEST },
-    { s: SmajA, d: ST_DTEST },
-  ]);
-  const minS = traceTier(tf, false, ST_DSEP, stRng, b, artEnds, SminS, [
-    { s: SminS, d: ST_DTEST },
-    { s: SminA, d: ST_DTEST },
-  ]);
+  const majS = traceTier(
+    tf,
+    true,
+    ST_DSEP,
+    stRng,
+    b,
+    artEnds,
+    SmajS,
+    [
+      { s: SmajS, d: ST_DTEST },
+      { s: SmajA, d: ST_DTEST },
+    ],
+    mask,
+  );
+  const minS = traceTier(
+    tf,
+    false,
+    ST_DSEP,
+    stRng,
+    b,
+    artEnds,
+    SminS,
+    [
+      { s: SminS, d: ST_DTEST },
+      { s: SminA, d: ST_DTEST },
+    ],
+    mask,
+  );
 
   const arterials = [
     ...toPolys(majA, 16, "arterial", "art-maj"),

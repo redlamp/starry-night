@@ -5,6 +5,7 @@ import * as THREE from "three";
 import { generateAviationBeacons } from "@/lib/seed/cityGen";
 import { sharedTime } from "@/lib/shaders/sharedTime";
 import { sharedIntroProgress } from "@/lib/shaders/sharedIntro";
+import { useSceneStore } from "@/lib/state/sceneStore";
 
 // Blinking red aviation obstruction lights on skyscraper tops. One additive
 // Points cloud, deterministic flash from (uTime, aPhase) per the no-wall-clock
@@ -58,8 +59,10 @@ void main() {
 `;
 
 export function Beacons({ masterSeed }: { masterSeed: string }) {
+  const cityShape = useSceneStore((s) => s.cityShape);
+  const cityShapeScale = useSceneStore((s) => s.cityShapeScale);
   const { geometry, material } = useMemo(() => {
-    const beacons = generateAviationBeacons(masterSeed);
+    const beacons = generateAviationBeacons(masterSeed, cityShape, cityShapeScale);
     const positions = new Float32Array(beacons.length * 3);
     const phases = new Float32Array(beacons.length);
     for (let i = 0; i < beacons.length; i++) {
@@ -92,7 +95,7 @@ export function Beacons({ masterSeed }: { masterSeed: string }) {
       toneMapped: false,
     });
     return { geometry: geo, material: mat };
-  }, [masterSeed]);
+  }, [masterSeed, cityShape, cityShapeScale]);
 
   useEffect(() => {
     return () => {
