@@ -88,13 +88,13 @@ export type OrbitConfig = {
 
 // Tuned via the in-app Save/Copy values workflow (last 2026-05-31).
 // Wide pull-back radius (2400) frames the whole sprawl; 1200s sweep (0.3°/s) at a
-// gentle 9.25° elevation; focal Y at 114 sits the skyline a touch higher in frame.
+// gentle 9.25° elevation; focal Y at 198 frames the skyline.
 export const DEFAULT_ORBIT: OrbitConfig = {
   centerX: 0,
   centerZ: -120,
-  lookAtY: 114,
+  lookAtY: 198,
   radius: 2400,
-  azimuthDeg: 239.53946000002315,
+  azimuthDeg: 2.0981499991505075,
   elevationDeg: 9.25,
   periodSec: 1200,
 };
@@ -677,8 +677,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     fov: DEFAULT_INTENT.fov,
   },
   cameraTweenRequest: null,
-  projection: "orthographic",
-  orthoSize: 240,
+  projection: DEFAULT_PROJECTION,
+  orthoSize: DEFAULT_ORTHO_SIZE,
   projectionBlend: 1,
   setProjection: (projection) => set({ projection }),
   setOrthoSize: (orthoSize) => set({ orthoSize }),
