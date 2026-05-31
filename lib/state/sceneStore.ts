@@ -86,17 +86,17 @@ export type OrbitConfig = {
   periodSec: number; // seconds per full revolution
 };
 
-// Tuned via the in-app Save/Copy values workflow on 2026-05-27.
-// Wide pull-back radius (2400) frames the whole sprawl; slow 2400s sweep at a
-// gentle 7.5° elevation; focal Y at 150 frames the city skyline.
+// Tuned via the in-app Save/Copy values workflow (last 2026-05-31).
+// Wide pull-back radius (2400) frames the whole sprawl; 1200s sweep (0.3°/s) at a
+// gentle 9.25° elevation; focal Y at 114 sits the skyline a touch higher in frame.
 export const DEFAULT_ORBIT: OrbitConfig = {
   centerX: 0,
   centerZ: -120,
-  lookAtY: 222,
+  lookAtY: 114,
   radius: 2400,
-  azimuthDeg: 215.9930450000195,
-  elevationDeg: 6.25,
-  periodSec: 2400,
+  azimuthDeg: 239.53946000002315,
+  elevationDeg: 9.25,
+  periodSec: 1200,
 };
 
 // Azimuth flipped 180° from the 200° tuning that paired with the old camera
@@ -179,7 +179,7 @@ export const DEFAULT_INTRO = {
   durationSec: 240,
   // Streetlights wake on their own (much shorter) timeline so they don't take
   // the full multi-minute window wake to appear.
-  streetlightDurationSec: 3,
+  streetlightDurationSec: 24,
   mode: "random" as "random" | "district" | "outside-in" | "far-to-near" | "inside-out",
   offCycleSec: 90,
   retriggerSec: 45,
@@ -233,13 +233,13 @@ export const DEBUG_WIRE_COLOR = "#4d9fff";
 // On by default. `density` is the global car-count multiplier; highway/arterial/
 // minor are per-tier multipliers layered on each tier's base usage rate (base
 // rates already encode the usage hierarchy: highways busiest, side streets least).
-export const DEFAULT_TRAFFIC = { enabled: true, density: 1, highway: 1, arterial: 1, minor: 1 };
+export const DEFAULT_TRAFFIC = { enabled: true, density: 1, highway: 4, arterial: 2, minor: 1 };
 
 // Streetlights along the road network. On by default; toggled from the Roads panel.
 export const DEFAULT_STREETLIGHTS = { enabled: true };
 
 export const DEFAULT_FLY_SPEED = 14;
-export const DEFAULT_ORTHO_SIZE = 240;
+export const DEFAULT_ORTHO_SIZE = 300;
 export const DEFAULT_PROJECTION = "orthographic" as const;
 
 // ---------------------------------------------------------------------------
