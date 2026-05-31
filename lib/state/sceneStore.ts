@@ -174,6 +174,7 @@ export const DEFAULT_CITY_PLANNING_VIS = {
   showHighways: false,
   showDistrictShells: false,
   showArterials: false,
+  showStreets: false,
 };
 
 export const DEFAULT_FLY_SPEED = 14;
@@ -287,6 +288,7 @@ type SavedConfig = {
     showHighways: boolean;
     showDistrictShells: boolean;
     showArterials: boolean;
+    showStreets: boolean;
   };
 };
 
@@ -500,6 +502,7 @@ type SceneState = {
     showHighways: boolean;
     showDistrictShells: boolean;
     showArterials: boolean;
+    showStreets: boolean;
     topologyKind: TopologyKind | null;
     arterialCount: number;
   };
@@ -632,6 +635,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     showHighways: false,
     showDistrictShells: false,
     showArterials: false,
+    showStreets: false,
     topologyKind: null,
     arterialCount: 0,
   },
@@ -693,6 +697,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         showHighways: s.cityPlanning.showHighways,
         showDistrictShells: s.cityPlanning.showDistrictShells,
         showArterials: s.cityPlanning.showArterials,
+        showStreets: s.cityPlanning.showStreets,
       };
     }
     writeSavedConfig(snap as SavedConfig);
@@ -734,6 +739,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         showHighways: s.cityPlanning.showHighways,
         showDistrictShells: s.cityPlanning.showDistrictShells,
         showArterials: s.cityPlanning.showArterials,
+        showStreets: s.cityPlanning.showStreets,
       };
     }
     return out;

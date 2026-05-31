@@ -11,11 +11,12 @@ const TOPOLOGY_LABELS: Record<string, string> = {
   "ring-radial": "Ring + radial",
 };
 
-// Roads layer controls (Stage 1 scaffold). Highway toggle + topology readout.
-// Arterials + streetlight settings land in PR 3 / PR 4.
+// Roads layer controls. Each toggle tints that tier's smooth ground ribbon in
+// the scene (highways gold, arterials blue, streets teal) — off = dark asphalt.
 export function RoadsSection() {
   const showHighways = useSceneStore((s) => s.cityPlanning.showHighways);
   const showArterials = useSceneStore((s) => s.cityPlanning.showArterials);
+  const showStreets = useSceneStore((s) => s.cityPlanning.showStreets);
   const topologyKind = useSceneStore((s) => s.cityPlanning.topologyKind);
   const arterialCount = useSceneStore((s) => s.cityPlanning.arterialCount);
   const setCityPlanning = useSceneStore((s) => s.setCityPlanning);
@@ -31,6 +32,11 @@ export function RoadsSection() {
         label="Arterials"
         on={showArterials}
         onClick={() => setCityPlanning({ showArterials: !showArterials })}
+      />
+      <ToggleRow
+        label="Streets"
+        on={showStreets}
+        onClick={() => setCityPlanning({ showStreets: !showStreets })}
       />
       <div className="text-foreground/70 grid grid-cols-[5rem_1fr] gap-1 font-mono text-xs">
         <div>topology</div>

@@ -19,8 +19,6 @@ import { FocalIndicator } from "./FocalIndicator";
 import { IntroTicker } from "./IntroTicker";
 import { GroundHaze } from "./GroundHaze";
 import { Roads } from "./Roads";
-import { Highways } from "./Highways";
-import { Arterials } from "./Arterials";
 import { DistrictShells } from "./DistrictShells";
 
 export function Scene() {
@@ -74,10 +72,9 @@ export function Scene() {
       <InstancedCity masterSeed={masterSeed} />
       <Streetlights masterSeed={masterSeed} />
       <Beacons masterSeed={masterSeed} />
-      {/* Planning overlays — each respects its own visibility flag (default off). */}
+      {/* Planning overlays — each respects its own visibility flag (default off).
+          Highway/arterial/street tier tinting now lives in <Roads/>. */}
       <DistrictShells masterSeed={masterSeed} />
-      <Highways masterSeed={masterSeed} />
-      <Arterials masterSeed={masterSeed} />
       <FocalIndicator />
     </Canvas>
   );
