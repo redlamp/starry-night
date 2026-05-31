@@ -3,14 +3,15 @@
 import { useMemo, useEffect } from "react";
 import * as THREE from "three";
 import { useSceneStore } from "@/lib/state/sceneStore";
-import { generateTopology, flattenHighwaysToSegments } from "@/lib/seed/topology";
+import { flattenHighwaysToSegments } from "@/lib/seed/topology";
+import { generateCity } from "@/lib/seed/cityGen";
 
 export function Highways({ masterSeed }: { masterSeed: string }) {
   const showHighways = useSceneStore((s) => s.cityPlanning.showHighways);
   const setTopologyKind = useSceneStore((s) => s.setTopologyKind);
 
   const { geometry, kind } = useMemo(() => {
-    const topo = generateTopology(masterSeed);
+    const topo = generateCity(masterSeed).topology;
     const flat = flattenHighwaysToSegments(topo.highways);
     const geom = new THREE.BufferGeometry();
     geom.setAttribute("position", new THREE.BufferAttribute(flat, 3));

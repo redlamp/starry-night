@@ -2,9 +2,7 @@
 
 import { useMemo, useEffect } from "react";
 import * as THREE from "three";
-import { generateTopology } from "@/lib/seed/topology";
-import { generateDistricts } from "@/lib/seed/district";
-import { generateArterials } from "@/lib/seed/arterials";
+import { generateCity } from "@/lib/seed/cityGen";
 import { buildRoadGeometry, type RoadPoly } from "@/lib/seed/roadMesh";
 
 // In-scene road surfaces: dark asphalt ribbons along the highway + arterial
@@ -15,12 +13,15 @@ const ROAD_Y = 0.05;
 
 export function Roads({ masterSeed }: { masterSeed: string }) {
   const geometry = useMemo(() => {
-    const topo = generateTopology(masterSeed);
-    const field = generateDistricts(masterSeed, topo);
-    const arterials = generateArterials(masterSeed, topo, field);
+    const city = generateCity(masterSeed);
     const polys: RoadPoly[] = [
-      ...topo.highways.map((h) => ({ vertices: h.vertices, width: h.width, closed: h.closed })),
-      ...arterials.map((a) => ({ vertices: a.vertices, width: a.width, closed: false })),
+      ...city.topology.highways.map((h) => ({
+        vertices: h.vertices,
+        width: h.width,
+        closed: h.closed,
+      })),
+      ...city.arterials.map((a) => ({ vertices: a.vertices, width: a.width, closed: false })),
+      ...city.streets.map((s) => ({ vertices: s.vertices, width: s.width, closed: false })),
     ];
     return buildRoadGeometry(polys);
   }, [masterSeed]);

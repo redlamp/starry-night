@@ -1206,7 +1206,22 @@ function generateCityGridFirst(masterSeed: string): CityData {
   };
 }
 
+// generateCity / generateStreetlights are pure functions of the seed, but the
+// 3D scene renders ~5 components off the same seed — memoise (bounded) so the
+// tensor field is traced once per seed, not once per component.
+const cityCache = new Map<string, CityData>();
+const lightsCache = new Map<string, Streetlight[]>();
+
 export function generateCity(rawSeed: string, tuning: GridTuning = DEFAULT_TUNING): CityData {
+  const hit = cityCache.get(rawSeed);
+  if (hit) return hit;
+  const result = generateCityImpl(rawSeed, tuning);
+  if (cityCache.size > 64) cityCache.clear();
+  cityCache.set(rawSeed, result);
+  return result;
+}
+
+function generateCityImpl(rawSeed: string, tuning: GridTuning = DEFAULT_TUNING): CityData {
   // Strip the grid-first flag sentinel before any RNG key is derived (Stage 0).
   const masterSeed = stripGridFirst(rawSeed);
   // Tensor-field roads are the DEFAULT (and only intended) city model now. A
@@ -1451,6 +1466,18 @@ function generateStreetlightsGridFirst(masterSeed: string): Streetlight[] {
 }
 
 export function generateStreetlights(
+  rawSeed: string,
+  tuning: GridTuning = DEFAULT_TUNING,
+): Streetlight[] {
+  const hit = lightsCache.get(rawSeed);
+  if (hit) return hit;
+  const result = generateStreetlightsImpl(rawSeed, tuning);
+  if (lightsCache.size > 64) lightsCache.clear();
+  lightsCache.set(rawSeed, result);
+  return result;
+}
+
+function generateStreetlightsImpl(
   rawSeed: string,
   tuning: GridTuning = DEFAULT_TUNING,
 ): Streetlight[] {
