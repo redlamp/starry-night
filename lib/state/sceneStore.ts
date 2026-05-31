@@ -283,6 +283,7 @@ type AnySettingEntry =
   | SettingEntry<"showFocalIndicator">
   | SettingEntry<"cameraMode">
   | SettingEntry<"orbitRestore">
+  | SettingEntry<"topDownTip">
   | SettingEntry<"intro">
   | SettingEntry<"starIntro">
   | SettingEntry<"debug">
@@ -313,6 +314,7 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "showFocalIndicator", defaultValue: false as const, persist: true },
   { key: "cameraMode", defaultValue: "orbit" as const, persist: false },
   { key: "orbitRestore", defaultValue: null as SceneState["orbitRestore"], persist: false },
+  { key: "topDownTip", defaultValue: 0, persist: false },
   { key: "intro", defaultValue: DEFAULT_INTRO, persist: true },
   { key: "starIntro", defaultValue: DEFAULT_STAR_INTRO, persist: true },
   // persist:false — debug view modes are transient inspection state (wireframe /
@@ -564,6 +566,12 @@ type SceneState = {
     paused: boolean;
   } | null;
   setOrbitRestore: (r: SceneState["orbitRestore"]) => void;
+  // Top-down "north up" camera roll, 0 = world-up .. 1 = tipped to +Z. Tweened
+  // over the whole top-down transition so the roll eases in with the arc instead
+  // of snapping in the final elevation degrees. CameraControls maxes it with the
+  // elevation-keyed tip so manual high-elevation orbit still avoids gimbal.
+  topDownTip: number;
+  setTopDownTip: (v: number) => void;
   // Streets-first city-planning layer visibility + readouts (Stage 1).
   // Gated in the UI behind the ?stage1=1 flag until the rewrite is default.
   cityPlanning: {
@@ -692,6 +700,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setOrbit: (patch) => set((s) => ({ orbit: { ...s.orbit, ...patch } })),
   orbitRestore: null,
   setOrbitRestore: (orbitRestore) => set({ orbitRestore }),
+  topDownTip: 0,
+  setTopDownTip: (topDownTip) => set({ topDownTip }),
   cityPlanning: {
     // Planning overlays are review aids, not part of the ambient screensaver —
     // the streets-first network still shapes the city, it just isn't drawn over

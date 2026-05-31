@@ -17,7 +17,7 @@ import { useSceneStore, DEFAULT_ORBIT, DEFAULT_ORTHO_SIZE } from "@/lib/state/sc
 
 const TOP_DOWN_RADIUS = 4500;
 const TOP_DOWN_ORTHO_SIZE = 1000;
-const ORBIT_TWEEN_MS = 0.9;
+const ORBIT_TWEEN_SEC = 2.0;
 
 function tweenOrbitTowards(
   targetEl: number,
@@ -41,9 +41,24 @@ function tweenOrbitTowards(
     elProxy,
     {
       v: targetEl,
-      duration: ORBIT_TWEEN_MS,
-      ease: "power2.inOut",
+      duration: ORBIT_TWEEN_SEC,
+      ease: "power1.inOut",
       onUpdate: () => useSceneStore.getState().setOrbit({ elevationDeg: elProxy.v }),
+    },
+    0,
+  );
+
+  // North "up" roll, tweened over the WHOLE transition (target 1 only when
+  // arriving at top-down, el≈90). Eased in lockstep with the arc so the roll
+  // spreads across the tween instead of snapping in the final elevation degrees.
+  const tipProxy = { v: s.topDownTip };
+  tl.to(
+    tipProxy,
+    {
+      v: targetEl >= 89 ? 1 : 0,
+      duration: ORBIT_TWEEN_SEC,
+      ease: "power1.inOut",
+      onUpdate: () => useSceneStore.getState().setTopDownTip(tipProxy.v),
     },
     0,
   );
@@ -53,8 +68,8 @@ function tweenOrbitTowards(
     zoomProxy,
     {
       v: 1,
-      duration: ORBIT_TWEEN_MS * 0.7,
-      ease: "power2.inOut",
+      duration: ORBIT_TWEEN_SEC * 0.7,
+      ease: "power1.inOut",
       onUpdate: () => {
         const t = zoomProxy.v;
         const st = useSceneStore.getState();
@@ -62,7 +77,7 @@ function tweenOrbitTowards(
         st.setOrthoSize(fromOrtho + (targetOrtho - fromOrtho) * t);
       },
     },
-    ORBIT_TWEEN_MS * 0.4,
+    ORBIT_TWEEN_SEC * 0.4,
   );
 }
 
@@ -102,6 +117,7 @@ function restoreOrbitSilently() {
   s.setOrthoSize(r.orthoSize);
   s.setOrbitPaused(r.paused);
   s.setOrbitRestore(null);
+  s.setTopDownTip(0); // silent exit lands at a low elevation — drop the roll
 }
 
 export function isTopDown(): boolean {
@@ -161,13 +177,19 @@ export function tweenOrbitToDefault() {
   tweenOrbitTowards(DEFAULT_ORBIT.elevationDeg, DEFAULT_ORBIT.radius, DEFAULT_ORTHO_SIZE);
 }
 
-const PROJECTION_TWEEN_DURATION = 0.5;
+const PROJECTION_TWEEN_DURATION = 1.0;
+
+// The single in-flight projection tween. Killed before a new one starts so a
+// mid-tween reversal (toggling back before the swap finishes) animates cleanly
+// from the current blend instead of two tweens fighting over projectionBlend.
+let projTween: gsap.core.Tween | null = null;
 
 // Projection swap (perspective ⇄ orthographic) — shared by the Camera panel's
 // projection toggle and the `p` hotkey so both animate identically. Matches
 // framing at the lookAt distance so the swap stays visually continuous (ortho
 // frustum half-height = perspective tangent half-extent at d), then GSAP-blends
-// projectionBlend 0↔1 (ProjectionBlender lerps the matrices each frame).
+// projectionBlend 0↔1 (ProjectionBlender lerps the matrices each frame). Works
+// in both directions and is interruptible mid-tween.
 export function tweenProjectionTo(target: "perspective" | "orthographic") {
   const s = useSceneStore.getState();
   if (s.projection === target) return;
@@ -180,14 +202,18 @@ export function tweenProjectionTo(target: "perspective" | "orthographic") {
     s.setCameraIntent({ fov: matchedFov });
   }
   s.setProjection(target);
-  const from = s.projectionBlend;
+  // Start from the LIVE blend (mid-tween if interrupted), not a stale snapshot.
+  projTween?.kill();
+  const proxy = { v: s.projectionBlend };
   const to = target === "orthographic" ? 1 : 0;
-  const proxy = { v: from };
-  gsap.to(proxy, {
+  projTween = gsap.to(proxy, {
     v: to,
     duration: PROJECTION_TWEEN_DURATION,
-    ease: "power2.inOut",
+    ease: "power1.inOut",
     onUpdate: () => useSceneStore.getState().setProjectionBlend(proxy.v),
+    onComplete: () => {
+      projTween = null;
+    },
   });
 }
 

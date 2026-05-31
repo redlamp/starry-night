@@ -335,7 +335,10 @@ export function CameraControls() {
       // degeneracy. Flat (world-Y up) below 70°, fully tipped at 90°. Keyed on
       // elevation alone (not the top-down snapshot) so switching top-down →
       // orbit mid-drag stays seamless.
-      const upT = Math.max(0, Math.min(1, (orbit.elevationDeg - 70) / 20));
+      // Elevation-keyed tip (manual high-elevation orbit) maxed with the tweened
+      // top-down roll so a transition eases the roll across the whole tween.
+      const upElev = Math.max(0, Math.min(1, (orbit.elevationDeg - 70) / 20));
+      const upT = Math.max(upElev, useSceneStore.getState().topDownTip);
       const upAng = upT * Math.PI * 0.5;
       camera.up.set(0, Math.cos(upAng), Math.sin(upAng));
       camera.lookAt(orbit.centerX, orbit.lookAtY, orbit.centerZ);
@@ -430,6 +433,9 @@ export function CameraControls() {
       // Dropping the snapshot is seamless now that camera.up keys on elevation.
       if (!focal && useSceneStore.getState().orbitRestore !== null) {
         useSceneStore.getState().setOrbitRestore(null);
+        // Hand the roll back to elevation-keying — at el≈90 it stays tipped, then
+        // untips as the drag lowers elevation (no snap).
+        useSceneStore.getState().setTopDownTip(0);
       }
       dragging.current = true;
       const o = useSceneStore.getState().orbit;
