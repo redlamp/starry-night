@@ -16,6 +16,7 @@
  */
 import { generateCity, type Building } from "@/lib/seed/cityGen";
 import { CITY_CENTER, CITY_HALF_EXTENT } from "@/lib/seed/topology";
+import { computeLattice } from "@/lib/seed/lattice";
 
 type Vec = { x: number; z: number };
 
@@ -74,7 +75,7 @@ function pointSegDist(x: number, z: number, ax: number, az: number, bx: number, 
 const OVERLAP_TOL = 0.3; // m of penetration we tolerate (rounding noise)
 
 function checkSeed(seed: string) {
-  const { buildings, districts, topology, arterials } = generateCity(seed);
+  const { buildings, districts, topology, arterials, seams, streets } = generateCity(seed);
   const failures: string[] = [];
 
   // 1. Overlaps (broad-phase by centre distance, then OBB/SAT).
@@ -92,8 +93,9 @@ function checkSeed(seed: string) {
   }
   if (overlaps > 0) failures.push(`${overlaps} building overlaps`);
 
-  // 2. Corridor violations — building centre on a road surface.
-  const roads = [...topology.highways, ...arterials];
+  // 2. Corridor violations — building centre on a road surface. Includes the
+  // grid's minor streets (the new path) and seams (legacy, now empty).
+  const roads = [...topology.highways, ...arterials, ...streets, ...seams];
   let corridorHits = 0;
   for (const bld of buildings) {
     for (const r of roads) {
@@ -139,7 +141,10 @@ function main() {
   const seeds = args.length > 0 ? args : Array.from({ length: 20 }, (_, i) => `gate1-${i}`);
   let failed = 0;
 
-  console.log("Gate 1 — streets-first generator asserts\n");
+  console.log("Gate 1 — tensor-field city generator asserts\n");
+
+  // The default (and only) city model is tensor. Run the 20-seed suite on it:
+  // no overlaps, no road-corridor hits, district count in band, in-bounds.
   console.log("seed           buildings  districts  result");
   for (const seed of seeds) {
     const r = checkSeed(seed);
@@ -152,12 +157,45 @@ function main() {
     );
   }
 
-  // Determinism.
+  // Determinism — the tensor city is a pure function of the seed.
   const d1 = JSON.stringify(generateCity("gate1-det"));
   const d2 = JSON.stringify(generateCity("gate1-det"));
   const detOk = d1 === d2;
   console.log(`\ndeterminism: ${detOk ? "PASS" : "FAIL"}`);
   if (!detOk) failed++;
+
+  // Streets present — the tensor city always lays arterials + minor streets.
+  let streetTotal = 0;
+  let arterialTotal = 0;
+  for (const s of ["gate1-2", "gate1-5", "gate1-9", "gate1-13", "gate1-16"]) {
+    const c = generateCity(s);
+    streetTotal += c.streets.length;
+    arterialTotal += c.arterials.length;
+  }
+  const streetsOk = streetTotal > 0 && arterialTotal > 0;
+  console.log(
+    `streets: ${arterialTotal} arterials, ${streetTotal} minor across 5 seeds ${streetsOk ? "PASS" : "FAIL"}`,
+  );
+  if (!streetsOk) failed++;
+
+  // The lattice is a pure deterministic function with a
+  // center-anchored orientation field whose neighbour-delta stays small.
+  const L1 = computeLattice("gate1-det");
+  const L2 = computeLattice("gate1-det");
+  let latticeOk = L1.theta0 === L2.theta0 && L1.driftMag === L2.driftMag;
+  let maxDelta = 0;
+  for (let x = -700; x <= 700; x += 100) {
+    for (let z = -820; z <= 580; z += 100) {
+      if (L1.orientationAt(x, z) !== L2.orientationAt(x, z)) latticeOk = false;
+      const d = Math.abs(L1.orientationAt(x, z) - L1.orientationAt(x + 50, z));
+      if (d > maxDelta) maxDelta = d;
+    }
+  }
+  const neighbourOk = maxDelta < L1.driftMag;
+  console.log(
+    `lattice: determinism ${latticeOk ? "PASS" : "FAIL"}; neighbour-delta ${maxDelta.toFixed(4)} (< ${L1.driftMag.toFixed(4)}) ${neighbourOk ? "PASS" : "FAIL"}`,
+  );
+  if (!latticeOk || !neighbourOk) failed++;
 
   console.log(`\n${failed === 0 ? "GATE 1 PASS" : `GATE 1 FAIL (${failed} seed(s))`}`);
   process.exit(failed === 0 ? 0 : 1);

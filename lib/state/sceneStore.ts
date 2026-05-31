@@ -102,13 +102,14 @@ export const DEFAULT_ORBIT: OrbitConfig = {
 // Azimuth flipped 180° from the 200° tuning that paired with the old camera
 // pose: with the new defaults the camera faces +z, so the moon sits at +z too.
 // radiusRatio: moon radius as a fraction of star shell radius (~4500m), so
-// the moon scales with the dome by default. 0.0355 ≈ 160m moon at default
-// stars radius — exposed in the Moon panel for live tuning.
+// the moon scales with the dome by default. 0.02 ≈ 90m moon at default stars
+// radius, sitting just above the horizon (elevation 1°) — exposed in the Moon
+// panel for live tuning.
 export const DEFAULT_MOON = {
   azimuthDeg: 20,
-  elevationDeg: 16,
+  elevationDeg: 1,
   distance: 4500,
-  radiusRatio: 0.0355,
+  radiusRatio: 0.02,
 };
 // `factor` is the star base size in px (mean, before the per-star long-tail).
 // Previously a vestigial drei value (200) that nothing read; now wired to
@@ -179,6 +180,87 @@ export const DEFAULT_FLY_SPEED = 14;
 export const DEFAULT_ORTHO_SIZE = 240;
 export const DEFAULT_PROJECTION = "orthographic" as const;
 
+// ---------------------------------------------------------------------------
+// Settings registry
+// ---------------------------------------------------------------------------
+// One entry per panel-tunable field. `persist` = included in SavedConfig.
+// Reset derives system defaults from `defaultValue`; Save/Copy/Revert derive
+// their field lists from `persist: true` entries. Adding a new field here
+// automatically wires it into all four actions.
+//
+// POLICY: any setting a user adjusts that affects the scene's look or behaviour
+// MUST be persist:true so Copy / Save / Revert include it. persist:false is
+// reserved for TRANSIENT runtime state only — currently: projectionBlend (the
+// derived perspective↔ortho tween), orbitPaused, cameraMode, orbitRestore. When
+// adding a setting, default to persist:true and add it to the SavedConfig type.
+//
+// NOTE: cityPlanning is handled specially — only the three visibility toggles
+// participate (showHighways/showDistrictShells/showArterials), not the runtime
+// readouts (topologyKind/arterialCount). The `cityPlanningVis` pseudo-key
+// encodes that semantics so the registry loops stay uniform.
+// ---------------------------------------------------------------------------
+
+type SettingEntry<K extends keyof SceneState> = {
+  key: K;
+  defaultValue: SceneState[K];
+  persist: boolean;
+};
+
+// A discriminated union so the registry is typed without needing `any`.
+type AnySettingEntry =
+  | SettingEntry<"cameraIntent">
+  | SettingEntry<"orbit">
+  | SettingEntry<"moon">
+  | SettingEntry<"moonHalo">
+  | SettingEntry<"moonFollowCamera">
+  | SettingEntry<"stars">
+  | SettingEntry<"projection">
+  | SettingEntry<"orthoSize">
+  | SettingEntry<"projectionBlend">
+  | SettingEntry<"windowAA">
+  | SettingEntry<"windowMode">
+  | SettingEntry<"windowSimple">
+  | SettingEntry<"windowProfiles">
+  | SettingEntry<"fog">
+  | SettingEntry<"haze">
+  | SettingEntry<"flySpeed">
+  | SettingEntry<"orbitPaused">
+  | SettingEntry<"showFocalIndicator">
+  | SettingEntry<"cameraMode">
+  | SettingEntry<"orbitRestore">;
+
+export const SETTINGS_REGISTRY: AnySettingEntry[] = [
+  { key: "cameraIntent", defaultValue: DEFAULT_INTENT, persist: true },
+  { key: "orbit", defaultValue: DEFAULT_ORBIT, persist: true },
+  { key: "moon", defaultValue: DEFAULT_MOON, persist: true },
+  { key: "moonHalo", defaultValue: DEFAULT_MOON_HALO, persist: true },
+  { key: "moonFollowCamera", defaultValue: false as const, persist: true },
+  { key: "stars", defaultValue: DEFAULT_STARS, persist: true },
+  { key: "projection", defaultValue: DEFAULT_PROJECTION, persist: true },
+  { key: "orthoSize", defaultValue: DEFAULT_ORTHO_SIZE, persist: true },
+  {
+    key: "projectionBlend",
+    defaultValue: DEFAULT_PROJECTION === "orthographic" ? 1 : 0,
+    persist: false,
+  },
+  { key: "windowAA", defaultValue: DEFAULT_WINDOW_AA, persist: true },
+  { key: "windowMode", defaultValue: "advanced" as const, persist: true },
+  { key: "windowSimple", defaultValue: DEFAULT_WINDOW_SIMPLE, persist: true },
+  { key: "windowProfiles", defaultValue: DEFAULT_WINDOW_PROFILES, persist: true },
+  { key: "fog", defaultValue: DEFAULT_FOG, persist: true },
+  { key: "haze", defaultValue: DEFAULT_HAZE, persist: true },
+  { key: "flySpeed", defaultValue: DEFAULT_FLY_SPEED, persist: true },
+  { key: "orbitPaused", defaultValue: false as const, persist: false },
+  { key: "showFocalIndicator", defaultValue: false as const, persist: true },
+  { key: "cameraMode", defaultValue: "orbit" as const, persist: false },
+  { key: "orbitRestore", defaultValue: null as SceneState["orbitRestore"], persist: false },
+];
+
+// cityPlanning visibility toggles — persisted separately because `cityPlanning`
+// in state also carries runtime readouts (topologyKind, arterialCount) that
+// must never be overwritten by Reset/Revert/Save.
+const CITY_PLANNING_VIS_PERSIST = true;
+
 const SAVED_CONFIG_KEY = "starry-night.savedConfig";
 
 type SavedConfig = {
@@ -195,6 +277,10 @@ type SavedConfig = {
   windowMode?: "simple" | "advanced";
   windowSimple?: { w: number; h: number };
   windowProfiles?: Record<Archetype, { w: number; h: number }>;
+  moonHalo?: typeof DEFAULT_MOON_HALO;
+  moonFollowCamera?: boolean;
+  flySpeed?: number;
+  showFocalIndicator?: boolean;
   // Only the layer-visibility toggles persist — topologyKind / arterialCount
   // are per-seed runtime readouts, not settings.
   cityPlanning?: {
@@ -431,7 +517,9 @@ type SceneState = {
   setCameraLive: (live: CameraLive) => void;
   resetCamera: () => void;
   saveCurrentAsDefault: () => void;
+  revertToSaved: () => void;
   hasSavedConfig: () => boolean;
+  copyableConfig: () => Record<string, unknown>;
   snapIntentToLive: () => void;
   tweenCameraTo: (to: CameraIntent, durationMs?: number) => void;
   clearCameraTweenRequest: () => void;
@@ -496,7 +584,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   intro: {
     progress: 0,
     playing: false,
-    durationSec: 60,
+    durationSec: 240,
     mode: "random",
     offCycleSec: 90,
     retriggerSec: 45,
@@ -505,7 +593,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   starIntro: {
     progress: 0,
     playing: false,
-    durationSec: 30,
+    durationSec: 360,
     mode: "random",
   },
   setIntroProgress: (progress) => set((s) => ({ intro: { ...s.intro, progress } })),
@@ -577,57 +665,79 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     })),
   setCameraLive: (cameraLive) => set({ cameraLive }),
   resetCamera: () => {
-    // Comprehensive reset: every panel-tunable setting goes back to its
-    // hardcoded default, regardless of any localStorage SavedConfig. Runtime
-    // readouts (cityPlanning.topologyKind / arterialCount, perf, live values)
-    // are preserved.
-    set((s) => ({
-      cameraIntent: DEFAULT_INTENT,
-      orbit: DEFAULT_ORBIT,
-      moon: DEFAULT_MOON,
-      moonHalo: DEFAULT_MOON_HALO,
-      moonFollowCamera: false,
-      stars: DEFAULT_STARS,
-      projection: DEFAULT_PROJECTION,
-      orthoSize: DEFAULT_ORTHO_SIZE,
-      projectionBlend: DEFAULT_PROJECTION === "orthographic" ? 1 : 0,
-      windowAA: DEFAULT_WINDOW_AA,
-      windowMode: "advanced" as const,
-      windowSimple: DEFAULT_WINDOW_SIMPLE,
-      windowProfiles: DEFAULT_WINDOW_PROFILES,
-      fog: DEFAULT_FOG,
-      haze: DEFAULT_HAZE,
-      cityPlanning: { ...s.cityPlanning, ...DEFAULT_CITY_PLANNING_VIS },
-      flySpeed: DEFAULT_FLY_SPEED,
-      orbitPaused: false,
-      showFocalIndicator: false,
-      cameraMode: "orbit" as const,
-      orbitRestore: null,
-    }));
+    // Derive reset patch from the registry: every entry goes back to its
+    // hardcoded defaultValue. Runtime readouts (cityPlanning.topologyKind /
+    // arterialCount, perf, live values) are preserved.
+    set((s) => {
+      const patch: Partial<SceneState> = {};
+      for (const entry of SETTINGS_REGISTRY) {
+        (patch as Record<string, unknown>)[entry.key] = entry.defaultValue;
+      }
+      // cityPlanning visibility toggles only — preserve runtime readouts.
+      patch.cityPlanning = { ...s.cityPlanning, ...DEFAULT_CITY_PLANNING_VIS };
+      return patch;
+    });
   },
   saveCurrentAsDefault: () => {
     const s = get();
-    writeSavedConfig({
-      cameraIntent: s.cameraIntent,
-      orbit: s.orbit,
-      moon: s.moon,
-      stars: s.stars,
-      projection: s.projection,
-      orthoSize: s.orthoSize,
-      windowAA: s.windowAA,
-      windowMode: s.windowMode,
-      windowSimple: s.windowSimple,
-      windowProfiles: s.windowProfiles,
-      fog: s.fog,
-      haze: s.haze,
-      cityPlanning: {
+    // Build SavedConfig from persist:true registry entries.
+    const snap: Partial<SavedConfig> = {};
+    for (const entry of SETTINGS_REGISTRY) {
+      if (entry.persist) {
+        (snap as Record<string, unknown>)[entry.key] = s[entry.key];
+      }
+    }
+    // cityPlanning visibility toggles — persisted, but only the three toggles.
+    if (CITY_PLANNING_VIS_PERSIST) {
+      snap.cityPlanning = {
         showHighways: s.cityPlanning.showHighways,
         showDistrictShells: s.cityPlanning.showDistrictShells,
         showArterials: s.cityPlanning.showArterials,
-      },
+      };
+    }
+    writeSavedConfig(snap as SavedConfig);
+  },
+  revertToSaved: () => {
+    // Load the last SavedConfig (with migration applied) and apply persisted
+    // fields back to state. If no saved config exists, this is a no-op.
+    const saved = readSavedConfig();
+    if (!saved) return;
+    set((s) => {
+      const patch: Partial<SceneState> = {};
+      for (const entry of SETTINGS_REGISTRY) {
+        if (entry.persist) {
+          const savedValue = (saved as Record<string, unknown>)[entry.key];
+          if (savedValue !== undefined) {
+            (patch as Record<string, unknown>)[entry.key] = savedValue;
+          }
+        }
+      }
+      // cityPlanning visibility toggles — preserve runtime readouts.
+      if (saved.cityPlanning !== undefined) {
+        patch.cityPlanning = { ...s.cityPlanning, ...saved.cityPlanning };
+      }
+      return patch;
     });
   },
   hasSavedConfig: () => readSavedConfig() !== null,
+  copyableConfig: () => {
+    const s = get();
+    const out: Record<string, unknown> = {};
+    for (const entry of SETTINGS_REGISTRY) {
+      if (entry.persist) {
+        out[entry.key] = s[entry.key];
+      }
+    }
+    // cityPlanning visibility toggles only.
+    if (CITY_PLANNING_VIS_PERSIST) {
+      out.cityPlanning = {
+        showHighways: s.cityPlanning.showHighways,
+        showDistrictShells: s.cityPlanning.showDistrictShells,
+        showArterials: s.cityPlanning.showArterials,
+      };
+    }
+    return out;
+  },
   tweenCameraTo: (to, durationMs = 1000) =>
     set({ cameraTweenRequest: { to, durationMs }, cameraMode: "still" }),
   clearCameraTweenRequest: () => set({ cameraTweenRequest: null }),

@@ -3,14 +3,22 @@
 import { useEffect, useMemo, useRef } from "react";
 import { generateTopology, CITY_CENTER, CITY_HALF_EXTENT } from "@/lib/seed/topology";
 import { generateDistricts } from "@/lib/seed/district";
-import { generateArterials } from "@/lib/seed/arterials";
-import { generateCity, generateStreetlights } from "@/lib/seed/cityGen";
+import {
+  generateCity,
+  generateStreetlights,
+  dropRadialSpokes,
+  DEFAULT_TUNING,
+  type GridTuning,
+} from "@/lib/seed/cityGen";
+import { stripGridFirst } from "@/lib/seed/lattice";
 
 export type PlanLayers = {
   districts: boolean;
   buildings: boolean;
+  blocks: boolean;
   highways: boolean;
   arterials: boolean;
+  streets: boolean;
   streetlights: boolean;
 };
 
@@ -18,19 +26,29 @@ type Props = {
   seed: string;
   size: number;
   layers: PlanLayers;
+  tuning?: GridTuning;
 };
 
-export function PlanView({ seed, size, layers }: Props) {
+export function PlanView({ seed, size, layers, tuning = DEFAULT_TUNING }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const data = useMemo(() => {
-    const topo = generateTopology(seed);
-    const field = generateDistricts(seed, topo);
-    const arts = generateArterials(seed, topo, field);
-    const city = generateCity(seed);
-    const lights = generateStreetlights(seed);
-    return { topo, field, arts, city, lights };
-  }, [seed]);
+    // The ::gridfirst sentinel selects the grid-first path. generateCity /
+    // generateStreetlights strip the sentinel + branch internally, so they take
+    // the raw seed. generateTopology / generateDistricts / generateArterials do
+    // NOT, so derive base + useGrid + θ0 here and pass them through — matching
+    // exactly what generateCity computes internally, so every layer agrees.
+    const base = stripGridFirst(seed);
+    // Tensor is the only city model now: drop radial spokes + L∞ districts in the
+    // θ0=0 frame, matching generateCity exactly so the overlay agrees with it.
+    const topo = dropRadialSpokes(generateTopology(base));
+    const field = generateDistricts(base, topo, true, 0);
+    // Roads come off the city artifact (city.arterials + city.streets) so /plan
+    // draws the exact same network the buildings were derived from.
+    const city = generateCity(seed, tuning);
+    const lights = generateStreetlights(seed, tuning);
+    return { topo, field, city, lights };
+  }, [seed, tuning]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -42,7 +60,7 @@ export function PlanView({ seed, size, layers }: Props) {
     if (!ctx) return;
     ctx.scale(dpr, dpr);
 
-    const { topo, field, arts, city, lights } = data;
+    const { topo, field, city, lights } = data;
     const cx = CITY_CENTER.x;
     const cz = CITY_CENTER.z;
     const half = CITY_HALF_EXTENT;
@@ -56,7 +74,10 @@ export function PlanView({ seed, size, layers }: Props) {
     ctx.fillStyle = "#0b1020";
     ctx.fillRect(0, 0, size, size);
 
-    // 2. Districts — sampled grid
+    // Draw order (bottom → top): districts, blocks, streets, arterials,
+    // highways, buildings, streetlights.
+
+    // Districts — sampled fill (very bottom).
     if (layers.districts) {
       const gridN = 70;
       const step = (2 * half) / gridN;
@@ -75,7 +96,76 @@ export function PlanView({ seed, size, layers }: Props) {
       }
     }
 
-    // 3. Buildings — rotated footprints
+    // Road polyline helper
+    const drawPolyline = (
+      vertices: Array<{ x: number; z: number }>,
+      closed: boolean,
+      strokeColor: string,
+      lineWidth: number,
+    ) => {
+      if (vertices.length < 2) return;
+      ctx.beginPath();
+      ctx.moveTo(toX(vertices[0].x), toY(vertices[0].z));
+      for (let i = 1; i < vertices.length; i++) {
+        ctx.lineTo(toX(vertices[i].x), toY(vertices[i].z));
+      }
+      if (closed) ctx.closePath();
+      ctx.strokeStyle = strokeColor;
+      ctx.lineWidth = lineWidth;
+      ctx.stroke();
+    };
+
+    // Block outlines (above districts, below roads). Empty on the tensor path.
+    if (layers.blocks) {
+      ctx.save();
+      ctx.strokeStyle = "rgba(170,195,230,0.45)";
+      ctx.lineWidth = 1;
+      for (const b of city.blocks) {
+        if (b.empty) continue;
+        const px = toX(b.cx);
+        const py = toY(b.cz);
+        const pw = worldWToPx(b.w);
+        const pd = worldWToPx(b.d);
+        ctx.save();
+        ctx.translate(px, py);
+        ctx.rotate(b.rotationY);
+        ctx.strokeRect(-pw / 2, -pd / 2, pw, pd);
+        ctx.restore();
+      }
+      ctx.restore();
+    }
+
+    // Minor (local) streets — bottom road tier.
+    if (layers.streets) {
+      ctx.save();
+      for (const s of city.streets) {
+        const lw = Math.max(0.6, worldWToPx(s.width));
+        drawPolyline(s.vertices, s.closed, "#54627a", lw);
+      }
+      ctx.restore();
+    }
+
+    // Arterials — above streets.
+    if (layers.arterials) {
+      ctx.save();
+      for (const art of city.arterials) {
+        const lw = Math.max(1.5, worldWToPx(art.width));
+        drawPolyline(art.vertices, art.closed, "#7fa8d0", lw);
+      }
+      ctx.restore();
+    }
+
+    // Highways — above arterials (top road tier).
+    if (layers.highways) {
+      ctx.save();
+      for (const hw of city.topology.highways) {
+        const lw = Math.max(2, worldWToPx(hw.width));
+        drawPolyline(hw.vertices, hw.closed, "#f0c850", lw);
+      }
+      ctx.restore();
+    }
+
+    // Buildings — rotated footprints, on top of the roads.
     if (layers.buildings) {
       const districtColorMap = new Map<string, string>();
       for (const d of field.districts) {
@@ -100,46 +190,7 @@ export function PlanView({ seed, size, layers }: Props) {
       ctx.restore();
     }
 
-    // Road polyline helper
-    const drawPolyline = (
-      vertices: Array<{ x: number; z: number }>,
-      closed: boolean,
-      strokeColor: string,
-      lineWidth: number,
-    ) => {
-      if (vertices.length < 2) return;
-      ctx.beginPath();
-      ctx.moveTo(toX(vertices[0].x), toY(vertices[0].z));
-      for (let i = 1; i < vertices.length; i++) {
-        ctx.lineTo(toX(vertices[i].x), toY(vertices[i].z));
-      }
-      if (closed) ctx.closePath();
-      ctx.strokeStyle = strokeColor;
-      ctx.lineWidth = lineWidth;
-      ctx.stroke();
-    };
-
-    // 4. Highways
-    if (layers.highways) {
-      ctx.save();
-      for (const hw of topo.highways) {
-        const lw = Math.max(2, worldWToPx(hw.width));
-        drawPolyline(hw.vertices, hw.closed, "#f0c850", lw);
-      }
-      ctx.restore();
-    }
-
-    // 5. Arterials
-    if (layers.arterials) {
-      ctx.save();
-      for (const art of arts) {
-        const lw = Math.max(1.5, worldWToPx(art.width));
-        drawPolyline(art.vertices, art.closed, "#7fa8d0", lw);
-      }
-      ctx.restore();
-    }
-
-    // 6. Streetlights
+    // Streetlights — very top.
     if (layers.streetlights) {
       ctx.save();
       for (const light of lights) {

@@ -3,18 +3,14 @@
 import { useMemo, useEffect } from "react";
 import * as THREE from "three";
 import { useSceneStore } from "@/lib/state/sceneStore";
-import { generateTopology } from "@/lib/seed/topology";
-import { generateDistricts } from "@/lib/seed/district";
-import { generateArterials } from "@/lib/seed/arterials";
+import { generateCity } from "@/lib/seed/cityGen";
 
 export function Arterials({ masterSeed }: { masterSeed: string }) {
   const showArterials = useSceneStore((s) => s.cityPlanning.showArterials);
   const setArterialCount = useSceneStore((s) => s.setArterialCount);
 
   const { geometry, count } = useMemo(() => {
-    const topo = generateTopology(masterSeed);
-    const field = generateDistricts(masterSeed, topo);
-    const arterials = generateArterials(masterSeed, topo, field);
+    const arterials = generateCity(masterSeed).arterials;
     const segs: number[] = [];
     for (const a of arterials) {
       for (let i = 0; i < a.vertices.length - 1; i++) {

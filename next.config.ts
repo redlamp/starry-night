@@ -11,6 +11,9 @@ const nextConfig: NextConfig = {
   ...(basePath ? { basePath, assetPrefix: basePath } : {}),
   trailingSlash: true,
   images: { unoptimized: true },
+  // Hide the Next.js dev-indicator badge (lower-left) — it collides with the
+  // in-app seed overlay. Dev-only; no effect on the production build.
+  devIndicators: false,
 };
 
 export default nextConfig;
