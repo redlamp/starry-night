@@ -19,6 +19,7 @@ import {
   Bug,
   Building2,
   Camera,
+  Car,
   Check,
   CloudFog,
   Contrast,
@@ -292,6 +293,10 @@ export function CameraPanel() {
 
             <Section value="fog" icon={CloudFog} label="Fog">
               <FogSection />
+            </Section>
+
+            <Section value="traffic" icon={Car} label="Traffic">
+              <TrafficSection />
             </Section>
 
             <Section value="windows" icon={AppWindow} label="Anti-Aliasing">
@@ -1137,6 +1142,31 @@ function DebugSection() {
       </label>
       <div className="text-foreground/45 text-[11px] leading-snug">
         The major-eigenvector field the roads follow — ticks coloured by grain angle.
+      </div>
+    </>
+  );
+}
+
+function TrafficSection() {
+  const traffic = useSceneStore((s) => s.traffic);
+  const setTraffic = useSceneStore((s) => s.setTraffic);
+  return (
+    <>
+      <label className="flex cursor-pointer items-center justify-between gap-2 text-xs">
+        <span className="text-foreground/70">enabled</span>
+        <Switch checked={traffic.enabled} onCheckedChange={(v) => setTraffic({ enabled: v })} />
+      </label>
+      <ValueSlider
+        label="density"
+        value={traffic.density}
+        min={0}
+        max={2}
+        step={0.1}
+        onChange={(density) => setTraffic({ density })}
+      />
+      <div className="text-foreground/45 text-[11px] leading-snug">
+        Car head/tail-lights flowing along the roads — warm white one way, red the other.
+        Deterministic per seed; off by default.
       </div>
     </>
   );

@@ -226,6 +226,10 @@ export const DEFAULT_DEBUG = {
 // in their highlight colours; the moon strokes in its own material colour.)
 export const DEBUG_WIRE_COLOR = "#4d9fff";
 
+// Ambient traffic (research D): car head/tail-lights flowing along the roads.
+// Off by default — an opt-in effect. density scales the car count per metre.
+export const DEFAULT_TRAFFIC = { enabled: false, density: 1 };
+
 export const DEFAULT_FLY_SPEED = 14;
 export const DEFAULT_ORTHO_SIZE = 240;
 export const DEFAULT_PROJECTION = "orthographic" as const;
@@ -281,7 +285,8 @@ type AnySettingEntry =
   | SettingEntry<"orbitRestore">
   | SettingEntry<"intro">
   | SettingEntry<"starIntro">
-  | SettingEntry<"debug">;
+  | SettingEntry<"debug">
+  | SettingEntry<"traffic">;
 
 export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "cameraIntent", defaultValue: DEFAULT_INTENT, persist: true },
@@ -314,6 +319,7 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   // hidden / tint), not look-and-feel a user would Save/Copy/Revert into a
   // default. Reset still clears them (resetCamera iterates every entry).
   { key: "debug", defaultValue: DEFAULT_DEBUG, persist: false },
+  { key: "traffic", defaultValue: DEFAULT_TRAFFIC, persist: true },
 ];
 
 // cityPlanning visibility toggles — persisted separately because `cityPlanning`
@@ -343,6 +349,7 @@ type SavedConfig = {
   showFocalIndicator?: boolean;
   intro?: SceneState["intro"];
   starIntro?: SceneState["starIntro"];
+  traffic?: SceneState["traffic"];
   // Only the layer-visibility toggles persist — topologyKind / arterialCount
   // are per-seed runtime readouts, not settings.
   cityPlanning?: {
@@ -576,6 +583,9 @@ type SceneState = {
   setRenderMode: (group: RenderGroup, mode: RenderMode) => void;
   setAllRenderModes: (mode: RenderMode) => void;
   setShowTensorField: (v: boolean) => void;
+  // Ambient traffic (research D) — opt-in car head/tail-lights.
+  traffic: typeof DEFAULT_TRAFFIC;
+  setTraffic: (patch: Partial<typeof DEFAULT_TRAFFIC>) => void;
   perf: Perf;
   setPerf: (perf: Perf) => void;
   setSeed: (seed: string) => void;
@@ -719,6 +729,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       },
     })),
   setShowTensorField: (v) => set((s) => ({ debug: { ...s.debug, showTensorField: v } })),
+  traffic: DEFAULT_TRAFFIC,
+  setTraffic: (patch) => set((s) => ({ traffic: { ...s.traffic, ...patch } })),
   perf: { fps: 0, triangles: 0, calls: 0, geometries: 0, textures: 0 },
   setPerf: (perf) => set({ perf }),
   setSeed: (masterSeed) => set({ masterSeed }),
