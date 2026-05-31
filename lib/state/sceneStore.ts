@@ -584,7 +584,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   intro: {
     progress: 0,
     playing: false,
-    durationSec: 60,
+    durationSec: 240,
     mode: "random",
     offCycleSec: 90,
     retriggerSec: 45,
@@ -593,7 +593,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   starIntro: {
     progress: 0,
     playing: false,
-    durationSec: 30,
+    durationSec: 360,
     mode: "random",
   },
   setIntroProgress: (progress) => set((s) => ({ intro: { ...s.intro, progress } })),
