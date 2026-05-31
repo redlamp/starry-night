@@ -3,6 +3,7 @@
 import { Canvas } from "@react-three/fiber";
 import * as THREE from "three";
 import { useSceneStore, QUALITY_TIERS } from "@/lib/state/sceneStore";
+import { CITY_SCALE } from "@/lib/seed/topology";
 import { InstancedCity } from "./InstancedCity";
 import { Moon } from "./Moon";
 import { StarField } from "./StarField";
@@ -33,7 +34,7 @@ export function Scene() {
 
   return (
     <Canvas
-      camera={{ position: intent.position, fov: intent.fov, near: 0.5, far: 12000 }}
+      camera={{ position: intent.position, fov: intent.fov, near: 0.5, far: 12000 * CITY_SCALE }}
       gl={{
         antialias: true,
         toneMapping: THREE.ACESFilmicToneMapping,

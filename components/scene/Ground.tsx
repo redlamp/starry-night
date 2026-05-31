@@ -1,6 +1,7 @@
 "use client";
 
 import { useSceneStore, DEBUG_WIRE_COLOR } from "@/lib/state/sceneStore";
+import { CITY_SCALE } from "@/lib/seed/topology";
 
 // 1 500 m radius disc (~2× the city extent). Round footprint avoids the
 // visible square corners a plane shows when the orbit camera swings around;
@@ -12,7 +13,7 @@ export function Ground() {
   const wireframe = mode === "wireframe";
   return (
     <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} visible={mode !== "hidden"}>
-      <circleGeometry args={[1575, 48]} />
+      <circleGeometry args={[1575 * CITY_SCALE, 48]} />
       <meshBasicMaterial
         color={wireframe ? DEBUG_WIRE_COLOR : "#04060c"}
         toneMapped={false}

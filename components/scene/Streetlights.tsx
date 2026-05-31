@@ -90,8 +90,10 @@ void main() {
 
 export function Streetlights({ masterSeed }: { masterSeed: string }) {
   const enabled = useSceneStore((s) => s.streetlights.enabled);
+  const cityShape = useSceneStore((s) => s.cityShape);
+  const cityShapeScale = useSceneStore((s) => s.cityShapeScale);
   const { geometry, material, maxRadius } = useMemo(() => {
-    const lights = generateStreetlights(masterSeed);
+    const lights = generateStreetlights(masterSeed, cityShape, cityShapeScale);
     const positions = new Float32Array(lights.length * 3);
     const colors = new Float32Array(lights.length * 3);
     const failing = new Float32Array(lights.length);
@@ -137,7 +139,7 @@ export function Streetlights({ masterSeed }: { masterSeed: string }) {
       toneMapped: false,
     });
     return { geometry: geo, material: mat, maxRadius: maxR };
-  }, [masterSeed]);
+  }, [masterSeed, cityShape, cityShapeScale]);
 
   useFrame(() => {
     const s = useSceneStore.getState();

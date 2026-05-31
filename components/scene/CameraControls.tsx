@@ -5,6 +5,7 @@ import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { useSceneStore, type CameraIntent, type Vec3 } from "@/lib/state/sceneStore";
 import { enterFlyMode, enterOrbitMode } from "@/lib/scene/cameraView";
+import { CITY_SCALE } from "@/lib/seed/topology";
 
 function easeInOutCubic(t: number) {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
@@ -69,8 +70,8 @@ const FLY_PINCH_DOLLY = 0.8; // metres flown per pixel of two-finger pinch-sprea
 
 // Ortho zoom (frustum half-height) tuning — shared by wheel + pinch.
 const ORTHO_WHEEL_STEP = 1.1;
-const ORTHO_SIZE_MIN = 5;
-const ORTHO_SIZE_MAX = 2000;
+const ORTHO_SIZE_MIN = 5 * CITY_SCALE;
+const ORTHO_SIZE_MAX = 2000 * CITY_SCALE;
 
 const POINTER_SENSITIVITY = 0.002;
 const _euler = new THREE.Euler(0, 0, 0, "YXZ");
@@ -81,8 +82,8 @@ const DEG2RAD = Math.PI / 180;
 const ORBIT_YAW_SENSITIVITY = 0.25; // deg per pixel
 const ORBIT_PITCH_SENSITIVITY = 0.25; // deg per pixel
 const ORBIT_WHEEL_SENSITIVITY = 0.5; // metres per wheel-delta tick
-const ORBIT_RADIUS_MIN = 50;
-const ORBIT_RADIUS_MAX = 5000;
+const ORBIT_RADIUS_MIN = 50 * CITY_SCALE;
+const ORBIT_RADIUS_MAX = 5000 * CITY_SCALE;
 const ORBIT_ELEVATION_MIN = 0.01; // hair above horizon — el = 0 clips the ground plane and culls it from the frame
 // Just under vertical: manual orbit keeps world-up (level horizon), and capping
 // below 90° means world-up never goes parallel to the view direction (gimbal).
@@ -285,8 +286,8 @@ export function CameraControls() {
   const activeTouches = useRef<Map<number, { x: number; y: number }>>(new Map());
 
   const FOCAL_Y_SENSITIVITY_RATIO = 0.005; // multiplied by orbit.radius — pan scales with how far out we are
-  const LOOK_AT_Y_MIN = -200;
-  const LOOK_AT_Y_MAX = 2000;
+  const LOOK_AT_Y_MIN = -200 * CITY_SCALE;
+  const LOOK_AT_Y_MAX = 2000 * CITY_SCALE;
 
   const lastWrite = useRef(0);
   const lastPaused = useRef(false);

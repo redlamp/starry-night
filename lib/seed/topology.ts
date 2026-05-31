@@ -34,7 +34,16 @@ export type Topology = {
 // Centred on the orbit default (0, -120). A large ~1500m × 1500m playing field
 // so cities sprawl well past the framed core into the fog at the edges.
 export const CITY_CENTER = { x: 0, z: -120 };
-export const CITY_HALF_EXTENT = 750;
+// The tuning baseline. Every world-space constant below (and across the scene /
+// camera) was hand-tuned at this size, so CITY_SCALE === 1 here.
+export const BASE_HALF_EXTENT = 750;
+// THE city-size knob — raise for larger tiers (see wiki plan-city-scale-tiers).
+// City tier (1500 = 3km across, ~6.5k buildings). CITY_SCALE=2 vs the 750 base.
+export const CITY_HALF_EXTENT = 1500;
+// Multiply world-space lengths/extents by this so the scene, camera, and the
+// density-coupled gen constants (lattice N, road point cap, district raster)
+// track the size knob. Exactly 1 at the base size — a no-op until the knob moves.
+export const CITY_SCALE = CITY_HALF_EXTENT / BASE_HALF_EXTENT;
 
 const HIGHWAY_WIDTH = 28;
 

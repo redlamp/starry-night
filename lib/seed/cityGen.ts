@@ -9,6 +9,7 @@ import {
 import { buildSilhouette, isHighRise, type SilhouetteField } from "./silhouette";
 import { generateTensorStreets } from "./tensorStreets";
 import { type RoadPoly } from "./streets";
+import { resolveCityShape, makeShapeMask, type CityShapeSetting, type ShapeMask } from "./cityShape";
 
 // Any road tier, for the building-skip corridor test.
 type RoadLike = { vertices: Array<{ x: number; z: number }>; width: number; closed: boolean };
@@ -343,7 +344,9 @@ const RING_TURN = (200 * Math.PI) / 180; // ≥ ~200° of turning reads as circu
 function buildTensorRoadsImpl(masterSeed: string) {
   const rawTopo = dropRadialSpokes(generateTopology(masterSeed));
   // The tensor streamlines only need the city extent — districts are derived
-  // FROM the finished network below, not the other way round.
+  // FROM the finished network below, not the other way round. This base network
+  // is always the full square; the organic footprint (#14) is a post-filter mask
+  // applied in generateCity, so the central layout is identical across shapes.
   const bounds = {
     minX: rawTopo.centerX - rawTopo.halfExtent,
     maxX: rawTopo.centerX + rawTopo.halfExtent,
@@ -403,6 +406,7 @@ function buildTensorRoads(masterSeed: string) {
 
 // The tensor city's district field, exposed so the /plan + scene overlays draw
 // the SAME districts the buildings were derived from (no separate Voronoi pass).
+// Shape-independent: the field is the full square; shapes clip the output.
 export function tensorDistrictField(rawSeed: string): DistrictField {
   return buildTensorRoads(rawSeed).field;
 }
@@ -610,7 +614,12 @@ function fillTensorBuildings(
         // Centre must clear EVERY road (not just corners) — catches a long
         // building straddling a perpendicular street between its corners.
         const centreClear = roadIndex.query(cx, cz).edge >= 0.5;
-        if (field.classify(cx, cz) >= 0 && centreClear && !cornerOnRoad(f) && !overlapsPlaced(f)) {
+        if (
+          field.classify(cx, cz) >= 0 &&
+          centreClear &&
+          !cornerOnRoad(f) &&
+          !overlapsPlaced(f)
+        ) {
           const lightingClass = LIGHTING_CLASS[character];
           const sil = isHighRise(character) ? (silhouetteByIndex.get(idx) ?? null) : null;
           const hm = sil ? sil.multiplier(cx, cz) : 1;
@@ -656,16 +665,67 @@ function fillTensorBuildings(
 
 // Tensor-field generator: streets follow the tensor field; buildings line the
 // streets. This is the DEFAULT city generator.
-function generateCityTensor(masterSeed: string): CityData {
+// Keep the longest contiguous run of in-mask vertices. For a convex footprint
+// (circle) a road crosses the boundary at most twice, so its inside portion is a
+// single run — this clips the road to the footprint without splitting it.
+function clipVertsToMask(
+  verts: Array<{ x: number; z: number }>,
+  mask: ShapeMask,
+): Array<{ x: number; z: number }> {
+  let bestStart = 0;
+  let bestLen = 0;
+  let curStart = 0;
+  let curLen = 0;
+  for (let i = 0; i < verts.length; i++) {
+    if (mask(verts[i].x, verts[i].z) >= 0.5) {
+      if (curLen === 0) curStart = i;
+      curLen++;
+      if (curLen > bestLen) {
+        bestLen = curLen;
+        bestStart = curStart;
+      }
+    } else {
+      curLen = 0;
+    }
+  }
+  return bestLen >= 2 ? verts.slice(bestStart, bestStart + bestLen) : [];
+}
+
+function clipRoadsToMask<T extends { vertices: Array<{ x: number; z: number }> }>(
+  roads: T[],
+  mask: ShapeMask,
+): T[] {
+  const out: T[] = [];
+  for (const r of roads) {
+    const v = clipVertsToMask(r.vertices, mask);
+    if (v.length >= 2) out.push({ ...r, vertices: v });
+  }
+  return out;
+}
+
+function generateCityTensor(
+  masterSeed: string,
+  shape: CityShapeSetting,
+  shapeScale: number,
+): CityData {
+  // Base layout is always the full square (shape-independent, cached per seed).
   const { topology, field, arterials, minorStreets } = buildTensorRoads(masterSeed);
   const roads: RoadLike[] = [...topology.highways, ...arterials, ...minorStreets];
   const buildings = fillTensorBuildings(masterSeed, field, roads);
+
+  const resolved = resolveCityShape(shape, masterSeed);
+  if (resolved === "square") {
+    return { buildings, districts: field.districts, topology, arterials, streets: minorStreets };
+  }
+  // Organic footprint (#14): clip the full square layout with a seeded mask so
+  // the central layout is identical across shapes — only the edges differ.
+  const mask = makeShapeMask(resolved, shapeScale);
   return {
-    buildings,
+    buildings: buildings.filter((b) => mask(b.x, b.z) >= 0.5),
     districts: field.districts,
-    topology,
-    arterials,
-    streets: minorStreets,
+    topology: { ...topology, highways: clipRoadsToMask(topology.highways, mask) },
+    arterials: clipRoadsToMask(arterials, mask),
+    streets: clipRoadsToMask(minorStreets, mask),
   };
 }
 
@@ -675,12 +735,17 @@ function generateCityTensor(masterSeed: string): CityData {
 const cityCache = new Map<string, CityData>();
 const lightsCache = new Map<string, Streetlight[]>();
 
-export function generateCity(rawSeed: string): CityData {
-  const hit = cityCache.get(rawSeed);
+export function generateCity(
+  rawSeed: string,
+  shape: CityShapeSetting = "square",
+  shapeScale = 1,
+): CityData {
+  const key = `${rawSeed}::${shape}::${shapeScale}`;
+  const hit = cityCache.get(key);
   if (hit) return hit;
-  const result = generateCityTensor(rawSeed);
+  const result = generateCityTensor(rawSeed, shape, shapeScale);
   if (cityCache.size > 64) cityCache.clear();
-  cityCache.set(rawSeed, result);
+  cityCache.set(key, result);
   return result;
 }
 
@@ -748,7 +813,13 @@ function emitRoadLights(
 
 // Tensor streetlights (Stage 1): edge lights along every road tier. Local
 // per-block lights arrive with the blocks in Stage 2-3.
-function generateStreetlightsTensor(masterSeed: string): Streetlight[] {
+function generateStreetlightsTensor(
+  masterSeed: string,
+  shape: CityShapeSetting,
+  shapeScale: number,
+): Streetlight[] {
+  // Emit on the full square network, then clip to the footprint mask (#14) so the
+  // lights match the same boundary the buildings + roads were clipped to.
   const { topology, arterials, minorStreets } = buildTensorRoads(masterSeed);
   const lights: Streetlight[] = [];
   const hwRng = seedrandom(`${masterSeed}::streetlights::highways`);
@@ -763,15 +834,23 @@ function generateStreetlightsTensor(masterSeed: string): Streetlight[] {
   for (const s of minorStreets) {
     emitRoadLights(minRng, s, "local", 3300, 40, lights);
   }
-  return lights;
+  const resolved = resolveCityShape(shape, masterSeed);
+  if (resolved === "square") return lights;
+  const mask = makeShapeMask(resolved, shapeScale);
+  return lights.filter((l) => mask(l.x, l.z) >= 0.5);
 }
 
-export function generateStreetlights(rawSeed: string): Streetlight[] {
-  const hit = lightsCache.get(rawSeed);
+export function generateStreetlights(
+  rawSeed: string,
+  shape: CityShapeSetting = "square",
+  shapeScale = 1,
+): Streetlight[] {
+  const key = `${rawSeed}::${shape}::${shapeScale}`;
+  const hit = lightsCache.get(key);
   if (hit) return hit;
-  const result = generateStreetlightsTensor(rawSeed);
+  const result = generateStreetlightsTensor(rawSeed, shape, shapeScale);
   if (lightsCache.size > 64) lightsCache.clear();
-  lightsCache.set(rawSeed, result);
+  lightsCache.set(key, result);
   return result;
 }
 
@@ -787,8 +866,12 @@ export type AviationBeacon = {
 // beacon — a short city has none, which is correct.
 const BEACON_MIN_HEIGHT = 100;
 
-export function generateAviationBeacons(rawSeed: string): AviationBeacon[] {
-  const { buildings } = generateCity(rawSeed);
+export function generateAviationBeacons(
+  rawSeed: string,
+  shape: CityShapeSetting = "square",
+  shapeScale = 1,
+): AviationBeacon[] {
+  const { buildings } = generateCity(rawSeed, shape, shapeScale);
   const rng = seedrandom(`${rawSeed}::beacons`);
   const beacons: AviationBeacon[] = [];
   for (const b of buildings) {
