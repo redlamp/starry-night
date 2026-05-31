@@ -590,6 +590,7 @@ type SceneState = {
   setBuildingTint: (patch: Partial<{ mode: BuildingTintMode; intensity: number }>) => void;
   setRenderMode: (group: RenderGroup, mode: RenderMode) => void;
   setAllRenderModes: (mode: RenderMode) => void;
+  setRenderModes: (modes: Record<RenderGroup, RenderMode>) => void;
   setShowTensorField: (v: boolean) => void;
   // Ambient traffic (research D) — opt-in car head/tail-lights.
   traffic: typeof DEFAULT_TRAFFIC;
@@ -738,6 +739,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         renderModes: { buildings: mode, roads: mode, ground: mode, sky: mode, moon: mode },
       },
     })),
+  setRenderModes: (renderModes) => set((s) => ({ debug: { ...s.debug, renderModes } })),
   setShowTensorField: (v) => set((s) => ({ debug: { ...s.debug, showTensorField: v } })),
   traffic: DEFAULT_TRAFFIC,
   setTraffic: (patch) => set((s) => ({ traffic: { ...s.traffic, ...patch } })),

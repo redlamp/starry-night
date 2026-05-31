@@ -1,7 +1,13 @@
 "use client";
 
 import gsap from "gsap";
-import { useSceneStore, DEFAULT_ORBIT, DEFAULT_ORTHO_SIZE } from "@/lib/state/sceneStore";
+import {
+  useSceneStore,
+  DEFAULT_ORBIT,
+  DEFAULT_ORTHO_SIZE,
+  type RenderGroup,
+  type RenderMode,
+} from "@/lib/state/sceneStore";
 
 // Shared camera-mode logic — the single source of truth for the Fly / Orbit /
 // Top-down switch, used by the Camera panel's mode tabs, the `t` hotkey, and the
@@ -221,4 +227,19 @@ export function tweenProjectionTo(target: "perspective" | "orthographic") {
 export function toggleProjection() {
   const s = useSceneStore.getState();
   tweenProjectionTo(s.projection === "orthographic" ? "perspective" : "orthographic");
+}
+
+// `d` hotkey (orbit only): flip every render group to wireframe, remembering the
+// exact prior modes; press again to restore them. Snapshot is module-level, so a
+// reload/HMR just starts fresh (next `d` re-snapshots).
+let wireframeSnapshot: Record<RenderGroup, RenderMode> | null = null;
+export function toggleAllWireframe() {
+  const s = useSceneStore.getState();
+  if (wireframeSnapshot) {
+    s.setRenderModes(wireframeSnapshot);
+    wireframeSnapshot = null;
+  } else {
+    wireframeSnapshot = { ...s.debug.renderModes };
+    s.setAllRenderModes("wireframe");
+  }
 }

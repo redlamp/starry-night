@@ -1,25 +1,29 @@
 "use client";
 
 import { useEffect } from "react";
-import { toggleTopDown, toggleProjection } from "@/lib/scene/cameraView";
+import { toggleTopDown, toggleProjection, toggleAllWireframe } from "@/lib/scene/cameraView";
+import { useSceneStore } from "@/lib/state/sceneStore";
 
 // Keyboard shortcuts, each routed through the same dispatch the Camera panel
 // uses so key + panel behave identically:
 //   "t" — toggle Top-down on/off (enter from orbit or fly, exit back to orbit).
 //   "p" — toggle projection (perspective ⇄ orthographic), same blend tween.
+//   "d" — orbit only: flip all render groups to wireframe, then back. (In fly, d
+//         is the strafe key, so this is gated to orbit to avoid conflict.)
 // Ignored while typing in an input / when a modifier is held.
 export function ViewHotkeys() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase();
-      if (k !== "t" && k !== "p") return;
+      if (k !== "t" && k !== "p" && k !== "d") return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const el = e.target as HTMLElement | null;
       if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) {
         return;
       }
       if (k === "t") toggleTopDown();
-      else toggleProjection();
+      else if (k === "p") toggleProjection();
+      else if (useSceneStore.getState().cameraMode === "orbit") toggleAllWireframe();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);

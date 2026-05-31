@@ -502,12 +502,12 @@ function OrbitSection() {
         <FocalIndicatorToggle />
       </div>
       <ValueSlider
-        label="speed"
-        value={orbit.periodSec}
-        min={5}
-        max={3600}
-        step={5}
-        onChange={(periodSec) => setOrbit({ periodSec })}
+        label="speed °/s"
+        value={Number((360 / Math.max(1, orbit.periodSec)).toFixed(1))}
+        min={0}
+        max={72}
+        step={0.1}
+        onChange={(dps) => setOrbit({ periodSec: 360 / Math.max(0.1, dps) })}
       />
       <ValueSlider
         label="radius"
