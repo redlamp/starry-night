@@ -16,15 +16,22 @@ import { generateTopology, CITY_CENTER, CITY_HALF_EXTENT, type Topology } from "
 // is stripped to a clean base seed BEFORE any RNG key is derived; the flag is
 // read separately from the raw string.
 const GRIDFIRST_SENTINEL = "::gridfirst";
+const TENSOR_SENTINEL = "::tensor";
 
 export function stripGridFirst(rawSeed: string): string {
-  return rawSeed.endsWith(GRIDFIRST_SENTINEL)
-    ? rawSeed.slice(0, -GRIDFIRST_SENTINEL.length)
-    : rawSeed;
+  if (rawSeed.endsWith(GRIDFIRST_SENTINEL)) return rawSeed.slice(0, -GRIDFIRST_SENTINEL.length);
+  if (rawSeed.endsWith(TENSOR_SENTINEL)) return rawSeed.slice(0, -TENSOR_SENTINEL.length);
+  return rawSeed;
 }
 
 export function gridFirst(rawSeed: string): boolean {
   return rawSeed.endsWith(GRIDFIRST_SENTINEL);
+}
+
+// Tensor-field road generator (the proper streets model). Separate sentinel from
+// ::gridfirst so /plan + gate1 can A/B all three paths (legacy / grid / tensor).
+export function tensorFirst(rawSeed: string): boolean {
+  return rawSeed.endsWith(TENSOR_SENTINEL);
 }
 
 // Default orientation drift from city centre to edge, in degrees. Tunable knob

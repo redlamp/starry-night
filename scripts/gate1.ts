@@ -75,7 +75,7 @@ function pointSegDist(x: number, z: number, ax: number, az: number, bx: number, 
 const OVERLAP_TOL = 0.3; // m of penetration we tolerate (rounding noise)
 
 function checkSeed(seed: string) {
-  const { buildings, districts, topology, arterials, seams } = generateCity(seed);
+  const { buildings, districts, topology, arterials, seams, streets } = generateCity(seed);
   const failures: string[] = [];
 
   // 1. Overlaps (broad-phase by centre distance, then OBB/SAT).
@@ -93,8 +93,9 @@ function checkSeed(seed: string) {
   }
   if (overlaps > 0) failures.push(`${overlaps} building overlaps`);
 
-  // 2. Corridor violations — building centre on a road surface.
-  const roads = [...topology.highways, ...arterials, ...seams];
+  // 2. Corridor violations — building centre on a road surface. Includes the
+  // grid's minor streets (the new path) and seams (legacy, now empty).
+  const roads = [...topology.highways, ...arterials, ...streets, ...seams];
   let corridorHits = 0;
   for (const bld of buildings) {
     for (const r of roads) {
@@ -140,10 +141,10 @@ function main() {
   const seeds = args.length > 0 ? args : Array.from({ length: 20 }, (_, i) => `gate1-${i}`);
   let failed = 0;
 
-  console.log("Gate 1 — grid-first generator asserts\n");
+  console.log("Gate 1 — tensor-field city generator asserts\n");
 
-  // Flag-OFF 20-seed loop (must match the pre-rework baseline exactly).
-  console.log("flag-OFF (legacy radial)");
+  // The default (and only) city model is tensor. Run the 20-seed suite on it:
+  // no overlaps, no road-corridor hits, district count in band, in-bounds.
   console.log("seed           buildings  districts  result");
   for (const seed of seeds) {
     const r = checkSeed(seed);
@@ -156,64 +157,28 @@ function main() {
     );
   }
 
-  // Flag-ON 20-seed loop — the SAME seeds with the ::gridfirst sentinel, so the
-  // grid-first path (L∞ districts + grid-line arterials) clears every gate1
-  // assert too, district count stays in [6,26] included.
-  console.log("\nflag-ON (grid-first)");
-  console.log("seed                     buildings  districts  result");
-  for (const seed of seeds) {
-    const gseed = `${seed}::gridfirst`;
-    const r = checkSeed(gseed);
-    const ok = r.failures.length === 0;
-    if (!ok) failed++;
-    console.log(
-      `${gseed.padEnd(24)} ${String(r.buildings).padStart(8)} ${String(r.districts).padStart(10)}  ${
-        ok ? "PASS" : "FAIL — " + r.failures.join("; ")
-      }`,
-    );
-  }
-
-  // Determinism (flag-OFF).
+  // Determinism — the tensor city is a pure function of the seed.
   const d1 = JSON.stringify(generateCity("gate1-det"));
   const d2 = JSON.stringify(generateCity("gate1-det"));
   const detOk = d1 === d2;
-  console.log(`\ndeterminism (flag-OFF): ${detOk ? "PASS" : "FAIL"}`);
+  console.log(`\ndeterminism: ${detOk ? "PASS" : "FAIL"}`);
   if (!detOk) failed++;
 
-  // Stage 1 — flag-ON determinism: the grid-first city is a pure function of the
-  // seed and reproduces byte-for-byte across runs.
-  const g1 = JSON.stringify(generateCity("gate1-det::gridfirst"));
-  const g2 = JSON.stringify(generateCity("gate1-det::gridfirst"));
-  const detGridOk = g1 === g2;
-  console.log(`determinism (flag-ON): ${detGridOk ? "PASS" : "FAIL"}`);
-  if (!detGridOk) failed++;
-
-  // Stage 1 — TOPOLOGY invariance: flag-ON differs from flag-OFF BY DESIGN
-  // (L∞ districts + grid arterials), but the topology must be identical — it
-  // derives from the base seed, proving the sentinel still strips before any
-  // RNG key is keyed.
-  const topoOff = JSON.stringify(generateCity("gate1-det").topology);
-  const topoOn = JSON.stringify(generateCity("gate1-det::gridfirst").topology);
-  const topoInvariantOk = topoOff === topoOn;
-  console.log(`topology invariance (flag base seed): ${topoInvariantOk ? "PASS" : "FAIL"}`);
-  if (!topoInvariantOk) failed++;
-
-  // Stage 3 — seam streets: flag-OFF emits none (byte-identity), flag-ON is
-  // deterministic and actually produces promoted seams across the seed set.
-  const seamOff = generateCity("gate1-det").seams;
-  const sOn1 = JSON.stringify(generateCity("gate1-det::gridfirst").seams);
-  const sOn2 = JSON.stringify(generateCity("gate1-det::gridfirst").seams);
-  let seamTotal = 0;
+  // Streets present — the tensor city always lays arterials + minor streets.
+  let streetTotal = 0;
+  let arterialTotal = 0;
   for (const s of ["gate1-2", "gate1-5", "gate1-9", "gate1-13", "gate1-16"]) {
-    seamTotal += generateCity(`${s}::gridfirst`).seams.length;
+    const c = generateCity(s);
+    streetTotal += c.streets.length;
+    arterialTotal += c.arterials.length;
   }
-  const seamOk = seamOff.length === 0 && sOn1 === sOn2 && seamTotal > 0;
+  const streetsOk = streetTotal > 0 && arterialTotal > 0;
   console.log(
-    `seams: flag-OFF empty ${seamOff.length === 0 ? "PASS" : "FAIL"}; determinism ${sOn1 === sOn2 ? "PASS" : "FAIL"}; flag-ON present (${seamTotal} across 5 seeds) ${seamTotal > 0 ? "PASS" : "FAIL"}`,
+    `streets: ${arterialTotal} arterials, ${streetTotal} minor across 5 seeds ${streetsOk ? "PASS" : "FAIL"}`,
   );
-  if (!seamOk) failed++;
+  if (!streetsOk) failed++;
 
-  // Stage 0 — the lattice is a pure deterministic function with a
+  // The lattice is a pure deterministic function with a
   // center-anchored orientation field whose neighbour-delta stays small.
   const L1 = computeLattice("gate1-det");
   const L2 = computeLattice("gate1-det");
