@@ -19,12 +19,12 @@ import {
   Bug,
   Building2,
   Camera,
-  Car,
   Check,
   CloudFog,
   Contrast,
   Copy,
   Gauge,
+  Info,
   Map as MapIcon,
   Moon,
   MoonStar,
@@ -60,7 +60,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DistrictsSection } from "@/components/ui/DistrictsPanel";
-import { RoadsSection } from "@/components/ui/RoadsPanel";
+import { RoadsSection, CityDetailsSection } from "@/components/ui/RoadsPanel";
 import {
   setCameraTab,
   currentCameraTab,
@@ -118,6 +118,10 @@ const THEME_OPTIONS: Array<{ value: Theme; icon: LucideIcon; label: string }> = 
 function ThemeToggle() {
   const [theme, setTheme] = useTheme();
   const [mounted, setMounted] = useState(false);
+  // Hydration guard: server renders the unselected state, then we mark mounted
+  // after hydration so the active-theme highlight only appears client-side. The
+  // one-time post-mount setState is the intended SSR pattern here.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setMounted(true), []);
   return (
     <div
@@ -281,6 +285,11 @@ export function CameraPanel() {
             </Section>
             <Section value="roads" icon={Route} label="Roads">
               <RoadsSection />
+              <TrafficSection />
+            </Section>
+
+            <Section value="city-details" icon={Info} label="City Details">
+              <CityDetailsSection />
             </Section>
 
             <Section value="stars" icon={Stars} label="Stars">
@@ -293,10 +302,6 @@ export function CameraPanel() {
 
             <Section value="fog" icon={CloudFog} label="Fog">
               <FogSection />
-            </Section>
-
-            <Section value="traffic" icon={Car} label="Traffic">
-              <TrafficSection />
             </Section>
 
             <Section value="windows" icon={AppWindow} label="Anti-Aliasing">
@@ -961,6 +966,7 @@ function IntroSection() {
   const intro = useSceneStore((s) => s.intro);
   const starIntro = useSceneStore((s) => s.starIntro);
   const setIntroDuration = useSceneStore((s) => s.setIntroDuration);
+  const setStreetlightDuration = useSceneStore((s) => s.setStreetlightDuration);
   const setIntroMode = useSceneStore((s) => s.setIntroMode);
   const setOffCycle = useSceneStore((s) => s.setOffCycle);
   const setRetrigger = useSceneStore((s) => s.setRetrigger);
@@ -1066,6 +1072,16 @@ function IntroSection() {
         onChange={(v) => setStarIntroMode(v as typeof starIntro.mode)}
       />
       <ProgressRow label="progress" value={starIntro.progress} />
+
+      <SubHeader label="Streetlights" />
+      <ValueSlider
+        label="duration"
+        value={intro.streetlightDurationSec}
+        min={0.5}
+        max={60}
+        step={0.5}
+        onChange={(streetlightDurationSec) => setStreetlightDuration(streetlightDurationSec)}
+      />
     </>
   );
 }
@@ -1152,22 +1168,45 @@ function TrafficSection() {
   const setTraffic = useSceneStore((s) => s.setTraffic);
   return (
     <>
-      <label className="flex cursor-pointer items-center justify-between gap-2 text-xs">
-        <span className="text-foreground/70">enabled</span>
+      <div className="flex items-center justify-between gap-2 pt-1">
+        <span className="text-foreground/60 text-[11px] font-medium tracking-wide uppercase">
+          Traffic
+        </span>
         <Switch checked={traffic.enabled} onCheckedChange={(v) => setTraffic({ enabled: v })} />
-      </label>
+      </div>
       <ValueSlider
         label="density"
         value={traffic.density}
-        min={0}
-        max={2}
+        min={0.1}
+        max={8}
         step={0.1}
         onChange={(density) => setTraffic({ density })}
       />
-      <div className="text-foreground/45 text-[11px] leading-snug">
-        Car head/tail-lights flowing along the roads — warm white one way, red the other.
-        Deterministic per seed; off by default.
-      </div>
+      <div className="text-foreground/55 pt-1 text-[11px]">per-tier ×</div>
+      <ValueSlider
+        label="highway"
+        value={traffic.highway}
+        min={0}
+        max={4}
+        step={0.1}
+        onChange={(highway) => setTraffic({ highway })}
+      />
+      <ValueSlider
+        label="arterial"
+        value={traffic.arterial}
+        min={0}
+        max={4}
+        step={0.1}
+        onChange={(arterial) => setTraffic({ arterial })}
+      />
+      <ValueSlider
+        label="streets"
+        value={traffic.minor}
+        min={0}
+        max={4}
+        step={0.1}
+        onChange={(minor) => setTraffic({ minor })}
+      />
     </>
   );
 }
@@ -1524,8 +1563,14 @@ function SeedRow() {
   const seed = useSceneStore((s) => s.masterSeed);
   const setSeed = useSceneStore((s) => s.setSeed);
   const [draft, setDraft] = useState(seed);
+  const [prevSeed, setPrevSeed] = useState(seed);
 
-  useEffect(() => setDraft(seed), [seed]);
+  // Reset the draft when the store seed changes (e.g. randomize). Adjust state
+  // during render per React docs — no effect, avoids the cascading-render smell.
+  if (seed !== prevSeed) {
+    setPrevSeed(seed);
+    setDraft(seed);
+  }
 
   const commit = () => {
     const v = draft.trim();

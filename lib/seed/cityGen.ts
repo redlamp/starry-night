@@ -695,30 +695,12 @@ export type Streetlight = {
   tier: StreetlightTier;
 };
 
-// Modern-LED streetlight matrix (decision note §Streetlight planning):
-//   highway + arterial → 4000K uniform (no variant);
-//   local → per-zone colour temperature by district character.
-const LOCAL_KELVIN: Record<DistrictCharacter, number> = {
-  downtown: 4000,
-  subcentre: 4000,
-  residential: 3000,
-  heritage: 2700,
-  industrial: 4300,
-  "mixed-use": 3500,
-};
+// Modern-LED streetlight temps (decision note §Streetlight planning):
+//   highway + arterial → 4000K uniform; local → flat 3300K for now.
+//   Per-district local temps + variant bulbs are planned — see #42.
 const HIGHWAY_KELVIN = 4000;
 const ARTERIAL_KELVIN = 4000;
-// A replaced bulb / different batch sits at one of these off-temps.
-const VARIANT_TEMPS = [2200, 3500, 5000];
 const FAILURE_RATE = 0.025; // fraction of local lights that flicker as failing
-
-function pickVariant(rng: () => number, base: number): number {
-  for (let i = 0; i < 4; i++) {
-    const t = VARIANT_TEMPS[Math.floor(rng() * VARIANT_TEMPS.length)];
-    if (Math.abs(t - base) > 200) return t;
-  }
-  return VARIANT_TEMPS[0];
-}
 
 // Emit lights in pairs along both sides of a road polyline at fixed spacing.
 function emitRoadLights(
@@ -732,6 +714,11 @@ function emitRoadLights(
   const verts = road.vertices;
   const last = road.closed ? verts.length : verts.length - 1;
   const offset = road.width / 2 + 2;
+  // Walk arc-length across the WHOLE polyline, dropping a light every `spacing`
+  // metres. Tensor roads are RK4-sampled at ~4m, so a per-segment emitter would
+  // never fire (spacing >> segment length) — accumulate across the segment seams.
+  let acc = 0; // arc-length up to vertex i
+  let nextAt = spacing; // arc-length of the next light to place
   for (let i = 0; i < last; i++) {
     const a = verts[i];
     const b = verts[(i + 1) % verts.length];
@@ -741,7 +728,8 @@ function emitRoadLights(
     const uz = (b.z - a.z) / segLen;
     const nx = -uz;
     const nz = ux;
-    for (let s = spacing; s < segLen; s += spacing) {
+    while (nextAt <= acc + segLen) {
+      const s = nextAt - acc; // distance into this segment
       for (const side of [-1, 1] as const) {
         out.push({
           x: a.x + ux * s + nx * offset * side,
@@ -752,7 +740,9 @@ function emitRoadLights(
           tier,
         });
       }
+      nextAt += spacing;
     }
+    acc += segLen;
   }
 }
 

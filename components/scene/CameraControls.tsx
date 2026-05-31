@@ -257,7 +257,6 @@ export function CameraControls() {
       window.removeEventListener("keyup", onUp);
       window.removeEventListener("blur", onBlur);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [camera]);
 
   // Orbit drag state.
@@ -394,6 +393,9 @@ export function CameraControls() {
   useEffect(() => {
     if (mode !== "orbit") return;
     const dom = gl.domElement;
+    // Snapshot the touch map for cleanup — the ref identity is stable, but
+    // exhaustive-deps wants `.current` captured inside the effect body.
+    const touches = activeTouches.current;
 
     const settleAzimuthBeforeDrag = () => {
       const s = useSceneStore.getState();
@@ -581,7 +583,7 @@ export function CameraControls() {
       dom.removeEventListener("pointercancel", onPointerEnd);
       dom.removeEventListener("wheel", onWheel);
       dom.removeEventListener("contextmenu", onContextMenu);
-      activeTouches.current.clear();
+      touches.clear();
       pinch.current = null;
       dragging.current = false;
       dragBase.current = null;

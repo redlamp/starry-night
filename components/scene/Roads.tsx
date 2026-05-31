@@ -24,9 +24,11 @@ export function Roads({ masterSeed }: { masterSeed: string }) {
   const showStreets = useSceneStore((s) => s.cityPlanning.showStreets);
   const roadsMode = useSceneStore((s) => s.debug.renderModes.roads);
   const setTopologyKind = useSceneStore((s) => s.setTopologyKind);
+  const setHighwayCount = useSceneStore((s) => s.setHighwayCount);
   const setArterialCount = useSceneStore((s) => s.setArterialCount);
+  const setStreetCount = useSceneStore((s) => s.setStreetCount);
 
-  const { geometries, kind, arterialCount } = useMemo(() => {
+  const { geometries, kind, highwayCount, arterialCount, streetCount } = useMemo(() => {
     const city = generateCity(masterSeed);
     const hwPolys: RoadPoly[] = city.topology.highways.map((h) => ({
       vertices: h.vertices,
@@ -50,12 +52,16 @@ export function Roads({ masterSeed }: { masterSeed: string }) {
         streets: buildRoadGeometry(stPolys),
       },
       kind: city.topology.kind,
+      highwayCount: city.topology.highways.length,
       arterialCount: city.arterials.length,
+      streetCount: city.streets.length,
     };
   }, [masterSeed]);
 
   useEffect(() => setTopologyKind(kind), [kind, setTopologyKind]);
+  useEffect(() => setHighwayCount(highwayCount), [highwayCount, setHighwayCount]);
   useEffect(() => setArterialCount(arterialCount), [arterialCount, setArterialCount]);
+  useEffect(() => setStreetCount(streetCount), [streetCount, setStreetCount]);
 
   useEffect(() => {
     return () => {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import seedrandom from "seedrandom";
 import * as THREE from "three";
 import { kelvinToColor, lerpKelvin } from "@/lib/color/kelvin";
@@ -623,12 +624,12 @@ export default function PalettePage() {
             reset
           </button>
         </label>
-        <a
+        <Link
           href="/"
           className="ml-auto text-sm text-zinc-400 hover:text-white underline"
         >
           &larr; Back to scene
-        </a>
+        </Link>
       </div>
       <BucketComparison
         proposedBuckets={proposedBuckets}

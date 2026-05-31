@@ -10,6 +10,7 @@ Map of Content for external references that shape direction.
 ## Scale references
 
 - [[building-sizes-real-world-references]] — real-world floor heights, window dims, archetype size bands, city framing
+- [[plan-city-scale-tiers]] — scale-tier proposal for #14 (Town/District/City/Metro); recommended City (`half=1500`, 3 km across); one-knob `×k` scaling recipe + perf/LOD roadmap
 
 ## Urban planning references
 
