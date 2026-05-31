@@ -1,5 +1,5 @@
 import seedrandom from "seedrandom";
-import type { Topology, Highway } from "./topology";
+import { CITY_CENTER, type Topology, type Highway } from "./topology";
 
 // District field for the streets-first generator (Stage 1).
 //
@@ -44,6 +44,41 @@ export type DistrictField = {
 
 const GRID_STEPS = 64; // sample resolution per axis
 const MIN_SAMPLE_FRACTION = 0.006; // districts below this share of samples are merged away
+
+// Grid-first rework — Stage 1 (wiki/notes/plan-grid-first-rework.md). When the
+// flag is on, the Voronoi metric switches from squared-Euclidean (round/organic
+// cells) to Chebyshev L∞ evaluated in the θ0 frame → rectilinear, map-like seams
+// aligned to the downtown grid. We rotate both points by -θ0 about CITY_CENTER,
+// then the distance is max(|dx_rot|, |dz_rot|).
+//
+// Grid-first min-seed spacing factor (× halfExtent). The plan's documented
+// default is the same half*0.13 the L2 path uses, re-tuned only reactively if a
+// flag-ON seed trips gate1's [6,26] district-count band. The full 20-seed
+// flag-ON gate passes at 0.13 (counts land in [11,24]), so no re-tune was
+// needed; this stays a single tunable knob should a future seed-set trip it.
+const GRID_MIN_DIST_FACTOR = 0.13;
+
+// Squared Chebyshev (L∞) distance between two world points, evaluated in the θ0
+// frame (rotate both by -θ0 about CITY_CENTER first). Squared so it composes
+// with the existing squared-Euclidean comparisons without a sqrt.
+function chebyshevSqInFrame(
+  theta0: number,
+  ax: number,
+  az: number,
+  bx: number,
+  bz: number,
+): number {
+  const cos = Math.cos(-theta0);
+  const sin = Math.sin(-theta0);
+  const cx = CITY_CENTER.x;
+  const cz = CITY_CENTER.z;
+  const arx = (ax - cx) * cos - (az - cz) * sin;
+  const arz = (ax - cx) * sin + (az - cz) * cos;
+  const brx = (bx - cx) * cos - (bz - cz) * sin;
+  const brz = (bx - cx) * sin + (bz - cz) * cos;
+  const m = Math.max(Math.abs(arx - brx), Math.abs(arz - brz));
+  return m * m;
+}
 
 function sideOfSegment(
   x: number,
@@ -90,10 +125,16 @@ function macroSignature(topo: Topology, x: number, z: number): string {
 
 type Seed = { x: number; z: number; macro: string };
 
-function placeSeeds(rng: () => number, topo: Topology): Seed[] {
+function placeSeeds(rng: () => number, topo: Topology, useGrid: boolean, theta0: number): Seed[] {
   const { centerX: cx, centerZ: cz, halfExtent: half } = topo;
   const target = 10 + Math.floor(rng() * 15); // 10..24 (merge trims to ~8..24)
-  const minDist = half * 0.13;
+  // Same 0.13 factor as the L2 path — NOT wider. The square L∞ exclusion zone
+  // is already ~27% larger in area than the L2 circle at equal radius, so L∞
+  // naturally limits the district count; no re-tune was needed (flag-ON counts
+  // land in [11,24], inside the [6,26] gate, across 20 seeds). Kept as a single
+  // knob to re-tune reactively if a future seed-set trips the band.
+  const minDist = half * (useGrid ? GRID_MIN_DIST_FACTOR : 0.13);
+  const minDistSq = minDist * minDist;
   const seeds: Seed[] = [];
   let attempts = 0;
   while (seeds.length < target && attempts < 1500) {
@@ -103,7 +144,10 @@ function placeSeeds(rng: () => number, topo: Topology): Seed[] {
     const rad = Math.pow(rng(), 0.7) * half * 0.92;
     const x = cx + Math.cos(ang) * rad;
     const z = cz + Math.sin(ang) * rad;
-    if (seeds.every((s) => Math.hypot(s.x - x, s.z - z) > minDist)) {
+    const farEnough = useGrid
+      ? seeds.every((s) => chebyshevSqInFrame(theta0, s.x, s.z, x, z) > minDistSq)
+      : seeds.every((s) => Math.hypot(s.x - x, s.z - z) > minDist);
+    if (farEnough) {
       seeds.push({ x, z, macro: macroSignature(topo, x, z) });
     }
   }
@@ -119,14 +163,23 @@ function placeSeeds(rng: () => number, topo: Topology): Seed[] {
 
 // Nearest seed that shares the point's macro region (highways are hard walls).
 // Falls back to global nearest if no seed sits in the same macro region.
-function nearestSeed(seeds: Seed[], topo: Topology, x: number, z: number): number {
+function nearestSeed(
+  seeds: Seed[],
+  topo: Topology,
+  x: number,
+  z: number,
+  useGrid: boolean,
+  theta0: number,
+): number {
   const macro = macroSignature(topo, x, z);
   let best = -1;
   let bestD = Infinity;
   let fallback = -1;
   let fallbackD = Infinity;
   for (let i = 0; i < seeds.length; i++) {
-    const d = (seeds[i].x - x) ** 2 + (seeds[i].z - z) ** 2;
+    const d = useGrid
+      ? chebyshevSqInFrame(theta0, seeds[i].x, seeds[i].z, x, z)
+      : (seeds[i].x - x) ** 2 + (seeds[i].z - z) ** 2;
     if (d < fallbackD) {
       fallbackD = d;
       fallback = i;
@@ -241,10 +294,15 @@ function assignCharacters(
   return chars;
 }
 
-export function generateDistricts(masterSeed: string, topo: Topology): DistrictField {
+export function generateDistricts(
+  masterSeed: string,
+  topo: Topology,
+  useGrid: boolean = false,
+  theta0: number = 0,
+): DistrictField {
   const rng = seedrandom(`${masterSeed}::districts`);
   const { centerX: cx, centerZ: cz, halfExtent: half } = topo;
-  const seeds = placeSeeds(rng, topo);
+  const seeds = placeSeeds(rng, topo, useGrid, theta0);
 
   const minX = cx - half;
   const maxX = cx + half;
@@ -259,7 +317,7 @@ export function generateDistricts(masterSeed: string, topo: Topology): DistrictF
     for (let gz = 0; gz < GRID_STEPS; gz++) {
       const x = minX + (gx + 0.5) * step;
       const z = minZ + (gz + 0.5) * step;
-      rawCount[nearestSeed(seeds, topo, x, z)]++;
+      rawCount[nearestSeed(seeds, topo, x, z, useGrid, theta0)]++;
     }
   }
   const totalSamples = GRID_STEPS * GRID_STEPS;
@@ -278,7 +336,9 @@ export function generateDistricts(masterSeed: string, topo: Topology): DistrictF
     let bestD = Infinity;
     for (let j = 0; j < seeds.length; j++) {
       if (!survivors[j]) continue;
-      const d = (seeds[i].x - seeds[j].x) ** 2 + (seeds[i].z - seeds[j].z) ** 2;
+      const d = useGrid
+        ? chebyshevSqInFrame(theta0, seeds[i].x, seeds[i].z, seeds[j].x, seeds[j].z)
+        : (seeds[i].x - seeds[j].x) ** 2 + (seeds[i].z - seeds[j].z) ** 2;
       if (d < bestD) {
         bestD = d;
         best = j;
@@ -298,7 +358,7 @@ export function generateDistricts(masterSeed: string, topo: Topology): DistrictF
     // The city has a finite extent — Voronoi cells must not bleed past the
     // bbox, or block-grid overshoot would place buildings off the map.
     if (x < minX || x > maxX || z < minZ || z > maxZ) return -1;
-    const raw = nearestSeed(seeds, topo, x, z);
+    const raw = nearestSeed(seeds, topo, x, z, useGrid, theta0);
     const survivorSeed = remapToSurvivorSeed[raw];
     return survivorSeedToIndex.get(survivorSeed) ?? -1;
   };
@@ -364,6 +424,227 @@ export function generateDistricts(masterSeed: string, topo: Topology): DistrictF
     classify: classifyRaw,
     bounds: { minX, maxX, minZ, maxZ },
   };
+}
+
+// ---------------------------------------------------------------------------
+// Seam streets (issue #33) — TIERED.
+// ---------------------------------------------------------------------------
+// The full Voronoi boundary network is extracted from the classify grid via
+// marching-squares crack-chaining, then only the MAJOR boundaries (long
+// through-runs) are promoted to drawn avenues. Real cities join differently-
+// oriented grids along a few shared streets — usually one major boundary, often
+// diagonal — not a lane per Voronoi edge (wiki/research/map-layout-references.md).
+// Minor boundaries stay as the street-width gap footprintInDistrict already
+// leaves. Pure + deterministic: reads classify + sampleCount, consumes no RNG.
+
+export const SEAM_STREET_WIDTH = 16;
+const SEAM_MIN_CELLS = 4; // clamp: skip seams touching a sub-4-cell district
+const SEAM_MIN_LENGTH_FACTOR = 0.3; // promote boundaries longer than half * this
+const SEAM_MIN_ANGLE = 0.2; // rad ≈ 11.5° — only where adjacent grids truly clash
+const SEAM_MAX = 8; // cap to a handful of major avenues, never a lane per boundary
+
+export type SeamPolyline = {
+  id: string;
+  vertices: Array<{ x: number; z: number }>;
+  width: number;
+  closed: boolean;
+  districtPair: [number, number];
+};
+
+export function seamSegments(
+  field: DistrictField,
+  districtRot: Map<number, number>,
+  maxCount: number = SEAM_MAX,
+  minAngle: number = SEAM_MIN_ANGLE,
+): SeamPolyline[] {
+  if (field.districts.length < 2) return [];
+  const { minX, maxX, minZ } = field.bounds;
+  const N = GRID_STEPS;
+  const step = (maxX - minX) / N;
+  const half = (maxX - minX) / 2;
+
+  // Label cache at cell centres — one classify call per cell (matches the grid
+  // sampleCount was accumulated on, so the clamp is exact).
+  const label = new Int16Array(N * N);
+  for (let gx = 0; gx < N; gx++) {
+    for (let gz = 0; gz < N; gz++) {
+      label[gx * N + gz] = field.classify(minX + (gx + 0.5) * step, minZ + (gz + 0.5) * step);
+    }
+  }
+  const sampleCount = field.districts.map((d) => d.sampleCount);
+  const bigEnough = (lab: number) => lab >= 0 && (sampleCount[lab] ?? 0) >= SEAM_MIN_CELLS;
+
+  // Cracks on shared cell edges. Vertex (i,j) = world (minX+i*step, minZ+j*step),
+  // i,j in [0,N]; a crack joins two adjacent vertices (the exact L∞ boundary
+  // line between two differing cell centres). Tagged with the unordered pair.
+  const vKey = (i: number, j: number) => i * (N + 1) + j;
+  const pairKey = (p: number, q: number) => (p < q ? p * 100000 + q : q * 100000 + p);
+  const cracks: Array<{ a: number; b: number; pair: number }> = [];
+  // x-neighbours → vertical boundary line at i = gx+1
+  for (let gx = 0; gx < N - 1; gx++) {
+    for (let gz = 0; gz < N; gz++) {
+      const la = label[gx * N + gz];
+      const lb = label[(gx + 1) * N + gz];
+      if (la === lb || !bigEnough(la) || !bigEnough(lb)) continue;
+      cracks.push({ a: vKey(gx + 1, gz), b: vKey(gx + 1, gz + 1), pair: pairKey(la, lb) });
+    }
+  }
+  // z-neighbours → horizontal boundary line at j = gz+1
+  for (let gx = 0; gx < N; gx++) {
+    for (let gz = 0; gz < N - 1; gz++) {
+      const la = label[gx * N + gz];
+      const lb = label[gx * N + gz + 1];
+      if (la === lb || !bigEnough(la) || !bigEnough(lb)) continue;
+      cracks.push({ a: vKey(gx, gz + 1), b: vKey(gx + 1, gz + 1), pair: pairKey(la, lb) });
+    }
+  }
+
+  const adj = new Map<number, number[]>();
+  for (let ci = 0; ci < cracks.length; ci++) {
+    for (const v of [cracks[ci].a, cracks[ci].b]) {
+      const l = adj.get(v);
+      if (l) l.push(ci);
+      else adj.set(v, [ci]);
+    }
+  }
+  const vToXZ = (v: number) => {
+    const i = Math.floor(v / (N + 1));
+    return { x: minX + i * step, z: minZ + (v - i * (N + 1)) * step };
+  };
+  // Continue only through a clean degree-2 vertex of the SAME pair — so a seam
+  // passes straight/around corners but DEAD-ENDS (T-junction) where a third
+  // district meets, never line-matching the neighbour grid.
+  const continuation = (v: number, fromCi: number, pair: number): number => {
+    const list = adj.get(v);
+    if (!list) return -1;
+    let other = -1;
+    let count = 0;
+    for (const ci of list) {
+      if (cracks[ci].pair !== pair) continue;
+      count++;
+      if (ci !== fromCi) other = ci;
+    }
+    return count === 2 ? other : -1;
+  };
+
+  const visited = new Array<boolean>(cracks.length).fill(false);
+  const collected: Array<{ poly: SeamPolyline; len: number }> = [];
+  let sid = 0;
+  for (let start = 0; start < cracks.length; start++) {
+    if (visited[start]) continue;
+    visited[start] = true;
+    const pair = cracks[start].pair;
+    const chain: number[] = [cracks[start].a, cracks[start].b];
+    // Walk forward from b, then backward from a, through degree-2 same-pair vertices.
+    let curV = cracks[start].b;
+    let curCi = start;
+    let closedLoop = false;
+    for (;;) {
+      const next = continuation(curV, curCi, pair);
+      if (next < 0 || visited[next]) break;
+      visited[next] = true;
+      const far = cracks[next].a === curV ? cracks[next].b : cracks[next].a;
+      chain.push(far);
+      curV = far;
+      curCi = next;
+      if (curV === cracks[start].a) {
+        closedLoop = true;
+        break;
+      }
+    }
+    if (!closedLoop) {
+      curV = cracks[start].a;
+      curCi = start;
+      for (;;) {
+        const next = continuation(curV, curCi, pair);
+        if (next < 0 || visited[next]) break;
+        visited[next] = true;
+        const far = cracks[next].a === curV ? cracks[next].b : cracks[next].a;
+        chain.unshift(far);
+        curV = far;
+        curCi = next;
+      }
+    }
+    if (closedLoop) chain.pop(); // drop the duplicate closing vertex
+
+    // Collinear-merge (lossless on the rectilinear grid) + to world.
+    const pts = chain.map(vToXZ);
+    const merged: Array<{ x: number; z: number }> = [];
+    for (let i = 0; i < pts.length; i++) {
+      if (i > 0 && i < pts.length - 1) {
+        const a = pts[i - 1];
+        const b = pts[i];
+        const c = pts[i + 1];
+        const cross = (b.x - a.x) * (c.z - a.z) - (b.z - a.z) * (c.x - a.x);
+        if (Math.abs(cross) < 1e-6 * step * step) continue;
+      }
+      merged.push(pts[i]);
+    }
+    // Closed loops: the chain ends are cyclic neighbours, so also drop a
+    // collinear join (the linear pass above never tests the two endpoints).
+    if (closedLoop) {
+      while (merged.length >= 3) {
+        const a = merged[merged.length - 1];
+        const b = merged[0];
+        const c = merged[1];
+        if (Math.abs((b.x - a.x) * (c.z - a.z) - (b.z - a.z) * (c.x - a.x)) < 1e-6 * step * step)
+          merged.shift();
+        else break;
+      }
+      while (merged.length >= 3) {
+        const a = merged[merged.length - 2];
+        const b = merged[merged.length - 1];
+        const c = merged[0];
+        if (Math.abs((b.x - a.x) * (c.z - a.z) - (b.z - a.z) * (c.x - a.x)) < 1e-6 * step * step)
+          merged.pop();
+        else break;
+      }
+    }
+    let len = 0;
+    for (let i = 1; i < merged.length; i++) {
+      len += Math.hypot(merged[i].x - merged[i - 1].x, merged[i].z - merged[i - 1].z);
+    }
+    // Closed loops: count the closing segment too, so the tier length is correct.
+    if (closedLoop && merged.length >= 2) {
+      len += Math.hypot(
+        merged[0].x - merged[merged.length - 1].x,
+        merged[0].z - merged[merged.length - 1].z,
+      );
+    }
+    const da = Math.floor(pair / 100000);
+    const db = pair % 100000;
+    collected.push({
+      poly: {
+        id: `seam-${sid++}`,
+        vertices: merged,
+        width: SEAM_STREET_WIDTH,
+        closed: closedLoop,
+        districtPair: [da, db],
+      },
+      len,
+    });
+  }
+
+  // Tier: a seam street is warranted only where two adjacent grids genuinely
+  // CLASH in orientation (a reconciling avenue, like SF's Market St) AND the
+  // boundary is a long through-run. Cap to the few longest so the result reads
+  // as a handful of major avenues, not a lane per Voronoi edge.
+  const angDiff = (a: number, b: number) => {
+    let d = Math.abs(a - b) % Math.PI;
+    if (d > Math.PI / 2) d = Math.PI - d;
+    return d;
+  };
+  const minLen = half * SEAM_MIN_LENGTH_FACTOR;
+  return collected
+    .filter((c) => {
+      if (c.poly.vertices.length < 2 || c.len < minLen) return false;
+      const ra = districtRot.get(c.poly.districtPair[0]);
+      const rb = districtRot.get(c.poly.districtPair[1]);
+      return ra !== undefined && rb !== undefined && angDiff(ra, rb) >= minAngle;
+    })
+    .sort((a, b) => b.len - a.len)
+    .slice(0, maxCount)
+    .map((c, i) => ({ ...c.poly, id: `seam-${i}` }));
 }
 
 export { CHARACTER_COLOR };

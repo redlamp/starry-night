@@ -14,6 +14,8 @@ tags:
 
 Supersedes [[decision-district-based-city-layout]].
 
+**Partially superseded (2026-05-30) by [[decision-grid-first-city-generation]]**: the road-network + block-formation mechanism below (pipeline steps 6–11 — the radial arterial model, the per-district rotated-grid + stripe-fill generator, "streets-last" ordering) is replaced by a grid-first model with continuous seam streets. The *grammar* in this note — district characters, silhouette templates, zone palette, height-cap matrix, streetlight planning, naming, heritage buffer, podium-tower — **remains in force**.
+
 ## Goal
 
 Different seeds produce **categorically different cities** — not variations of one template. A viewer doing a slow orbit can read a city's identity at a glance: its network topology, where its centres of gravity lie, what its dominant heights look like.

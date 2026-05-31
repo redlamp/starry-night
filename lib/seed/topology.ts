@@ -126,8 +126,13 @@ function buildBypass(rng: () => number, cx: number, cz: number, half: number): H
 
 function buildRing(rng: () => number, cx: number, cz: number, half: number): Highway[] {
   // Closed ellipse. Radii vary by seed and the ring may be rotated up to ±45°.
-  const rx = half * (0.4 + rng() * 0.15);
-  const rz = half * (0.4 + rng() * 0.15);
+  // Real beltways encircle the built area near the city edge (radius ~5-8× the
+  // downtown core), not a tight inner loop — push the radius to 0.80-0.95 of the
+  // half-extent so the ring reads as a true edge beltway with a thin suburban
+  // band outside it, and stays inside the bbox at any rotation (max semi-axis
+  // 0.95·half < half). (#14; wiki/research/map-layout-references.md.)
+  const rx = half * (0.8 + rng() * 0.15);
+  const rz = half * (0.8 + rng() * 0.15);
   const rotation = (rng() - 0.5) * (Math.PI / 4);
   const cos = Math.cos(rotation);
   const sin = Math.sin(rotation);

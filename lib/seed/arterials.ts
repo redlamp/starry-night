@@ -17,6 +17,14 @@ export type Arterial = {
 
 const ARTERIAL_WIDTH = 14;
 
+// Grid-first rework — Stage 1. Under the flag, arterials are the HEAVY LINES of
+// the grid: straight lines in the θ0 frame at a uniform spacing, spanning the
+// city bbox in both axis directions. Spacing is the largest tunable here.
+// Local block+street pitch runs ~60-100m, so 190m places an arterial roughly
+// every 2nd-3rd local street and sits in the decision note's 160-220m band.
+// (Promoted seam runs are Stage 3 — not generated here.)
+const GRID_ARTERIAL_SPACING = 190;
+
 // Distance from a point along a direction until it hits the city bbox edge.
 function reachToEdge(
   ox: number,
@@ -39,6 +47,8 @@ export function generateArterials(
   masterSeed: string,
   topo: Topology,
   field: DistrictField,
+  useGrid: boolean = false,
+  theta0: number = 0,
 ): Arterial[] {
   const rng = seedrandom(`${masterSeed}::arterials`);
   const districts = field.districts;
@@ -47,6 +57,57 @@ export function generateArterials(
   const cx = topo.centerX;
   const cz = topo.centerZ;
   const half = topo.halfExtent;
+
+  // Grid-first: arterials = heavy grid lines in the θ0 frame. Lines run parallel
+  // to each frame axis at a uniform spacing, spanning the bbox in both
+  // directions, then transform to world space. Continuity is guaranteed because
+  // every arterial is a straight lattice-aligned line.
+  if (useGrid) {
+    const cos = Math.cos(theta0);
+    const sin = Math.sin(theta0);
+    // Frame→world for a point (u, v) measured from CITY_CENTER along the θ0 axes.
+    const toWorld = (u: number, v: number) => ({
+      x: cx + u * cos - v * sin,
+      z: cz + u * sin + v * cos,
+    });
+    // The rotated bbox fits inside a frame-aligned square of half-side √2·half;
+    // run lines across that span so they fully cross the city at any rotation.
+    const reach = half * Math.SQRT2;
+    const gridArterials: Arterial[] = [];
+    let gid = 0;
+    // Lines of constant v (running along the +u axis) and constant u (running
+    // along the +v axis): the two families of the heavy grid.
+    const maxIndex = Math.floor(reach / GRID_ARTERIAL_SPACING);
+    for (let k = -maxIndex; k <= maxIndex; k++) {
+      const offset = k * GRID_ARTERIAL_SPACING;
+      const a = toWorld(-reach, offset);
+      const b = toWorld(reach, offset);
+      gridArterials.push({
+        id: `arterial-${gid++}`,
+        width: ARTERIAL_WIDTH,
+        closed: false,
+        vertices: [
+          { x: a.x, z: a.z },
+          { x: b.x, z: b.z },
+        ],
+      });
+    }
+    for (let k = -maxIndex; k <= maxIndex; k++) {
+      const offset = k * GRID_ARTERIAL_SPACING;
+      const a = toWorld(offset, -reach);
+      const b = toWorld(offset, reach);
+      gridArterials.push({
+        id: `arterial-${gid++}`,
+        width: ARTERIAL_WIDTH,
+        closed: false,
+        vertices: [
+          { x: a.x, z: a.z },
+          { x: b.x, z: b.z },
+        ],
+      });
+    }
+    return gridArterials;
+  }
 
   const peaks = districts.filter((d) => isHighRise(d.character));
   const byCentral = [...districts].sort(

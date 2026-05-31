@@ -41,6 +41,9 @@ Thumbs.db
 *.swp
 *.swo
 
+# Obsidian vault config
+.obsidian/
+
 # Test coverage
 coverage/
 

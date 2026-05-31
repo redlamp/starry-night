@@ -51,6 +51,7 @@ import {
 } from "@/components/ui/select";
 import { DistrictsSection } from "@/components/ui/DistrictsPanel";
 import { RoadsSection } from "@/components/ui/RoadsPanel";
+import { applyViewPreset } from "@/lib/scene/cameraView";
 
 const PROJECTION_TWEEN_DURATION = 0.5;
 
@@ -79,114 +80,9 @@ function tweenProjectionTo(target: "perspective" | "orthographic") {
   });
 }
 
-// Orbit top-down: tilt the orbit straight down, pull the camera back, and pause
-// the auto-sweep — all without leaving orbit mode. Tweens elevation→90, radius
-// up to a city-fitting distance, and orthoSize up so the framing also works in
-// ortho (where radius alone doesn't change visible extent). The pre-top-down
-// orbit + projection state is captured into orbitRestore the first time so the
-// Default preset (#19) can put the user back where they were.
-const TOP_DOWN_RADIUS = 4500;
-const TOP_DOWN_ORTHO_SIZE = 1000;
-const ORBIT_TWEEN_MS = 0.9;
-
-function tweenOrbitTowards(
-  targetEl: number,
-  targetR: number,
-  targetOrtho: number,
-  onComplete?: () => void,
-) {
-  const s = useSceneStore.getState();
-  const fromEl = s.orbit.elevationDeg;
-  const fromR = s.orbit.radius;
-  const fromOrtho = s.orthoSize;
-
-  // Two-phase swing-arm tween. The angular swing happens at constant radius
-  // first, so the camera reads as an arm pivoting around the city centre.
-  // Radius + orthoSize (zoom-out) ramp in over the late half, overlapping the
-  // tail of the swing so the whole motion still feels like one continuous arc
-  // rather than two distinct beats.
-  const tl = gsap.timeline({ onComplete });
-
-  const elProxy = { v: fromEl };
-  tl.to(
-    elProxy,
-    {
-      v: targetEl,
-      duration: ORBIT_TWEEN_MS,
-      ease: "power2.inOut",
-      onUpdate: () => useSceneStore.getState().setOrbit({ elevationDeg: elProxy.v }),
-    },
-    0,
-  );
-
-  const zoomProxy = { v: 0 };
-  tl.to(
-    zoomProxy,
-    {
-      v: 1,
-      duration: ORBIT_TWEEN_MS * 0.7,
-      ease: "power2.inOut",
-      onUpdate: () => {
-        const t = zoomProxy.v;
-        const st = useSceneStore.getState();
-        st.setOrbit({ radius: fromR + (targetR - fromR) * t });
-        st.setOrthoSize(fromOrtho + (targetOrtho - fromOrtho) * t);
-      },
-    },
-    ORBIT_TWEEN_MS * 0.4,
-  );
-}
-
-function tweenOrbitTopDown() {
-  const s = useSceneStore.getState();
-  if (s.orbitRestore === null) {
-    s.setOrbitRestore({
-      elevationDeg: s.orbit.elevationDeg,
-      radius: s.orbit.radius,
-      orthoSize: s.orthoSize,
-      paused: s.orbitPaused,
-    });
-  }
-  s.setOrbitPaused(true);
-  tweenOrbitTowards(90, TOP_DOWN_RADIUS, TOP_DOWN_ORTHO_SIZE);
-}
-
-function tweenOrbitRestore() {
-  const s = useSceneStore.getState();
-  const r = s.orbitRestore;
-  if (!r) return;
-  tweenOrbitTowards(r.elevationDeg, r.radius, r.orthoSize, () => {
-    const st = useSceneStore.getState();
-    st.setOrbitPaused(r.paused);
-    st.setOrbitRestore(null);
-  });
-}
-
 function copyConfigToClipboard() {
   const s = useSceneStore.getState();
-  const snippet = JSON.stringify(
-    {
-      cameraIntent: s.cameraIntent,
-      orbit: s.orbit,
-      projection: s.projection,
-      orthoSize: s.orthoSize,
-      moon: s.moon,
-      stars: s.stars,
-      windowAA: s.windowAA,
-      windowMode: s.windowMode,
-      windowSimple: s.windowSimple,
-      windowProfiles: s.windowProfiles,
-      fog: s.fog,
-      haze: s.haze,
-      cityPlanning: {
-        showHighways: s.cityPlanning.showHighways,
-        showDistrictShells: s.cityPlanning.showDistrictShells,
-        showArterials: s.cityPlanning.showArterials,
-      },
-    },
-    null,
-    2,
-  );
+  const snippet = JSON.stringify(s.copyableConfig(), null, 2);
   if (typeof navigator !== "undefined" && navigator.clipboard) {
     void navigator.clipboard.writeText(snippet);
   }
@@ -277,10 +173,12 @@ export function CameraPanel() {
     setCameraIntent,
     resetCamera,
     saveCurrentAsDefault,
-    tweenCameraTo,
+    revertToSaved,
+    hasSavedConfig,
   } = useSceneStore();
 
   const [hidden, setHidden] = useState(true);
+  const [savedExists, setSavedExists] = useState(() => hasSavedConfig());
   const captureMode = useSceneStore((s) => s.captureMode);
 
   useEffect(() => {
@@ -375,7 +273,6 @@ export function CameraPanel() {
                 cameraIntent={cameraIntent}
                 intentRotDeg={intentRotDeg}
                 setCameraIntent={setCameraIntent}
-                tweenCameraTo={tweenCameraTo}
               />
             </Section>
 
@@ -442,18 +339,33 @@ export function CameraPanel() {
 
       {/* Sticky footer */}
       <div className="border-foreground/10 flex shrink-0 items-center justify-between gap-2 border-t px-4 pt-3 pb-3">
-        <Button
-          variant="ghost"
-          onClick={() => resetCamera()}
-          title="Reset all settings to their hardcoded defaults"
-          className="text-rose-400 hover:bg-rose-400/10 hover:text-rose-300"
-        >
-          Reset
-        </Button>
+        <div className="flex items-center gap-1.5">
+          <Button
+            variant="ghost"
+            onClick={() => resetCamera()}
+            title="Reset all settings to their hardcoded defaults"
+            className="text-rose-400 hover:bg-rose-400/10 hover:text-rose-300"
+          >
+            Reset
+          </Button>
+          {savedExists && (
+            <Button
+              variant="ghost"
+              onClick={() => revertToSaved()}
+              title="Restore the last locally-saved config"
+              className="text-amber-400 hover:bg-amber-400/10 hover:text-amber-300"
+            >
+              Revert
+            </Button>
+          )}
+        </div>
         <div className="flex items-center gap-1.5">
           <CopyButton />
           <Button
-            onClick={() => saveCurrentAsDefault()}
+            onClick={() => {
+              saveCurrentAsDefault();
+              setSavedExists(true);
+            }}
             title="Snapshot current camera + orbit + moon + stars as the new Reset target"
             className="bg-emerald-400 text-black hover:bg-emerald-400/90"
           >
@@ -499,13 +411,11 @@ function PoseSection({
   cameraIntent,
   intentRotDeg,
   setCameraIntent,
-  tweenCameraTo,
 }: {
   locked: boolean;
   cameraIntent: ReturnType<typeof useSceneStore.getState>["cameraIntent"];
   intentRotDeg: Vec3;
   setCameraIntent: ReturnType<typeof useSceneStore.getState>["setCameraIntent"];
-  tweenCameraTo: ReturnType<typeof useSceneStore.getState>["tweenCameraTo"];
 }) {
   const orbiting = useSceneStore((s) => s.cameraMode === "orbit");
   const orbitRestoreSet = useSceneStore((s) => s.orbitRestore !== null);
@@ -515,14 +425,7 @@ function PoseSection({
         <span className="text-foreground/40 text-xs tracking-wide uppercase">tween to</span>
         <Tabs
           value={orbitRestoreSet ? "top-down" : "default"}
-          onValueChange={(v) => {
-            const preset = PRESETS.find((p) => p.id === v);
-            if (!preset) return;
-            if (orbiting && preset.id === "top-down") tweenOrbitTopDown();
-            else if (orbiting && preset.id === "default" && orbitRestoreSet)
-              tweenOrbitRestore();
-            else tweenCameraTo(preset.intent, 900);
-          }}
+          onValueChange={(v) => applyViewPreset(v as "default" | "top-down")}
         >
           <TabsList className="w-full">
             {PRESETS.map((p) => {
