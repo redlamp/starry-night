@@ -3,9 +3,7 @@
 import { useMemo, useEffect } from "react";
 import * as THREE from "three";
 import { useSceneStore } from "@/lib/state/sceneStore";
-import { generateTopology } from "@/lib/seed/topology";
-import { generateDistricts } from "@/lib/seed/district";
-import { dropRadialSpokes } from "@/lib/seed/cityGen";
+import { tensorDistrictField } from "@/lib/seed/cityGen";
 
 // Color-coded district fill overlay for the planning layer. Samples the
 // district field on a grid and draws one flat quad per occupied cell, colored
@@ -18,8 +16,7 @@ export function DistrictShells({ masterSeed }: { masterSeed: string }) {
   const show = useSceneStore((s) => s.cityPlanning.showDistrictShells);
 
   const mesh = useMemo(() => {
-    const topo = dropRadialSpokes(generateTopology(masterSeed));
-    const field = generateDistricts(masterSeed, topo, true, 0);
+    const field = tensorDistrictField(masterSeed);
     const { minX, maxX, minZ, maxZ } = field.bounds;
     const step = (maxX - minX) / OVERLAY_STEPS;
 

@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useRef } from "react";
 import { generateTopology, CITY_CENTER, CITY_HALF_EXTENT } from "@/lib/seed/topology";
-import { generateDistricts } from "@/lib/seed/district";
 import {
   generateCity,
   generateStreetlights,
+  tensorDistrictField,
   dropRadialSpokes,
   DEFAULT_TUNING,
   type GridTuning,
@@ -42,7 +42,9 @@ export function PlanView({ seed, size, layers, tuning = DEFAULT_TUNING }: Props)
     // Tensor is the only city model now: drop radial spokes + L∞ districts in the
     // θ0=0 frame, matching generateCity exactly so the overlay agrees with it.
     const topo = dropRadialSpokes(generateTopology(base));
-    const field = generateDistricts(base, topo, true, 0);
+    // Districts now follow the arterial network (built inside generateCity);
+    // read that exact field so the overlay matches where the buildings sit.
+    const field = tensorDistrictField(base);
     // Roads come off the city artifact (city.arterials + city.streets) so /plan
     // draws the exact same network the buildings were derived from.
     const city = generateCity(seed, tuning);

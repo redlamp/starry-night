@@ -8,6 +8,7 @@ import {
 } from "./topology";
 import {
   generateDistricts,
+  generateDistrictsFromNetwork,
   seamSegments,
   type District,
   type DistrictCharacter,
@@ -721,10 +722,17 @@ const RING_TURN = (200 * Math.PI) / 180; // ≥ ~200° of turning reads as circu
 // largely-straight arterial that spans the map; the old random-tilt topology
 // highways are dropped (out of place against the tensor flow). Districts still
 // use the raw topology for their macro regions (the character overlay).
-function buildTensorRoads(masterSeed: string) {
+function buildTensorRoadsImpl(masterSeed: string) {
   const rawTopo = dropRadialSpokes(generateTopology(masterSeed));
-  const field = generateDistricts(masterSeed, rawTopo, true, 0);
-  const gen = generateTensorStreets(masterSeed, field);
+  // The tensor streamlines only need the city extent — districts are derived
+  // FROM the finished network below, not the other way round.
+  const bounds = {
+    minX: rawTopo.centerX - rawTopo.halfExtent,
+    maxX: rawTopo.centerX + rawTopo.halfExtent,
+    minZ: rawTopo.centerZ - rawTopo.halfExtent,
+    maxZ: rawTopo.centerZ + rawTopo.halfExtent,
+  };
+  const gen = generateTensorStreets(masterSeed, bounds);
 
   const ringArts = gen.arterials.filter((a) => totalTurn(a) >= RING_TURN);
   const arterials = gen.arterials.filter((a) => totalTurn(a) < RING_TURN);
@@ -753,7 +761,32 @@ function buildTensorRoads(masterSeed: string) {
   }
 
   const topology: Topology = { ...rawTopo, highways };
+  // Districts follow the road network: arterials + the highway are HARD WALLS,
+  // minor streets stay passable, so each district is an arterial-bounded region
+  // spanning several street blocks (replaces the free-floating Voronoi).
+  const walls: RoadLike[] = [...highways, ...outArterials];
+  const field = generateDistrictsFromNetwork(masterSeed, walls, rawTopo);
   return { topology, field, arterials: outArterials, minorStreets };
+}
+
+// buildTensorRoads is consumed by the city, the streetlights, and the three
+// district overlays (/plan, scene shells, settings list) — all per seed. Cache
+// so the tensor field + the flood-fill districting run once per seed, and every
+// consumer agrees on the same districts the buildings were placed against.
+const tensorRoadsCache = new Map<string, ReturnType<typeof buildTensorRoadsImpl>>();
+function buildTensorRoads(masterSeed: string) {
+  const hit = tensorRoadsCache.get(masterSeed);
+  if (hit) return hit;
+  const result = buildTensorRoadsImpl(masterSeed);
+  if (tensorRoadsCache.size > 64) tensorRoadsCache.clear();
+  tensorRoadsCache.set(masterSeed, result);
+  return result;
+}
+
+// The tensor city's district field, exposed so the /plan + scene overlays draw
+// the SAME districts the buildings were derived from (no separate Voronoi pass).
+export function tensorDistrictField(rawSeed: string): DistrictField {
+  return buildTensorRoads(stripGridFirst(rawSeed)).field;
 }
 
 // --- Tensor building fill -------------------------------------------------
