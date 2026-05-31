@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { Map, Building2, Milestone, Route, Lightbulb, Spline, LayoutGrid, X } from "lucide-react";
 import { PlanView, type PlanLayers } from "@/components/plan/PlanView";
 import { Button } from "@/components/ui/button";
@@ -151,12 +152,12 @@ export default function PlanPage() {
             <Button variant="outline" onClick={reroll}>
               Reroll
             </Button>
-            <a
+            <Link
               href="/"
               className="text-sm text-zinc-400 underline-offset-4 hover:text-white hover:underline"
             >
               ← scene
-            </a>
+            </Link>
           </div>
         </div>
 

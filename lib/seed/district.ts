@@ -238,10 +238,22 @@ export function generateDistrictsFromNetwork(
       const c = stack.pop() as number;
       const gx = Math.floor(c / N);
       const gz = c - gx * N;
-      if (gx > 0 && !isWall[c - N] && label[c - N] < 0) (label[c - N] = K), stack.push(c - N);
-      if (gx < N - 1 && !isWall[c + N] && label[c + N] < 0) (label[c + N] = K), stack.push(c + N);
-      if (gz > 0 && !isWall[c - 1] && label[c - 1] < 0) (label[c - 1] = K), stack.push(c - 1);
-      if (gz < N - 1 && !isWall[c + 1] && label[c + 1] < 0) (label[c + 1] = K), stack.push(c + 1);
+      if (gx > 0 && !isWall[c - N] && label[c - N] < 0) {
+        label[c - N] = K;
+        stack.push(c - N);
+      }
+      if (gx < N - 1 && !isWall[c + N] && label[c + N] < 0) {
+        label[c + N] = K;
+        stack.push(c + N);
+      }
+      if (gz > 0 && !isWall[c - 1] && label[c - 1] < 0) {
+        label[c - 1] = K;
+        stack.push(c - 1);
+      }
+      if (gz < N - 1 && !isWall[c + 1] && label[c + 1] < 0) {
+        label[c + 1] = K;
+        stack.push(c + 1);
+      }
     }
     K++;
   }
@@ -264,10 +276,22 @@ export function generateDistrictsFromNetwork(
     const lab = full[c];
     const gx = Math.floor(c / N);
     const gz = c - gx * N;
-    if (gx > 0 && full[c - N] < 0) (full[c - N] = lab), (queue[qt++] = c - N);
-    if (gx < N - 1 && full[c + N] < 0) (full[c + N] = lab), (queue[qt++] = c + N);
-    if (gz > 0 && full[c - 1] < 0) (full[c - 1] = lab), (queue[qt++] = c - 1);
-    if (gz < N - 1 && full[c + 1] < 0) (full[c + 1] = lab), (queue[qt++] = c + 1);
+    if (gx > 0 && full[c - N] < 0) {
+      full[c - N] = lab;
+      queue[qt++] = c - N;
+    }
+    if (gx < N - 1 && full[c + N] < 0) {
+      full[c + N] = lab;
+      queue[qt++] = c + N;
+    }
+    if (gz > 0 && full[c - 1] < 0) {
+      full[c - 1] = lab;
+      queue[qt++] = c - 1;
+    }
+    if (gz < N - 1 && full[c + 1] < 0) {
+      full[c + 1] = lab;
+      queue[qt++] = c + 1;
+    }
   }
 
   // Cell count per raw component (post wall-fill) + adjacency strength between
