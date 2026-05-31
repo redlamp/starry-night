@@ -65,11 +65,13 @@ const FLY_SPEED_MIN = 0.1;
 const FLY_SPEED_MAX = 500;
 const FLY_WHEEL_STEP = 1.15; // each wheel tick scales fly speed by this — UE5-ish
 const FLY_WHEEL_DOLLY = 0.12; // metres dollied per wheel-delta when not moving (perspective)
+const FLY_PINCH_DOLLY = 0.8; // metres flown per pixel of two-finger pinch-spread (touch)
 
 // Ortho zoom (frustum half-height) tuning — shared by wheel + pinch.
 const ORTHO_WHEEL_STEP = 1.1;
 const ORTHO_SIZE_MIN = 5;
 const ORTHO_SIZE_MAX = 2000;
+const ORTHO_GROUND_GUARD = 0.75; // focal-Y floor = orthoSize·cos(el)·this (tune visually)
 
 const POINTER_SENSITIVITY = 0.002;
 const _euler = new THREE.Euler(0, 0, 0, "YXZ");
@@ -337,7 +339,18 @@ export function CameraControls() {
       const upT = Math.max(0, Math.min(1, (orbit.elevationDeg - 70) / 20));
       const upAng = upT * Math.PI * 0.5;
       camera.up.set(0, Math.cos(upAng), Math.sin(upAng));
-      camera.lookAt(orbit.centerX, orbit.lookAtY, orbit.centerZ);
+      // Ortho ground guard: zooming out at a low angle would drop the bottom of
+      // the frustum below the ground plane (seeing under the world). Floor the
+      // focal Y at orthoSize·cos(el)·guard so the focal point rises and the
+      // bottom of the screen locks to the ground instead. Non-destructive — the
+      // stored lookAtY is untouched, only this frame's target is raised. At
+      // top-down (el→90, cos→0) the floor vanishes, which is correct.
+      let lookAtY = orbit.lookAtY;
+      if (useSceneStore.getState().projection === "orthographic") {
+        const floorY = useSceneStore.getState().orthoSize * Math.cos(el) * ORTHO_GROUND_GUARD;
+        if (lookAtY < floorY) lookAtY = floorY;
+      }
+      camera.lookAt(orbit.centerX, lookAtY, orbit.centerZ);
       return;
     }
 
@@ -633,6 +646,62 @@ export function CameraControls() {
       window.removeEventListener("mouseup", onMouseUp);
       document.removeEventListener("mousemove", onMouseMove);
       if (document.pointerLockElement === dom) document.exitPointerLock();
+    };
+  }, [mode, gl, camera]);
+
+  // Fly-mode touch — 1-finger drag looks around (yaw/pitch); 2-finger pinch
+  // flies forward / back along the view direction (pinch out = forward).
+  useEffect(() => {
+    if (mode !== "fly") return;
+    const dom = gl.domElement;
+    const touches = new Map<number, { x: number; y: number }>();
+    let pinchDist = 0;
+
+    const onDown = (e: PointerEvent) => {
+      if (e.pointerType !== "touch") return;
+      e.preventDefault();
+      touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (touches.size === 2) {
+        const p = Array.from(touches.values());
+        pinchDist = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y);
+      }
+      dom.setPointerCapture?.(e.pointerId);
+    };
+    const onMove = (e: PointerEvent) => {
+      if (e.pointerType !== "touch" || !touches.has(e.pointerId)) return;
+      e.preventDefault();
+      const prev = touches.get(e.pointerId) as { x: number; y: number };
+      touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (touches.size >= 2) {
+        const p = Array.from(touches.values());
+        const d = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y);
+        camera.getWorldDirection(forward.current);
+        camera.position.addScaledVector(forward.current, (d - pinchDist) * FLY_PINCH_DOLLY);
+        pinchDist = d;
+      } else {
+        const dx = e.clientX - prev.x;
+        const dy = e.clientY - prev.y;
+        _euler.setFromQuaternion(camera.quaternion);
+        _euler.y -= dx * POINTER_SENSITIVITY;
+        _euler.x -= dy * POINTER_SENSITIVITY;
+        _euler.x = Math.max(-HALF_PI + 0.001, Math.min(HALF_PI - 0.001, _euler.x));
+        camera.quaternion.setFromEuler(_euler);
+      }
+    };
+    const onUp = (e: PointerEvent) => {
+      if (e.pointerType !== "touch") return;
+      touches.delete(e.pointerId);
+      dom.releasePointerCapture?.(e.pointerId);
+    };
+    dom.addEventListener("pointerdown", onDown);
+    dom.addEventListener("pointermove", onMove);
+    dom.addEventListener("pointerup", onUp);
+    dom.addEventListener("pointercancel", onUp);
+    return () => {
+      dom.removeEventListener("pointerdown", onDown);
+      dom.removeEventListener("pointermove", onMove);
+      dom.removeEventListener("pointerup", onUp);
+      dom.removeEventListener("pointercancel", onUp);
     };
   }, [mode, gl, camera]);
 
