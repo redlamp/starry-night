@@ -16,9 +16,12 @@ const INTENSITY = 2.2; // emissive boost for ACES bloom
 export function Traffic({ masterSeed }: { masterSeed: string }) {
   const enabled = useSceneStore((s) => s.traffic.enabled);
   const density = useSceneStore((s) => s.traffic.density);
+  const highway = useSceneStore((s) => s.traffic.highway);
+  const arterial = useSceneStore((s) => s.traffic.arterial);
+  const minor = useSceneStore((s) => s.traffic.minor);
 
   const points = useMemo(() => {
-    const t = buildTraffic(masterSeed, density);
+    const t = buildTraffic(masterSeed, density, { highway, arterial, minor });
     const geo = new THREE.BufferGeometry();
     // `position` only defines the draw count; the real location is computed in
     // the vertex shader from aA/aB. Use aA so any bounds query is sane.
@@ -50,7 +53,7 @@ export function Traffic({ masterSeed }: { masterSeed: string }) {
     const pts = new THREE.Points(geo, mat);
     pts.frustumCulled = false; // positions live in the shader; bounds are unknown
     return pts;
-  }, [masterSeed, density]);
+  }, [masterSeed, density, highway, arterial, minor]);
 
   useEffect(() => {
     return () => {

@@ -177,6 +177,9 @@ export const DEFAULT_INTRO = {
   progress: 0,
   playing: false,
   durationSec: 240,
+  // Streetlights wake on their own (much shorter) timeline so they don't take
+  // the full multi-minute window wake to appear.
+  streetlightDurationSec: 3,
   mode: "random" as "random" | "district" | "outside-in" | "far-to-near" | "inside-out",
   offCycleSec: 90,
   retriggerSec: 45,
@@ -227,8 +230,13 @@ export const DEFAULT_DEBUG = {
 export const DEBUG_WIRE_COLOR = "#4d9fff";
 
 // Ambient traffic (research D): car head/tail-lights flowing along the roads.
-// Off by default — an opt-in effect. density scales the car count per metre.
-export const DEFAULT_TRAFFIC = { enabled: false, density: 1 };
+// On by default. `density` is the global car-count multiplier; highway/arterial/
+// minor are per-tier multipliers layered on each tier's base usage rate (base
+// rates already encode the usage hierarchy: highways busiest, side streets least).
+export const DEFAULT_TRAFFIC = { enabled: true, density: 1, highway: 1, arterial: 1, minor: 1 };
+
+// Streetlights along the road network. On by default; toggled from the Roads panel.
+export const DEFAULT_STREETLIGHTS = { enabled: true };
 
 export const DEFAULT_FLY_SPEED = 14;
 export const DEFAULT_ORTHO_SIZE = 240;
@@ -287,7 +295,8 @@ type AnySettingEntry =
   | SettingEntry<"intro">
   | SettingEntry<"starIntro">
   | SettingEntry<"debug">
-  | SettingEntry<"traffic">;
+  | SettingEntry<"traffic">
+  | SettingEntry<"streetlights">;
 
 export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "cameraIntent", defaultValue: DEFAULT_INTENT, persist: true },
@@ -322,6 +331,7 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   // default. Reset still clears them (resetCamera iterates every entry).
   { key: "debug", defaultValue: DEFAULT_DEBUG, persist: false },
   { key: "traffic", defaultValue: DEFAULT_TRAFFIC, persist: true },
+  { key: "streetlights", defaultValue: DEFAULT_STREETLIGHTS, persist: true },
 ];
 
 // cityPlanning visibility toggles — persisted separately because `cityPlanning`
@@ -352,6 +362,7 @@ type SavedConfig = {
   intro?: SceneState["intro"];
   starIntro?: SceneState["starIntro"];
   traffic?: SceneState["traffic"];
+  streetlights?: SceneState["streetlights"];
   // Only the layer-visibility toggles persist — topologyKind / arterialCount
   // are per-seed runtime readouts, not settings.
   cityPlanning?: {
@@ -515,6 +526,9 @@ type SceneState = {
     progress: number;
     playing: boolean;
     durationSec: number;
+    // Streetlights wake over their own (shorter) duration, independent of the
+    // multi-minute window wake.
+    streetlightDurationSec: number;
     mode: "random" | "district" | "outside-in" | "far-to-near" | "inside-out";
     // Seconds a window stays ON after wake (per-cell jitter applied).
     offCycleSec: number;
@@ -535,6 +549,7 @@ type SceneState = {
   setIntroProgress: (v: number) => void;
   setIntroPlaying: (v: boolean) => void;
   setIntroDuration: (v: number) => void;
+  setStreetlightDuration: (v: number) => void;
   setIntroMode: (m: SceneState["intro"]["mode"]) => void;
   setOffCycle: (v: number) => void;
   setRetrigger: (v: number) => void;
@@ -580,11 +595,15 @@ type SceneState = {
     showArterials: boolean;
     showStreets: boolean;
     topologyKind: TopologyKind | null;
+    highwayCount: number;
     arterialCount: number;
+    streetCount: number;
   };
   setCityPlanning: (patch: Partial<SceneState["cityPlanning"]>) => void;
   setTopologyKind: (kind: TopologyKind) => void;
+  setHighwayCount: (n: number) => void;
   setArterialCount: (n: number) => void;
+  setStreetCount: (n: number) => void;
   // Debug view modes — building tint + per-group render mode (Slices A/B).
   debug: typeof DEFAULT_DEBUG;
   setBuildingTint: (patch: Partial<{ mode: BuildingTintMode; intensity: number }>) => void;
@@ -595,6 +614,8 @@ type SceneState = {
   // Ambient traffic (research D) — opt-in car head/tail-lights.
   traffic: typeof DEFAULT_TRAFFIC;
   setTraffic: (patch: Partial<typeof DEFAULT_TRAFFIC>) => void;
+  streetlights: typeof DEFAULT_STREETLIGHTS;
+  setStreetlights: (patch: Partial<typeof DEFAULT_STREETLIGHTS>) => void;
   perf: Perf;
   setPerf: (perf: Perf) => void;
   setSeed: (seed: string) => void;
@@ -675,6 +696,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setIntroProgress: (progress) => set((s) => ({ intro: { ...s.intro, progress } })),
   setIntroPlaying: (playing) => set((s) => ({ intro: { ...s.intro, playing } })),
   setIntroDuration: (durationSec) => set((s) => ({ intro: { ...s.intro, durationSec } })),
+  setStreetlightDuration: (streetlightDurationSec) =>
+    set((s) => ({ intro: { ...s.intro, streetlightDurationSec } })),
   setIntroMode: (mode) => set((s) => ({ intro: { ...s.intro, mode } })),
   setOffCycle: (offCycleSec) => set((s) => ({ intro: { ...s.intro, offCycleSec } })),
   setRetrigger: (retriggerSec) => set((s) => ({ intro: { ...s.intro, retriggerSec } })),
@@ -712,7 +735,9 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     showArterials: false,
     showStreets: false,
     topologyKind: null,
+    highwayCount: 0,
     arterialCount: 0,
+    streetCount: 0,
   },
   setCityPlanning: (patch) => set((s) => ({ cityPlanning: { ...s.cityPlanning, ...patch } })),
   setTopologyKind: (topologyKind) =>
@@ -726,6 +751,18 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       s.cityPlanning.arterialCount === arterialCount
         ? s
         : { cityPlanning: { ...s.cityPlanning, arterialCount } },
+    ),
+  setHighwayCount: (highwayCount) =>
+    set((s) =>
+      s.cityPlanning.highwayCount === highwayCount
+        ? s
+        : { cityPlanning: { ...s.cityPlanning, highwayCount } },
+    ),
+  setStreetCount: (streetCount) =>
+    set((s) =>
+      s.cityPlanning.streetCount === streetCount
+        ? s
+        : { cityPlanning: { ...s.cityPlanning, streetCount } },
     ),
   debug: DEFAULT_DEBUG,
   setBuildingTint: (patch) =>
@@ -743,6 +780,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setShowTensorField: (v) => set((s) => ({ debug: { ...s.debug, showTensorField: v } })),
   traffic: DEFAULT_TRAFFIC,
   setTraffic: (patch) => set((s) => ({ traffic: { ...s.traffic, ...patch } })),
+  streetlights: DEFAULT_STREETLIGHTS,
+  setStreetlights: (patch) => set((s) => ({ streetlights: { ...s.streetlights, ...patch } })),
   perf: { fps: 0, triangles: 0, calls: 0, geometries: 0, textures: 0 },
   setPerf: (perf) => set({ perf }),
   setSeed: (masterSeed) => set({ masterSeed }),

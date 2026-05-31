@@ -32,27 +32,43 @@ const MIN_SEG = 6; // drop a macro-segment shorter than this (m)
 // the gentle tensor curvature means a chord barely deviates from the road.
 const CHUNK = 55;
 
-type TierCfg = { carsPerM: number; speed: number; laneHalf: number; size: number };
+type TierCfg = {
+  carsPerM: number;
+  speed: number;
+  laneHalf: number; // offset (m) from centreline to the innermost lane (median gap)
+  laneWidth: number; // spacing (m) between adjacent lanes within one direction
+  lanes: number; // lanes per direction
+  size: number;
+};
 
 function tierCfg(tier: "highway" | "arterial" | "minor"): TierCfg {
   switch (tier) {
     case "highway":
-      return { carsPerM: 0.02, speed: 24, laneHalf: 5.0, size: 7 };
+      return { carsPerM: 0.02, speed: 24, laneHalf: 4.0, laneWidth: 4.0, lanes: 3, size: 7 };
     case "arterial":
-      return { carsPerM: 0.012, speed: 14, laneHalf: 3.6, size: 5.5 };
+      return { carsPerM: 0.012, speed: 14, laneHalf: 3.0, laneWidth: 3.2, lanes: 2, size: 5.5 };
     default:
-      return { carsPerM: 0.005, speed: 8, laneHalf: 2.6, size: 4 }; // minor streets
+      return { carsPerM: 0.005, speed: 8, laneHalf: 2.5, laneWidth: 0, lanes: 1, size: 4 }; // minor
   }
 }
 
-export function buildTraffic(masterSeed: string, density = 1): TrafficData {
+export function buildTraffic(
+  masterSeed: string,
+  density = 1,
+  tierMul: { highway: number; arterial: number; minor: number } = {
+    highway: 1,
+    arterial: 1,
+    minor: 1,
+  },
+): TrafficData {
   const rng = seedrandom(`${masterSeed}::traffic`);
   const city = generateCity(masterSeed);
 
-  type Seg = { ax: number; az: number; bx: number; bz: number; len: number; cfg: TierCfg };
+  type Seg = { ax: number; az: number; bx: number; bz: number; len: number; cfg: TierCfg; mult: number };
   const segs: Seg[] = [];
   const collect = (verts: Vert[], tier: "highway" | "arterial" | "minor") => {
     const cfg = tierCfg(tier);
+    const mult = tierMul[tier];
     if (verts.length < 2) return;
     let startIdx = 0;
     let accum = 0;
@@ -63,7 +79,7 @@ export function buildTraffic(masterSeed: string, density = 1): TrafficData {
         const a = verts[startIdx];
         const b = verts[i];
         const len = Math.hypot(b.x - a.x, b.z - a.z); // chord length
-        if (len >= MIN_SEG) segs.push({ ax: a.x, az: a.z, bx: b.x, bz: b.z, len, cfg });
+        if (len >= MIN_SEG) segs.push({ ax: a.x, az: a.z, bx: b.x, bz: b.z, len, cfg, mult });
         startIdx = i;
         accum = 0;
       }
@@ -78,7 +94,7 @@ export function buildTraffic(masterSeed: string, density = 1): TrafficData {
   const perSeg: number[] = [];
   let total = 0;
   for (const s of segs) {
-    const expected = s.len * s.cfg.carsPerM * density;
+    const expected = s.len * s.cfg.carsPerM * density * s.mult * s.cfg.lanes;
     let n = Math.floor(expected);
     if (rng() < expected - n) n += 1;
     if (total + n > MAX_CARS) n = Math.max(0, MAX_CARS - total);
@@ -105,8 +121,9 @@ export function buildTraffic(masterSeed: string, density = 1): TrafficData {
     const pz = dx;
     for (let k = 0; k < n; k++) {
       const dir = rng() < 0.5 ? 1 : -1;
-      const off = s.cfg.laneHalf * dir;
-      // Travel start/end oriented by direction; both lanes offset to opposite sides.
+      const laneIdx = Math.floor(rng() * s.cfg.lanes); // 0..lanes-1 within this direction
+      const off = (s.cfg.laneHalf + laneIdx * s.cfg.laneWidth) * dir;
+      // Travel start/end oriented by direction; lanes stack outward from the median.
       const sx = (dir > 0 ? s.ax : s.bx) + px * off;
       const sz = (dir > 0 ? s.az : s.bz) + pz * off;
       const ex = (dir > 0 ? s.bx : s.ax) + px * off;
