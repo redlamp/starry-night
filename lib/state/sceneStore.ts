@@ -170,11 +170,65 @@ export const DEFAULT_HAZE = {
   radius: 1450,
 };
 
+// Intro wake-up sequence defaults. Durations are the "Default" speed preset
+// (windows 240s / stars 360s); the panel's Fast preset drops both to 30s.
+// Persisted via the settings registry so Reset/Save/Copy/Revert cover them.
+export const DEFAULT_INTRO = {
+  progress: 0,
+  playing: false,
+  durationSec: 240,
+  mode: "random" as "random" | "district" | "outside-in" | "far-to-near" | "inside-out",
+  offCycleSec: 90,
+  retriggerSec: 45,
+  cycleJitter: 0.3,
+};
+export const DEFAULT_STAR_INTRO = {
+  progress: 0,
+  playing: false,
+  durationSec: 360,
+  mode: "random" as "random" | "bright-first" | "horizon-first" | "zenith-first",
+};
+
 export const DEFAULT_CITY_PLANNING_VIS = {
   showHighways: false,
   showDistrictShells: false,
   showArterials: false,
+  showStreets: false,
 };
+
+// ---------------------------------------------------------------------------
+// Debug view modes
+// ---------------------------------------------------------------------------
+// Building tint washes the 3D massing by a chosen category (plan-view-style),
+// driven by a shader uniform mix — no mesh rebuild. Render modes flip each
+// scene group between Rendered / Wireframe / Hidden. All runtime UI state.
+export type BuildingTintMode = "off" | "district" | "landuse" | "archetype" | "depth" | "height";
+export type RenderGroup = "buildings" | "roads" | "ground" | "sky" | "moon";
+export type RenderMode = "rendered" | "wireframe" | "hidden";
+export const RENDER_GROUPS: RenderGroup[] = ["buildings", "roads", "ground", "sky", "moon"];
+
+export const DEFAULT_DEBUG = {
+  buildingTint: { mode: "off" as BuildingTintMode, intensity: 0.85 },
+  renderModes: {
+    buildings: "rendered" as RenderMode,
+    roads: "rendered" as RenderMode,
+    ground: "rendered" as RenderMode,
+    sky: "rendered" as RenderMode,
+    moon: "rendered" as RenderMode,
+  } as Record<RenderGroup, RenderMode>,
+  // Tensor Field view (#40 Phase 1): overlay the road-shaping direction field.
+  showTensorField: false,
+};
+
+// Default wireframe stroke colour — a bright blue used where a group has no
+// semantic source colour to match: buildings with tint OFF, and the ground.
+// (Buildings with a tint mode stroke in that mode's colour; road tiers stroke
+// in their highlight colours; the moon strokes in its own material colour.)
+export const DEBUG_WIRE_COLOR = "#4d9fff";
+
+// Ambient traffic (research D): car head/tail-lights flowing along the roads.
+// Off by default — an opt-in effect. density scales the car count per metre.
+export const DEFAULT_TRAFFIC = { enabled: false, density: 1 };
 
 export const DEFAULT_FLY_SPEED = 14;
 export const DEFAULT_ORTHO_SIZE = 240;
@@ -191,8 +245,9 @@ export const DEFAULT_PROJECTION = "orthographic" as const;
 // POLICY: any setting a user adjusts that affects the scene's look or behaviour
 // MUST be persist:true so Copy / Save / Revert include it. persist:false is
 // reserved for TRANSIENT runtime state only — currently: projectionBlend (the
-// derived perspective↔ortho tween), orbitPaused, cameraMode, orbitRestore. When
-// adding a setting, default to persist:true and add it to the SavedConfig type.
+// derived perspective↔ortho tween), orbitPaused, cameraMode, orbitRestore, and
+// debug (inspection view modes). When adding a setting, default to persist:true
+// and add it to the SavedConfig type.
 //
 // NOTE: cityPlanning is handled specially — only the three visibility toggles
 // participate (showHighways/showDistrictShells/showArterials), not the runtime
@@ -227,7 +282,12 @@ type AnySettingEntry =
   | SettingEntry<"orbitPaused">
   | SettingEntry<"showFocalIndicator">
   | SettingEntry<"cameraMode">
-  | SettingEntry<"orbitRestore">;
+  | SettingEntry<"orbitRestore">
+  | SettingEntry<"topDownTip">
+  | SettingEntry<"intro">
+  | SettingEntry<"starIntro">
+  | SettingEntry<"debug">
+  | SettingEntry<"traffic">;
 
 export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "cameraIntent", defaultValue: DEFAULT_INTENT, persist: true },
@@ -254,6 +314,14 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "showFocalIndicator", defaultValue: false as const, persist: true },
   { key: "cameraMode", defaultValue: "orbit" as const, persist: false },
   { key: "orbitRestore", defaultValue: null as SceneState["orbitRestore"], persist: false },
+  { key: "topDownTip", defaultValue: 0, persist: false },
+  { key: "intro", defaultValue: DEFAULT_INTRO, persist: true },
+  { key: "starIntro", defaultValue: DEFAULT_STAR_INTRO, persist: true },
+  // persist:false — debug view modes are transient inspection state (wireframe /
+  // hidden / tint), not look-and-feel a user would Save/Copy/Revert into a
+  // default. Reset still clears them (resetCamera iterates every entry).
+  { key: "debug", defaultValue: DEFAULT_DEBUG, persist: false },
+  { key: "traffic", defaultValue: DEFAULT_TRAFFIC, persist: true },
 ];
 
 // cityPlanning visibility toggles — persisted separately because `cityPlanning`
@@ -281,12 +349,16 @@ type SavedConfig = {
   moonFollowCamera?: boolean;
   flySpeed?: number;
   showFocalIndicator?: boolean;
+  intro?: SceneState["intro"];
+  starIntro?: SceneState["starIntro"];
+  traffic?: SceneState["traffic"];
   // Only the layer-visibility toggles persist — topologyKind / arterialCount
   // are per-seed runtime readouts, not settings.
   cityPlanning?: {
     showHighways: boolean;
     showDistrictShells: boolean;
     showArterials: boolean;
+    showStreets: boolean;
   };
 };
 
@@ -494,18 +566,34 @@ type SceneState = {
     paused: boolean;
   } | null;
   setOrbitRestore: (r: SceneState["orbitRestore"]) => void;
+  // Top-down "north up" camera roll, 0 = world-up .. 1 = tipped to +Z. Tweened
+  // over the whole top-down transition so the roll eases in with the arc instead
+  // of snapping in the final elevation degrees. CameraControls maxes it with the
+  // elevation-keyed tip so manual high-elevation orbit still avoids gimbal.
+  topDownTip: number;
+  setTopDownTip: (v: number) => void;
   // Streets-first city-planning layer visibility + readouts (Stage 1).
   // Gated in the UI behind the ?stage1=1 flag until the rewrite is default.
   cityPlanning: {
     showHighways: boolean;
     showDistrictShells: boolean;
     showArterials: boolean;
+    showStreets: boolean;
     topologyKind: TopologyKind | null;
     arterialCount: number;
   };
   setCityPlanning: (patch: Partial<SceneState["cityPlanning"]>) => void;
   setTopologyKind: (kind: TopologyKind) => void;
   setArterialCount: (n: number) => void;
+  // Debug view modes — building tint + per-group render mode (Slices A/B).
+  debug: typeof DEFAULT_DEBUG;
+  setBuildingTint: (patch: Partial<{ mode: BuildingTintMode; intensity: number }>) => void;
+  setRenderMode: (group: RenderGroup, mode: RenderMode) => void;
+  setAllRenderModes: (mode: RenderMode) => void;
+  setShowTensorField: (v: boolean) => void;
+  // Ambient traffic (research D) — opt-in car head/tail-lights.
+  traffic: typeof DEFAULT_TRAFFIC;
+  setTraffic: (patch: Partial<typeof DEFAULT_TRAFFIC>) => void;
   perf: Perf;
   setPerf: (perf: Perf) => void;
   setSeed: (seed: string) => void;
@@ -581,21 +669,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setHaze: (patch) => set((s) => ({ haze: { ...s.haze, ...patch } })),
   showFocalIndicator: false,
   setShowFocalIndicator: (showFocalIndicator) => set({ showFocalIndicator }),
-  intro: {
-    progress: 0,
-    playing: false,
-    durationSec: 240,
-    mode: "random",
-    offCycleSec: 90,
-    retriggerSec: 45,
-    cycleJitter: 0.3,
-  },
-  starIntro: {
-    progress: 0,
-    playing: false,
-    durationSec: 360,
-    mode: "random",
-  },
+  intro: DEFAULT_INTRO,
+  starIntro: DEFAULT_STAR_INTRO,
   setIntroProgress: (progress) => set((s) => ({ intro: { ...s.intro, progress } })),
   setIntroPlaying: (playing) => set((s) => ({ intro: { ...s.intro, playing } })),
   setIntroDuration: (durationSec) => set((s) => ({ intro: { ...s.intro, durationSec } })),
@@ -625,6 +700,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setOrbit: (patch) => set((s) => ({ orbit: { ...s.orbit, ...patch } })),
   orbitRestore: null,
   setOrbitRestore: (orbitRestore) => set({ orbitRestore }),
+  topDownTip: 0,
+  setTopDownTip: (topDownTip) => set({ topDownTip }),
   cityPlanning: {
     // Planning overlays are review aids, not part of the ambient screensaver —
     // the streets-first network still shapes the city, it just isn't drawn over
@@ -632,6 +709,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     showHighways: false,
     showDistrictShells: false,
     showArterials: false,
+    showStreets: false,
     topologyKind: null,
     arterialCount: 0,
   },
@@ -648,6 +726,21 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         ? s
         : { cityPlanning: { ...s.cityPlanning, arterialCount } },
     ),
+  debug: DEFAULT_DEBUG,
+  setBuildingTint: (patch) =>
+    set((s) => ({ debug: { ...s.debug, buildingTint: { ...s.debug.buildingTint, ...patch } } })),
+  setRenderMode: (group, mode) =>
+    set((s) => ({ debug: { ...s.debug, renderModes: { ...s.debug.renderModes, [group]: mode } } })),
+  setAllRenderModes: (mode) =>
+    set((s) => ({
+      debug: {
+        ...s.debug,
+        renderModes: { buildings: mode, roads: mode, ground: mode, sky: mode, moon: mode },
+      },
+    })),
+  setShowTensorField: (v) => set((s) => ({ debug: { ...s.debug, showTensorField: v } })),
+  traffic: DEFAULT_TRAFFIC,
+  setTraffic: (patch) => set((s) => ({ traffic: { ...s.traffic, ...patch } })),
   perf: { fps: 0, triangles: 0, calls: 0, geometries: 0, textures: 0 },
   setPerf: (perf) => set({ perf }),
   setSeed: (masterSeed) => set({ masterSeed }),
@@ -693,6 +786,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         showHighways: s.cityPlanning.showHighways,
         showDistrictShells: s.cityPlanning.showDistrictShells,
         showArterials: s.cityPlanning.showArterials,
+        showStreets: s.cityPlanning.showStreets,
       };
     }
     writeSavedConfig(snap as SavedConfig);
@@ -734,6 +828,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         showHighways: s.cityPlanning.showHighways,
         showDistrictShells: s.cityPlanning.showDistrictShells,
         showArterials: s.cityPlanning.showArterials,
+        showStreets: s.cityPlanning.showStreets,
       };
     }
     return out;

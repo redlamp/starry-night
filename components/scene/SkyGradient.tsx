@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo } from "react";
 import * as THREE from "three";
+import { useSceneStore } from "@/lib/state/sceneStore";
 import {
   skyGradientVertexShader,
   skyGradientFragmentShader,
@@ -51,8 +52,12 @@ export function SkyGradient({
 
   useEffect(() => () => material.dispose(), [material]);
 
+  // Debug "sky" group (Slice B): Hidden drops the gradient so the flat star-pass
+  // background shows. Wireframe is a no-op for the sky dome.
+  const skyHidden = useSceneStore((s) => s.debug.renderModes.sky === "hidden");
+
   return (
-    <mesh material={material} renderOrder={-1} frustumCulled={false}>
+    <mesh material={material} renderOrder={-1} frustumCulled={false} visible={!skyHidden}>
       <sphereGeometry args={[9000, 32, 16]} />
     </mesh>
   );
