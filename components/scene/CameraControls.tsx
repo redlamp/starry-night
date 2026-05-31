@@ -64,6 +64,12 @@ const FLY_SPRINT_MULTIPLIER = 2.85; // matches the legacy 40 m/s sprint vs 14 m/
 const FLY_SPEED_MIN = 0.1;
 const FLY_SPEED_MAX = 500;
 const FLY_WHEEL_STEP = 1.15; // each wheel tick scales fly speed by this — UE5-ish
+const FLY_WHEEL_DOLLY = 0.12; // metres dollied per wheel-delta when not moving (perspective)
+
+// Ortho zoom (frustum half-height) tuning — shared by wheel + pinch.
+const ORTHO_WHEEL_STEP = 1.1;
+const ORTHO_SIZE_MIN = 5;
+const ORTHO_SIZE_MAX = 2000;
 
 const POINTER_SENSITIVITY = 0.002;
 const _euler = new THREE.Euler(0, 0, 0, "YXZ");
@@ -268,6 +274,7 @@ export function CameraControls() {
   const pinch = useRef<{
     startDist: number;
     startRadius: number;
+    startOrthoSize: number;
     startMidY: number;
     startLookAtY: number;
   } | null>(null);
@@ -322,22 +329,12 @@ export function CameraControls() {
         camY,
         orbit.centerZ + Math.cos(az) * horizR,
       );
-      // While a top-down snapshot is held in orbitRestore, tip camera.up from
-      // world-Y toward world +Z (north) in lock-step with the elevation tween
-      // — at the original elevation up = (0,1,0); at 90° up = (0,0,1). This
-      // makes the screen-orientation change one continuous motion with the
-      // elevation/radius/orthoSize tween instead of snapping at the end.
-      // When no top-down is active (orbitRestore null), the user's at a normal
-      // orbit angle and the horizon stays flat.
-      const restoreSnapshot = useSceneStore.getState().orbitRestore;
-      let upT = 0;
-      if (restoreSnapshot) {
-        const range = Math.max(1, 90 - restoreSnapshot.elevationDeg);
-        upT = Math.max(
-          0,
-          Math.min(1, (orbit.elevationDeg - restoreSnapshot.elevationDeg) / range),
-        );
-      }
+      // Tip camera.up from world-Y toward +Z (north) as elevation approaches
+      // 90°, so looking straight down never hits the up/view-direction gimbal
+      // degeneracy. Flat (world-Y up) below 70°, fully tipped at 90°. Keyed on
+      // elevation alone (not the top-down snapshot) so switching top-down →
+      // orbit mid-drag stays seamless.
+      const upT = Math.max(0, Math.min(1, (orbit.elevationDeg - 70) / 20));
       const upAng = upT * Math.PI * 0.5;
       camera.up.set(0, Math.cos(upAng), Math.sin(upAng));
       camera.lookAt(orbit.centerX, orbit.lookAtY, orbit.centerZ);
@@ -414,6 +411,7 @@ export function CameraControls() {
           pinch.current = {
             startDist: Math.hypot(dx, dy),
             startRadius: o.radius,
+            startOrthoSize: useSceneStore.getState().orthoSize,
             startMidY: (pts[0].y + pts[1].y) / 2,
             startLookAtY: o.lookAtY,
           };
@@ -427,6 +425,11 @@ export function CameraControls() {
       }
       const focal = e.pointerType === "mouse" && e.button === 2;
       if (!focal) settleAzimuthBeforeDrag();
+      // Rotating the camera in top-down exits to plain Orbit (orbit rules apply).
+      // Dropping the snapshot is seamless now that camera.up keys on elevation.
+      if (!focal && useSceneStore.getState().orbitRestore !== null) {
+        useSceneStore.getState().setOrbitRestore(null);
+      }
       dragging.current = true;
       const o = useSceneStore.getState().orbit;
       dragBase.current = {
@@ -451,13 +454,21 @@ export function CameraControls() {
           const dy = pts[0].y - pts[1].y;
           const dist = Math.hypot(dx, dy);
           const scale = pinch.current.startDist / Math.max(1, dist);
+          // In ortho, zoom = frustum half-height; in perspective, zoom = radius.
+          const ortho = useSceneStore.getState().projection === "orthographic";
+          if (ortho) {
+            useSceneStore
+              .getState()
+              .setOrthoSize(
+                clamp(pinch.current.startOrthoSize * scale, ORTHO_SIZE_MIN, ORTHO_SIZE_MAX),
+              );
+          }
           const newRadius = clamp(
             pinch.current.startRadius * scale,
             ORBIT_RADIUS_MIN,
             ORBIT_RADIUS_MAX,
           );
           // Two-finger midpoint translation drives focal Y (lookAtY).
-          // Applied on top of the radius change so a translating pinch still zooms.
           const midY = (pts[0].y + pts[1].y) / 2;
           const focalSpeed = newRadius * FOCAL_Y_SENSITIVITY_RATIO;
           const newLookAtY = clamp(
@@ -466,7 +477,7 @@ export function CameraControls() {
             LOOK_AT_Y_MIN,
             LOOK_AT_Y_MAX,
           );
-          setOrbit({ radius: newRadius, lookAtY: newLookAtY });
+          setOrbit({ radius: ortho ? pinch.current.startRadius : newRadius, lookAtY: newLookAtY });
           return;
         }
       }
@@ -517,9 +528,15 @@ export function CameraControls() {
 
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
-      const o = useSceneStore.getState().orbit;
+      const s = useSceneStore.getState();
+      if (s.projection === "orthographic") {
+        // Ortho zoom = frustum half-height (radius doesn't change apparent size).
+        const factor = e.deltaY < 0 ? 1 / ORTHO_WHEEL_STEP : ORTHO_WHEEL_STEP;
+        s.setOrthoSize(clamp(s.orthoSize * factor, ORTHO_SIZE_MIN, ORTHO_SIZE_MAX));
+        return;
+      }
       const newRadius = clamp(
-        o.radius + e.deltaY * ORBIT_WHEEL_SENSITIVITY,
+        s.orbit.radius + e.deltaY * ORBIT_WHEEL_SENSITIVITY,
         ORBIT_RADIUS_MIN,
         ORBIT_RADIUS_MAX,
       );
@@ -555,13 +572,27 @@ export function CameraControls() {
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       const s = useSceneStore.getState();
-      const factor = e.deltaY < 0 ? FLY_WHEEL_STEP : 1 / FLY_WHEEL_STEP;
-      const next = clamp(s.flySpeed * factor, FLY_SPEED_MIN, FLY_SPEED_MAX);
-      s.setFlySpeed(next);
+      if (s.projection === "orthographic") {
+        // Ortho: wheel zooms the frustum half-height (same as orbit).
+        const factor = e.deltaY < 0 ? 1 / ORTHO_WHEEL_STEP : ORTHO_WHEEL_STEP;
+        s.setOrthoSize(clamp(s.orthoSize * factor, ORTHO_SIZE_MIN, ORTHO_SIZE_MAX));
+        return;
+      }
+      const k = keys.current;
+      const moving = k.w || k.a || k.s || k.d || k.space || k.c;
+      if (moving) {
+        // Mid-flight: wheel scales fly speed (UE5-style).
+        const factor = e.deltaY < 0 ? FLY_WHEEL_STEP : 1 / FLY_WHEEL_STEP;
+        s.setFlySpeed(clamp(s.flySpeed * factor, FLY_SPEED_MIN, FLY_SPEED_MAX));
+      } else {
+        // Stationary: wheel dollies forward / back along the view direction.
+        camera.getWorldDirection(forward.current);
+        camera.position.addScaledVector(forward.current, -e.deltaY * FLY_WHEEL_DOLLY);
+      }
     };
     dom.addEventListener("wheel", onWheel, { passive: false });
     return () => dom.removeEventListener("wheel", onWheel);
-  }, [mode, gl]);
+  }, [mode, gl, camera]);
 
   // Fly-mode pointer lock — engaged only while the user is actively dragging
   // (mouse held down). Releasing returns the cursor; the camera keeps whatever
