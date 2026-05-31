@@ -28,3 +28,8 @@ export const sharedCycleJitter: { value: number } = { value: 0.3 };
 // 3=zenith-first (stars near zenith wake first).
 export const sharedStarIntroProgress: { value: number } = { value: 0 };
 export const sharedStarIntroMode: { value: number } = { value: 0 };
+
+// Streetlights wake on their own (shorter) timeline — derived in IntroTicker from
+// the window-intro progress scaled by streetlightDurationSec, so they pop in
+// quickly instead of waiting out the multi-minute window wake.
+export const sharedStreetlightIntroProgress: { value: number } = { value: 0 };

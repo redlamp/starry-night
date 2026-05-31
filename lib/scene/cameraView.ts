@@ -1,28 +1,29 @@
 "use client";
 
 import gsap from "gsap";
-import { useSceneStore, PRESETS } from "@/lib/state/sceneStore";
+import {
+  useSceneStore,
+  DEFAULT_ORBIT,
+  DEFAULT_ORTHO_SIZE,
+  type RenderGroup,
+  type RenderMode,
+} from "@/lib/state/sceneStore";
 
-// Shared "Default ↔ Top-down" view logic. Single source of truth for what the
-// Camera panel's tween-to tabs AND the `t` hotkey do, so both produce the exact
-// same animation and end state. The behaviour is mode-dependent:
-//   - orbit mode  → swing-arm orbit tween that stays in orbit (pauses sweep)
-//   - still / fly → still-mode pose tween via tweenCameraTo
-// Keeping this in one place is the whole point — the hotkey used to always take
-// the still-mode path, which diverged from the panel while orbiting.
+// Shared camera-mode logic — the single source of truth for the Fly / Orbit /
+// Top-down switch, used by the Camera panel's mode tabs, the `t` hotkey, and the
+// F/G keys in CameraControls so they all behave identically.
+//
+// The three modes:
+//   Fly      — free-fly (own controls).
+//   Orbit    — spherical revolution around the city.
+//   Top-down — a VARIANT of orbit: elevation tweened to 90°, pulled back, sweep
+//              paused, camera.up tipped to north. The pre-top-down orbit framing
+//              is snapshotted in orbitRestore so returning to Orbit tweens back
+//              from wherever top-down currently sits.
 
-export type ViewPresetId = "default" | "top-down";
-
-// Orbit top-down: tilt the orbit straight down, pull the camera back, and pause
-// the auto-sweep — all without leaving orbit mode. Tweens elevation→90, radius
-// up to a city-fitting distance, and orthoSize up so the framing also works in
-// ortho (where radius alone doesn't change visible extent). The pre-top-down
-// orbit + projection state is captured into orbitRestore the first time so the
-// Default preset can put the user back where they were.
 const TOP_DOWN_RADIUS = 4500;
 const TOP_DOWN_ORTHO_SIZE = 1000;
-const ORBIT_TWEEN_MS = 0.9;
-const PRESET_TWEEN_MS = 900;
+const ORBIT_TWEEN_SEC = 2.0;
 
 function tweenOrbitTowards(
   targetEl: number,
@@ -37,9 +38,8 @@ function tweenOrbitTowards(
 
   // Two-phase swing-arm tween. The angular swing happens at constant radius
   // first, so the camera reads as an arm pivoting around the city centre.
-  // Radius + orthoSize (zoom-out) ramp in over the late half, overlapping the
-  // tail of the swing so the whole motion still feels like one continuous arc
-  // rather than two distinct beats.
+  // Radius + orthoSize ramp in over the late half, overlapping the tail of the
+  // swing so the whole motion feels like one continuous arc.
   const tl = gsap.timeline({ onComplete });
 
   const elProxy = { v: fromEl };
@@ -47,9 +47,24 @@ function tweenOrbitTowards(
     elProxy,
     {
       v: targetEl,
-      duration: ORBIT_TWEEN_MS,
-      ease: "power2.inOut",
+      duration: ORBIT_TWEEN_SEC,
+      ease: "power1.inOut",
       onUpdate: () => useSceneStore.getState().setOrbit({ elevationDeg: elProxy.v }),
+    },
+    0,
+  );
+
+  // North "up" roll, tweened over the WHOLE transition (target 1 only when
+  // arriving at top-down, el≈90). Eased in lockstep with the arc so the roll
+  // spreads across the tween instead of snapping in the final elevation degrees.
+  const tipProxy = { v: s.topDownTip };
+  tl.to(
+    tipProxy,
+    {
+      v: targetEl >= 89 ? 1 : 0,
+      duration: ORBIT_TWEEN_SEC,
+      ease: "power1.inOut",
+      onUpdate: () => useSceneStore.getState().setTopDownTip(tipProxy.v),
     },
     0,
   );
@@ -59,8 +74,8 @@ function tweenOrbitTowards(
     zoomProxy,
     {
       v: 1,
-      duration: ORBIT_TWEEN_MS * 0.7,
-      ease: "power2.inOut",
+      duration: ORBIT_TWEEN_SEC * 0.7,
+      ease: "power1.inOut",
       onUpdate: () => {
         const t = zoomProxy.v;
         const st = useSceneStore.getState();
@@ -68,11 +83,11 @@ function tweenOrbitTowards(
         st.setOrthoSize(fromOrtho + (targetOrtho - fromOrtho) * t);
       },
     },
-    ORBIT_TWEEN_MS * 0.4,
+    ORBIT_TWEEN_SEC * 0.4,
   );
 }
 
-export function tweenOrbitTopDown() {
+function tweenOrbitTopDown() {
   const s = useSceneStore.getState();
   if (s.orbitRestore === null) {
     s.setOrbitRestore({
@@ -86,7 +101,7 @@ export function tweenOrbitTopDown() {
   tweenOrbitTowards(90, TOP_DOWN_RADIUS, TOP_DOWN_ORTHO_SIZE);
 }
 
-export function tweenOrbitRestore() {
+function tweenOrbitRestore() {
   const s = useSceneStore.getState();
   const r = s.orbitRestore;
   if (!r) return;
@@ -97,35 +112,134 @@ export function tweenOrbitRestore() {
   });
 }
 
-// Apply a view preset using the same mode-aware dispatch the Camera panel tabs
-// use. Re-derives orbiting/orbitRestore from the live store so it matches the
-// panel exactly.
-export function applyViewPreset(id: ViewPresetId) {
+// Drop a held top-down snapshot back into the orbit config without animating —
+// used when switching to a mode where the tween would be invisible (Fly), so
+// orbit state is always "normal" when not actively in top-down.
+function restoreOrbitSilently() {
   const s = useSceneStore.getState();
-  const orbiting = s.cameraMode === "orbit";
-  const orbitRestoreSet = s.orbitRestore !== null;
-  if (orbiting && id === "top-down") tweenOrbitTopDown();
-  else if (orbiting && id === "default" && orbitRestoreSet) tweenOrbitRestore();
-  else {
-    const preset = PRESETS.find((p) => p.id === id);
-    if (preset) s.tweenCameraTo(preset.intent, PRESET_TWEEN_MS);
-  }
+  const r = s.orbitRestore;
+  if (!r) return;
+  s.setOrbit({ elevationDeg: r.elevationDeg, radius: r.radius });
+  s.setOrthoSize(r.orthoSize);
+  s.setOrbitPaused(r.paused);
+  s.setOrbitRestore(null);
+  s.setTopDownTip(0); // silent exit lands at a low elevation — drop the roll
 }
 
-// Tracks the last applied preset for still/fly mode, where the store has no
-// signal for which framing is active. In orbit mode we ignore this and read
-// orbitRestore instead (kept in sync below) so the hotkey mirrors the panel.
-let lastPreset: ViewPresetId = "default";
-
-export function toggleViewPreset() {
+export function isTopDown(): boolean {
   const s = useSceneStore.getState();
-  const current: ViewPresetId =
-    s.cameraMode === "orbit"
-      ? s.orbitRestore !== null
-        ? "top-down"
-        : "default"
-      : lastPreset;
-  const next: ViewPresetId = current === "top-down" ? "default" : "top-down";
-  lastPreset = next;
-  applyViewPreset(next);
+  return s.cameraMode === "orbit" && s.orbitRestore !== null;
+}
+
+export type CameraTab = "fly" | "orbit" | "top-down";
+
+export function currentCameraTab(cameraMode: string, orbitRestoreSet: boolean): CameraTab {
+  if (cameraMode === "fly") return "fly";
+  if (cameraMode === "orbit" && orbitRestoreSet) return "top-down";
+  return "orbit";
+}
+
+export function enterFlyMode() {
+  restoreOrbitSilently();
+  useSceneStore.getState().setCameraMode("fly");
+}
+
+export function enterOrbitMode() {
+  const s = useSceneStore.getState();
+  if (s.cameraMode === "orbit" && s.orbitRestore !== null) {
+    tweenOrbitRestore(); // exit top-down → animate back from the current overhead view
+    return;
+  }
+  restoreOrbitSilently();
+  s.setCameraMode("orbit");
+}
+
+export function enterTopDownMode() {
+  const s = useSceneStore.getState();
+  if (s.cameraMode !== "orbit") s.setCameraMode("orbit"); // works from Fly too
+  tweenOrbitTopDown();
+}
+
+export function setCameraTab(tab: CameraTab) {
+  if (tab === "fly") enterFlyMode();
+  else if (tab === "orbit") enterOrbitMode();
+  else enterTopDownMode();
+}
+
+// `t` hotkey: toggle top-down on/off (enter from orbit or fly, exit back to orbit).
+export function toggleTopDown() {
+  if (isTopDown()) enterOrbitMode();
+  else enterTopDownMode();
+}
+
+// "Default Orbit" button: reset the orbit framing to DEFAULT_ORBIT with a tween
+// (elevation / radius / orthoSize animate; azimuth is kept so it doesn't spin).
+export function tweenOrbitToDefault() {
+  const s = useSceneStore.getState();
+  s.setOrbitRestore(null);
+  if (s.cameraMode !== "orbit") s.setCameraMode("orbit");
+  s.setOrbitPaused(false);
+  s.setOrbit({ lookAtY: DEFAULT_ORBIT.lookAtY, periodSec: DEFAULT_ORBIT.periodSec });
+  tweenOrbitTowards(DEFAULT_ORBIT.elevationDeg, DEFAULT_ORBIT.radius, DEFAULT_ORTHO_SIZE);
+}
+
+const PROJECTION_TWEEN_DURATION = 1.0;
+
+// The single in-flight projection tween. Killed before a new one starts so a
+// mid-tween reversal (toggling back before the swap finishes) animates cleanly
+// from the current blend instead of two tweens fighting over projectionBlend.
+let projTween: gsap.core.Tween | null = null;
+
+// Projection swap (perspective ⇄ orthographic) — shared by the Camera panel's
+// projection toggle and the `p` hotkey so both animate identically. Matches
+// framing at the lookAt distance so the swap stays visually continuous (ortho
+// frustum half-height = perspective tangent half-extent at d), then GSAP-blends
+// projectionBlend 0↔1 (ProjectionBlender lerps the matrices each frame). Works
+// in both directions and is interruptible mid-tween.
+export function tweenProjectionTo(target: "perspective" | "orthographic") {
+  const s = useSceneStore.getState();
+  if (s.projection === target) return;
+  const d = Math.max(1, s.orbit.radius);
+  const fovRad = (s.cameraIntent.fov * Math.PI) / 180;
+  if (target === "orthographic") {
+    s.setOrthoSize(d * Math.tan(fovRad / 2));
+  } else {
+    const matchedFov = (2 * Math.atan(s.orthoSize / d) * 180) / Math.PI;
+    s.setCameraIntent({ fov: matchedFov });
+  }
+  s.setProjection(target);
+  // Start from the LIVE blend (mid-tween if interrupted), not a stale snapshot.
+  projTween?.kill();
+  const proxy = { v: s.projectionBlend };
+  const to = target === "orthographic" ? 1 : 0;
+  projTween = gsap.to(proxy, {
+    v: to,
+    duration: PROJECTION_TWEEN_DURATION,
+    ease: "power1.inOut",
+    onUpdate: () => useSceneStore.getState().setProjectionBlend(proxy.v),
+    onComplete: () => {
+      projTween = null;
+    },
+  });
+}
+
+// `p` hotkey: toggle to whichever projection isn't current.
+export function toggleProjection() {
+  const s = useSceneStore.getState();
+  tweenProjectionTo(s.projection === "orthographic" ? "perspective" : "orthographic");
+}
+
+// `d` hotkey (orbit only): flip every render group to wireframe, remembering the
+// exact prior modes; press again to restore them. Snapshot is module-level, so a
+// reload/HMR just starts fresh (next `d` re-snapshots).
+let wireframeSnapshot: Record<RenderGroup, RenderMode> | null = null;
+export function toggleAllWireframe() {
+  const s = useSceneStore.getState();
+  if (wireframeSnapshot) {
+    s.setRenderModes(wireframeSnapshot);
+    wireframeSnapshot = null;
+  } else {
+    wireframeSnapshot = { ...s.debug.renderModes };
+    s.setAllRenderModes("wireframe");
+  }
 }

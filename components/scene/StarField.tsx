@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo } from "react";
 import * as THREE from "three";
+import { useSceneStore } from "@/lib/state/sceneStore";
 import { deriveSeed } from "@/lib/seed/rng";
 import { sharedTime } from "@/lib/shaders/sharedTime";
 import { sharedStarIntroProgress, sharedStarIntroMode } from "@/lib/shaders/sharedIntro";
@@ -160,5 +161,11 @@ export function StarField({
     };
   }, [geometry, material]);
 
-  return <points geometry={geometry} material={material} frustumCulled={false} />;
+  // Debug "sky" group (Slice B): Hidden removes the stars (wireframe is a no-op
+  // for a point cloud).
+  const skyHidden = useSceneStore((s) => s.debug.renderModes.sky === "hidden");
+
+  return (
+    <points geometry={geometry} material={material} frustumCulled={false} visible={!skyHidden} />
+  );
 }

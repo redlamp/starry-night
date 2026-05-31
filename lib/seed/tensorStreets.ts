@@ -1,6 +1,5 @@
 import seedrandom from "seedrandom";
 import { computeLattice } from "./lattice";
-import type { DistrictField } from "./district";
 import { buildTensorField, alignDir, type TensorField, type Vec2 } from "./tensorField";
 import type { RoadPoly, RoadTier } from "./streets";
 
@@ -168,11 +167,11 @@ function toPolys(lines: Vec2[][], width: number, tier: RoadTier, prefix: string)
 
 export function generateTensorStreets(
   masterSeed: string,
-  field: DistrictField,
+  bounds: BBox,
 ): { arterials: RoadPoly[]; minorStreets: RoadPoly[] } {
   const lattice = computeLattice(masterSeed);
   const tf = buildTensorField(masterSeed, lattice);
-  const b: BBox = field.bounds;
+  const b: BBox = bounds;
 
   // Per-family, per-tier separation storages (cell ≥ finest dsep).
   const SmajA = new GridStorage(80);

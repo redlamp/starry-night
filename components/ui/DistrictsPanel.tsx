@@ -4,8 +4,7 @@ import { useMemo } from "react";
 import { useSceneStore } from "@/lib/state/sceneStore";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { generateTopology } from "@/lib/seed/topology";
-import { generateDistricts } from "@/lib/seed/district";
+import { tensorDistrictField } from "@/lib/seed/cityGen";
 
 // Districts layer controls. Toggle the colour-coded shell overlay and list the
 // current seed's districts with their planning character + colour swatch.
@@ -14,10 +13,7 @@ export function DistrictsSection() {
   const showShells = useSceneStore((s) => s.cityPlanning.showDistrictShells);
   const setCityPlanning = useSceneStore((s) => s.setCityPlanning);
 
-  const districts = useMemo(() => {
-    const topo = generateTopology(masterSeed);
-    return generateDistricts(masterSeed, topo).districts;
-  }, [masterSeed]);
+  const districts = useMemo(() => tensorDistrictField(masterSeed).districts, [masterSeed]);
 
   return (
     <>

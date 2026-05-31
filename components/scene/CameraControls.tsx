@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { useSceneStore, type CameraIntent, type Vec3 } from "@/lib/state/sceneStore";
+import { enterFlyMode, enterOrbitMode } from "@/lib/scene/cameraView";
 
 function easeInOutCubic(t: number) {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
@@ -63,6 +64,13 @@ const FLY_SPRINT_MULTIPLIER = 2.85; // matches the legacy 40 m/s sprint vs 14 m/
 const FLY_SPEED_MIN = 0.1;
 const FLY_SPEED_MAX = 500;
 const FLY_WHEEL_STEP = 1.15; // each wheel tick scales fly speed by this — UE5-ish
+const FLY_WHEEL_DOLLY = 0.12; // metres dollied per wheel-delta when not moving (perspective)
+const FLY_PINCH_DOLLY = 0.8; // metres flown per pixel of two-finger pinch-spread (touch)
+
+// Ortho zoom (frustum half-height) tuning — shared by wheel + pinch.
+const ORTHO_WHEEL_STEP = 1.1;
+const ORTHO_SIZE_MIN = 5;
+const ORTHO_SIZE_MAX = 2000;
 
 const POINTER_SENSITIVITY = 0.002;
 const _euler = new THREE.Euler(0, 0, 0, "YXZ");
@@ -76,7 +84,11 @@ const ORBIT_WHEEL_SENSITIVITY = 0.5; // metres per wheel-delta tick
 const ORBIT_RADIUS_MIN = 50;
 const ORBIT_RADIUS_MAX = 5000;
 const ORBIT_ELEVATION_MIN = 0.01; // hair above horizon — el = 0 clips the ground plane and culls it from the frame
-const ORBIT_ELEVATION_MAX = 90; // can sit directly above the city, no flip-over
+// Just under vertical: manual orbit keeps world-up (level horizon), and capping
+// below 90° means world-up never goes parallel to the view direction (gimbal).
+// Top-down (looking straight down) is the dedicated preset, which sets 90° + the
+// north-up roll via topDownTip rather than coming through the drag handler.
+const ORBIT_ELEVATION_MAX = 89;
 
 export function CameraControls() {
   const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
@@ -84,7 +96,6 @@ export function CameraControls() {
   const mode = useSceneStore((s) => s.cameraMode);
   const intent = useSceneStore((s) => s.cameraIntent);
   const setCameraLive = useSceneStore((s) => s.setCameraLive);
-  const setCameraMode = useSceneStore((s) => s.setCameraMode);
   const setCameraIntent = useSceneStore((s) => s.setCameraIntent);
 
   const keys = useRef<KeyState>({ ...initialKeys });
@@ -180,14 +191,6 @@ export function CameraControls() {
     });
   };
 
-  const exitFly = () => {
-    captureCurrentPoseAsIntent();
-    setCameraMode("orbit");
-    if (typeof document !== "undefined" && document.pointerLockElement) {
-      document.exitPointerLock();
-    }
-  };
-
   useEffect(() => {
     const isTyping = () => {
       const el = typeof document !== "undefined" ? document.activeElement : null;
@@ -210,14 +213,14 @@ export function CameraControls() {
       if (e.repeat || isTyping()) return;
       const key = e.key.toLowerCase();
       if (key === "f") {
-        if (currentMode === "fly") exitFly();
-        else setCameraMode("fly");
+        if (currentMode === "fly") enterOrbitMode();
+        else enterFlyMode();
         return;
       }
       // G switches to orbit when NOT in fly mode (in fly, S/G are movement keys).
-      // Still is no longer a user-facing mode, so the old S→still binding is gone.
+      // Routes through enterOrbitMode so it also exits a held top-down cleanly.
       if (currentMode !== "fly" && key === "g") {
-        setCameraMode("orbit");
+        enterOrbitMode();
       }
       // Space in orbit mode toggles auto-revolution. When pausing, settle the
       // current azimuth into the store + reset orbitStart so resume continues
@@ -254,7 +257,6 @@ export function CameraControls() {
       window.removeEventListener("keyup", onUp);
       window.removeEventListener("blur", onBlur);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [camera]);
 
   // Orbit drag state.
@@ -276,6 +278,7 @@ export function CameraControls() {
   const pinch = useRef<{
     startDist: number;
     startRadius: number;
+    startOrthoSize: number;
     startMidY: number;
     startLookAtY: number;
   } | null>(null);
@@ -330,22 +333,16 @@ export function CameraControls() {
         camY,
         orbit.centerZ + Math.cos(az) * horizR,
       );
-      // While a top-down snapshot is held in orbitRestore, tip camera.up from
-      // world-Y toward world +Z (north) in lock-step with the elevation tween
-      // — at the original elevation up = (0,1,0); at 90° up = (0,0,1). This
-      // makes the screen-orientation change one continuous motion with the
-      // elevation/radius/orthoSize tween instead of snapping at the end.
-      // When no top-down is active (orbitRestore null), the user's at a normal
-      // orbit angle and the horizon stays flat.
-      const restoreSnapshot = useSceneStore.getState().orbitRestore;
-      let upT = 0;
-      if (restoreSnapshot) {
-        const range = Math.max(1, 90 - restoreSnapshot.elevationDeg);
-        upT = Math.max(
-          0,
-          Math.min(1, (orbit.elevationDeg - restoreSnapshot.elevationDeg) / range),
-        );
-      }
+      // Tip camera.up from world-Y toward +Z (north) as elevation approaches
+      // 90°, so looking straight down never hits the up/view-direction gimbal
+      // degeneracy. Flat (world-Y up) below 70°, fully tipped at 90°. Keyed on
+      // elevation alone (not the top-down snapshot) so switching top-down →
+      // orbit mid-drag stays seamless.
+      // Up stays world-up for ALL orbit (level horizon — ground down, sky up) and
+      // rolls toward +Z (north-up) only for top-down, driven by the tweened
+      // topDownTip. Decoupled from elevation, so free orbiting never rolls the
+      // horizon; the <90° elevation cap keeps world-up from gimballing.
+      const upT = useSceneStore.getState().topDownTip;
       const upAng = upT * Math.PI * 0.5;
       camera.up.set(0, Math.cos(upAng), Math.sin(upAng));
       camera.lookAt(orbit.centerX, orbit.lookAtY, orbit.centerZ);
@@ -396,13 +393,20 @@ export function CameraControls() {
   useEffect(() => {
     if (mode !== "orbit") return;
     const dom = gl.domElement;
+    // Snapshot the touch map for cleanup — the ref identity is stable, but
+    // exhaustive-deps wants `.current` captured inside the effect body.
+    const touches = activeTouches.current;
 
     const settleAzimuthBeforeDrag = () => {
+      const s = useSceneStore.getState();
       const now = performance.now();
-      const elapsed = (now - orbitStart.current) / 1000;
-      const sweepDeg = (elapsed / Math.max(1, orbit.periodSec)) * 360;
-      const az =
-        ((useSceneStore.getState().orbit.azimuthDeg + sweepDeg) % 360 + 360) % 360;
+      // Read pause + period LIVE and respect pause: when paused the sweep isn't
+      // advancing, so orbitStart has been aging — adding (now − orbitStart)·speed
+      // would bake a phantom sweep and jump the camera on click. Mirror exactly
+      // what the useFrame sweep renders.
+      const elapsed = s.orbitPaused ? 0 : (now - orbitStart.current) / 1000;
+      const sweepDeg = (elapsed / Math.max(1, s.orbit.periodSec)) * 360;
+      const az = ((s.orbit.azimuthDeg + sweepDeg) % 360 + 360) % 360;
       setOrbit({ azimuthDeg: az });
       orbitStart.current = now;
     };
@@ -422,6 +426,7 @@ export function CameraControls() {
           pinch.current = {
             startDist: Math.hypot(dx, dy),
             startRadius: o.radius,
+            startOrthoSize: useSceneStore.getState().orthoSize,
             startMidY: (pts[0].y + pts[1].y) / 2,
             startLookAtY: o.lookAtY,
           };
@@ -435,6 +440,22 @@ export function CameraControls() {
       }
       const focal = e.pointerType === "mouse" && e.button === 2;
       if (!focal) settleAzimuthBeforeDrag();
+      // Rotating the camera in top-down exits to plain Orbit (orbit rules apply).
+      // Dropping the snapshot is seamless now that camera.up keys on elevation.
+      if (!focal && useSceneStore.getState().orbitRestore !== null) {
+        // Grabbing top-down to orbit it → exit to a LEVEL orbit: drop the
+        // north-up roll and pull elevation just under vertical (same frame, so
+        // world-up never gimbals at 90°). Resume the pre-top-down auto-revolution
+        // state (top-down paused it) so the speed slider works again afterward.
+        const st = useSceneStore.getState();
+        const wasPaused = st.orbitRestore?.paused ?? false;
+        st.setOrbitRestore(null);
+        st.setTopDownTip(0);
+        st.setOrbitPaused(wasPaused);
+        if (st.orbit.elevationDeg > ORBIT_ELEVATION_MAX) {
+          st.setOrbit({ elevationDeg: ORBIT_ELEVATION_MAX });
+        }
+      }
       dragging.current = true;
       const o = useSceneStore.getState().orbit;
       dragBase.current = {
@@ -459,13 +480,21 @@ export function CameraControls() {
           const dy = pts[0].y - pts[1].y;
           const dist = Math.hypot(dx, dy);
           const scale = pinch.current.startDist / Math.max(1, dist);
+          // In ortho, zoom = frustum half-height; in perspective, zoom = radius.
+          const ortho = useSceneStore.getState().projection === "orthographic";
+          if (ortho) {
+            useSceneStore
+              .getState()
+              .setOrthoSize(
+                clamp(pinch.current.startOrthoSize * scale, ORTHO_SIZE_MIN, ORTHO_SIZE_MAX),
+              );
+          }
           const newRadius = clamp(
             pinch.current.startRadius * scale,
             ORBIT_RADIUS_MIN,
             ORBIT_RADIUS_MAX,
           );
           // Two-finger midpoint translation drives focal Y (lookAtY).
-          // Applied on top of the radius change so a translating pinch still zooms.
           const midY = (pts[0].y + pts[1].y) / 2;
           const focalSpeed = newRadius * FOCAL_Y_SENSITIVITY_RATIO;
           const newLookAtY = clamp(
@@ -474,7 +503,7 @@ export function CameraControls() {
             LOOK_AT_Y_MIN,
             LOOK_AT_Y_MAX,
           );
-          setOrbit({ radius: newRadius, lookAtY: newLookAtY });
+          setOrbit({ radius: ortho ? pinch.current.startRadius : newRadius, lookAtY: newLookAtY });
           return;
         }
       }
@@ -525,9 +554,15 @@ export function CameraControls() {
 
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
-      const o = useSceneStore.getState().orbit;
+      const s = useSceneStore.getState();
+      if (s.projection === "orthographic") {
+        // Ortho zoom = frustum half-height (radius doesn't change apparent size).
+        const factor = e.deltaY < 0 ? 1 / ORTHO_WHEEL_STEP : ORTHO_WHEEL_STEP;
+        s.setOrthoSize(clamp(s.orthoSize * factor, ORTHO_SIZE_MIN, ORTHO_SIZE_MAX));
+        return;
+      }
       const newRadius = clamp(
-        o.radius + e.deltaY * ORBIT_WHEEL_SENSITIVITY,
+        s.orbit.radius + e.deltaY * ORBIT_WHEEL_SENSITIVITY,
         ORBIT_RADIUS_MIN,
         ORBIT_RADIUS_MAX,
       );
@@ -548,7 +583,7 @@ export function CameraControls() {
       dom.removeEventListener("pointercancel", onPointerEnd);
       dom.removeEventListener("wheel", onWheel);
       dom.removeEventListener("contextmenu", onContextMenu);
-      activeTouches.current.clear();
+      touches.clear();
       pinch.current = null;
       dragging.current = false;
       dragBase.current = null;
@@ -563,13 +598,27 @@ export function CameraControls() {
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       const s = useSceneStore.getState();
-      const factor = e.deltaY < 0 ? FLY_WHEEL_STEP : 1 / FLY_WHEEL_STEP;
-      const next = clamp(s.flySpeed * factor, FLY_SPEED_MIN, FLY_SPEED_MAX);
-      s.setFlySpeed(next);
+      if (s.projection === "orthographic") {
+        // Ortho: wheel zooms the frustum half-height (same as orbit).
+        const factor = e.deltaY < 0 ? 1 / ORTHO_WHEEL_STEP : ORTHO_WHEEL_STEP;
+        s.setOrthoSize(clamp(s.orthoSize * factor, ORTHO_SIZE_MIN, ORTHO_SIZE_MAX));
+        return;
+      }
+      const k = keys.current;
+      const moving = k.w || k.a || k.s || k.d || k.space || k.c;
+      if (moving) {
+        // Mid-flight: wheel scales fly speed (UE5-style).
+        const factor = e.deltaY < 0 ? FLY_WHEEL_STEP : 1 / FLY_WHEEL_STEP;
+        s.setFlySpeed(clamp(s.flySpeed * factor, FLY_SPEED_MIN, FLY_SPEED_MAX));
+      } else {
+        // Stationary: wheel dollies forward / back along the view direction.
+        camera.getWorldDirection(forward.current);
+        camera.position.addScaledVector(forward.current, -e.deltaY * FLY_WHEEL_DOLLY);
+      }
     };
     dom.addEventListener("wheel", onWheel, { passive: false });
     return () => dom.removeEventListener("wheel", onWheel);
-  }, [mode, gl]);
+  }, [mode, gl, camera]);
 
   // Fly-mode pointer lock — engaged only while the user is actively dragging
   // (mouse held down). Releasing returns the cursor; the camera keeps whatever
@@ -610,6 +659,62 @@ export function CameraControls() {
       window.removeEventListener("mouseup", onMouseUp);
       document.removeEventListener("mousemove", onMouseMove);
       if (document.pointerLockElement === dom) document.exitPointerLock();
+    };
+  }, [mode, gl, camera]);
+
+  // Fly-mode touch — 1-finger drag looks around (yaw/pitch); 2-finger pinch
+  // flies forward / back along the view direction (pinch out = forward).
+  useEffect(() => {
+    if (mode !== "fly") return;
+    const dom = gl.domElement;
+    const touches = new Map<number, { x: number; y: number }>();
+    let pinchDist = 0;
+
+    const onDown = (e: PointerEvent) => {
+      if (e.pointerType !== "touch") return;
+      e.preventDefault();
+      touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (touches.size === 2) {
+        const p = Array.from(touches.values());
+        pinchDist = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y);
+      }
+      dom.setPointerCapture?.(e.pointerId);
+    };
+    const onMove = (e: PointerEvent) => {
+      if (e.pointerType !== "touch" || !touches.has(e.pointerId)) return;
+      e.preventDefault();
+      const prev = touches.get(e.pointerId) as { x: number; y: number };
+      touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (touches.size >= 2) {
+        const p = Array.from(touches.values());
+        const d = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y);
+        camera.getWorldDirection(forward.current);
+        camera.position.addScaledVector(forward.current, (d - pinchDist) * FLY_PINCH_DOLLY);
+        pinchDist = d;
+      } else {
+        const dx = e.clientX - prev.x;
+        const dy = e.clientY - prev.y;
+        _euler.setFromQuaternion(camera.quaternion);
+        _euler.y -= dx * POINTER_SENSITIVITY;
+        _euler.x -= dy * POINTER_SENSITIVITY;
+        _euler.x = Math.max(-HALF_PI + 0.001, Math.min(HALF_PI - 0.001, _euler.x));
+        camera.quaternion.setFromEuler(_euler);
+      }
+    };
+    const onUp = (e: PointerEvent) => {
+      if (e.pointerType !== "touch") return;
+      touches.delete(e.pointerId);
+      dom.releasePointerCapture?.(e.pointerId);
+    };
+    dom.addEventListener("pointerdown", onDown);
+    dom.addEventListener("pointermove", onMove);
+    dom.addEventListener("pointerup", onUp);
+    dom.addEventListener("pointercancel", onUp);
+    return () => {
+      dom.removeEventListener("pointerdown", onDown);
+      dom.removeEventListener("pointermove", onMove);
+      dom.removeEventListener("pointerup", onUp);
+      dom.removeEventListener("pointercancel", onUp);
     };
   }, [mode, gl, camera]);
 

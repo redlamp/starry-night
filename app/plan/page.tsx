@@ -1,19 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import {
-  Map,
-  Building2,
-  Grid2x2,
-  Milestone,
-  Route,
-  Lightbulb,
-  Spline,
-  LayoutGrid,
-  X,
-} from "lucide-react";
+import Link from "next/link";
+import { Map, Building2, Milestone, Route, Lightbulb, Spline, LayoutGrid, X } from "lucide-react";
 import { PlanView, type PlanLayers } from "@/components/plan/PlanView";
-import { DEFAULT_TUNING, type GridTuning } from "@/lib/seed/cityGen";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,7 +12,6 @@ import { Switch } from "@/components/ui/switch";
 // Sorted largest feature → smallest, per the requested order.
 const LAYER_KEYS: (keyof PlanLayers)[] = [
   "districts",
-  "blocks",
   "buildings",
   "streets",
   "arterials",
@@ -33,7 +22,6 @@ const LAYER_KEYS: (keyof PlanLayers)[] = [
 const LAYER_ICONS: Record<keyof PlanLayers, React.ReactNode> = {
   districts: <Map size={16} />,
   buildings: <Building2 size={16} />,
-  blocks: <Grid2x2 size={16} />,
   streets: <Spline size={16} />,
   arterials: <Route size={16} />,
   highways: <Milestone size={16} />,
@@ -50,14 +38,12 @@ export default function PlanPage() {
   const [layers, setLayers] = useState<PlanLayers>({
     districts: true,
     buildings: true,
-    blocks: true,
     highways: true,
     arterials: true,
     streets: true,
     streetlights: true,
   });
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
-  const [tuning] = useState<GridTuning>(DEFAULT_TUNING);
 
   // Measure the toolbar's viewport-bottom + window size so the tile grid can
   // auto-fill and the lightbox can pin the square plan to the smaller side.
@@ -166,12 +152,12 @@ export default function PlanPage() {
             <Button variant="outline" onClick={reroll}>
               Reroll
             </Button>
-            <a
+            <Link
               href="/"
               className="text-sm text-zinc-400 underline-offset-4 hover:text-white hover:underline"
             >
               ← scene
-            </a>
+            </Link>
           </div>
         </div>
 
@@ -197,7 +183,7 @@ export default function PlanPage() {
             title={`Click to enlarge: ${seed}`}
             aria-label={`Enlarge seed ${seed}`}
           >
-            <PlanView seed={seed} size={CELL_SIZE} layers={layers} tuning={tuning} />
+            <PlanView seed={seed} size={CELL_SIZE} layers={layers} />
           </button>
         ))}
       </div>
@@ -229,7 +215,7 @@ export default function PlanPage() {
                   <X size={16} />
                 </Button>
               </div>
-              <PlanView seed={activeSeed} size={lightboxSize} layers={layers} tuning={tuning} />
+              <PlanView seed={activeSeed} size={lightboxSize} layers={layers} />
             </div>
           </div>
         </>

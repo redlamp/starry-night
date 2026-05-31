@@ -6,7 +6,7 @@ import { useFrame } from "@react-three/fiber";
 import { generateStreetlights } from "@/lib/seed/cityGen";
 import { kelvinToColor } from "@/lib/color/kelvin";
 import { SCENE_WB_GAIN } from "@/lib/color/whiteBalance";
-import { sharedIntroProgress } from "@/lib/shaders/sharedIntro";
+import { sharedStreetlightIntroProgress } from "@/lib/shaders/sharedIntro";
 import { sharedTime } from "@/lib/shaders/sharedTime";
 import { useSceneStore } from "@/lib/state/sceneStore";
 
@@ -46,7 +46,10 @@ void main() {
   vWake = smoothstep(threshold, threshold + 0.08, uIntroProgress);
 
   gl_Position = projectionMatrix * mv;
-  gl_PointSize = max(2.0, uBaseSize * uPixelRatio * (180.0 / vDist));
+  // Fixed apparent size. The default projection is orthographic, where screen
+  // size must NOT fall off with distance — the old 180/vDist term collapsed
+  // every light to the 2px floor at city-viewing distances, making them vanish.
+  gl_PointSize = clamp(uBaseSize * uPixelRatio, 2.0, 10.0);
 }
 `;
 
@@ -80,12 +83,13 @@ void main() {
     bright = 0.18 + n * 0.82;
   }
 
-  float intensity = pow(core, 1.4) * 2.2 * vWake * bright;
+  float intensity = pow(core, 1.4) * 1.8 * vWake * bright;
   gl_FragColor = vec4(vColor * intensity, core * vWake * bright);
 }
 `;
 
 export function Streetlights({ masterSeed }: { masterSeed: string }) {
+  const enabled = useSceneStore((s) => s.streetlights.enabled);
   const { geometry, material, maxRadius } = useMemo(() => {
     const lights = generateStreetlights(masterSeed);
     const positions = new Float32Array(lights.length * 3);
@@ -121,7 +125,7 @@ export function Streetlights({ masterSeed }: { masterSeed: string }) {
         uPixelRatio: {
           value: typeof window !== "undefined" ? Math.min(window.devicePixelRatio, 2) : 1,
         },
-        uIntroProgress: sharedIntroProgress,
+        uIntroProgress: sharedStreetlightIntroProgress,
         uIntroCityCenter: { value: new THREE.Vector3() },
         uIntroMaxRadius: { value: maxR },
         uTime: sharedTime,
@@ -141,5 +145,6 @@ export function Streetlights({ masterSeed }: { masterSeed: string }) {
     material.uniforms.uIntroMaxRadius.value = maxRadius;
   });
 
+  if (!enabled) return null;
   return <points geometry={geometry} material={material} frustumCulled={false} />;
 }

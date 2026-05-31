@@ -13,6 +13,7 @@ import {
   sharedCycleJitter,
   sharedStarIntroProgress,
   sharedStarIntroMode,
+  sharedStreetlightIntroProgress,
 } from "@/lib/shaders/sharedIntro";
 import { sharedTime } from "@/lib/shaders/sharedTime";
 
@@ -73,6 +74,15 @@ export function IntroTicker() {
     } else {
       sharedIntroProgress.value = s.intro.progress;
     }
+
+    // Streetlights wake on their own (shorter) duration, derived from the same
+    // timeline: elapsed = progress·durationSec; streetlightProgress =
+    // elapsed / streetlightDurationSec, clamped to 1.
+    sharedStreetlightIntroProgress.value = Math.min(
+      1,
+      (sharedIntroProgress.value * s.intro.durationSec) /
+        Math.max(0.1, s.intro.streetlightDurationSec),
+    );
 
     // Star intro — progress-driven wake (no cycle), no startTime stamp needed.
     if (s.starIntro.playing) {

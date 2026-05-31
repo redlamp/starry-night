@@ -11,6 +11,7 @@ Map of Content for architectural and product decisions. Each decision is an atom
 - [[decision-streets-first-city-generation]] — Streets-first hybrid: highways and arterials drawn first, districts form between them, blocks/lots emerge from network closure *(road mechanism partially superseded)*
 - [[decision-grid-first-city-generation]] — Grid-first rework: coherent grid substrate, patchwork via center-anchored orientation field, continuous seam streets, arterials = heavy grid lines (kills the radial starburst), zone-driven hybrid fill *(geometry superseded)*
 - [[decision-tensor-field-roads]] — **Tensor-field streets-first (current model):** roads = streamlines of a grid-basis tensor field, criss-cross arterials + streets, one promoted highway, occasional roundabout, buildings line the frontage; default city generator
+- [[decision-network-aligned-districts]] — **Districts follow the arterials:** raster flood-fill with arterials/highway as hard walls (minor streets passable), slivers merged; replaces free-floating Voronoi on the tensor path; one shared field across buildings + all overlays
 - [[decision-window-proportion-by-archetype]] — Per-archetype window size + grid pitch (skyscraper glass / warehouse bays / heritage punched windows); admits archetype-level fenestration to v1
 - [[decision-moon-celestial-model]] — Moon parametrised as azimuth / elevation / distance, not cylinder coords
 - [[decision-orbit-spherical-controls]] — Spherical orbit + drag / pinch / wheel controls on the canvas
