@@ -160,3 +160,39 @@ export function tweenOrbitToDefault() {
   s.setOrbit({ lookAtY: DEFAULT_ORBIT.lookAtY, periodSec: DEFAULT_ORBIT.periodSec });
   tweenOrbitTowards(DEFAULT_ORBIT.elevationDeg, DEFAULT_ORBIT.radius, DEFAULT_ORTHO_SIZE);
 }
+
+const PROJECTION_TWEEN_DURATION = 0.5;
+
+// Projection swap (perspective ⇄ orthographic) — shared by the Camera panel's
+// projection toggle and the `p` hotkey so both animate identically. Matches
+// framing at the lookAt distance so the swap stays visually continuous (ortho
+// frustum half-height = perspective tangent half-extent at d), then GSAP-blends
+// projectionBlend 0↔1 (ProjectionBlender lerps the matrices each frame).
+export function tweenProjectionTo(target: "perspective" | "orthographic") {
+  const s = useSceneStore.getState();
+  if (s.projection === target) return;
+  const d = Math.max(1, s.orbit.radius);
+  const fovRad = (s.cameraIntent.fov * Math.PI) / 180;
+  if (target === "orthographic") {
+    s.setOrthoSize(d * Math.tan(fovRad / 2));
+  } else {
+    const matchedFov = (2 * Math.atan(s.orthoSize / d) * 180) / Math.PI;
+    s.setCameraIntent({ fov: matchedFov });
+  }
+  s.setProjection(target);
+  const from = s.projectionBlend;
+  const to = target === "orthographic" ? 1 : 0;
+  const proxy = { v: from };
+  gsap.to(proxy, {
+    v: to,
+    duration: PROJECTION_TWEEN_DURATION,
+    ease: "power2.inOut",
+    onUpdate: () => useSceneStore.getState().setProjectionBlend(proxy.v),
+  });
+}
+
+// `p` hotkey: toggle to whichever projection isn't current.
+export function toggleProjection() {
+  const s = useSceneStore.getState();
+  tweenProjectionTo(s.projection === "orthographic" ? "perspective" : "orthographic");
+}

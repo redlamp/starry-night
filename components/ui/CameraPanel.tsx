@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import gsap from "gsap";
 import {
   useSceneStore,
   type Vec3,
@@ -59,35 +58,9 @@ import {
   setCameraTab,
   currentCameraTab,
   tweenOrbitToDefault,
+  tweenProjectionTo,
   type CameraTab,
 } from "@/lib/scene/cameraView";
-
-const PROJECTION_TWEEN_DURATION = 0.5;
-
-function tweenProjectionTo(target: "perspective" | "orthographic") {
-  const s = useSceneStore.getState();
-  if (s.projection === target) return;
-  // Match framing at lookAt distance so projection swap stays visually
-  // continuous: ortho frustum half-height = perspective tangent half-extent at d.
-  const d = Math.max(1, s.orbit.radius);
-  const fovRad = (s.cameraIntent.fov * Math.PI) / 180;
-  if (target === "orthographic") {
-    s.setOrthoSize(d * Math.tan(fovRad / 2));
-  } else {
-    const matchedFov = (2 * Math.atan(s.orthoSize / d) * 180) / Math.PI;
-    s.setCameraIntent({ fov: matchedFov });
-  }
-  s.setProjection(target);
-  const from = s.projectionBlend;
-  const to = target === "orthographic" ? 1 : 0;
-  const proxy = { v: from };
-  gsap.to(proxy, {
-    v: to,
-    duration: PROJECTION_TWEEN_DURATION,
-    ease: "power2.inOut",
-    onUpdate: () => useSceneStore.getState().setProjectionBlend(proxy.v),
-  });
-}
 
 function copyConfigToClipboard() {
   const s = useSceneStore.getState();
