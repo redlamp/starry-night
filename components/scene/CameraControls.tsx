@@ -71,7 +71,6 @@ const FLY_PINCH_DOLLY = 0.8; // metres flown per pixel of two-finger pinch-sprea
 const ORTHO_WHEEL_STEP = 1.1;
 const ORTHO_SIZE_MIN = 5;
 const ORTHO_SIZE_MAX = 2000;
-const ORTHO_GROUND_GUARD = 0.75; // focal-Y floor = orthoSize·cos(el)·this (tune visually)
 
 const POINTER_SENSITIVITY = 0.002;
 const _euler = new THREE.Euler(0, 0, 0, "YXZ");
@@ -339,18 +338,7 @@ export function CameraControls() {
       const upT = Math.max(0, Math.min(1, (orbit.elevationDeg - 70) / 20));
       const upAng = upT * Math.PI * 0.5;
       camera.up.set(0, Math.cos(upAng), Math.sin(upAng));
-      // Ortho ground guard: zooming out at a low angle would drop the bottom of
-      // the frustum below the ground plane (seeing under the world). Floor the
-      // focal Y at orthoSize·cos(el)·guard so the focal point rises and the
-      // bottom of the screen locks to the ground instead. Non-destructive — the
-      // stored lookAtY is untouched, only this frame's target is raised. At
-      // top-down (el→90, cos→0) the floor vanishes, which is correct.
-      let lookAtY = orbit.lookAtY;
-      if (useSceneStore.getState().projection === "orthographic") {
-        const floorY = useSceneStore.getState().orthoSize * Math.cos(el) * ORTHO_GROUND_GUARD;
-        if (lookAtY < floorY) lookAtY = floorY;
-      }
-      camera.lookAt(orbit.centerX, lookAtY, orbit.centerZ);
+      camera.lookAt(orbit.centerX, orbit.lookAtY, orbit.centerZ);
       return;
     }
 
