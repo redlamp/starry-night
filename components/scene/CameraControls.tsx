@@ -84,7 +84,11 @@ const ORBIT_WHEEL_SENSITIVITY = 0.5; // metres per wheel-delta tick
 const ORBIT_RADIUS_MIN = 50;
 const ORBIT_RADIUS_MAX = 5000;
 const ORBIT_ELEVATION_MIN = 0.01; // hair above horizon — el = 0 clips the ground plane and culls it from the frame
-const ORBIT_ELEVATION_MAX = 90; // can sit directly above the city, no flip-over
+// Just under vertical: manual orbit keeps world-up (level horizon), and capping
+// below 90° means world-up never goes parallel to the view direction (gimbal).
+// Top-down (looking straight down) is the dedicated preset, which sets 90° + the
+// north-up roll via topDownTip rather than coming through the drag handler.
+const ORBIT_ELEVATION_MAX = 89;
 
 export function CameraControls() {
   const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
@@ -335,10 +339,11 @@ export function CameraControls() {
       // degeneracy. Flat (world-Y up) below 70°, fully tipped at 90°. Keyed on
       // elevation alone (not the top-down snapshot) so switching top-down →
       // orbit mid-drag stays seamless.
-      // Elevation-keyed tip (manual high-elevation orbit) maxed with the tweened
-      // top-down roll so a transition eases the roll across the whole tween.
-      const upElev = Math.max(0, Math.min(1, (orbit.elevationDeg - 70) / 20));
-      const upT = Math.max(upElev, useSceneStore.getState().topDownTip);
+      // Up stays world-up for ALL orbit (level horizon — ground down, sky up) and
+      // rolls toward +Z (north-up) only for top-down, driven by the tweened
+      // topDownTip. Decoupled from elevation, so free orbiting never rolls the
+      // horizon; the <90° elevation cap keeps world-up from gimballing.
+      const upT = useSceneStore.getState().topDownTip;
       const upAng = upT * Math.PI * 0.5;
       camera.up.set(0, Math.cos(upAng), Math.sin(upAng));
       camera.lookAt(orbit.centerX, orbit.lookAtY, orbit.centerZ);
@@ -391,11 +396,15 @@ export function CameraControls() {
     const dom = gl.domElement;
 
     const settleAzimuthBeforeDrag = () => {
+      const s = useSceneStore.getState();
       const now = performance.now();
-      const elapsed = (now - orbitStart.current) / 1000;
-      const sweepDeg = (elapsed / Math.max(1, orbit.periodSec)) * 360;
-      const az =
-        ((useSceneStore.getState().orbit.azimuthDeg + sweepDeg) % 360 + 360) % 360;
+      // Read pause + period LIVE and respect pause: when paused the sweep isn't
+      // advancing, so orbitStart has been aging — adding (now − orbitStart)·speed
+      // would bake a phantom sweep and jump the camera on click. Mirror exactly
+      // what the useFrame sweep renders.
+      const elapsed = s.orbitPaused ? 0 : (now - orbitStart.current) / 1000;
+      const sweepDeg = (elapsed / Math.max(1, s.orbit.periodSec)) * 360;
+      const az = ((s.orbit.azimuthDeg + sweepDeg) % 360 + 360) % 360;
       setOrbit({ azimuthDeg: az });
       orbitStart.current = now;
     };
@@ -432,10 +441,18 @@ export function CameraControls() {
       // Rotating the camera in top-down exits to plain Orbit (orbit rules apply).
       // Dropping the snapshot is seamless now that camera.up keys on elevation.
       if (!focal && useSceneStore.getState().orbitRestore !== null) {
-        useSceneStore.getState().setOrbitRestore(null);
-        // Hand the roll back to elevation-keying — at el≈90 it stays tipped, then
-        // untips as the drag lowers elevation (no snap).
-        useSceneStore.getState().setTopDownTip(0);
+        // Grabbing top-down to orbit it → exit to a LEVEL orbit: drop the
+        // north-up roll and pull elevation just under vertical (same frame, so
+        // world-up never gimbals at 90°). Resume the pre-top-down auto-revolution
+        // state (top-down paused it) so the speed slider works again afterward.
+        const st = useSceneStore.getState();
+        const wasPaused = st.orbitRestore?.paused ?? false;
+        st.setOrbitRestore(null);
+        st.setTopDownTip(0);
+        st.setOrbitPaused(wasPaused);
+        if (st.orbit.elevationDeg > ORBIT_ELEVATION_MAX) {
+          st.setOrbit({ elevationDeg: ORBIT_ELEVATION_MAX });
+        }
       }
       dragging.current = true;
       const o = useSceneStore.getState().orbit;
