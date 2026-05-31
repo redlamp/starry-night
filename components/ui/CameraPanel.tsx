@@ -6,7 +6,6 @@ import {
   useSceneStore,
   type Vec3,
   type QualityTier,
-  PRESETS,
   QUALITY_TIERS,
 } from "@/lib/state/sceneStore";
 import { randomSeed } from "@/lib/seed/rng";
@@ -16,20 +15,25 @@ import {
   AppWindow,
   Building2,
   Camera,
+  Check,
   CloudFog,
   Contrast,
+  Copy,
   Gauge,
   Map as MapIcon,
   Moon,
   MoonStar,
   Orbit as OrbitIcon,
   Radio,
+  RotateCcw,
   Route,
+  Save,
   Settings,
   Sparkles,
   Sprout,
   Stars,
   Sun,
+  Undo2,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -51,7 +55,12 @@ import {
 } from "@/components/ui/select";
 import { DistrictsSection } from "@/components/ui/DistrictsPanel";
 import { RoadsSection } from "@/components/ui/RoadsPanel";
-import { applyViewPreset } from "@/lib/scene/cameraView";
+import {
+  setCameraTab,
+  currentCameraTab,
+  tweenOrbitToDefault,
+  type CameraTab,
+} from "@/lib/scene/cameraView";
 
 const PROJECTION_TWEEN_DURATION = 0.5;
 
@@ -169,13 +178,13 @@ export function CameraPanel() {
     cameraMode,
     cameraIntent,
     cameraLive,
-    setCameraMode,
     setCameraIntent,
     resetCamera,
     saveCurrentAsDefault,
     revertToSaved,
     hasSavedConfig,
   } = useSceneStore();
+  const orbitRestoreSet = useSceneStore((s) => s.orbitRestore !== null);
 
   const [hidden, setHidden] = useState(true);
   const [savedExists, setSavedExists] = useState(() => hasSavedConfig());
@@ -209,6 +218,7 @@ export function CameraPanel() {
   const flying = cameraMode === "fly";
   const orbiting = cameraMode === "orbit";
   const locked = flying || orbiting;
+  const modeTab = currentCameraTab(cameraMode, orbitRestoreSet);
   const livePos = cameraLive.position;
   const liveRotDeg: Vec3 = [
     cameraLive.rotation[0] * RAD2DEG,
@@ -244,22 +254,28 @@ export function CameraPanel() {
             </Button>
           </div>
         </div>
-        <div className="flex items-center gap-1.5">
-          <ModeButton
-            label="Fly"
-            hotkey="F"
-            active={flying}
-            activeClass="bg-orange-500 text-black hover:bg-orange-500"
-            onClick={() => setCameraMode("fly")}
-          />
-          <ModeButton
-            label="Orbit"
-            hotkey="G"
-            active={orbiting}
-            activeClass="bg-sky-400 text-black hover:bg-sky-400"
-            onClick={() => setCameraMode("orbit")}
-          />
-        </div>
+        <Tabs value={modeTab} onValueChange={(v) => setCameraTab(v as CameraTab)}>
+          <TabsList className="w-full">
+            <TabsTrigger
+              value="fly"
+              className="data-[state=active]:bg-orange-500 data-[state=active]:text-black"
+            >
+              Fly <span className="text-[10px] opacity-70">(F)</span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="orbit"
+              className="data-[state=active]:bg-purple-500 data-[state=active]:text-black"
+            >
+              Orbit <span className="text-[10px] opacity-70">(G)</span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="top-down"
+              className="data-[state=active]:bg-sky-400 data-[state=active]:text-black"
+            >
+              Top-down <span className="text-[10px] opacity-70">(T)</span>
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
         <ModeDetailPanel mode={cameraMode} />
       </div>
 
@@ -343,18 +359,20 @@ export function CameraPanel() {
           <Button
             variant="ghost"
             onClick={() => resetCamera()}
-            title="Reset all settings to their hardcoded defaults"
+            title="Reset every setting to its built-in default"
             className="text-rose-400 hover:bg-rose-400/10 hover:text-rose-300"
           >
+            <RotateCcw className="size-4" />
             Reset
           </Button>
           {savedExists && (
             <Button
               variant="ghost"
               onClick={() => revertToSaved()}
-              title="Restore the last locally-saved config"
+              title="Restore the last config you Saved"
               className="text-amber-400 hover:bg-amber-400/10 hover:text-amber-300"
             >
+              <Undo2 className="size-4" />
               Revert
             </Button>
           )}
@@ -366,9 +384,10 @@ export function CameraPanel() {
               saveCurrentAsDefault();
               setSavedExists(true);
             }}
-            title="Snapshot current camera + orbit + moon + stars as the new Reset target"
+            title="Snapshot every current setting as the new Reset target"
             className="bg-emerald-400 text-black hover:bg-emerald-400/90"
           >
+            <Save className="size-4" />
             Save
           </Button>
         </div>
@@ -417,32 +436,8 @@ function PoseSection({
   intentRotDeg: Vec3;
   setCameraIntent: ReturnType<typeof useSceneStore.getState>["setCameraIntent"];
 }) {
-  const orbiting = useSceneStore((s) => s.cameraMode === "orbit");
-  const orbitRestoreSet = useSceneStore((s) => s.orbitRestore !== null);
   return (
     <>
-      <div className="flex flex-col gap-1.5">
-        <span className="text-foreground/40 text-xs tracking-wide uppercase">tween to</span>
-        <Tabs
-          value={orbitRestoreSet ? "top-down" : "default"}
-          onValueChange={(v) => applyViewPreset(v as "default" | "top-down")}
-        >
-          <TabsList className="w-full">
-            {PRESETS.map((p) => {
-              const orbitTopDown = orbiting && p.id === "top-down";
-              const orbitDefault = orbiting && p.id === "default" && orbitRestoreSet;
-              const enabledInOrbit = orbitTopDown || orbitDefault;
-              const disabled = locked && !enabledInOrbit;
-              return (
-                <TabsTrigger key={p.id} value={p.id} disabled={disabled}>
-                  {p.label}
-                </TabsTrigger>
-              );
-            })}
-          </TabsList>
-        </Tabs>
-      </div>
-
       <ProjectionRow />
       <FovOrSizeSlider />
 
@@ -506,7 +501,16 @@ function OrbitSection() {
   const setOrbit = useSceneStore((s) => s.setOrbit);
   return (
     <>
-      <div className="flex items-center justify-end">
+      <div className="flex items-center justify-between">
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => tweenOrbitToDefault()}
+          title="Tween the orbit back to its default framing"
+          className="bg-purple-500/20 text-purple-200 hover:bg-purple-500/30"
+        >
+          Default Orbit
+        </Button>
         <FocalIndicatorToggle />
       </div>
       <ValueSlider
@@ -978,6 +982,23 @@ function IntroSection() {
   const playAllIntros = useSceneStore((s) => s.playAllIntros);
   const windowModes = ["random", "district", "outside-in", "inside-out", "far-to-near"] as const;
   const starModes = ["random", "bright-first", "horizon-first", "zenith-first"] as const;
+  // Speed presets: Default = the slow ambient wake (windows 240s / stars 360s);
+  // Fast = a quick 30s/30s cascade. Empty when durations have been hand-tuned.
+  const speedPreset =
+    intro.durationSec === 240 && starIntro.durationSec === 360
+      ? "default"
+      : intro.durationSec === 30 && starIntro.durationSec === 30
+        ? "fast"
+        : "";
+  const applyIntroSpeed = (v: string) => {
+    if (v === "default") {
+      setIntroDuration(240);
+      setStarIntroDuration(360);
+    } else if (v === "fast") {
+      setIntroDuration(30);
+      setStarIntroDuration(30);
+    }
+  };
   return (
     <>
       <div className="flex items-center justify-end">
@@ -990,6 +1011,16 @@ function IntroSection() {
         >
           ▶ play
         </Button>
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <span className="text-foreground/40 text-xs tracking-wide uppercase">speed</span>
+        <Tabs value={speedPreset} onValueChange={applyIntroSpeed}>
+          <TabsList className="w-full">
+            <TabsTrigger value="default">Default</TabsTrigger>
+            <TabsTrigger value="fast">Fast</TabsTrigger>
+          </TabsList>
+        </Tabs>
       </div>
 
       <SubHeader label="Windows" />
@@ -1221,35 +1252,6 @@ function FovOrSizeSlider() {
   );
 }
 
-function ModeButton({
-  label,
-  hotkey,
-  active,
-  activeClass,
-  onClick,
-}: {
-  label: string;
-  hotkey: string;
-  active: boolean;
-  activeClass: string;
-  onClick: () => void;
-}) {
-  return (
-    <Button
-      variant="secondary"
-      size="sm"
-      onClick={onClick}
-      title={`${label} mode (${hotkey})`}
-      className={cn(
-        active ? activeClass : "bg-foreground/10 text-foreground hover:bg-foreground/20",
-      )}
-    >
-      {label}
-      <span className="text-[10px] opacity-70">({hotkey})</span>
-    </Button>
-  );
-}
-
 function CopyButton() {
   const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
   const onCopy = () => {
@@ -1262,10 +1264,20 @@ function CopyButton() {
       variant="secondary"
       size="sm"
       onClick={onCopy}
-      title="Copy camera + orbit + moon + stars as JSON to clipboard"
+      title="Copy every current setting as JSON to the clipboard"
       className="bg-foreground/10 text-foreground hover:bg-foreground/20"
     >
-      {copyState === "copied" ? "copied" : "copy"}
+      {copyState === "copied" ? (
+        <>
+          <Check className="size-4" />
+          Copied
+        </>
+      ) : (
+        <>
+          <Copy className="size-4" />
+          Copy
+        </>
+      )}
     </Button>
   );
 }

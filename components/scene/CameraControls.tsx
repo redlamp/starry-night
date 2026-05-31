@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { useSceneStore, type CameraIntent, type Vec3 } from "@/lib/state/sceneStore";
+import { enterFlyMode, enterOrbitMode } from "@/lib/scene/cameraView";
 
 function easeInOutCubic(t: number) {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
@@ -84,7 +85,6 @@ export function CameraControls() {
   const mode = useSceneStore((s) => s.cameraMode);
   const intent = useSceneStore((s) => s.cameraIntent);
   const setCameraLive = useSceneStore((s) => s.setCameraLive);
-  const setCameraMode = useSceneStore((s) => s.setCameraMode);
   const setCameraIntent = useSceneStore((s) => s.setCameraIntent);
 
   const keys = useRef<KeyState>({ ...initialKeys });
@@ -180,14 +180,6 @@ export function CameraControls() {
     });
   };
 
-  const exitFly = () => {
-    captureCurrentPoseAsIntent();
-    setCameraMode("orbit");
-    if (typeof document !== "undefined" && document.pointerLockElement) {
-      document.exitPointerLock();
-    }
-  };
-
   useEffect(() => {
     const isTyping = () => {
       const el = typeof document !== "undefined" ? document.activeElement : null;
@@ -210,14 +202,14 @@ export function CameraControls() {
       if (e.repeat || isTyping()) return;
       const key = e.key.toLowerCase();
       if (key === "f") {
-        if (currentMode === "fly") exitFly();
-        else setCameraMode("fly");
+        if (currentMode === "fly") enterOrbitMode();
+        else enterFlyMode();
         return;
       }
       // G switches to orbit when NOT in fly mode (in fly, S/G are movement keys).
-      // Still is no longer a user-facing mode, so the old S→still binding is gone.
+      // Routes through enterOrbitMode so it also exits a held top-down cleanly.
       if (currentMode !== "fly" && key === "g") {
-        setCameraMode("orbit");
+        enterOrbitMode();
       }
       // Space in orbit mode toggles auto-revolution. When pausing, settle the
       // current azimuth into the store + reset orbitStart so resume continues

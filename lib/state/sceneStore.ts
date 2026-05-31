@@ -170,6 +170,25 @@ export const DEFAULT_HAZE = {
   radius: 1450,
 };
 
+// Intro wake-up sequence defaults. Durations are the "Default" speed preset
+// (windows 240s / stars 360s); the panel's Fast preset drops both to 30s.
+// Persisted via the settings registry so Reset/Save/Copy/Revert cover them.
+export const DEFAULT_INTRO = {
+  progress: 0,
+  playing: false,
+  durationSec: 240,
+  mode: "random" as "random" | "district" | "outside-in" | "far-to-near" | "inside-out",
+  offCycleSec: 90,
+  retriggerSec: 45,
+  cycleJitter: 0.3,
+};
+export const DEFAULT_STAR_INTRO = {
+  progress: 0,
+  playing: false,
+  durationSec: 360,
+  mode: "random" as "random" | "bright-first" | "horizon-first" | "zenith-first",
+};
+
 export const DEFAULT_CITY_PLANNING_VIS = {
   showHighways: false,
   showDistrictShells: false,
@@ -228,7 +247,9 @@ type AnySettingEntry =
   | SettingEntry<"orbitPaused">
   | SettingEntry<"showFocalIndicator">
   | SettingEntry<"cameraMode">
-  | SettingEntry<"orbitRestore">;
+  | SettingEntry<"orbitRestore">
+  | SettingEntry<"intro">
+  | SettingEntry<"starIntro">;
 
 export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "cameraIntent", defaultValue: DEFAULT_INTENT, persist: true },
@@ -255,6 +276,8 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "showFocalIndicator", defaultValue: false as const, persist: true },
   { key: "cameraMode", defaultValue: "orbit" as const, persist: false },
   { key: "orbitRestore", defaultValue: null as SceneState["orbitRestore"], persist: false },
+  { key: "intro", defaultValue: DEFAULT_INTRO, persist: true },
+  { key: "starIntro", defaultValue: DEFAULT_STAR_INTRO, persist: true },
 ];
 
 // cityPlanning visibility toggles — persisted separately because `cityPlanning`
@@ -282,6 +305,8 @@ type SavedConfig = {
   moonFollowCamera?: boolean;
   flySpeed?: number;
   showFocalIndicator?: boolean;
+  intro?: SceneState["intro"];
+  starIntro?: SceneState["starIntro"];
   // Only the layer-visibility toggles persist — topologyKind / arterialCount
   // are per-seed runtime readouts, not settings.
   cityPlanning?: {
@@ -584,21 +609,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setHaze: (patch) => set((s) => ({ haze: { ...s.haze, ...patch } })),
   showFocalIndicator: false,
   setShowFocalIndicator: (showFocalIndicator) => set({ showFocalIndicator }),
-  intro: {
-    progress: 0,
-    playing: false,
-    durationSec: 240,
-    mode: "random",
-    offCycleSec: 90,
-    retriggerSec: 45,
-    cycleJitter: 0.3,
-  },
-  starIntro: {
-    progress: 0,
-    playing: false,
-    durationSec: 360,
-    mode: "random",
-  },
+  intro: DEFAULT_INTRO,
+  starIntro: DEFAULT_STAR_INTRO,
   setIntroProgress: (progress) => set((s) => ({ intro: { ...s.intro, progress } })),
   setIntroPlaying: (playing) => set((s) => ({ intro: { ...s.intro, playing } })),
   setIntroDuration: (durationSec) => set((s) => ({ intro: { ...s.intro, durationSec } })),
