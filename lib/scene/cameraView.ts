@@ -8,6 +8,7 @@ import {
   type RenderGroup,
   type RenderMode,
 } from "@/lib/state/sceneStore";
+import { CITY_HALF_EXTENT } from "@/lib/seed/topology";
 
 // Shared camera-mode logic — the single source of truth for the Fly / Orbit /
 // Top-down switch, used by the Camera panel's mode tabs, the `t` hotkey, and the
@@ -21,9 +22,27 @@ import {
 //              is snapshotted in orbitRestore so returning to Orbit tweens back
 //              from wherever top-down currently sits.
 
-const TOP_DOWN_RADIUS = 4500;
-const TOP_DOWN_ORTHO_SIZE = 1000;
 const ORBIT_TWEEN_SEC = 2.0;
+
+// Top-down must frame the WHOLE city (± CITY_HALF_EXTENT) plus a margin, in any
+// aspect. orthoSize is the ortho frustum half-height; half-width = aspect ×
+// orthoSize (see ProjectionBlender), so the limiting axis sets
+//   orthoSize = H / min(1, aspect).
+// The margin also absorbs the orbit-centre Z offset (the camera pivots on the
+// orbit centre, not the city centre). Perspective frames the same extent at
+// radius = orthoSize / tan(fov/2); clamped so a tiny FOV can't fling the camera
+// past the far plane.
+const TOP_DOWN_MARGIN = 1.15;
+
+function topDownFraming(): { orthoSize: number; radius: number } {
+  const H = CITY_HALF_EXTENT * TOP_DOWN_MARGIN;
+  const aspect =
+    typeof window !== "undefined" ? window.innerWidth / Math.max(1, window.innerHeight) : 1;
+  const orthoSize = H / Math.min(1, aspect);
+  const fovRad = (useSceneStore.getState().cameraIntent.fov * Math.PI) / 180;
+  const radius = Math.min(12000, Math.max(1000, orthoSize / Math.max(0.05, Math.tan(fovRad / 2))));
+  return { orthoSize, radius };
+}
 
 function tweenOrbitTowards(
   targetEl: number,
@@ -98,7 +117,8 @@ function tweenOrbitTopDown() {
     });
   }
   s.setOrbitPaused(true);
-  tweenOrbitTowards(90, TOP_DOWN_RADIUS, TOP_DOWN_ORTHO_SIZE);
+  const { orthoSize, radius } = topDownFraming();
+  tweenOrbitTowards(90, radius, orthoSize);
 }
 
 function tweenOrbitRestore() {
