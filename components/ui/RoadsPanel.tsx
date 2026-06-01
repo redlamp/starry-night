@@ -2,6 +2,8 @@
 
 import { useSceneStore } from "@/lib/state/sceneStore";
 import { Switch } from "@/components/ui/switch";
+import { Slider } from "@/components/ui/slider";
+import { cn } from "@/lib/utils";
 
 const TOPOLOGY_LABELS: Record<string, string> = {
   crossroads: "Crossroads",
@@ -45,7 +47,73 @@ export function RoadsSection() {
         on={showStreetlights}
         onChange={(v) => setStreetlights({ enabled: v })}
       />
+      {showStreetlights ? <StreetlightControls /> : null}
     </>
+  );
+}
+
+function StreetlightControls() {
+  const size = useSceneStore((s) => s.streetlights.size);
+  const brightness = useSceneStore((s) => s.streetlights.brightness);
+  const setStreetlights = useSceneStore((s) => s.setStreetlights);
+  return (
+    <>
+      <ValueSlider
+        label="size"
+        value={size}
+        min={0.2}
+        max={2}
+        step={0.05}
+        onChange={(v) => setStreetlights({ size: v })}
+      />
+      <ValueSlider
+        label="brightness"
+        value={brightness}
+        min={0.1}
+        max={2}
+        step={0.05}
+        onChange={(v) => setStreetlights({ brightness: v })}
+      />
+    </>
+  );
+}
+
+// Compact labelled slider (mirrors CameraPanel's ValueSlider, kept local to
+// avoid exporting it across panels).
+function ValueSlider({
+  label,
+  value,
+  min,
+  max,
+  step,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <div className={cn("flex items-center gap-2 text-xs")}>
+      <span className="text-foreground/70 w-16 shrink-0">{label}</span>
+      <Slider
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onValueChange={(v) => onChange(typeof v === "number" ? v : v[0])}
+        className="flex-1"
+      />
+      <input
+        type="number"
+        step={step}
+        value={value}
+        onChange={(e) => onChange(parseFloat(e.target.value) || min)}
+        className="border-foreground/15 bg-background/60 text-foreground w-14 rounded border px-1.5 py-0.5 tabular-nums"
+      />
+    </div>
   );
 }
 

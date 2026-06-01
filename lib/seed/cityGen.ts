@@ -760,19 +760,34 @@ export type Streetlight = {
   tier: StreetlightTier;
 };
 
-// Modern-LED streetlight temps (decision note §Streetlight planning):
-//   highway + arterial → 4000K uniform; local → flat 3300K for now.
-//   Per-district local temps + variant bulbs are planned — see #42.
-const HIGHWAY_KELVIN = 4000;
-const ARTERIAL_KELVIN = 4000;
+// Streetlight colour temperature by district character (#42). Local lamps take
+// the temperature of the zone they light — cool white LED downtown, warm in
+// residential, sodium-amber in heritage + industrial. Highway/arterial run a
+// uniform cool white. A per-light jitter inside each band gives a real city's
+// patchwork (retrofits, bulb age) instead of one flat colour.
+const DISTRICT_KELVIN: Record<DistrictCharacter, [number, number]> = {
+  downtown: [3800, 4300], // modern cool-white LED
+  subcentre: [3500, 4000], // cool-neutral LED
+  "mixed-use": [3100, 3700], // neutral white
+  residential: [2850, 3300], // warm-white LED
+  heritage: [2200, 2600], // warm decorative / legacy sodium
+  industrial: [1900, 2300], // HPS sodium amber
+};
+const LOCAL_FALLBACK_KELVIN: [number, number] = [2900, 3300]; // off-district cells
+const HIGHWAY_ARTERIAL_KELVIN: [number, number] = [3900, 4250]; // uniform cool white
 const FAILURE_RATE = 0.025; // fraction of local lights that flicker as failing
 
+function bandPick(rng: () => number, band: readonly [number, number]): number {
+  return band[0] + rng() * (band[1] - band[0]);
+}
+
 // Emit lights in pairs along both sides of a road polyline at fixed spacing.
+// `pickKelvin` is evaluated per lamp (position-dependent for local streets).
 function emitRoadLights(
   rng: () => number,
   road: RoadLike,
   tier: StreetlightTier,
-  kelvin: number,
+  pickKelvin: (x: number, z: number) => number,
   spacing: number,
   out: Streetlight[],
 ) {
@@ -796,11 +811,13 @@ function emitRoadLights(
     while (nextAt <= acc + segLen) {
       const s = nextAt - acc; // distance into this segment
       for (const side of [-1, 1] as const) {
+        const lx = a.x + ux * s + nx * offset * side;
+        const lz = a.z + uz * s + nz * offset * side;
         out.push({
-          x: a.x + ux * s + nx * offset * side,
+          x: lx,
           y: 7 + (rng() - 0.5) * 0.4,
-          z: a.z + uz * s + nz * offset * side,
-          kelvin,
+          z: lz,
+          kelvin: pickKelvin(lx, lz),
           isFailing: rng() < FAILURE_RATE,
           tier,
         });
@@ -822,17 +839,29 @@ function generateStreetlightsTensor(
   // lights match the same boundary the buildings + roads were clipped to.
   const { topology, arterials, minorStreets } = buildTensorRoads(masterSeed);
   const lights: Streetlight[] = [];
+
+  // District lookup for local-lamp temperature. classify() → district index →
+  // character → kelvin band. Field is shape-independent + cached.
+  const field = tensorDistrictField(masterSeed);
+  const charByIndex = new Map<number, DistrictCharacter>();
+  for (const d of field.districts) charByIndex.set(d.index, d.character);
+  const localBand = (x: number, z: number): readonly [number, number] => {
+    const idx = field.classify(x, z);
+    const ch = idx >= 0 ? charByIndex.get(idx) : undefined;
+    return ch ? DISTRICT_KELVIN[ch] : LOCAL_FALLBACK_KELVIN;
+  };
+
   const hwRng = seedrandom(`${masterSeed}::streetlights::highways`);
   for (const hw of topology.highways) {
-    emitRoadLights(hwRng, hw, "highway", HIGHWAY_KELVIN, 34, lights);
+    emitRoadLights(hwRng, hw, "highway", () => bandPick(hwRng, HIGHWAY_ARTERIAL_KELVIN), 34, lights);
   }
   const artRng = seedrandom(`${masterSeed}::streetlights::arterials`);
   for (const a of arterials) {
-    emitRoadLights(artRng, a, "arterial", ARTERIAL_KELVIN, 28, lights);
+    emitRoadLights(artRng, a, "arterial", () => bandPick(artRng, HIGHWAY_ARTERIAL_KELVIN), 28, lights);
   }
   const minRng = seedrandom(`${masterSeed}::streetlights::minor`);
   for (const s of minorStreets) {
-    emitRoadLights(minRng, s, "local", 3300, 40, lights);
+    emitRoadLights(minRng, s, "local", (x, z) => bandPick(minRng, localBand(x, z)), 40, lights);
   }
   const resolved = resolveCityShape(shape, masterSeed);
   if (resolved === "square") return lights;
