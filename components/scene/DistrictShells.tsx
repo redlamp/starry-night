@@ -7,32 +7,51 @@ import { tensorDistrictField } from "@/lib/seed/cityGen";
 
 // Color-coded district fill overlay for the planning layer. Samples the
 // district field on a grid and draws one flat quad per occupied cell, colored
-// by its district. Single InstancedMesh = one draw call. Sits just above the
-// ground (y=0.25) and below the highway lines (y=0.5).
+// by its district. Single InstancedMesh = one draw call. A white LineSegments
+// pass traces every cell edge where the two neighbours belong to different
+// districts (internal seams + outer perimeter), so each district reads as an
+// outlined region. Sits just above the ground (y=0.25) and below the highway
+// lines (y=0.5).
 const OVERLAY_STEPS = 80;
 const OVERLAY_Y = 0.25;
+const BORDER_Y = 0.3; // just above the fill so the line is never z-hidden
 
 export function DistrictShells({ masterSeed }: { masterSeed: string }) {
   const show = useSceneStore((s) => s.cityPlanning.showDistrictShells);
 
-  const mesh = useMemo(() => {
+  const group = useMemo(() => {
     const field = tensorDistrictField(masterSeed);
     const { minX, maxX, minZ, maxZ } = field.bounds;
-    const step = (maxX - minX) / OVERLAY_STEPS;
+    const stepX = (maxX - minX) / OVERLAY_STEPS;
+    const stepZ = (maxZ - minZ) / OVERLAY_STEPS;
 
-    // Collect occupied cells first so the InstancedMesh is exactly sized.
+    // Sample district index per cell once; reused for the fill + the borders.
+    const idxGrid: number[][] = [];
+    for (let gx = 0; gx < OVERLAY_STEPS; gx++) {
+      const col: number[] = [];
+      for (let gz = 0; gz < OVERLAY_STEPS; gz++) {
+        const x = minX + (gx + 0.5) * stepX;
+        const z = minZ + (gz + 0.5) * stepZ;
+        col.push(field.classify(x, z));
+      }
+      idxGrid.push(col);
+    }
+
+    // --- Fill: one quad per occupied cell ---
     const cells: Array<{ x: number; z: number; color: string }> = [];
     for (let gx = 0; gx < OVERLAY_STEPS; gx++) {
       for (let gz = 0; gz < OVERLAY_STEPS; gz++) {
-        const x = minX + (gx + 0.5) * step;
-        const z = minZ + (gz + 0.5) * ((maxZ - minZ) / OVERLAY_STEPS);
-        const idx = field.classify(x, z);
+        const idx = idxGrid[gx][gz];
         if (idx < 0) continue;
-        cells.push({ x, z, color: field.districts[idx].color });
+        cells.push({
+          x: minX + (gx + 0.5) * stepX,
+          z: minZ + (gz + 0.5) * stepZ,
+          color: field.districts[idx].color,
+        });
       }
     }
 
-    const geo = new THREE.PlaneGeometry(step, (maxZ - minZ) / OVERLAY_STEPS);
+    const geo = new THREE.PlaneGeometry(stepX, stepZ);
     // Planning overlay: draws over the scene (depthTest off, high render order)
     // like a GIS layer so districts read regardless of building occlusion or
     // camera angle. Fog off so distant cells keep their colour.
@@ -53,8 +72,7 @@ export function DistrictShells({ masterSeed }: { masterSeed: string }) {
     const pos = new THREE.Vector3();
     const quat = new THREE.Quaternion();
     const scale = new THREE.Vector3(1, 1, 1);
-    // Lay flat on the ground plane.
-    quat.setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0));
+    quat.setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0)); // lay flat
     const color = new THREE.Color();
     for (let i = 0; i < cells.length; i++) {
       pos.set(cells[i].x, OVERLAY_Y, cells[i].z);
@@ -64,16 +82,58 @@ export function DistrictShells({ masterSeed }: { masterSeed: string }) {
     }
     im.instanceMatrix.needsUpdate = true;
     if (im.instanceColor) im.instanceColor.needsUpdate = true;
-    return im;
+
+    // --- Borders: a segment on each cell edge where the two sides differ ---
+    const pts: number[] = [];
+    const isBorder = (a: number, b: number) => a !== b && (a >= 0 || b >= 0);
+    for (let gx = 0; gx < OVERLAY_STEPS; gx++) {
+      for (let gz = 0; gz < OVERLAY_STEPS; gz++) {
+        const a = idxGrid[gx][gz];
+        // shared edge with the right neighbour → vertical line in XZ
+        if (gx + 1 < OVERLAY_STEPS && isBorder(a, idxGrid[gx + 1][gz])) {
+          const ex = minX + (gx + 1) * stepX;
+          pts.push(ex, BORDER_Y, minZ + gz * stepZ, ex, BORDER_Y, minZ + (gz + 1) * stepZ);
+        }
+        // shared edge with the bottom neighbour → horizontal line in XZ
+        if (gz + 1 < OVERLAY_STEPS && isBorder(a, idxGrid[gx][gz + 1])) {
+          const ez = minZ + (gz + 1) * stepZ;
+          pts.push(minX + gx * stepX, BORDER_Y, ez, minX + (gx + 1) * stepX, BORDER_Y, ez);
+        }
+      }
+    }
+
+    const lineGeo = new THREE.BufferGeometry();
+    lineGeo.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
+    const lineMat = new THREE.LineBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.85,
+      depthTest: false,
+      depthWrite: false,
+      fog: false,
+      toneMapped: false,
+    });
+    const lines = new THREE.LineSegments(lineGeo, lineMat);
+    lines.frustumCulled = false;
+    lines.renderOrder = 1000; // above the fill
+
+    const g = new THREE.Group();
+    g.add(im);
+    g.add(lines);
+    return g;
   }, [masterSeed]);
 
   useEffect(() => {
     return () => {
-      mesh.geometry.dispose();
-      (mesh.material as THREE.Material).dispose();
+      group.traverse((o) => {
+        const m = o as THREE.Mesh | THREE.LineSegments;
+        m.geometry?.dispose();
+        const mat = m.material as THREE.Material | undefined;
+        mat?.dispose();
+      });
     };
-  }, [mesh]);
+  }, [group]);
 
   if (!show) return null;
-  return <primitive object={mesh} />;
+  return <primitive object={group} />;
 }

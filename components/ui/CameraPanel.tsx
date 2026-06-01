@@ -217,7 +217,7 @@ export function CameraPanel() {
   ];
 
   return (
-    <div className="border-foreground/10 bg-popover text-foreground grey:bg-popover/70 grey:backdrop-blur-md pointer-events-auto fixed top-0 right-0 bottom-0 z-20 flex h-screen w-[26rem] flex-col border-l shadow-2xl">
+    <div className="border-foreground/10 bg-popover text-foreground grey:bg-popover/70 grey:backdrop-blur-md pointer-events-auto fixed top-0 right-0 bottom-0 z-20 flex h-dvh max-h-dvh w-[26rem] max-w-full flex-col border-l shadow-2xl">
       {/* Sticky header */}
       <div className="border-border flex shrink-0 flex-col gap-2.5 border-b px-4 pt-4 pb-3">
         <div className="flex items-center justify-between gap-2">
@@ -226,6 +226,7 @@ export function CameraPanel() {
             Settings
           </span>
           <div className="flex items-center gap-1.5">
+            <HeaderPauseButton tab={modeTab} />
             <ThemeToggle />
             <Button
               variant="ghost"
@@ -261,7 +262,6 @@ export function CameraPanel() {
             </TabsTrigger>
           </TabsList>
         </Tabs>
-        <ModeDetailPanel mode={cameraMode} />
       </div>
 
       {/* Scrollable middle */}
@@ -271,6 +271,7 @@ export function CameraPanel() {
             <Section value="pose" icon={Camera} label="Camera">
               <PoseSection
                 locked={locked}
+                flying={flying}
                 cameraIntent={cameraIntent}
                 intentRotDeg={intentRotDeg}
                 setCameraIntent={setCameraIntent}
@@ -421,11 +422,13 @@ function Section({
 
 function PoseSection({
   locked,
+  flying,
   cameraIntent,
   intentRotDeg,
   setCameraIntent,
 }: {
   locked: boolean;
+  flying: boolean;
   cameraIntent: ReturnType<typeof useSceneStore.getState>["cameraIntent"];
   intentRotDeg: Vec3;
   setCameraIntent: ReturnType<typeof useSceneStore.getState>["setCameraIntent"];
@@ -486,6 +489,7 @@ function PoseSection({
         }
       />
 
+      {flying ? <FlySpeedSlider /> : null}
     </>
   );
 }
@@ -882,7 +886,7 @@ function FogSection() {
             label="far"
             value={fog.far}
             min={50}
-            max={6000}
+            max={12000}
             step={10}
             onChange={(far) => setFog({ far })}
           />
@@ -980,7 +984,7 @@ function IntroSection() {
   // Speed presets: Default = the slow ambient wake (windows 240s / stars 360s);
   // Fast = a quick 30s/30s cascade. Empty when durations have been hand-tuned.
   const speedPreset =
-    intro.durationSec === 240 && starIntro.durationSec === 360
+    intro.durationSec === 240 && starIntro.durationSec === 240
       ? "default"
       : intro.durationSec === 30 && starIntro.durationSec === 30
         ? "fast"
@@ -988,7 +992,7 @@ function IntroSection() {
   const applyIntroSpeed = (v: string) => {
     if (v === "default") {
       setIntroDuration(240);
-      setStarIntroDuration(360);
+      setStarIntroDuration(240);
     } else if (v === "fast") {
       setIntroDuration(30);
       setStarIntroDuration(30);
@@ -1079,7 +1083,7 @@ function IntroSection() {
         label="duration"
         value={intro.streetlightDurationSec}
         min={0.5}
-        max={60}
+        max={120}
         step={0.5}
         onChange={(streetlightDurationSec) => setStreetlightDuration(streetlightDurationSec)}
       />
@@ -1299,60 +1303,34 @@ function ProgressRow({ label, value }: { label: string; value: number }) {
   );
 }
 
-function ModeDetailPanel({ mode }: { mode: "still" | "fly" | "orbit" }) {
-  if (mode === "fly") {
-    return (
-      <div className="text-foreground/70 flex flex-col gap-1.5 rounded-lg border border-orange-400/30 bg-orange-400/5 p-2">
-        <div className="text-xs tracking-wide text-orange-200/80 uppercase">fly</div>
-        <div className="text-xs leading-snug">
-          Hold LMB look · WASD move · Space up · C down · Q/E roll · Shift sprint · wheel = speed ·
-          F exit
-        </div>
-        <FlySpeedSlider />
-      </div>
-    );
-  }
-  if (mode === "orbit") {
-    return (
-      <div className="text-foreground/70 flex flex-col gap-1.5 rounded-lg border border-sky-400/30 bg-sky-400/5 p-2">
-        <div className="flex items-center justify-between">
-          <span className="text-xs tracking-wide text-sky-300/80 uppercase">orbit</span>
-          <OrbitPauseBadge />
-        </div>
-        <div className="text-xs leading-snug">
-          Drag spin · RMB drag = focal Y · pinch / wheel zoom · two-finger pan = focal Y · Space
-          pause
-        </div>
-      </div>
-    );
-  }
-  return (
-    <div className="border-foreground/15 bg-foreground/5 text-foreground/70 flex flex-col gap-1 rounded-lg border p-2">
-      <div className="text-foreground/55 text-xs tracking-wide uppercase">still</div>
-      <div className="text-xs leading-snug">
-        Pose set by position / lookAt / rotation / FOV. Tween presets to jump to common framings;
-        switch to Fly (F) or Orbit (G) for motion.
-      </div>
-    </div>
-  );
-}
-
-function OrbitPauseBadge() {
-  const paused = useSceneStore((s) => s.orbitPaused);
+// Pause/resume in the panel header. Contextual: in Orbit it pauses the camera
+// auto-revolution (orbitPaused); in Top-down — a static pose — it freezes the
+// scene animation clock (paused) so traffic / twinkle / flicker hold. Hidden in
+// Fly (you're driving manually). Replaces the old per-mode detail box.
+function HeaderPauseButton({ tab }: { tab: CameraTab }) {
+  const orbitPaused = useSceneStore((s) => s.orbitPaused);
   const setOrbitPaused = useSceneStore((s) => s.setOrbitPaused);
+  const paused = useSceneStore((s) => s.paused);
+  const setPaused = useSceneStore((s) => s.setPaused);
+  if (tab === "fly") return null;
+  const isOrbit = tab === "orbit";
+  const active = isOrbit ? orbitPaused : paused;
+  const toggle = () => (isOrbit ? setOrbitPaused(!orbitPaused) : setPaused(!paused));
+  const what = isOrbit ? "orbit revolution" : "scene animation";
   return (
     <Button
-      variant="secondary"
       size="sm"
-      onClick={() => setOrbitPaused(!paused)}
-      title="Pause / resume orbit auto-revolution (Space)"
+      onClick={toggle}
+      title={active ? `Resume ${what}${isOrbit ? " (Space)" : ""}` : `Pause ${what}${isOrbit ? " (Space)" : ""}`}
+      aria-label={active ? `Resume ${what}` : `Pause ${what}`}
       className={cn(
-        paused
-          ? "bg-sky-400 text-black hover:bg-sky-400"
-          : "bg-foreground/10 text-foreground/80 hover:bg-foreground/20",
+        "min-w-[5.5rem] gap-1.5 font-medium",
+        active
+          ? "bg-emerald-400 text-black hover:bg-emerald-400/90"
+          : "bg-sky-400 text-black hover:bg-sky-400/90",
       )}
     >
-      {paused ? "▶ resume" : "⏸ pause"}
+      {active ? "▶ Resume" : "⏸ Pause"}
     </Button>
   );
 }

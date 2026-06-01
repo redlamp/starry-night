@@ -11,13 +11,13 @@ import {
 
 /**
  * Low atmospheric band near the city horizon. Sits as the inner surface of a
- * sphere centred on the orbit centre, so it's visible from any camera angle.
- * Vertical alpha gradient confines it to a band between bottomY and topY.
+ * sphere centred on the world origin — the same centre + radius as the ground
+ * disc (both `1500 × CITY_SCALE`) so their edges align. Vertical alpha gradient
+ * confines it to a band between bottomY and topY.
  */
 export function GroundHaze() {
   const meshRef = useRef<THREE.Mesh>(null);
   const haze = useSceneStore((s) => s.haze);
-  const orbit = useSceneStore((s) => s.orbit);
 
   const material = useMemo(
     () =>
@@ -45,11 +45,8 @@ export function GroundHaze() {
   }, [material]);
 
   useFrame(() => {
-    if (!meshRef.current) return;
-    const s = useSceneStore.getState();
-    const h = s.haze;
-    meshRef.current.position.set(s.orbit.centerX, 0, s.orbit.centerZ);
-    meshRef.current.visible = h.enabled;
+    const h = useSceneStore.getState().haze;
+    if (meshRef.current) meshRef.current.visible = h.enabled;
     if (!h.enabled) return;
     material.uniforms.uColor.value.set(h.color);
     material.uniforms.uTopY.value = h.topY;
@@ -58,12 +55,7 @@ export function GroundHaze() {
   });
 
   return (
-    <mesh
-      ref={meshRef}
-      material={material}
-      position={[orbit.centerX, 0, orbit.centerZ]}
-      visible={haze.enabled}
-    >
+    <mesh ref={meshRef} material={material} position={[0, 0, 0]} visible={haze.enabled}>
       <sphereGeometry args={[haze.radius, 32, 16]} />
     </mesh>
   );

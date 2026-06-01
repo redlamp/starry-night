@@ -55,6 +55,7 @@ void main() {
 
 const fragmentShader = /* glsl */ `
 uniform float uTime;
+uniform float uBrightness;
 varying float vDist;
 varying vec3 vColor;
 varying float vWake;
@@ -83,7 +84,7 @@ void main() {
     bright = 0.18 + n * 0.82;
   }
 
-  float intensity = pow(core, 1.4) * 1.8 * vWake * bright;
+  float intensity = pow(core, 1.4) * 1.8 * uBrightness * vWake * bright;
   gl_FragColor = vec4(vColor * intensity, core * vWake * bright);
 }
 `;
@@ -124,6 +125,7 @@ export function Streetlights({ masterSeed }: { masterSeed: string }) {
       fragmentShader,
       uniforms: {
         uBaseSize: { value: 6 },
+        uBrightness: { value: 1 },
         uPixelRatio: {
           value: typeof window !== "undefined" ? Math.min(window.devicePixelRatio, 2) : 1,
         },
@@ -145,6 +147,9 @@ export function Streetlights({ masterSeed }: { masterSeed: string }) {
     const s = useSceneStore.getState();
     material.uniforms.uIntroCityCenter.value.set(s.orbit.centerX, 0, s.orbit.centerZ);
     material.uniforms.uIntroMaxRadius.value = maxRadius;
+    // size + brightness are live multipliers (no regen) — base sprite is 6px.
+    material.uniforms.uBaseSize.value = 6 * s.streetlights.size;
+    material.uniforms.uBrightness.value = s.streetlights.brightness;
   });
 
   if (!enabled) return null;

@@ -94,10 +94,10 @@ export type OrbitConfig = {
 export const DEFAULT_ORBIT: OrbitConfig = {
   centerX: 0,
   centerZ: -120,
-  lookAtY: 130,
+  lookAtY: 240,
   radius: 2400 * CITY_SCALE,
-  azimuthDeg: 6,
-  elevationDeg: 9,
+  azimuthDeg: 0,
+  elevationDeg: 6,
   periodSec: 1800,
 };
 
@@ -162,19 +162,20 @@ export const DEFAULT_MOON_HALO = { radiusMul: 2.5, innerRadius: 0.05, intensity:
 export const DEFAULT_FOG = {
   enabled: true,
   mode: "linear" as const,
-  color: "#0a1838",
-  near: 2400 * CITY_SCALE,
-  far: 6400 * CITY_SCALE,
+  color: "#0b0d14",
+  near: 2400 * CITY_SCALE, // 4800 at City
+  far: 3600 * CITY_SCALE, // 7200 at City
   density: 0.0006,
 };
 
 export const DEFAULT_HAZE = {
   enabled: true,
   color: "#1b2641",
-  topY: 360 * CITY_SCALE,
-  bottomY: -15 * CITY_SCALE,
-  intensity: 1.1,
-  radius: 1450 * CITY_SCALE,
+  // Vertical extents are absolute (heights don't scale with city width — #47).
+  topY: 240,
+  bottomY: -30,
+  intensity: 1,
+  radius: 1500 * CITY_SCALE, // 3000 at City
 };
 
 // Intro wake-up sequence defaults. Durations are the "Default" speed preset
@@ -184,9 +185,9 @@ export const DEFAULT_INTRO = {
   progress: 0,
   playing: false,
   durationSec: 240,
-  // Streetlights wake on their own (much shorter) timeline so they don't take
-  // the full multi-minute window wake to appear.
-  streetlightDurationSec: 24,
+  // Streetlights wake on their own (shorter) timeline so they don't take the
+  // full multi-minute window wake to appear.
+  streetlightDurationSec: 60,
   mode: "random" as "random" | "district" | "outside-in" | "far-to-near" | "inside-out",
   offCycleSec: 90,
   retriggerSec: 45,
@@ -195,7 +196,7 @@ export const DEFAULT_INTRO = {
 export const DEFAULT_STAR_INTRO = {
   progress: 0,
   playing: false,
-  durationSec: 360,
+  durationSec: 240,
   mode: "random" as "random" | "bright-first" | "horizon-first" | "zenith-first",
 };
 
@@ -243,12 +244,16 @@ export const DEBUG_WIRE_COLOR = "#4d9fff";
 export const DEFAULT_TRAFFIC = { enabled: true, density: 1, highway: 4, arterial: 2, minor: 1 };
 
 // Streetlights along the road network. On by default; toggled from the Roads panel.
-export const DEFAULT_STREETLIGHTS = { enabled: true };
+// `size` scales the point sprite (×base 6 px); `brightness` scales emissive gain.
+// Defaults dialled below 1.0 — on high-DPR mobile the sprite pinned the clamp
+// ceiling and read too large/hot.
+export const DEFAULT_STREETLIGHTS = { enabled: true, size: 0.8, brightness: 0.85 };
 
-// Organic city footprint (#14). `square` = the original full-square field (safe
-// default, byte-identical). `auto` lets each seed pick its own shape; the other
-// values force one shape (the debug switcher). See lib/seed/cityShape.ts.
-export const DEFAULT_CITY_SHAPE: CityShapeSetting = "square";
+// Organic city footprint (#14). `circle` is the default look — a round footprint
+// masked over the fixed square layout. `square` = the original full-square field
+// (byte-identical no-op mask). `auto` lets each seed pick its own shape; the
+// other values force one shape (the debug switcher). See lib/seed/cityShape.ts.
+export const DEFAULT_CITY_SHAPE: CityShapeSetting = "circle";
 // Circle-mask radius as a fraction of the city half-extent. 1.0 touches the
 // square's edge midpoints; ~1.4 reaches the corners (full content). Only affects
 // the `circle` shape. Tunable via the City shape size slider.
