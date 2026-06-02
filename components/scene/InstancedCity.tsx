@@ -305,7 +305,11 @@ function buildMeshes(
       aDebugDistrictColor[i * 3 + 2] = color.b;
 
       position.set(b.x, b.height / 2, b.z);
-      euler.set(0, b.rotationY, 0);
+      // rotationY = atan2(uz, ux) is the road-aligned bearing (matches the /plan
+      // canvas, which is y-down). Three's Y-up right-handed frame rotates the
+      // opposite way, so the sign is negated here to keep footprints square to
+      // the roads instead of mirrored about Z (which made them clip curved roads).
+      euler.set(0, -b.rotationY, 0);
       quaternion.setFromEuler(euler);
       scale.set(b.width, b.height, b.depth);
       matrix.compose(position, quaternion, scale);
