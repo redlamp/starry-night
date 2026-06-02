@@ -986,9 +986,14 @@ export type AviationBeacon = {
 };
 
 // Real-world obstruction lights sit on structures tall enough to threaten
-// flight paths. Gate on absolute height so only genuine skyscrapers get a red
-// beacon — a short city has none, which is correct.
+// flight paths AND tall enough to stand out locally — aviation rules light the
+// prominent obstruction, not every tall building. Gate on absolute height, then
+// keep only the tallest building per local cluster cell (#48). A short city has
+// no beacons (correct); a dense downtown lights its standout towers, not every
+// mid-rise. Cluster size is a fixed real-world distance (NOT scaled with city
+// width) — a bigger city just has more clusters, so proportionally more beacons.
 const BEACON_MIN_HEIGHT = 100;
+const BEACON_CLUSTER_SIZE = 300; // m — neighbourhood cell for the tallest-tower rule
 
 export function generateAviationBeacons(
   rawSeed: string,
@@ -996,10 +1001,19 @@ export function generateAviationBeacons(
   shapeScale = 1,
 ): AviationBeacon[] {
   const { buildings } = generateCity(rawSeed, shape, shapeScale);
-  const rng = seedrandom(`${rawSeed}::beacons`);
-  const beacons: AviationBeacon[] = [];
+  // Tallest qualifying building per cluster cell. Map keeps first-insertion key
+  // order, and buildings are iterated in deterministic array order, so the
+  // emitted set + phase assignment below stay deterministic.
+  const tallestPerCell = new Map<string, (typeof buildings)[number]>();
   for (const b of buildings) {
     if (b.height < BEACON_MIN_HEIGHT) continue;
+    const key = `${Math.floor(b.x / BEACON_CLUSTER_SIZE)},${Math.floor(b.z / BEACON_CLUSTER_SIZE)}`;
+    const cur = tallestPerCell.get(key);
+    if (!cur || b.height > cur.height) tallestPerCell.set(key, b);
+  }
+  const rng = seedrandom(`${rawSeed}::beacons`);
+  const beacons: AviationBeacon[] = [];
+  for (const b of tallestPerCell.values()) {
     beacons.push({ x: b.x, y: b.height + 3, z: b.z, phase: rng() });
   }
   return beacons;
