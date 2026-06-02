@@ -35,11 +35,20 @@ where they cross. Each idea reinforces the others:
 |---|---|---|---|---|
 | **Urban core** | dense grid, tall archetypes | high density, small blocks | tight grid + arterials | continuous, bright |
 | **Suburban ring** | curvilinear "kidney-bean" subdivisions | low density, big curvy blocks | **tighter-grain field + wider street spacing** | sparse |
-| **Undeveloped fringe** | mostly empty, occasional cluster | very sparse / none | freeways + a few arterials only | dark, key points |
+| **Rural / boonies** | open, occasional cluster or lone structure | very sparse → near-zero | **highways + sparse local streets; arterials suppressed** | very dark, key points only |
+| **Undeveloped fringe** | empty land the city hasn't reached | none | a highway may pass through; otherwise empty | unlit |
 
 The transition follows the (irregular) **district** layout, not a perfect radius — so
-the core→suburb→fringe fade reads organic. Density is a per-district scalar derived
-from district centroid radius + seed jitter.
+the core→suburb→rural→fringe fade reads organic. Density is a per-district scalar
+derived from district centroid radius + seed jitter, mapped to band thresholds.
+
+**Road tier by band (the rural rule).** Arterials are the *urban* backbone — they
+taper out as density drops. So the outer bands are **crossed by highways and sparse
+local streets, but few-to-no arterials** (user: rural areas are "run through by highway
+or streets, but less likely to have arterials"). Highways span every band (they're the
+cross-town backbone, Stage 1); local streets thin out; arterial generation is gated by
+district density and effectively zero in rural/fringe. Buildings and streetlamps scale
+the same way — near-zero structures, very sparse lamps far out.
 
 ## Kidney-bean suburbs — the "tighter grain" nuance
 

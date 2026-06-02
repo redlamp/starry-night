@@ -1229,7 +1229,7 @@ function DebugSection() {
         onChange={(v) => setCityShape(v as CityShapeSetting)}
       />
       <ValueSlider
-        label="size"
+        label="crop"
         value={cityShapeScale}
         min={0.4}
         max={1.4}
@@ -1237,8 +1237,9 @@ function DebugSection() {
         onChange={setCityShapeScale}
       />
       <div className="text-foreground/45 text-[11px] leading-snug">
-        Footprint mask. auto = each seed picks; square = full field. size scales the circle
-        radius (1.0 ≈ map edges, 1.4 ≈ corners). Changing either regenerates the city.
+        Footprint mask. auto = each seed picks; square = full field. crop scales the kept
+        circle radius (1.0 ≈ map edges, 1.4 ≈ corners) — it does NOT change the city&apos;s
+        extent or density, only how much is kept. Changing either regenerates the city.
       </div>
 
       <SubHeader label="Building tint" />
