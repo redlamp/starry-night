@@ -777,6 +777,31 @@ const LOCAL_FALLBACK_KELVIN: [number, number] = [2900, 3300]; // off-district ce
 const HIGHWAY_ARTERIAL_KELVIN: [number, number] = [3900, 4250]; // uniform cool white
 const FAILURE_RATE = 0.025; // fraction of local lights that flicker as failing
 
+// Per-side spacing guards (#46). The centreline is stepped evenly, but after the
+// perpendicular offset the inner side of a curve compresses toward the curve
+// centre while the outer side spreads. Measured in WORLD distance per side,
+// these clamp the result: skip a candidate that lands closer than MIN_SPACING_FRAC
+// of the tier spacing (kills inner-curve bunching), and insert one interpolated
+// lamp when a gap exceeds MAX_SPACING_FRAC (caps outer-curve thinning). Fractions
+// are tuned so straight roads — where offset lamps keep the centreline spacing —
+// are visually unchanged.
+const MIN_SPACING_FRAC = 0.6;
+const MAX_SPACING_FRAC = 1.6;
+
+// Global de-bunch (#46). The per-side guard above only sees one road; the worst
+// bunching is CROSS-road — lamps from different polylines piling up at
+// intersections, roundabouts, and the dense criss-cross core (measured: ~1.5–2.6k
+// lamps/seed with a neighbour < 8 m, hundreds within 2 m). After all tiers emit,
+// drop any lamp within STREETLIGHT_MIN_DIST of an already-kept lamp. 8 m sits
+// safely below the ~12–13 m two-sides-of-a-street pair distance, so legitimate
+// paired lamps survive while coincident pile-ups collapse to one. Lamps are
+// processed highway → arterial → local, so main-road lamps win a conflict.
+// Set to the grid's own two-sides-of-a-street pair distance (~12 m): the grid is
+// already that dense, so it's untouched, while denser cross-road convergence
+// (radial hubs, concentric rings, intersections) collapses to match it — even
+// density everywhere. Just under the pair distance so paired lamps survive.
+const STREETLIGHT_MIN_DIST = 11.5;
+
 function bandPick(rng: () => number, band: readonly [number, number]): number {
   return band[0] + rng() * (band[1] - band[0]);
 }
@@ -794,6 +819,28 @@ function emitRoadLights(
   const verts = road.vertices;
   const last = road.closed ? verts.length : verts.length - 1;
   const offset = road.width / 2 + 2;
+  const minDist = spacing * MIN_SPACING_FRAC;
+  const maxDist = spacing * MAX_SPACING_FRAC;
+  // Last KEPT lamp position per side (-1 → index 0, +1 → index 1), used to clamp
+  // the post-offset world spacing. null until each side's first lamp is placed.
+  const lastBySide: ([number, number] | null)[] = [null, null];
+
+  // Push one lamp, do its rng draws (y-jitter, kelvin, isFailing) in the fixed
+  // order, and record it as this side's last kept position. rng is only consumed
+  // here, so skipped candidates never advance the stream — the draw order across
+  // kept lamps is identical run-to-run (determinism contract / gate1).
+  const place = (lx: number, lz: number, sideIdx: number) => {
+    out.push({
+      x: lx,
+      y: 7 + (rng() - 0.5) * 0.4,
+      z: lz,
+      kelvin: pickKelvin(lx, lz),
+      isFailing: rng() < FAILURE_RATE,
+      tier,
+    });
+    lastBySide[sideIdx] = [lx, lz];
+  };
+
   // Walk arc-length across the WHOLE polyline, dropping a light every `spacing`
   // metres. Tensor roads are RK4-sampled at ~4m, so a per-segment emitter would
   // never fire (spacing >> segment length) — accumulate across the segment seams.
@@ -811,21 +858,67 @@ function emitRoadLights(
     while (nextAt <= acc + segLen) {
       const s = nextAt - acc; // distance into this segment
       for (const side of [-1, 1] as const) {
+        const sideIdx = side < 0 ? 0 : 1;
         const lx = a.x + ux * s + nx * offset * side;
         const lz = a.z + uz * s + nz * offset * side;
-        out.push({
-          x: lx,
-          y: 7 + (rng() - 0.5) * 0.4,
-          z: lz,
-          kelvin: pickKelvin(lx, lz),
-          isFailing: rng() < FAILURE_RATE,
-          tier,
-        });
+        const prev = lastBySide[sideIdx];
+        if (prev) {
+          const d = Math.hypot(lx - prev[0], lz - prev[1]);
+          // Inner-curve bunching: candidate too close to the previous lamp — skip
+          // it (and its rng draws) so the visible spacing never collapses.
+          if (d < minDist) continue;
+          // Outer-curve thinning: gap too wide — drop one interpolated lamp at the
+          // midpoint first, then place the candidate. Midpoint of two offset
+          // points stays on the offset line for straight runs and is a clean,
+          // deterministic cap on the worst gaps.
+          if (d > maxDist) {
+            place((prev[0] + lx) / 2, (prev[1] + lz) / 2, sideIdx);
+          }
+        }
+        place(lx, lz, sideIdx);
       }
       nextAt += spacing;
     }
     acc += segLen;
   }
+}
+
+// Global de-bunch pass: keep a lamp only if no already-kept lamp sits within
+// `minDist`. Deterministic — input order (highway → arterial → local) decides
+// which lamp wins, so main-road lamps survive over crowding local ones. Spatial
+// hash with cell = minDist; a conflicting lamp can only be in the same or an
+// adjacent cell, so a ±1 cell scan is exhaustive.
+function dedupeByMinDistance(lights: Streetlight[], minDist: number): Streetlight[] {
+  const cell = minDist;
+  const min2 = minDist * minDist;
+  const grid = new Map<string, Streetlight[]>();
+  const out: Streetlight[] = [];
+  for (const l of lights) {
+    const cx = Math.floor(l.x / cell);
+    const cz = Math.floor(l.z / cell);
+    let tooClose = false;
+    for (let gx = cx - 1; gx <= cx + 1 && !tooClose; gx++) {
+      for (let gz = cz - 1; gz <= cz + 1 && !tooClose; gz++) {
+        const bucket = grid.get(`${gx},${gz}`);
+        if (!bucket) continue;
+        for (const o of bucket) {
+          const dx = l.x - o.x;
+          const dz = l.z - o.z;
+          if (dx * dx + dz * dz < min2) {
+            tooClose = true;
+            break;
+          }
+        }
+      }
+    }
+    if (tooClose) continue;
+    out.push(l);
+    const k = `${cx},${cz}`;
+    const bucket = grid.get(k);
+    if (bucket) bucket.push(l);
+    else grid.set(k, [l]);
+  }
+  return out;
 }
 
 // Tensor streetlights (Stage 1): edge lights along every road tier. Local
@@ -863,10 +956,12 @@ function generateStreetlightsTensor(
   for (const s of minorStreets) {
     emitRoadLights(minRng, s, "local", (x, z) => bandPick(minRng, localBand(x, z)), 40, lights);
   }
+  // De-bunch across all tiers before clipping to the footprint mask.
+  const deduped = dedupeByMinDistance(lights, STREETLIGHT_MIN_DIST);
   const resolved = resolveCityShape(shape, masterSeed);
-  if (resolved === "square") return lights;
+  if (resolved === "square") return deduped;
   const mask = makeShapeMask(resolved, shapeScale);
-  return lights.filter((l) => mask(l.x, l.z) >= 0.5);
+  return deduped.filter((l) => mask(l.x, l.z) >= 0.5);
 }
 
 export function generateStreetlights(

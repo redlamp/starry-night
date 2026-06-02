@@ -9,6 +9,7 @@ import {
   dropRadialSpokes,
 } from "@/lib/seed/cityGen";
 import { useSceneStore } from "@/lib/state/sceneStore";
+import { useGeneratedCity } from "@/lib/hooks/useGeneratedCity";
 
 export type PlanLayers = {
   districts: boolean;
@@ -30,18 +31,28 @@ export function PlanView({ seed, size, layers }: Props) {
   const cityShape = useSceneStore((s) => s.cityShape);
   const cityShapeScale = useSceneStore((s) => s.cityShapeScale);
 
+  // #44: the /plan grid renders up to 64 tiles, each a cold city generation for a
+  // distinct seed. Warming each tile's cache on an idle callback staggers that
+  // work across frames instead of blocking the main thread in one ~64×200ms wall
+  // on mount. `data` + the draw stay gated on `ready` so we never touch the cache
+  // before it is warm.
+  const { ready } = useGeneratedCity(seed, cityShape, cityShapeScale);
+
   const data = useMemo(() => {
+    if (!ready) return null;
     // Tensor is the only city model. Districts follow the arterial network
     // (built inside generateCity); read that exact field + roads so the overlay
-    // matches where the buildings were placed.
+    // matches where the buildings were placed. The cache is warm here, so these
+    // all return synchronously.
     const topo = dropRadialSpokes(generateTopology(seed));
     const field = tensorDistrictField(seed);
     const city = generateCity(seed, cityShape, cityShapeScale);
     const lights = generateStreetlights(seed, cityShape, cityShapeScale);
     return { topo, field, city, lights };
-  }, [seed, cityShape, cityShapeScale]);
+  }, [ready, seed, cityShape, cityShapeScale]);
 
   useEffect(() => {
+    if (!data) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const dpr = window.devicePixelRatio || 1;
