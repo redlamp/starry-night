@@ -12,6 +12,7 @@ Top-level Map of Content. See `CLAUDE.md` for conventions.
 
 - [[projects/v1-still-frame]] — Milestone 1: the still composition *(stub)*
 - [[projects/stage-1-streets-first]] — M2: streets-first city generation, file-level migration plan
+- [[settings-ia-evaluation]] — settings-panel IA evaluation + 5 layout proposals (incl. drag-drop `/studio`)
 
 ## Daily
 

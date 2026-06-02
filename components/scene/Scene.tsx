@@ -23,14 +23,24 @@ import { Roads } from "./Roads";
 import { DistrictShells } from "./DistrictShells";
 import { TensorFieldOverlay } from "./TensorFieldOverlay";
 import { Traffic } from "./Traffic";
+import { useGeneratedCity } from "@/lib/hooks/useGeneratedCity";
 
 export function Scene() {
   const masterSeed = useSceneStore((s) => s.masterSeed);
+  const cityShape = useSceneStore((s) => s.cityShape);
+  const cityShapeScale = useSceneStore((s) => s.cityShapeScale);
   const intent = useSceneStore((s) => s.cameraIntent);
   const stars = useSceneStore((s) => s.stars);
   const fog = useSceneStore((s) => s.fog);
   const qualityTier = useSceneStore((s) => s.qualityTier);
   const dprMax = QUALITY_TIERS[qualityTier].dprMax;
+
+  // #44: warm the heavy city-generation cache off the mount-critical path. The
+  // canvas + sky / stars / moon / ground mount immediately; the city-derived
+  // layers stream in one idle tick later, once their shared seeded cache is warm
+  // (so each renders synchronously). Determinism is unaffected — same seed in,
+  // byte-identical city out, just scheduled after first paint.
+  const { ready: cityReady } = useGeneratedCity(masterSeed, cityShape, cityShapeScale);
 
   return (
     <Canvas
@@ -71,15 +81,23 @@ export function Scene() {
 
       <Moon />
       <Ground />
-      <Roads masterSeed={masterSeed} />
-      <InstancedCity masterSeed={masterSeed} />
-      <Streetlights masterSeed={masterSeed} />
-      <Beacons masterSeed={masterSeed} />
-      <Traffic masterSeed={masterSeed} />
-      {/* Planning overlays — each respects its own visibility flag (default off).
-          Highway/arterial/street tier tinting now lives in <Roads/>. */}
-      <DistrictShells masterSeed={masterSeed} />
-      <TensorFieldOverlay masterSeed={masterSeed} />
+      {/* City-derived layers: held back until the seeded generation cache is warm
+          (#44) so the first mount frame paints the sky/ground without the ~200ms
+          generation stall. Once cityReady flips, every generator below hits the
+          warm cache and runs synchronously. */}
+      {cityReady ? (
+        <>
+          <Roads masterSeed={masterSeed} />
+          <InstancedCity masterSeed={masterSeed} />
+          <Streetlights masterSeed={masterSeed} />
+          <Beacons masterSeed={masterSeed} />
+          <Traffic masterSeed={masterSeed} />
+          {/* Planning overlays — each respects its own visibility flag (default
+              off). Highway/arterial/street tier tinting now lives in <Roads/>. */}
+          <DistrictShells masterSeed={masterSeed} />
+          <TensorFieldOverlay masterSeed={masterSeed} />
+        </>
+      ) : null}
       <FocalIndicator />
     </Canvas>
   );
