@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Slider } from "@/components/ui/slider";
 
 // Sorted largest feature → smallest, per the requested order.
 const LAYER_KEYS: (keyof PlanLayers)[] = [
@@ -28,22 +29,26 @@ const LAYER_ICONS: Record<keyof PlanLayers, React.ReactNode> = {
   streetlights: <Lightbulb size={16} />,
 };
 
-const CELL_SIZE = 320;
+const DEFAULT_CELL_SIZE = 320;
+const DEFAULT_COUNT = 8;
 const TILE_GAP = 12;
 
 export default function PlanPage() {
   const [baseSeed, setBaseSeed] = useState("plan");
-  const [seedCount, setSeedCount] = useState(16);
-  const [autoFill, setAutoFill] = useState(true);
+  const [seedCount, setSeedCount] = useState(DEFAULT_COUNT);
+  const [autoFill, setAutoFill] = useState(false);
+  const [cellSize, setCellSize] = useState(DEFAULT_CELL_SIZE);
   const [layers, setLayers] = useState<PlanLayers>({
     districts: true,
     buildings: true,
     highways: true,
     arterials: true,
     streets: true,
-    streetlights: true,
+    streetlights: false,
   });
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const zoomRef = useRef<HTMLDivElement>(null);
 
   // Measure the toolbar's viewport-bottom + window size so the tile grid can
   // auto-fill and the lightbox can pin the square plan to the smaller side.
@@ -64,8 +69,8 @@ export default function PlanPage() {
   // Auto-fill: enough tiles to cover the area below the toolbar — cols floor so
   // the row never h-scrolls, rows ceil so there's no empty band at the bottom.
   // Editing `count` switches to a manual override; the Fill button re-enables it.
-  const cols = Math.max(1, Math.floor((vp.w - 32) / (CELL_SIZE + TILE_GAP)));
-  const rows = Math.max(1, Math.ceil((vp.h - barBottom - 24) / (CELL_SIZE + TILE_GAP)));
+  const cols = Math.max(1, Math.floor((vp.w - 32) / (cellSize + TILE_GAP)));
+  const rows = Math.max(1, Math.ceil((vp.h - barBottom - 24) / (cellSize + TILE_GAP)));
   const fillCount = Math.min(64, cols * rows);
   const effectiveCount = autoFill ? fillCount : seedCount;
 
@@ -75,19 +80,48 @@ export default function PlanPage() {
   const seeds = Array.from({ length: effectiveCount }, (_, i) => seedFor(i));
   const activeSeed = activeIndex !== null ? seedFor(activeIndex) : null;
 
+  // Lightbox square: fill the area below the toolbar, pinning the smaller side
+  // (−~44px header, −48px padding) so the whole panel stays on screen.
+  const lightboxSize = Math.max(240, Math.floor(Math.min(vp.w - 48, vp.h - barBottom - 100)));
+
   // Lightbox keyboard nav: Esc closes, Left/Right step (wrapping) through tiles.
   useEffect(() => {
     if (activeIndex === null) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setActiveIndex(null);
-      else if (e.key === "ArrowRight")
+      else if (e.key === "ArrowRight") {
         setActiveIndex((i) => (i === null ? i : (i + 1) % effectiveCount));
-      else if (e.key === "ArrowLeft")
+        setZoom(1);
+      } else if (e.key === "ArrowLeft") {
         setActiveIndex((i) => (i === null ? i : (i - 1 + effectiveCount) % effectiveCount));
+        setZoom(1);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [activeIndex, effectiveCount]);
+
+  // Lightbox wheel-zoom. Native non-passive listener so preventDefault actually
+  // blocks page scroll (React's onWheel is passive). The plan re-renders at a
+  // larger pixel size (crisp, not CSS-upscaled); the scroll container recenters
+  // on each step so the city stays centred. Zoom is reset to 1 wherever the
+  // active tile changes (tile-open + arrow-nav), so no set-state-in-effect.
+  useEffect(() => {
+    const el = zoomRef.current;
+    if (el === null || activeIndex === null) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      setZoom((z) => Math.min(4, Math.max(1, z * (e.deltaY < 0 ? 1.15 : 1 / 1.15))));
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [activeIndex]);
+  useEffect(() => {
+    const el = zoomRef.current;
+    if (el === null) return;
+    el.scrollLeft = (el.scrollWidth - el.clientWidth) / 2;
+    el.scrollTop = (el.scrollHeight - el.clientHeight) / 2;
+  }, [zoom, lightboxSize, activeIndex]);
 
   function toggleLayer(key: keyof PlanLayers) {
     setLayers((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -96,10 +130,6 @@ export default function PlanPage() {
   function reroll() {
     setBaseSeed(Math.random().toString(36).slice(2, 8));
   }
-
-  // Lightbox square: fill the area below the toolbar, pinning the smaller side
-  // (−~44px header, −48px padding) so the whole panel stays on screen.
-  const lightboxSize = Math.max(240, Math.floor(Math.min(vp.w - 48, vp.h - barBottom - 100)));
 
   return (
     <main
@@ -170,6 +200,20 @@ export default function PlanPage() {
               {key}
             </Label>
           ))}
+          <Label className="ml-auto flex min-w-[16rem] flex-1 items-center gap-2 text-sm text-zinc-300">
+            size
+            <Slider
+              min={160}
+              max={640}
+              step={20}
+              value={cellSize}
+              onValueChange={(v) => setCellSize(typeof v === "number" ? v : v[0])}
+              className="flex-1"
+            />
+            <span className="w-9 shrink-0 text-right font-mono text-xs text-zinc-400 tabular-nums">
+              {cellSize}
+            </span>
+          </Label>
         </div>
       </div>
 
@@ -177,13 +221,16 @@ export default function PlanPage() {
         {seeds.map((seed, i) => (
           <button
             key={seed}
-            onClick={() => setActiveIndex(i)}
+            onClick={() => {
+              setActiveIndex(i);
+              setZoom(1);
+            }}
             className="cursor-zoom-in overflow-hidden rounded border border-zinc-800 transition-colors hover:border-sky-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400"
-            style={{ width: CELL_SIZE, height: CELL_SIZE }}
+            style={{ width: cellSize, height: cellSize }}
             title={`Click to enlarge: ${seed}`}
             aria-label={`Enlarge seed ${seed}`}
           >
-            <PlanView seed={seed} size={CELL_SIZE} layers={layers} />
+            <PlanView seed={seed} size={cellSize} layers={layers} />
           </button>
         ))}
       </div>
@@ -206,16 +253,34 @@ export default function PlanPage() {
             >
               <div className="flex shrink-0 items-center justify-between border-b border-zinc-800 px-3 py-2">
                 <span className="font-mono text-sm text-zinc-300">{activeSeed}</span>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() => setActiveIndex(null)}
-                  aria-label="Close"
-                >
-                  <X size={16} />
-                </Button>
+                <div className="flex items-center gap-2">
+                  <span
+                    className="font-mono text-xs tabular-nums text-zinc-500"
+                    title="Scroll to zoom"
+                  >
+                    {Math.round(zoom * 100)}%
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => setActiveIndex(null)}
+                    aria-label="Close"
+                  >
+                    <X size={16} />
+                  </Button>
+                </div>
               </div>
-              <PlanView seed={activeSeed} size={lightboxSize} layers={layers} />
+              <div
+                ref={zoomRef}
+                className="overflow-auto"
+                style={{ width: lightboxSize, height: lightboxSize }}
+              >
+                <PlanView
+                  seed={activeSeed}
+                  size={Math.round(lightboxSize * zoom)}
+                  layers={layers}
+                />
+              </div>
             </div>
           </div>
         </>
