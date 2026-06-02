@@ -49,6 +49,7 @@ export default function PlanPage() {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [zoom, setZoom] = useState(1);
   const zoomRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{ x: number; y: number; sl: number; st: number } | null>(null);
 
   // Measure the toolbar's viewport-bottom + window size so the tile grid can
   // auto-fill and the lightbox can pin the square plan to the smaller side.
@@ -80,9 +81,12 @@ export default function PlanPage() {
   const seeds = Array.from({ length: effectiveCount }, (_, i) => seedFor(i));
   const activeSeed = activeIndex !== null ? seedFor(activeIndex) : null;
 
-  // Lightbox square: fill the area below the toolbar, pinning the smaller side
-  // (−~44px header, −48px padding) so the whole panel stays on screen.
-  const lightboxSize = Math.max(240, Math.floor(Math.min(vp.w - 48, vp.h - barBottom - 100)));
+  // Lightbox: a window-filling rectangular panel below the toolbar. The (square)
+  // plan fits the smaller axis at zoom 1; `baseSize × zoom` is the rendered pixel
+  // size, panned/zoomed inside the rectangle.
+  const lbAvailW = Math.max(240, vp.w - 32); // overlay p-4 (16px) each side
+  const lbAvailH = Math.max(240, vp.h - barBottom - 32 - 44); // − padding − header
+  const baseSize = Math.floor(Math.min(lbAvailW, lbAvailH));
 
   // Lightbox keyboard nav: Esc closes, Left/Right step (wrapping) through tiles.
   useEffect(() => {
@@ -121,7 +125,7 @@ export default function PlanPage() {
     if (el === null) return;
     el.scrollLeft = (el.scrollWidth - el.clientWidth) / 2;
     el.scrollTop = (el.scrollHeight - el.clientHeight) / 2;
-  }, [zoom, lightboxSize, activeIndex]);
+  }, [zoom, baseSize, activeIndex]);
 
   function toggleLayer(key: keyof PlanLayers) {
     setLayers((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -129,6 +133,26 @@ export default function PlanPage() {
 
   function reroll() {
     setBaseSeed(Math.random().toString(36).slice(2, 8));
+  }
+
+  // Drag-to-pan inside the zoomed lightbox (pointer events → mouse + touch).
+  function onPanDown(e: React.PointerEvent<HTMLDivElement>) {
+    const el = zoomRef.current;
+    if (el === null) return;
+    dragRef.current = { x: e.clientX, y: e.clientY, sl: el.scrollLeft, st: el.scrollTop };
+    el.setPointerCapture(e.pointerId);
+  }
+  function onPanMove(e: React.PointerEvent<HTMLDivElement>) {
+    const el = zoomRef.current;
+    const d = dragRef.current;
+    if (el === null || d === null) return;
+    el.scrollLeft = d.sl - (e.clientX - d.x);
+    el.scrollTop = d.st - (e.clientY - d.y);
+  }
+  function onPanUp(e: React.PointerEvent<HTMLDivElement>) {
+    const el = zoomRef.current;
+    if (el !== null && el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
+    dragRef.current = null;
   }
 
   return (
@@ -243,12 +267,12 @@ export default function PlanPage() {
         <>
           <div className="fixed inset-0 z-40 bg-black/75 backdrop-blur-sm" aria-hidden />
           <div
-            className="fixed inset-x-0 bottom-0 z-50 flex items-center justify-center p-6"
+            className="fixed inset-x-0 bottom-0 z-50 flex p-4"
             style={{ top: barBottom }}
             onClick={() => setActiveIndex(null)}
           >
             <div
-              className="relative flex flex-col overflow-hidden rounded-lg border border-zinc-700 bg-[#0b1020] shadow-2xl"
+              className="relative flex w-full flex-1 flex-col overflow-hidden rounded-lg border border-zinc-700 bg-[#0b1020] shadow-2xl"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex shrink-0 items-center justify-between border-b border-zinc-800 px-3 py-2">
@@ -256,7 +280,7 @@ export default function PlanPage() {
                 <div className="flex items-center gap-2">
                   <span
                     className="font-mono text-xs tabular-nums text-zinc-500"
-                    title="Scroll to zoom"
+                    title="Scroll to zoom · drag to pan"
                   >
                     {Math.round(zoom * 100)}%
                   </span>
@@ -272,14 +296,19 @@ export default function PlanPage() {
               </div>
               <div
                 ref={zoomRef}
-                className="overflow-auto"
-                style={{ width: lightboxSize, height: lightboxSize }}
+                onPointerDown={onPanDown}
+                onPointerMove={onPanMove}
+                onPointerUp={onPanUp}
+                onPointerCancel={onPanUp}
+                className="min-h-0 flex-1 cursor-grab touch-none overflow-auto select-none active:cursor-grabbing"
               >
-                <PlanView
-                  seed={activeSeed}
-                  size={Math.round(lightboxSize * zoom)}
-                  layers={layers}
-                />
+                <div className="flex min-h-full min-w-full items-center justify-center">
+                  <PlanView
+                    seed={activeSeed}
+                    size={Math.round(baseSize * zoom)}
+                    layers={layers}
+                  />
+                </div>
               </div>
             </div>
           </div>
