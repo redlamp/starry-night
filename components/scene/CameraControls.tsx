@@ -286,8 +286,11 @@ export function CameraControls() {
   const activeTouches = useRef<Map<number, { x: number; y: number }>>(new Map());
 
   const FOCAL_Y_SENSITIVITY_RATIO = 0.005; // multiplied by orbit.radius — pan scales with how far out we are
-  const LOOK_AT_Y_MIN = -200 * CITY_SCALE;
-  const LOOK_AT_Y_MAX = 2000 * CITY_SCALE;
+  // Focal Y is a VERTICAL extent — building heights are fixed across size tiers,
+  // so this range must NOT scale with city width (#47). Matches the literal panel
+  // slider range and the literal DEFAULT_ORBIT.lookAtY.
+  const LOOK_AT_Y_MIN = -200;
+  const LOOK_AT_Y_MAX = 2000;
 
   const lastWrite = useRef(0);
   const lastPaused = useRef(false);
