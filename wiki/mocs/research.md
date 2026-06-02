@@ -16,6 +16,7 @@ Map of Content for external references that shape direction.
 ## Urban planning references
 
 - [[city-planning-references]] — real-world city plan patterns (multi-grid, diagonal arterials, organic cores, geo distortion) + GIS/OSM data options
+- [[highway-network-references]] — freeway hierarchy, interchange spacing/types/footprints, ramp + curve geometry, tiered night lighting (FHWA/AASHTO/NCHRP/Caltrans/TxDOT) for #13; metric params + placement rules
 
 ## Generation techniques / math
 
