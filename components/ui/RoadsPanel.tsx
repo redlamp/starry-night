@@ -23,9 +23,25 @@ export function RoadsSection() {
   const showStreetlights = useSceneStore((s) => s.streetlights.enabled);
   const setStreetlights = useSceneStore((s) => s.setStreetlights);
 
+  const allOn = showHighways && showArterials && showStreets;
+  const anyOn = showHighways || showArterials || showStreets;
+  const highlightState: TriState = allOn ? "on" : anyOn ? "mixed" : "off";
+  // Parent click: turn all three on, unless all are already on → all off.
+  const toggleAllHighlights = () => {
+    const next = !allOn;
+    setCityPlanning({ showHighways: next, showArterials: next, showStreets: next });
+  };
+
   return (
     <>
-      <Subhead>Highlight</Subhead>
+      <div className="flex items-center justify-between gap-2">
+        <Subhead>Highlight</Subhead>
+        <TriSwitch
+          state={highlightState}
+          onClick={toggleAllHighlights}
+          label="Toggle all road highlights"
+        />
+      </div>
       <ToggleRow
         label="Highways"
         on={showHighways}
@@ -136,6 +152,46 @@ export function CityDetailsSection() {
       <div>streets</div>
       <div className="tabular-nums">{streetCount}</div>
     </div>
+  );
+}
+
+type TriState = "on" | "off" | "mixed";
+
+// Parent toggle for the three highlight tiers. base-ui Switch is binary, so this
+// is a switch-styled tri-state button: "mixed" (some-but-not-all on) centres the
+// thumb with a dimmed track.
+function TriSwitch({
+  state,
+  onClick,
+  label,
+}: {
+  state: TriState;
+  onClick: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={state === "on" ? true : state === "mixed" ? "mixed" : false}
+      aria-label={label}
+      onClick={onClick}
+      className={cn(
+        "relative inline-flex h-[18.4px] w-[32px] shrink-0 cursor-pointer items-center rounded-full border border-transparent transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
+        state === "on" && "bg-primary",
+        state === "mixed" && "bg-primary/45",
+        state === "off" && "bg-input dark:bg-input/80",
+      )}
+    >
+      <span
+        className={cn(
+          "block size-4 rounded-full bg-background transition-transform dark:bg-foreground",
+          state === "on" && "translate-x-[calc(100%-2px)] dark:bg-primary-foreground",
+          state === "mixed" && "translate-x-[7px]",
+          state === "off" && "translate-x-0",
+        )}
+      />
+    </button>
   );
 }
 
