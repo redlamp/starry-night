@@ -205,13 +205,14 @@ export function CameraControls() {
       );
     };
     const onDown = (e: KeyboardEvent) => {
+      if (isTyping()) return; // typing in a field (e.g. settings search) never drives the camera
       const currentMode = useSceneStore.getState().cameraMode;
       const k = keyOf(e);
       if (k && currentMode === "fly") {
         keys.current[k] = true;
         if (k === "space") e.preventDefault();
       }
-      if (e.repeat || isTyping()) return;
+      if (e.repeat) return;
       const key = e.key.toLowerCase();
       if (key === "f") {
         if (currentMode === "fly") enterOrbitMode();

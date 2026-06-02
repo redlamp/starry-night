@@ -14,7 +14,7 @@ import {
 import { randomSeed } from "@/lib/seed/rng";
 import { ARCHETYPE_ORDER, type Archetype } from "@/lib/seed/cityGen";
 import { CITY_SHAPES, type CityShapeSetting } from "@/lib/seed/cityShape";
-import { cn } from "@/lib/utils";
+import { cn, isTypingTarget } from "@/lib/utils";
 import {
   AppWindow,
   Bug,
@@ -34,6 +34,7 @@ import {
   RotateCcw,
   Route,
   Save,
+  Search,
   Settings,
   Sparkles,
   Sprout,
@@ -45,6 +46,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
+import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -158,6 +160,35 @@ function fmt(n: number, p = 2) {
   return n.toFixed(p);
 }
 
+// Settings search. Each accordion section carries hidden keywords so a query can
+// surface a control filed under a non-obvious section label — e.g. the tensor
+// field toggle lives under "Debug View", not "Roads". Matching is AND-over-tokens
+// against label + value + keywords; matching sections auto-expand while searching.
+const SETTINGS_SECTIONS: { value: string; label: string; keywords: string }[] = [
+  { value: "pose", label: "Camera", keywords: "position rotation fov projection orthographic perspective look at orient pose lens" },
+  { value: "orbit", label: "Orbit", keywords: "elevation azimuth radius spin speed pause center focal auto rotate" },
+  { value: "districts", label: "Districts", keywords: "shells borders outline color region zones" },
+  { value: "roads", label: "Roads", keywords: "highways arterials streets traffic cars headlights taillights planning tier ribbons network" },
+  { value: "city-details", label: "City Details", keywords: "shape circle square scale size buildings count footprint" },
+  { value: "stars", label: "Stars", keywords: "starfield twinkle sparkle color temperature density sky" },
+  { value: "moon", label: "Moon", keywords: "phase distance halo glow" },
+  { value: "fog", label: "Fog", keywords: "haze ground near far density color exp2 distance depth" },
+  { value: "windows", label: "Anti-Aliasing", keywords: "aa msaa samples smoothing jaggies moire" },
+  { value: "window-profiles", label: "Windows", keywords: "lit ratio flicker brightness emissive profiles glow building" },
+  { value: "intro", label: "Intro", keywords: "wake reveal duration streetlight stars speed animation startup" },
+  { value: "live", label: "Live readout", keywords: "position rotation fov debug telemetry" },
+  { value: "seed", label: "Seed", keywords: "reroll random refresh regenerate city" },
+  { value: "perf", label: "Performance", keywords: "fps frame rate draw calls monitor gpu" },
+  { value: "debug", label: "Debug View", keywords: "render modes wireframe hidden tensor field flow visualization overlay building tint ground" },
+];
+
+function matchSection(query: string, s: (typeof SETTINGS_SECTIONS)[number]): boolean {
+  const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (!tokens.length) return true;
+  const hay = `${s.label} ${s.value} ${s.keywords}`.toLowerCase();
+  return tokens.every((t) => hay.includes(t));
+}
+
 export function CameraPanel() {
   const {
     cameraMode,
@@ -173,10 +204,13 @@ export function CameraPanel() {
 
   const [hidden, setHidden] = useState(true);
   const [savedExists, setSavedExists] = useState(() => hasSavedConfig());
+  const [query, setQuery] = useState("");
+  const [openSections, setOpenSections] = useState<string[]>([]);
   const captureMode = useSceneStore((s) => s.captureMode);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (isTypingTarget(e)) return; // don't toggle the panel while typing in search
       if (e.key === "h" || e.key === "H") setHidden((v) => !v);
     };
     window.addEventListener("keydown", onKey);
@@ -215,6 +249,12 @@ export function CameraPanel() {
     cameraIntent.rotation[1] * RAD2DEG,
     cameraIntent.rotation[2] * RAD2DEG,
   ];
+
+  const searching = query.trim().length > 0;
+  const matchedValues = SETTINGS_SECTIONS.filter((s) => matchSection(query, s)).map((s) => s.value);
+  const shownSections = searching ? new Set(matchedValues) : null;
+  const openValues = searching ? matchedValues : openSections;
+  const show = (value: string) => !shownSections || shownSections.has(value);
 
   return (
     <div className="border-foreground/10 bg-popover text-foreground grey:bg-popover/70 grey:backdrop-blur-md pointer-events-auto fixed top-0 right-0 bottom-0 z-20 flex h-dvh max-h-dvh w-[26rem] max-w-full flex-col border-l shadow-2xl">
@@ -262,13 +302,44 @@ export function CameraPanel() {
             </TabsTrigger>
           </TabsList>
         </Tabs>
+        <div className="relative">
+          <Search
+            aria-hidden="true"
+            className="text-foreground/40 pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2"
+          />
+          <Input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search settings…"
+            aria-label="Search settings"
+            className="h-9 pr-7 pl-8"
+          />
+          {searching && (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              aria-label="Clear search"
+              className="text-foreground/50 hover:text-foreground absolute top-1/2 right-2 -translate-y-1/2 text-base leading-none"
+            >
+              ×
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Scrollable middle */}
       <ScrollArea className="min-h-0 flex-1">
         <div className="px-4 py-3">
-          <Accordion multiple defaultValue={[]} className="flex flex-col gap-1.5">
-            <Section value="pose" icon={Camera} label="Camera">
+          <Accordion
+            multiple
+            value={openValues}
+            onValueChange={(v) => {
+              if (!searching) setOpenSections(v as string[]);
+            }}
+            className="flex flex-col gap-1.5"
+          >
+            <Section value="pose" icon={Camera} label="Camera" hidden={!show("pose")}>
               <PoseSection
                 locked={locked}
                 flying={flying}
@@ -278,47 +349,62 @@ export function CameraPanel() {
               />
             </Section>
 
-            <Section value="orbit" icon={OrbitIcon} label="Orbit">
+            <Section value="orbit" icon={OrbitIcon} label="Orbit" hidden={!show("orbit")}>
               <OrbitSection />
             </Section>
 
-            <Section value="districts" icon={MapIcon} label="Districts">
+            <Section value="districts" icon={MapIcon} label="Districts" hidden={!show("districts")}>
               <DistrictsSection />
             </Section>
-            <Section value="roads" icon={Route} label="Roads">
+            <Section value="roads" icon={Route} label="Roads" hidden={!show("roads")}>
               <RoadsSection />
               <TrafficSection />
             </Section>
 
-            <Section value="city-details" icon={Info} label="City Details">
+            <Section
+              value="city-details"
+              icon={Info}
+              label="City Details"
+              hidden={!show("city-details")}
+            >
               <CityDetailsSection />
             </Section>
 
-            <Section value="stars" icon={Stars} label="Stars">
+            <Section value="stars" icon={Stars} label="Stars" hidden={!show("stars")}>
               <StarsSection />
             </Section>
 
-            <Section value="moon" icon={Moon} label="Moon">
+            <Section value="moon" icon={Moon} label="Moon" hidden={!show("moon")}>
               <MoonSection />
             </Section>
 
-            <Section value="fog" icon={CloudFog} label="Fog">
+            <Section value="fog" icon={CloudFog} label="Fog" hidden={!show("fog")}>
               <FogSection />
             </Section>
 
-            <Section value="windows" icon={AppWindow} label="Anti-Aliasing">
+            <Section
+              value="windows"
+              icon={AppWindow}
+              label="Anti-Aliasing"
+              hidden={!show("windows")}
+            >
               <AntiAliasingSection />
             </Section>
 
-            <Section value="window-profiles" icon={Building2} label="Windows">
+            <Section
+              value="window-profiles"
+              icon={Building2}
+              label="Windows"
+              hidden={!show("window-profiles")}
+            >
               <WindowsSection />
             </Section>
 
-            <Section value="intro" icon={Sparkles} label="Intro">
+            <Section value="intro" icon={Sparkles} label="Intro" hidden={!show("intro")}>
               <IntroSection />
             </Section>
 
-            <Section value="live" icon={Radio} label="Live readout">
+            <Section value="live" icon={Radio} label="Live readout" hidden={!show("live")}>
               <div className="text-foreground/70 grid grid-cols-[5rem_1fr] gap-1 font-mono text-xs">
                 <div>position</div>
                 <div className="tabular-nums">
@@ -333,18 +419,23 @@ export function CameraPanel() {
               </div>
             </Section>
 
-            <Section value="seed" icon={Sprout} label="Seed">
+            <Section value="seed" icon={Sprout} label="Seed" hidden={!show("seed")}>
               <SeedRow />
             </Section>
 
-            <Section value="perf" icon={Gauge} label="Performance">
+            <Section value="perf" icon={Gauge} label="Performance" hidden={!show("perf")}>
               <PerfReadout />
             </Section>
 
-            <Section value="debug" icon={Bug} label="Debug View">
+            <Section value="debug" icon={Bug} label="Debug View" hidden={!show("debug")}>
               <DebugSection />
             </Section>
           </Accordion>
+          {searching && matchedValues.length === 0 && (
+            <p className="text-foreground/50 px-1 py-6 text-center text-sm">
+              No settings match “{query.trim()}”.
+            </p>
+          )}
         </div>
       </ScrollArea>
 
@@ -396,12 +487,15 @@ function Section({
   icon: Icon,
   label,
   children,
+  hidden,
 }: {
   value: string;
   icon: LucideIcon;
   label: string;
   children: ReactNode;
+  hidden?: boolean;
 }) {
+  if (hidden) return null;
   return (
     <AccordionItem
       value={value}
