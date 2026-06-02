@@ -19,8 +19,8 @@ Top-level Map of Content. See `CLAUDE.md` for conventions.
 
 Daily logs live in `wiki/daily/YYYY-MM-DD.md`. Latest:
 
+- [[2026-06-03]]
 - [[2026-06-02]]
 - [[2026-06-01]]
 - [[2026-05-31]]
 - [[2026-05-30]]
-- [[2026-05-26]]
