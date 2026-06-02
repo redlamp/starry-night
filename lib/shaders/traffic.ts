@@ -45,16 +45,18 @@ void main() {
   float thr = rr * 0.3 + aReveal * 0.6;
   vAlpha *= smoothstep(thr, thr + 0.06, uIntro);
 
-  // Camera-relative head/tail (#45): a car driving toward the camera shows white
-  // headlights, one driving away shows red tails. heading = travel direction.
-  vec3 hd = normalize(aB - aA);
-  float facing = -dot(hd, uViewDir);            // >0 = moving toward the camera
-  float camHead = smoothstep(-0.15, 0.15, facing);
-  // Straight-down (orthographic top-down) the dot degenerates to ~0 for every
-  // car. Blend toward the baked flow direction near vertical so divided roads
-  // keep clean paired white/red ribbons from above instead of muddy amber.
-  float vert = clamp(abs(uViewDir.y), 0.0, 1.0);
-  float headness = mix(camHead, aHead, vert * vert);
+  // Camera-relative head/tail (#45): white headlights face the viewer, red tails
+  // drive away. Decision is purely HORIZONTAL — the camera's orbit bearing (azim)
+  // vs the car heading — so it's independent of camera elevation; tilting down no
+  // longer shifts the colour. normalize(uViewDir.xz) drops the cos(elev) term,
+  // leaving the azimuth bearing. A car crossing at ~90° sits mid-blend with a
+  // soft easing band (the smoothstep edges = the wiggle room near broadside).
+  vec2 camDir = uViewDir.xz;
+  float cl = length(camDir);
+  camDir = cl > 1e-3 ? camDir / cl : vec2(0.0, 1.0); // exact top-down: stable fallback bearing
+  vec2 hd = normalize((aB - aA).xz);
+  float facing = -dot(hd, camDir);              // >0 = moving toward the camera
+  float headness = smoothstep(-0.2, 0.2, facing); // ±~11.5° wiggle around broadside
 
   vColor = mix(aTail, aColor, headness);
   vEmit = mix(uTailIntensity, uHeadIntensity, headness);
