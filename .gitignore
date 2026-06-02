@@ -51,5 +51,8 @@ coverage/
 /samples/*
 !/samples/curated/
 
+# Git worktrees (background-agent isolation)
+.claude/worktrees/
+
 # Misc
 *.tsbuildinfo
