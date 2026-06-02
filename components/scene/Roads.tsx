@@ -127,6 +127,10 @@ function RoadTier({
         polygonOffsetFactor={-2}
         polygonOffsetUnits={-2}
         depthWrite={false}
+        // Road highlights ignore scene fog so the tier tint stays crisp at
+        // distance (matches Traffic's fog:false); asphalt is near ground-colour
+        // anyway, so losing its fog fade is imperceptible.
+        fog={false}
         wireframe={wireframe}
       />
     </mesh>
