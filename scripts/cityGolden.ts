@@ -118,6 +118,46 @@ function check() {
   process.exit(failed === 0 ? 0 : 1);
 }
 
+// Cross-crop invariance — THE additive-growth contract (generate-at-max + crop):
+// a smaller circle crop must be a byte-identical SUBSET of a larger one (grow reveals,
+// never re-rolls). Validates that pinning gen to MAX (Step 2) makes the crop a pure
+// post-filter — i.e. the per-cell rng rewrite (Step 3) is unnecessary for v1.
+function crosscrop() {
+  const seeds = SEEDS.slice(0, 5);
+  const scales = [0.5, 1.0, 2.0]; // circle R = half*scale (currently 750 / 1500 / 3000)
+  let failed = 0;
+  console.log("cross-crop invariance — nested circle crops, byte-identical on overlap\n");
+  for (const seed of seeds) {
+    const byScale = scales.map((s) => {
+      const c = generateCity(seed, "circle", s);
+      const map = new Map<number, string>();
+      for (const b of c.buildings) map.set(b.id, JSON.stringify(b));
+      return { s, count: c.buildings.length, map };
+    });
+    for (let i = 0; i < byScale.length - 1; i++) {
+      const small = byScale[i];
+      const large = byScale[i + 1];
+      let missing = 0;
+      let mismatch = 0;
+      for (const [id, bj] of small.map) {
+        const lj = large.map.get(id);
+        if (lj === undefined) missing++;
+        else if (lj !== bj) mismatch++;
+      }
+      const ok = missing === 0 && mismatch === 0 && small.count <= large.count;
+      if (!ok) failed++;
+      console.log(
+        `  ${seed.padEnd(10)} ${small.s}⊂${large.s}: ${ok ? "PASS" : "FAIL"} (${small.count}⊂${large.count}${
+          ok ? "" : `, missing=${missing} mismatch=${mismatch}`
+        })`,
+      );
+    }
+  }
+  console.log(`\n${failed === 0 ? "CROSSCROP PASS" : `CROSSCROP FAIL (${failed})`}`);
+  process.exit(failed === 0 ? 0 : 1);
+}
+
 const mode = process.argv[2] ?? "check";
 if (mode === "capture") capture();
+else if (mode === "crosscrop") crosscrop();
 else check();

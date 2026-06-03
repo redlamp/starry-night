@@ -1,5 +1,5 @@
 import seedrandom from "seedrandom";
-import { CITY_CENTER, CITY_HALF_EXTENT, CITY_SCALE } from "./topology";
+import { CITY_CENTER, MAX_HALF_EXTENT, GEN_SCALE } from "./topology";
 import type { Lattice } from "./lattice";
 
 // Tensor field — the direction field the streets follow (the proper tensor-field
@@ -55,7 +55,7 @@ export function buildTensorField(masterSeed: string, lattice: Lattice): TensorFi
   const rng = seedrandom(`${masterSeed}::tensor::fields`);
   const cx = CITY_CENTER.x;
   const cz = CITY_CENTER.z;
-  const half = CITY_HALF_EXTENT;
+  const half = MAX_HALF_EXTENT; // #14: lay the field out at MAX; the crop is a post-filter
   const basis: Basis[] = [];
 
   // 1. A 4×4 lattice of GRID basis fields, oriented by the center-anchored
@@ -64,7 +64,7 @@ export function buildTensorField(masterSeed: string, lattice: Lattice): TensorFi
   //    grids at varying angles gives a coherently warping grid → curved streets.
   //    waviness varies the amount per seed: some cities near-straight, some wavy
   //    (the "responds to geography" feel) — no two read the same.
-  const N = Math.max(3, Math.round(4 * CITY_SCALE)); // grid-basis count — scales with size to hold grain
+  const N = Math.max(3, Math.round(4 * GEN_SCALE)); // grid-basis count — keyed to MAX (gen extent), constant across crops
   const span = half * 1.2;
   const waviness = 0.6 + rng() * 1.4; // 0.6 (calm grid) … 2.0 (very wavy)
   const jitterPeak = ((36 * Math.PI) / 180) * waviness; // ±18°·waviness

@@ -47,24 +47,22 @@ tags:
 - [x] **Step 1 — baseline.** `scripts/cityGolden.ts` (capture/check); golden captured for
   gate1-0..9 BEFORE any change. Added `MAX_HALF_EXTENT=3000` + `GEN_SCALE` to topology.ts
   (unwired). gate1 + golden + tsc green. ✅
-- [ ] **Step 2 — pin GEN domain to MAX.** Re-key off GEN_SCALE/MAX: `generateTopology` half
-  (topology.ts:203→208), `buildTensorRoadsImpl` bounds (cityGen.ts:350), tensorField half+N
-  (tensorField.ts:58,67), lattice half (lattice.ts:53) **+ ramp ref (decision 2)**, district
-  `NET_GRID_STEPS` (district.ts:161) + topo.halfExtent (district.ts:192). Checkpoint: **gate1
-  PASS at MAX gen** (no overlaps / district band / in-bounds at half 3000 — needs Step 2b
-  first for the bounds + scan-box re-key). The golden WILL diff here (city is now Metro-gen
-  + rng-count still live) — that is expected, not a failure. Cross-crop invariance is the
-  Step-3 gate, not this step.
-- [ ] **Step 2b — gate1's own extent coupling.** gate1.ts:129 slack → MAX-derived; gate1.ts:186-187
-  lattice scan box → ±MAX about CITY_CENTER (critic #3); make gate1 assert ACROSS {shape,scale}
-  pairs, not same-arg twice (critic #4).
-- [ ] **Step 3 — kill the 14 rng-count breakers.** Per subsystem, gate1 + cross-crop guard after each:
-  (a) tensorField: N off GEN_SCALE + plaza→`::tensor::plaza` (+ optional per-cell `::tensor::cell::i:j`).
-  (b) tensorStreets: fixed-MAX bbox freezes the seed loop; MAX_PTS off GEN_SCALE.
-  (c) district: pin total/minArea/N at MAX; replace `assignCharacters` rank logic (subTarget/
-  industrialTarget/n-2 pivot/order.slice) with **absolute distance bands**; anchor `district.id`
-  to a quantized centroid.
-  (d) buildings: `id`/`windowSeed` off quantized anchor; keep fill on full roads (critic #1/2).
+- [x] **Step 2 — pin GEN domain to MAX.** ✅ Re-keyed off GEN_SCALE/MAX: `generateTopology`
+  half → MAX (cascades to the road bbox + district raster via `topo.halfExtent`), tensorField
+  half + N, tensorStreets MAX_PTS, district NET_GRID_STEPS. Lattice ramp → fixed
+  `DRIFT_RADIUS=1500` (decision 2: preserves the core grain, extent-invariant — not keyed to
+  half/MAX/crop). tsc clean.
+- [x] **Step 2b — gate1's own coupling.** ✅ slack → `MAX_HALF_EXTENT*1.1`; lattice scan box →
+  ±MAX about CITY_CENTER (critic #3). Cross-crop assert added as `cityGolden.ts crosscrop`
+  (kept separate so gate1 stays a per-seed gate; fold into gate1 once stable).
+- [x] **Step 3 — rng-count breakers: DROPPED (validated unnecessary).** `crosscrop` PROVES
+  cross-crop invariance holds from Step 2 alone — 0.5⊂1.0⊂2.0 are byte-identical subsets across
+  5 seeds (1406⊂6064⊂22138, …). Because gen runs at FIXED MAX and the crop is a pure
+  post-filter, the rng-count couplings (which only bite when the gen *extent* changes) never
+  fire. The per-cell rewrite is now a FUTURE option only if true lazy *chunked* gen (don't gen
+  off-crop, for memory) is ever wanted. **Its place is taken by a DISCIPLINE (critic #1/#2):
+  `fillTensorBuildings` + `generateTensorStreets` MUST always run on the full MAX domain, never
+  a cropped set — enforced by guard/comment in Step 6.**
 - [ ] **Step 4 — slider = crop radius only.** Repurpose `cityShapeScale`→`cropFraction`
   (sceneStore.ts:257); square mask gets a real ±cropHalf test (cityShape.ts:45, else square can't
   crop — critic risk). Grow ADDS, shrink purges; intersection of any two crops byte-identical.
@@ -110,3 +108,14 @@ Float determinism at the extent change (lattice `t*t` ramp — decision 2 the fi
 absolute-band district character is a *look* change at MAX (visual check + maybe re-tune);
 Metro one-time gen cost ~2.25× (off-thread per #44 — verify); square can't crop (Step 4);
 camera default-vs-zoom-range split must not invert; MAX_CARS < Metro demand (Step 7).
+
+**MEASURED (Step 2):** gen at MAX ≈ **4 s/city** (15 gens / 59 s wall), full Metro ≈ **22k
+buildings**. The field `sample()` is O(N²) — 256 bases summed per call.
+- **NOT a live-slider problem:** heavy gen (`buildTensorRoads`/`fillTensorBuildings`) is cached
+  **per seed** (ignores scale); the crop is a cheap post-filter. So the slider RE-FILTERS the
+  cached full city — it does NOT re-gen. The 4 s is one-time per seed, off the mount thread (#44).
+- **Field-culling won't help:** basis influence radius (`size`≈2232) > field span, so ~all 256
+  bases are in range everywhere — O(N²) is inherent. (A coarse field-texture + interpolate would
+  cut it but changes output → not byte-identical. Not worth it: gen is one-time.) **Step 6a dropped.**
+- **The real perf concern = RENDER:** 22k InstancedMesh entries with `frustumCulled=false` at full
+  Metro crop. That is exactly issue **#52** (distance LOD + per-region culling) / Step 6b — not gen.

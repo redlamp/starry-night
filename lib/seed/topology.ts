@@ -212,7 +212,10 @@ export function generateTopology(masterSeed: string): Topology {
   const kind = pickTopologyKind(rng);
   const cx = CITY_CENTER.x;
   const cz = CITY_CENTER.z;
-  const half = CITY_HALF_EXTENT;
+  // #14: generate the topology at the fixed MAX extent (Metro). topo.halfExtent
+  // then = MAX, so the tensor-road bbox (cityGen) + district raster auto-follow.
+  // The size slider crops post-gen — see wiki/notes/plan-city-scale-migration.md.
+  const half = MAX_HALF_EXTENT;
   let highways: Highway[] = [];
   switch (kind) {
     case "crossroads":

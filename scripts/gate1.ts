@@ -15,7 +15,7 @@
  * from wiki/notes/decision-streets-first-city-generation.md.
  */
 import { generateCity, type Building } from "@/lib/seed/cityGen";
-import { CITY_CENTER, CITY_HALF_EXTENT } from "@/lib/seed/topology";
+import { CITY_CENTER, MAX_HALF_EXTENT } from "@/lib/seed/topology";
 import { computeLattice } from "@/lib/seed/lattice";
 
 type Vec = { x: number; z: number };
@@ -73,47 +73,93 @@ function pointSegDist(x: number, z: number, ax: number, az: number, bx: number, 
 }
 
 const OVERLAP_TOL = 0.3; // m of penetration we tolerate (rounding noise)
+// Spatial-hash cell for the overlap + corridor broad-phases — ≥ the 70m overlap
+// window and ≥ any road half-width, so a 3×3 neighbourhood query is exhaustive.
+// Turns both checks O(n) so gate1 stays tractable at MAX (~22k buildings).
+const GRID_CELL = 80;
 
 function checkSeed(seed: string) {
   const { buildings, districts, topology, arterials, streets } = generateCity(seed);
   const failures: string[] = [];
 
-  // 1. Overlaps (broad-phase by centre distance, then OBB/SAT).
+  // 1. Overlaps — spatial-hash broad-phase (O(n) at MAX's ~22k buildings), then OBB/SAT.
+  const bGrid = new Map<string, number[]>();
+  for (let i = 0; i < buildings.length; i++) {
+    const k = `${Math.floor(buildings[i].x / GRID_CELL)},${Math.floor(buildings[i].z / GRID_CELL)}`;
+    const cell = bGrid.get(k);
+    if (cell) cell.push(i);
+    else bGrid.set(k, [i]);
+  }
   let overlaps = 0;
   for (let i = 0; i < buildings.length; i++) {
     const a = buildings[i];
+    const ci = Math.floor(a.x / GRID_CELL);
+    const cj = Math.floor(a.z / GRID_CELL);
     const ra = Math.hypot(a.width, a.depth) / 2;
-    for (let j = i + 1; j < buildings.length; j++) {
-      const b = buildings[j];
-      if (Math.abs(a.x - b.x) > 70 || Math.abs(a.z - b.z) > 70) continue;
-      const rb = Math.hypot(b.width, b.depth) / 2;
-      if (Math.hypot(a.x - b.x, a.z - b.z) > ra + rb) continue;
-      if (obbPenetration(a, b) > OVERLAP_TOL) overlaps++;
+    for (let gi = ci - 1; gi <= ci + 1; gi++) {
+      for (let gj = cj - 1; gj <= cj + 1; gj++) {
+        const cell = bGrid.get(`${gi},${gj}`);
+        if (!cell) continue;
+        for (const j of cell) {
+          if (j <= i) continue; // process each pair once (smaller index iterates)
+          const b = buildings[j];
+          if (Math.abs(a.x - b.x) > 70 || Math.abs(a.z - b.z) > 70) continue;
+          const rb = Math.hypot(b.width, b.depth) / 2;
+          if (Math.hypot(a.x - b.x, a.z - b.z) > ra + rb) continue;
+          if (obbPenetration(a, b) > OVERLAP_TOL) overlaps++;
+        }
+      }
     }
   }
   if (overlaps > 0) failures.push(`${overlaps} building overlaps`);
 
-  // 2. Corridor violations — building centre on a road surface (every road tier).
+  // 2. Corridor violations — bucket road segments into the grid, then test each
+  //    building against only the segments in its 3×3 neighbourhood (O(n) at MAX).
   const roads = [...topology.highways, ...arterials, ...streets];
-  let corridorHits = 0;
-  for (const bld of buildings) {
-    for (const r of roads) {
-      const verts = r.vertices;
-      const last = r.closed ? verts.length : verts.length - 1;
-      let hit = false;
-      for (let i = 0; i < last; i++) {
-        const p = verts[i];
-        const q = verts[(i + 1) % verts.length];
-        if (pointSegDist(bld.x, bld.z, p.x, p.z, q.x, q.z) < r.width / 2) {
-          hit = true;
-          break;
+  const segGrid = new Map<
+    string,
+    Array<{ ax: number; az: number; bx: number; bz: number; w: number }>
+  >();
+  for (const r of roads) {
+    const verts = r.vertices;
+    const last = r.closed ? verts.length : verts.length - 1;
+    const w = r.width / 2;
+    for (let i = 0; i < last; i++) {
+      const p = verts[i];
+      const q = verts[(i + 1) % verts.length];
+      const seg = { ax: p.x, az: p.z, bx: q.x, bz: q.z, w };
+      const loI = Math.floor((Math.min(p.x, q.x) - w) / GRID_CELL);
+      const hiI = Math.floor((Math.max(p.x, q.x) + w) / GRID_CELL);
+      const loJ = Math.floor((Math.min(p.z, q.z) - w) / GRID_CELL);
+      const hiJ = Math.floor((Math.max(p.z, q.z) + w) / GRID_CELL);
+      for (let gi = loI; gi <= hiI; gi++) {
+        for (let gj = loJ; gj <= hiJ; gj++) {
+          const k = `${gi},${gj}`;
+          const cell = segGrid.get(k);
+          if (cell) cell.push(seg);
+          else segGrid.set(k, [seg]);
         }
       }
-      if (hit) {
-        corridorHits++;
-        break;
+    }
+  }
+  let corridorHits = 0;
+  for (const bld of buildings) {
+    const ci = Math.floor(bld.x / GRID_CELL);
+    const cj = Math.floor(bld.z / GRID_CELL);
+    let hit = false;
+    for (let gi = ci - 1; gi <= ci + 1 && !hit; gi++) {
+      for (let gj = cj - 1; gj <= cj + 1 && !hit; gj++) {
+        const cell = segGrid.get(`${gi},${gj}`);
+        if (!cell) continue;
+        for (const s of cell) {
+          if (pointSegDist(bld.x, bld.z, s.ax, s.az, s.bx, s.bz) < s.w) {
+            hit = true;
+            break;
+          }
+        }
       }
     }
+    if (hit) corridorHits++;
   }
   if (corridorHits > 0) failures.push(`${corridorHits} corridor violations`);
 
@@ -126,7 +172,7 @@ function checkSeed(seed: string) {
   if (orphans > 0) failures.push(`${orphans} buildings with unknown districtId`);
 
   // 4. In-bounds (+10% slack).
-  const slack = CITY_HALF_EXTENT * 1.1;
+  const slack = MAX_HALF_EXTENT * 1.1;
   const oob = buildings.filter(
     (b) => Math.abs(b.x - CITY_CENTER.x) > slack || Math.abs(b.z - CITY_CENTER.z) > slack,
   ).length;
@@ -183,8 +229,8 @@ function main() {
   const L2 = computeLattice("gate1-det");
   let latticeOk = L1.theta0 === L2.theta0 && L1.driftMag === L2.driftMag;
   let maxDelta = 0;
-  for (let x = -700; x <= 700; x += 100) {
-    for (let z = -820; z <= 580; z += 100) {
+  for (let x = CITY_CENTER.x - MAX_HALF_EXTENT; x <= CITY_CENTER.x + MAX_HALF_EXTENT; x += 200) {
+    for (let z = CITY_CENTER.z - MAX_HALF_EXTENT; z <= CITY_CENTER.z + MAX_HALF_EXTENT; z += 200) {
       if (L1.orientationAt(x, z) !== L2.orientationAt(x, z)) latticeOk = false;
       const d = Math.abs(L1.orientationAt(x, z) - L1.orientationAt(x + 50, z));
       if (d > maxDelta) maxDelta = d;

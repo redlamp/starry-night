@@ -1,5 +1,5 @@
 import seedrandom from "seedrandom";
-import { type Topology, CITY_SCALE } from "./topology";
+import { type Topology, GEN_SCALE } from "./topology";
 
 // District field for the tensor city. Districts are derived FROM the arterial
 // network (see generateDistrictsFromNetwork): arterials are hard walls, a
@@ -158,7 +158,7 @@ function assignCharacters(
 
 type NetRoad = { vertices: Array<{ x: number; z: number }>; width: number; closed: boolean };
 
-const NET_GRID_STEPS = Math.round(200 * CITY_SCALE); // raster steps/axis — scales to keep ~7.5m cells at any size
+const NET_GRID_STEPS = Math.round(200 * GEN_SCALE); // raster steps/axis — keyed to MAX; ~7.5m cells at the gen extent
 const NET_MIN_DISTRICTS = 6; // never merge below this (gate1's floor is 6)
 const NET_MAX_DISTRICTS = 24; // hard safety ceiling (gate1's cap is 26)
 const NET_MIN_AREA_FRACTION = 0.045; // a region below this share of the map is a sliver → merged
