@@ -63,10 +63,14 @@ tags:
   off-crop, for memory) is ever wanted. **Its place is taken by a DISCIPLINE (critic #1/#2):
   `fillTensorBuildings` + `generateTensorStreets` MUST always run on the full MAX domain, never
   a cropped set — enforced by guard/comment in Step 6.**
-- [ ] **Step 4 — slider = crop radius only.** Repurpose `cityShapeScale`→`cropFraction`
-  (sceneStore.ts:257); square mask gets a real ±cropHalf test (cityShape.ts:45, else square can't
-  crop — critic risk). Grow ADDS, shrink purges; intersection of any two crops byte-identical.
-- [ ] **Step 5 — camera/look follow the crop.** cameraView.ts:38 H, DEFAULT_ORBIT.radius
+- [x] **Step 4 — circle crop slider spans City→Metro.** ✅ Crop slider max 1.4→2.0 (1.0 ≈ City
+  core, 2.0 ≈ full Metro disc; circle R = CITY_HALF_EXTENT·scale). **Kept `square` = un-cropped
+  full Metro field** (also gate1's full-coverage test artifact) — crop via `circle` (app default).
+  The critic's "square can't crop" gap is resolved by "use circle to crop." No gen change
+  (golden/gate1 unaffected); slider re-filters the cached MAX city (grow = reveal, never re-roll —
+  proven by crosscrop + Step-2 verify). Helper text + makeShapeMask doc corrected. tsc clean.
+- [ ] **Step 5 — camera/look follow the crop (VISUAL — collaborate with the user; can't verify blind).**
+  cameraView.ts:38 H, DEFAULT_ORBIT.radius
   (sceneStore:98), DEFAULT_ORTHO_SIZE (:264) → crop radius. **Fog near/far, haze, stars/moon
   (sceneStore:113,120-124,162-179) → crop or literal, NOT doubled MAX** (critic #10). Keep zoom
   clamps (CameraControls:73-74,85-86), Scene far (Scene.tsx:47), ground disc keyed off MAX.

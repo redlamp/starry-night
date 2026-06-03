@@ -1232,14 +1232,15 @@ function DebugSection() {
         label="crop"
         value={cityShapeScale}
         min={0.4}
-        max={1.4}
+        max={2.0}
         step={0.05}
         onChange={setCityShapeScale}
       />
       <div className="text-foreground/45 text-[11px] leading-snug">
-        Footprint mask. auto = each seed picks; square = full field. crop scales the kept
-        circle radius (1.0 ≈ map edges, 1.4 ≈ corners) — it does NOT change the city&apos;s
-        extent or density, only how much is kept. Changing either regenerates the city.
+        Footprint mask. auto = each seed picks; square = full Metro field. crop scales the
+        kept circle radius — 1.0 ≈ a City-sized core, 2.0 ≈ the full Metro extent. It
+        reveals/hides the already-generated city (grow = reveal, never a re-roll); only the
+        seed changes the city itself.
       </div>
 
       <SubHeader label="Building tint" />

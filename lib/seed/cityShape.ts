@@ -31,12 +31,12 @@ function clamp01(v: number): number {
   return v < 0 ? 0 : v > 1 ? 1 : v;
 }
 
-// Build the boundary mask for a resolved shape. `half` defaults to the live city
-// extent so the boundary scales with the size tiers automatically.
-// Build the boundary mask for a resolved shape. `scale` sets the circle radius
-// as a fraction of `half`: 1.0 touches the square's edge midpoints, ~1.4 reaches
-// the corners (the full content). `half` defaults to the live city extent so the
-// boundary tracks the size tiers automatically.
+// Build the boundary mask for a resolved shape — a pure CROP applied POST-generation
+// (#14: the city is generated at MAX; this only reveals/hides, it never re-rolls). `scale`
+// sets the circle radius as a fraction of `half`: under generate-at-max, 1.0 ≈ a City-sized
+// core and 2.0 ≈ the full Metro disc. `half` defaults to CITY_HALF_EXTENT — the nominal crop
+// REFERENCE, not the (larger) gen extent. `square` is intentionally un-cropped: the full
+// Metro field, and gate1's full-coverage test artifact — crop via `circle`.
 export function makeShapeMask(
   shape: CityShape,
   scale = 1,
