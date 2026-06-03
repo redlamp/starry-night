@@ -1,5 +1,5 @@
 import seedrandom from "seedrandom";
-import { CITY_CENTER, CITY_HALF_EXTENT } from "./topology";
+import { CITY_CENTER, MAX_HALF_EXTENT } from "./topology";
 
 // Organic city footprints (#14). Instead of filling the whole square field, the
 // built-up area is clipped to a seeded boundary mask. The mask is a pure
@@ -33,14 +33,14 @@ function clamp01(v: number): number {
 
 // Build the boundary mask for a resolved shape — a pure CROP applied POST-generation
 // (#14: the city is generated at MAX; this only reveals/hides, it never re-rolls). `scale`
-// sets the circle radius as a fraction of `half`: under generate-at-max, 1.0 ≈ a City-sized
-// core and 2.0 ≈ the full Metro disc. `half` defaults to CITY_HALF_EXTENT — the nominal crop
-// REFERENCE, not the (larger) gen extent. `square` is intentionally un-cropped: the full
-// Metro field, and gate1's full-coverage test artifact — crop via `circle`.
+// sets the circle radius as a fraction of `half`, which defaults to MAX_HALF_EXTENT (the gen
+// extent): scale 1.0 = the full Metro disc (6 km across), 0.5 ≈ a City-sized core (3 km).
+// `square` is intentionally un-cropped: the full Metro field + gate1's full-coverage test
+// artifact — crop via `circle`.
 export function makeShapeMask(
   shape: CityShape,
   scale = 1,
-  half: number = CITY_HALF_EXTENT,
+  half: number = MAX_HALF_EXTENT,
 ): ShapeMask {
   if (shape === "square") {
     // No-op mask — the existing axis-aligned bbox still bounds the city to ±half.

@@ -254,10 +254,10 @@ export const DEFAULT_STREETLIGHTS = { enabled: true, size: 0.8, brightness: 0.85
 // (byte-identical no-op mask). `auto` lets each seed pick its own shape; the
 // other values force one shape (the debug switcher). See lib/seed/cityShape.ts.
 export const DEFAULT_CITY_SHAPE: CityShapeSetting = "circle";
-// Circle-mask radius as a fraction of the city half-extent. 1.0 touches the
-// square's edge midpoints; ~1.4 reaches the corners (full content). Only affects
-// the `circle` shape. Tunable via the City shape size slider.
-export const DEFAULT_CITY_SHAPE_SCALE = 1.0;
+// Circle crop radius as a fraction of the MAX (Metro) gen extent. 1.0 = the full
+// Metro disc (6 km across); 0.5 = a City-sized core (3 km, the default). Only affects
+// the `circle` shape. The City-shape "size" slider drives this, shown in km.
+export const DEFAULT_CITY_SHAPE_SCALE = 0.5;
 
 export const DEFAULT_FLY_SPEED = 14;
 // 360 at the City size (1500); base scales with the size knob via CITY_SCALE.

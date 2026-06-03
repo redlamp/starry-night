@@ -14,6 +14,7 @@ import {
 import { randomSeed } from "@/lib/seed/rng";
 import { ARCHETYPE_ORDER, type Archetype } from "@/lib/seed/cityGen";
 import { CITY_SHAPES, type CityShapeSetting } from "@/lib/seed/cityShape";
+import { MAX_HALF_EXTENT } from "@/lib/seed/topology";
 import { cn, isTypingTarget } from "@/lib/utils";
 import {
   AppWindow,
@@ -155,6 +156,10 @@ function ThemeToggle() {
 
 const RAD2DEG = 180 / Math.PI;
 const DEG2RAD = Math.PI / 180;
+
+// Full Metro crop diameter in km (2 × MAX half-extent). The City-shape "size" slider
+// works in km; cityShapeScale stays the 0..1 fraction-of-MAX it maps to.
+const CROP_FULL_KM = (2 * MAX_HALF_EXTENT) / 1000;
 
 function fmt(n: number, p = 2) {
   return n.toFixed(p);
@@ -1229,18 +1234,17 @@ function DebugSection() {
         onChange={(v) => setCityShape(v as CityShapeSetting)}
       />
       <ValueSlider
-        label="crop"
-        value={cityShapeScale}
-        min={0.4}
-        max={2.0}
-        step={0.05}
-        onChange={setCityShapeScale}
+        label="size km"
+        value={Math.round(cityShapeScale * CROP_FULL_KM * 10) / 10}
+        min={1.5}
+        max={CROP_FULL_KM}
+        step={0.5}
+        onChange={(km) => setCityShapeScale(km / CROP_FULL_KM)}
       />
       <div className="text-foreground/45 text-[11px] leading-snug">
-        Footprint mask. auto = each seed picks; square = full Metro field. crop scales the
-        kept circle radius — 1.0 ≈ a City-sized core, 2.0 ≈ the full Metro extent. It
-        reveals/hides the already-generated city (grow = reveal, never a re-roll); only the
-        seed changes the city itself.
+        City size across, in km (circle crop). 3 km ≈ a downtown core; 6 km = the full Metro
+        extent. Reveals/hides the already-generated city (grow = reveal, never a re-roll) —
+        only the seed changes the city. auto = each seed picks; square = full field.
       </div>
 
       <SubHeader label="Building tint" />
