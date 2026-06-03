@@ -1,0 +1,854 @@
+[
+  {
+    "seed": "gate1-0",
+    "buildingCount": 6638,
+    "districtCount": 9,
+    "fullHash": "44029d68",
+    "buildingsHash": "60f0a999",
+    "roadsHash": "c5f5bcf9",
+    "orientHash": "f366a1a4",
+    "districts": [
+      {
+        "id": "w-mixed-use-0",
+        "character": "mixed-use",
+        "cx": -120190,
+        "cz": 14818,
+        "area": 730125
+      },
+      {
+        "id": "sw-residential-1",
+        "character": "residential",
+        "cx": -113999,
+        "cz": -110449,
+        "area": 770400
+      },
+      {
+        "id": "nw-residential-2",
+        "character": "residential",
+        "cx": -91643,
+        "cz": 101603,
+        "area": 784406
+      },
+      {
+        "id": "nw-downtown-3",
+        "character": "downtown",
+        "cx": -25263,
+        "cz": 31616,
+        "area": 1868344
+      },
+      {
+        "id": "s-subcentre-4",
+        "character": "subcentre",
+        "cx": -9765,
+        "cz": -81427,
+        "area": 1249144
+      },
+      {
+        "id": "s-mixed-use-5",
+        "character": "mixed-use",
+        "cx": 28106,
+        "cz": -136038,
+        "area": 674438
+      },
+      {
+        "id": "ne-residential-6",
+        "character": "residential",
+        "cx": 86888,
+        "cz": 86718,
+        "area": 1251169
+      },
+      {
+        "id": "e-subcentre-7",
+        "character": "subcentre",
+        "cx": 99571,
+        "cz": -13745,
+        "area": 971944
+      },
+      {
+        "id": "se-industrial-8",
+        "character": "industrial",
+        "cx": 117735,
+        "cz": -105957,
+        "area": 700031
+      }
+    ]
+  },
+  {
+    "seed": "gate1-1",
+    "buildingCount": 6762,
+    "districtCount": 11,
+    "fullHash": "d109f8fc",
+    "buildingsHash": "689e5c28",
+    "roadsHash": "a00337b8",
+    "orientHash": "6f004c9b",
+    "districts": [
+      {
+        "id": "w-mixed-use-0",
+        "character": "mixed-use",
+        "cx": -116262,
+        "cz": -55435,
+        "area": 786319
+      },
+      {
+        "id": "nw-residential-1",
+        "character": "residential",
+        "cx": -122638,
+        "cz": 48276,
+        "area": 419513
+      },
+      {
+        "id": "nw-industrial-2",
+        "character": "industrial",
+        "cx": -91965,
+        "cz": 106697,
+        "area": 661050
+      },
+      {
+        "id": "w-downtown-3",
+        "character": "downtown",
+        "cx": -53994,
+        "cz": -19151,
+        "area": 837338
+      },
+      {
+        "id": "sw-residential-4",
+        "character": "residential",
+        "cx": -91083,
+        "cz": -129644,
+        "area": 650644
+      },
+      {
+        "id": "n-heritage-5",
+        "character": "heritage",
+        "cx": -19997,
+        "cz": 88355,
+        "area": 727200
+      },
+      {
+        "id": "s-subcentre-6",
+        "character": "subcentre",
+        "cx": -5189,
+        "cz": -123646,
+        "area": 636356
+      },
+      {
+        "id": "e-subcentre-7",
+        "character": "subcentre",
+        "cx": 60343,
+        "cz": 8817,
+        "area": 2058356
+      },
+      {
+        "id": "se-residential-8",
+        "character": "residential",
+        "cx": 86132,
+        "cz": -125659,
+        "area": 755381
+      },
+      {
+        "id": "se-subcentre-9",
+        "character": "subcentre",
+        "cx": 98662,
+        "cz": -68660,
+        "area": 675056
+      },
+      {
+        "id": "ne-residential-10",
+        "character": "residential",
+        "cx": 88431,
+        "cz": 104375,
+        "area": 792788
+      }
+    ]
+  },
+  {
+    "seed": "gate1-2",
+    "buildingCount": 6967,
+    "districtCount": 10,
+    "fullHash": "e843819a",
+    "buildingsHash": "c9066f34",
+    "roadsHash": "2e18ef45",
+    "orientHash": "e700e5cb",
+    "districts": [
+      {
+        "id": "sw-residential-0",
+        "character": "residential",
+        "cx": -117018,
+        "cz": -75253,
+        "area": 455006
+      },
+      {
+        "id": "nw-residential-1",
+        "character": "residential",
+        "cx": -101022,
+        "cz": 92463,
+        "area": 914119
+      },
+      {
+        "id": "w-subcentre-2",
+        "character": "subcentre",
+        "cx": -51237,
+        "cz": -14126,
+        "area": 2187113
+      },
+      {
+        "id": "sw-industrial-3",
+        "character": "industrial",
+        "cx": -92446,
+        "cz": -134623,
+        "area": 633881
+      },
+      {
+        "id": "s-subcentre-4",
+        "character": "subcentre",
+        "cx": 7745,
+        "cz": -120286,
+        "area": 751894
+      },
+      {
+        "id": "n-heritage-5",
+        "character": "heritage",
+        "cx": 8112,
+        "cz": 90058,
+        "area": 885656
+      },
+      {
+        "id": "e-downtown-6",
+        "character": "downtown",
+        "cx": 50767,
+        "cz": -7095,
+        "area": 530100
+      },
+      {
+        "id": "ne-residential-7",
+        "character": "residential",
+        "cx": 99095,
+        "cz": 96759,
+        "area": 845888
+      },
+      {
+        "id": "e-subcentre-8",
+        "character": "subcentre",
+        "cx": 114602,
+        "cz": 5574,
+        "area": 724725
+      },
+      {
+        "id": "se-residential-9",
+        "character": "residential",
+        "cx": 102139,
+        "cz": -105910,
+        "area": 1071619
+      }
+    ]
+  },
+  {
+    "seed": "gate1-3",
+    "buildingCount": 6493,
+    "districtCount": 14,
+    "fullHash": "0dc1b718",
+    "buildingsHash": "ae43fed8",
+    "roadsHash": "ba0b594e",
+    "orientHash": "458ee033",
+    "districts": [
+      {
+        "id": "nw-industrial-0",
+        "character": "industrial",
+        "cx": -105622,
+        "cz": 115248,
+        "area": 429019
+      },
+      {
+        "id": "sw-residential-1",
+        "character": "residential",
+        "cx": -117779,
+        "cz": -109878,
+        "area": 694294
+      },
+      {
+        "id": "nw-mixed-use-2",
+        "character": "mixed-use",
+        "cx": -94516,
+        "cz": 54490,
+        "area": 886838
+      },
+      {
+        "id": "w-subcentre-3",
+        "character": "subcentre",
+        "cx": -97709,
+        "cz": -16247,
+        "area": 629269
+      },
+      {
+        "id": "sw-mixed-use-4",
+        "character": "mixed-use",
+        "cx": -66499,
+        "cz": -102687,
+        "area": 503381
+      },
+      {
+        "id": "n-residential-5",
+        "character": "residential",
+        "cx": -11264,
+        "cz": 110567,
+        "area": 448538
+      },
+      {
+        "id": "s-subcentre-6",
+        "character": "subcentre",
+        "cx": -14970,
+        "cz": -95767,
+        "area": 857644
+      },
+      {
+        "id": "n-downtown-7",
+        "character": "downtown",
+        "cx": 10342,
+        "cz": 20285,
+        "area": 1159481
+      },
+      {
+        "id": "ne-residential-8",
+        "character": "residential",
+        "cx": 72834,
+        "cz": 93208,
+        "area": 658238
+      },
+      {
+        "id": "se-heritage-9",
+        "character": "heritage",
+        "cx": 49532,
+        "cz": -70231,
+        "area": 501019
+      },
+      {
+        "id": "e-subcentre-10",
+        "character": "subcentre",
+        "cx": 100982,
+        "cz": 15214,
+        "area": 511538
+      },
+      {
+        "id": "e-residential-11",
+        "character": "residential",
+        "cx": 117041,
+        "cz": -48367,
+        "area": 483188
+      },
+      {
+        "id": "se-residential-12",
+        "character": "residential",
+        "cx": 93402,
+        "cz": -127454,
+        "area": 828281
+      },
+      {
+        "id": "ne-industrial-13",
+        "character": "industrial",
+        "cx": 130564,
+        "cz": 89048,
+        "area": 409275
+      }
+    ]
+  },
+  {
+    "seed": "gate1-4",
+    "buildingCount": 6781,
+    "districtCount": 10,
+    "fullHash": "001994be",
+    "buildingsHash": "d1fb19e9",
+    "roadsHash": "53354943",
+    "orientHash": "4fd11fc9",
+    "districts": [
+      {
+        "id": "sw-residential-0",
+        "character": "residential",
+        "cx": -127429,
+        "cz": -68921,
+        "area": 472613
+      },
+      {
+        "id": "nw-industrial-1",
+        "character": "industrial",
+        "cx": -119610,
+        "cz": 70200,
+        "area": 829238
+      },
+      {
+        "id": "w-heritage-2",
+        "character": "heritage",
+        "cx": -55747,
+        "cz": -29396,
+        "area": 1188900
+      },
+      {
+        "id": "sw-residential-3",
+        "character": "residential",
+        "cx": -88007,
+        "cz": -124541,
+        "area": 715331
+      },
+      {
+        "id": "n-residential-4",
+        "character": "residential",
+        "cx": -35224,
+        "cz": 114211,
+        "area": 548156
+      },
+      {
+        "id": "s-subcentre-5",
+        "character": "subcentre",
+        "cx": 5739,
+        "cz": -135085,
+        "area": 588038
+      },
+      {
+        "id": "se-subcentre-6",
+        "character": "subcentre",
+        "cx": 70845,
+        "cz": -104521,
+        "area": 1069988
+      },
+      {
+        "id": "n-downtown-7",
+        "character": "downtown",
+        "cx": -5393,
+        "cz": 40669,
+        "area": 1154194
+      },
+      {
+        "id": "e-subcentre-8",
+        "character": "subcentre",
+        "cx": 100058,
+        "cz": -29710,
+        "area": 1217925
+      },
+      {
+        "id": "ne-residential-9",
+        "character": "residential",
+        "cx": 93066,
+        "cz": 89097,
+        "area": 1215619
+      }
+    ]
+  },
+  {
+    "seed": "gate1-5",
+    "buildingCount": 6467,
+    "districtCount": 12,
+    "fullHash": "1be52cb3",
+    "buildingsHash": "64a7ecb6",
+    "roadsHash": "e70781e3",
+    "orientHash": "80e426ab",
+    "districts": [
+      {
+        "id": "sw-residential-0",
+        "character": "residential",
+        "cx": -110732,
+        "cz": -93359,
+        "area": 1043550
+      },
+      {
+        "id": "nw-residential-1",
+        "character": "residential",
+        "cx": -100236,
+        "cz": 88840,
+        "area": 851231
+      },
+      {
+        "id": "w-subcentre-2",
+        "character": "subcentre",
+        "cx": -77529,
+        "cz": 19002,
+        "area": 1132875
+      },
+      {
+        "id": "s-residential-3",
+        "character": "residential",
+        "cx": -40146,
+        "cz": -122752,
+        "area": 572850
+      },
+      {
+        "id": "sw-subcentre-4",
+        "character": "subcentre",
+        "cx": -19477,
+        "cz": -52757,
+        "area": 506531
+      },
+      {
+        "id": "n-residential-5",
+        "character": "residential",
+        "cx": -26105,
+        "cz": 117267,
+        "area": 414956
+      },
+      {
+        "id": "ne-downtown-6",
+        "character": "downtown",
+        "cx": 13338,
+        "cz": 19784,
+        "area": 535050
+      },
+      {
+        "id": "se-mixed-use-7",
+        "character": "mixed-use",
+        "cx": 43181,
+        "cz": -111510,
+        "area": 799481
+      },
+      {
+        "id": "n-mixed-use-8",
+        "character": "mixed-use",
+        "cx": 36942,
+        "cz": 98702,
+        "area": 420581
+      },
+      {
+        "id": "e-subcentre-9",
+        "character": "subcentre",
+        "cx": 83931,
+        "cz": -32871,
+        "area": 1006481
+      },
+      {
+        "id": "ne-residential-10",
+        "character": "residential",
+        "cx": 109746,
+        "cz": 65305,
+        "area": 1194581
+      },
+      {
+        "id": "se-industrial-11",
+        "character": "industrial",
+        "cx": 114276,
+        "cz": -128815,
+        "area": 521831
+      }
+    ]
+  },
+  {
+    "seed": "gate1-6",
+    "buildingCount": 7053,
+    "districtCount": 8,
+    "fullHash": "e82ff859",
+    "buildingsHash": "6bbdeb74",
+    "roadsHash": "c164c132",
+    "orientHash": "32de8e1e",
+    "districts": [
+      {
+        "id": "nw-residential-0",
+        "character": "residential",
+        "cx": -97964,
+        "cz": 101589,
+        "area": 680513
+      },
+      {
+        "id": "w-residential-1",
+        "character": "residential",
+        "cx": -126531,
+        "cz": 19581,
+        "area": 566888
+      },
+      {
+        "id": "w-downtown-2",
+        "character": "downtown",
+        "cx": -72372,
+        "cz": -9772,
+        "area": 899381
+      },
+      {
+        "id": "sw-residential-3",
+        "character": "residential",
+        "cx": -112968,
+        "cz": -115015,
+        "area": 761400
+      },
+      {
+        "id": "sw-subcentre-4",
+        "character": "subcentre",
+        "cx": -40215,
+        "cz": -104873,
+        "area": 757069
+      },
+      {
+        "id": "n-heritage-5",
+        "character": "heritage",
+        "cx": 25443,
+        "cz": 61880,
+        "area": 2192906
+      },
+      {
+        "id": "se-subcentre-6",
+        "character": "subcentre",
+        "cx": 73956,
+        "cz": -80713,
+        "area": 2492606
+      },
+      {
+        "id": "ne-industrial-7",
+        "character": "industrial",
+        "cx": 122923,
+        "cz": 81655,
+        "area": 649238
+      }
+    ]
+  },
+  {
+    "seed": "gate1-7",
+    "buildingCount": 6921,
+    "districtCount": 10,
+    "fullHash": "b666ff0c",
+    "buildingsHash": "a097cafe",
+    "roadsHash": "1dffe12a",
+    "orientHash": "808c8bb8",
+    "districts": [
+      {
+        "id": "w-residential-0",
+        "character": "residential",
+        "cx": -117265,
+        "cz": -46856,
+        "area": 640575
+      },
+      {
+        "id": "w-subcentre-1",
+        "character": "subcentre",
+        "cx": -64994,
+        "cz": 14126,
+        "area": 704306
+      },
+      {
+        "id": "nw-residential-2",
+        "character": "residential",
+        "cx": -102664,
+        "cz": 83516,
+        "area": 1088100
+      },
+      {
+        "id": "sw-residential-3",
+        "character": "residential",
+        "cx": -107621,
+        "cz": -113398,
+        "area": 486225
+      },
+      {
+        "id": "ne-downtown-4",
+        "character": "downtown",
+        "cx": 6785,
+        "cz": -3079,
+        "area": 719213
+      },
+      {
+        "id": "ne-subcentre-5",
+        "character": "subcentre",
+        "cx": 54386,
+        "cz": 83058,
+        "area": 1946194
+      },
+      {
+        "id": "s-subcentre-6",
+        "character": "subcentre",
+        "cx": -13772,
+        "cz": -115115,
+        "area": 1524488
+      },
+      {
+        "id": "se-heritage-7",
+        "character": "heritage",
+        "cx": 59661,
+        "cz": -65784,
+        "area": 480150
+      },
+      {
+        "id": "se-industrial-8",
+        "character": "industrial",
+        "cx": 110541,
+        "cz": -124853,
+        "area": 513788
+      },
+      {
+        "id": "e-residential-9",
+        "character": "residential",
+        "cx": 122368,
+        "cz": -13242,
+        "area": 896963
+      }
+    ]
+  },
+  {
+    "seed": "gate1-8",
+    "buildingCount": 6737,
+    "districtCount": 13,
+    "fullHash": "690fee81",
+    "buildingsHash": "c7e005ce",
+    "roadsHash": "9d16f84c",
+    "orientHash": "50ced39c",
+    "districts": [
+      {
+        "id": "sw-residential-0",
+        "character": "residential",
+        "cx": -102250,
+        "cz": -116508,
+        "area": 934425
+      },
+      {
+        "id": "w-subcentre-1",
+        "character": "subcentre",
+        "cx": -81741,
+        "cz": -19493,
+        "area": 1034775
+      },
+      {
+        "id": "nw-residential-2",
+        "character": "residential",
+        "cx": -123743,
+        "cz": 47850,
+        "area": 408713
+      },
+      {
+        "id": "s-heritage-3",
+        "character": "heritage",
+        "cx": -18496,
+        "cz": -72791,
+        "area": 840263
+      },
+      {
+        "id": "nw-residential-4",
+        "character": "residential",
+        "cx": -80466,
+        "cz": 80653,
+        "area": 875475
+      },
+      {
+        "id": "n-mixed-use-5",
+        "character": "mixed-use",
+        "cx": -24413,
+        "cz": 104653,
+        "area": 557100
+      },
+      {
+        "id": "s-residential-6",
+        "character": "residential",
+        "cx": 14905,
+        "cz": -135461,
+        "area": 454500
+      },
+      {
+        "id": "ne-mixed-use-7",
+        "character": "mixed-use",
+        "cx": 51592,
+        "cz": 95462,
+        "area": 662456
+      },
+      {
+        "id": "ne-downtown-8",
+        "character": "downtown",
+        "cx": 30636,
+        "cz": 5797,
+        "area": 630731
+      },
+      {
+        "id": "se-subcentre-9",
+        "character": "subcentre",
+        "cx": 65315,
+        "cz": -78789,
+        "area": 444488
+      },
+      {
+        "id": "e-subcentre-10",
+        "character": "subcentre",
+        "cx": 113622,
+        "cz": -39650,
+        "area": 633825
+      },
+      {
+        "id": "se-industrial-11",
+        "character": "industrial",
+        "cx": 105842,
+        "cz": -132457,
+        "area": 547706
+      },
+      {
+        "id": "ne-residential-12",
+        "character": "residential",
+        "cx": 113782,
+        "cz": 62635,
+        "area": 975544
+      }
+    ]
+  },
+  {
+    "seed": "gate1-9",
+    "buildingCount": 6764,
+    "districtCount": 9,
+    "fullHash": "bc3d4a19",
+    "buildingsHash": "0cd99cae",
+    "roadsHash": "ae8faaf4",
+    "orientHash": "35760c2d",
+    "districts": [
+      {
+        "id": "sw-residential-0",
+        "character": "residential",
+        "cx": -112582,
+        "cz": -124722,
+        "area": 589500
+      },
+      {
+        "id": "nw-residential-1",
+        "character": "residential",
+        "cx": -102745,
+        "cz": 81402,
+        "area": 1159875
+      },
+      {
+        "id": "w-mixed-use-2",
+        "character": "mixed-use",
+        "cx": -114090,
+        "cz": -24712,
+        "area": 573300
+      },
+      {
+        "id": "sw-heritage-3",
+        "character": "heritage",
+        "cx": -40230,
+        "cz": -81697,
+        "area": 1534613
+      },
+      {
+        "id": "se-downtown-4",
+        "character": "downtown",
+        "cx": 56039,
+        "cz": -43974,
+        "area": 459281
+      },
+      {
+        "id": "n-subcentre-5",
+        "character": "subcentre",
+        "cx": 10567,
+        "cz": 58579,
+        "area": 1986750
+      },
+      {
+        "id": "e-subcentre-6",
+        "character": "subcentre",
+        "cx": 106235,
+        "cz": 21680,
+        "area": 755044
+      },
+      {
+        "id": "se-residential-7",
+        "character": "residential",
+        "cx": 87373,
+        "cz": -106178,
+        "area": 1439550
+      },
+      {
+        "id": "ne-industrial-8",
+        "character": "industrial",
+        "cx": 119424,
+        "cz": 101460,
+        "area": 502088
+      }
+    ]
+  }
+]
