@@ -74,7 +74,19 @@ const CHARACTER_COLOR: Record<DistrictCharacter, string> = {
   "mixed-use": "#9b6bc9", // violet
 };
 
-// Deterministic character pass driven by distance-to-centre rank + topology.
+// Absolute radial bands (metres) for the character pass. The high-rise core is
+// PINNED to a compact footprint that does NOT grow with the city — Clark's Law
+// (1951): population/built density declines ~exponentially from the CBD, and real
+// downtowns stay ~1–2 km across even in huge metros. Residential is "everything
+// past the belt", so the bulk of a large city is low-density and grows with it.
+// These are absolute world metres, independent of MAX_HALF_EXTENT, so they stay
+// correct under any crop or per-device extent tier (#53).
+const R_DOWNTOWN = 650; // primary CBD core radius
+const R_SUBCENTRE = 1150; // secondary dense band (subcentres live here)
+const R_MIXED = 1900; // transition belt → mixed-use; beyond this → residential
+const MAX_SUBCENTRES = 2; // few secondary clusters (was 1+⌊n/5⌋ ≈ 3–5, which blanketed the core)
+
+// Deterministic character pass driven by ABSOLUTE distance-to-centre bands (#49).
 function assignCharacters(
   rng: () => number,
   topo: Topology,
@@ -83,58 +95,68 @@ function assignCharacters(
   const cx = topo.centerX;
   const cz = topo.centerZ;
   const n = stats.length;
-  const order = stats
-    .map((s, i) => ({ i, d: Math.hypot(s.centroidX - cx, s.centroidZ - cz), area: s.area }))
-    .sort((a, b) => a.d - b.d);
+  const dist = stats.map((s, i) => ({
+    i,
+    d: Math.hypot(s.centroidX - cx, s.centroidZ - cz),
+    area: s.area,
+  }));
+  const order = [...dist].sort((a, b) => a.d - b.d);
+  const maxD = order.length ? order[order.length - 1].d : 1;
 
   const chars = new Array<DistrictCharacter>(n).fill("residential");
   const assigned = new Set<number>();
 
-  // 1. Closest district is downtown.
-  const downtownIdx = order[0].i;
-  chars[downtownIdx] = "downtown";
-  assigned.add(downtownIdx);
+  // 1. Downtown — the closest district is always the primary CBD; any further
+  //    district whose centroid still falls inside the core radius joins it.
+  chars[order[0].i] = "downtown";
+  assigned.add(order[0].i);
 
-  // 2. Heritage: the smallest of the next two closest (a dense old core beside
-  //    downtown). ~70% of cities have one.
+  // 2. Heritage — the smaller of the 2nd/3rd closest (a dense old core beside
+  //    downtown). ~70% of cities have one. Assigned before the core sweep so it
+  //    survives even when it sits inside R_DOWNTOWN.
   if (n >= 3 && rng() < 0.7) {
     const candidates = order.slice(1, 3).sort((a, b) => a.area - b.area);
-    const heritageIdx = candidates[0].i;
-    chars[heritageIdx] = "heritage";
-    assigned.add(heritageIdx);
+    chars[candidates[0].i] = "heritage";
+    assigned.add(candidates[0].i);
   }
 
-  // 3. Subcentres: the high-rise band clusters AROUND downtown — the innermost
-  //    unassigned districts become tall, so density concentrates centrally and
-  //    the periphery is left to residential / industrial. Scales with size.
-  const subTarget = 1 + Math.floor(n / 5);
-  let subPlaced = 0;
-  for (let rank = 1; rank < order.length && subPlaced < subTarget; rank++) {
-    const idx = order[rank].i;
-    if (assigned.has(idx)) continue;
-    chars[idx] = "subcentre";
-    assigned.add(idx);
-    subPlaced++;
+  // 3a. Core sweep — remaining districts inside R_DOWNTOWN are downtown-class.
+  for (const o of dist) {
+    if (!assigned.has(o.i) && o.d < R_DOWNTOWN) {
+      chars[o.i] = "downtown";
+      assigned.add(o.i);
+    }
   }
 
-  // 4. Industrial: the furthest-from-centre districts (docks / yards on the
-  //    edge). Scales with city size.
-  const industrialTarget = 1 + Math.floor(n / 14);
+  // 3b. Subcentres — the LARGEST unassigned districts in the subcentre band
+  //     (a subcentre is a big secondary cluster, not merely "next closest"),
+  //     capped few so the high-rise footprint stays compact.
+  const subCand = dist
+    .filter((o) => !assigned.has(o.i) && o.d >= R_DOWNTOWN && o.d < R_SUBCENTRE)
+    .sort((a, b) => b.area - a.area);
+  for (let s = 0; s < Math.min(MAX_SUBCENTRES, subCand.length); s++) {
+    chars[subCand[s].i] = "subcentre";
+    assigned.add(subCand[s].i);
+  }
+
+  // 4. Industrial — a thin fringe at the rim (furthest districts past half the
+  //    outer radius: docks / yards on the edge). Scales gently with city size.
+  const industrialTarget = Math.max(1, Math.round(n * 0.08));
   let industrialAssigned = 0;
   for (let k = order.length - 1; k >= 0 && industrialAssigned < industrialTarget; k--) {
-    if (!assigned.has(order[k].i)) {
-      chars[order[k].i] = "industrial";
-      assigned.add(order[k].i);
+    const o = order[k];
+    if (!assigned.has(o.i) && o.d > maxD * 0.5) {
+      chars[o.i] = "industrial";
+      assigned.add(o.i);
       industrialAssigned++;
     }
   }
 
-  // 5. Remaining: inner unassigned → mixed-use (transition belt), outer → residential.
-  const half = n / 2;
-  for (let rank = 0; rank < order.length; rank++) {
-    const idx = order[rank].i;
-    if (assigned.has(idx)) continue;
-    chars[idx] = rank < half ? "mixed-use" : "residential";
+  // 5. Remaining by absolute band: a mixed-use transition belt inside R_MIXED,
+  //    else residential — the low-density bulk that fills the rest of the city.
+  for (const o of dist) {
+    if (assigned.has(o.i)) continue;
+    chars[o.i] = o.d < R_MIXED ? "mixed-use" : "residential";
   }
 
   return chars;
@@ -160,10 +182,15 @@ type NetRoad = { vertices: Array<{ x: number; z: number }>; width: number; close
 
 const NET_GRID_STEPS = Math.round(200 * GEN_SCALE); // raster steps/axis — keyed to MAX; ~7.5m cells at the gen extent
 const NET_MIN_DISTRICTS = 6; // never merge below this (gate1's floor is 6)
-const NET_MAX_DISTRICTS = 24; // hard safety ceiling (gate1's cap is 26)
-const NET_MIN_AREA_FRACTION = 0.045; // a region below this share of the map is a sliver → merged
-// into a neighbour. This (not the cap) is the primary control: it merges small arterial superblocks
-// into adjacent ones so a district is a *group* of superblocks, and lets the count vary by seed.
+const NET_MAX_DISTRICTS = 48; // hard safety ceiling (gate1's cap is 48)
+// A district must clear this ABSOLUTE area or it's a sliver → merged into a
+// neighbour. Absolute (not a fraction of the map) so district SIZE stays roughly
+// constant across extents and the COUNT scales with the city (#49): at Metro the
+// old 0.045·mapArea floor was ~1.6 km², which collapsed the map to ~10 giant
+// districts. A district is still a *group* of superblocks, and the count varies by
+// seed. This (not the cap) is the primary control.
+const TARGET_MIN_DISTRICT_AREA = 360_000; // m² (~0.36 km²)
+const NET_MIN_AREA_FRACTION_MAX = 0.045; // clamp for small extents (per-device tiers, #53)
 const NET_WALL_PAD = 0.6; // wall half-band = width/2 + PAD·step, so the raster wall
 // is ≥1 cell thick on both sides of any diagonal and a 4-connected flood can't leak across it.
 
@@ -342,7 +369,9 @@ export function generateDistrictsFromNetwork(
     }
     return m;
   };
-  const minArea = total * NET_MIN_AREA_FRACTION;
+  // Sliver floor in CELLS: an absolute target area (÷ cellArea), clamped so a
+  // small extent can't demand a district bigger than 4.5% of its own map.
+  const minArea = Math.min(total * NET_MIN_AREA_FRACTION_MAX, TARGET_MIN_DISTRICT_AREA / cellArea);
   for (;;) {
     const sizes = rootSizes();
     if (sizes.size <= NET_MIN_DISTRICTS) break;
