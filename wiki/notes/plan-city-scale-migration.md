@@ -9,8 +9,15 @@ tags:
 
 # Plan: City-Scale Migration (generate-at-max + crop) — #14
 
-**Date:** 2026-06-03 · **Branch:** `spike/city-scale` (off `arch/city-planning`)
-**Implements:** [[decision-additive-growth-citygen]] · MAX = **Metro 6 km (half 3000)**.
+**Date:** 2026-06-03 · **Branch:** ~~`spike/city-scale`~~ **promoted spike → dev → main**
+(spike pruned). **Implements:** [[decision-additive-growth-citygen]] · MAX = **Metro 6 km (half 3000)**.
+
+> **Status (2026-06-03 evening):** Steps 1–4 **shipped to `main`**, plus gen/look wins
+> on the same spike — [[decision-density-gradient-bands]] (#49), [[decision-tensor-field-morphology]]
+> (#51), light distance LOD (#52, closed), ortho ground double-side (#38, closed). All
+> gate1 PASS + golden reblessed + cross-crop PASS. **Remaining: Step 5 (camera/look follow
+> the crop) + fog #54 (now scoped for camera mobility) — do together; Step 6 (lazy
+> materialisation + per-tile culling); Step 7 (traffic streams, optional).**
 **Source:** the `citygen-extent-audit` workflow (79 coupling sites, 14 rng-count breakers,
 23 gen constants, 15 crop, 7 camera) + an adversarial completeness critic (11 more).
 
