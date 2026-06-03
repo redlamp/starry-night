@@ -80,6 +80,50 @@ periphery ring** — the core is untouched and determinism holds.
   interchange as a single placeable module; circular arcs (no clothoids); 50:1–70:1
   merge taper drawn on ramps.
 
+## Highway rebuild — corridor model (2026-06-03 review + topology research)
+
+The first Stage-1 spike (`feat/highway-crossings`) was reviewed live and **rejected as a
+generator model** — it read as "child's-drawing" city planning.
+
+**Why the spike failed (geometry-first).** `generateFreeways` drew freeways from
+`centerX/centerZ/half` *only* — primitives (2–3 chords through a near-centre point + one
+circle arc) with **zero knowledge of the city fabric** (districts, density, arterial
+grid). A real network is a *response* to the land; the spike laid a *shape over* it. The
+beltway was an unanchored decorative arc bypassing nothing; the radials connected no
+destinations (chords overshooting the bbox, then clipped); crossings were "wherever two
+abstract lines met," with the ~1 mi cadence applied as cosmetic thinning. The macro
+topology was **vibes** because the topology research was unsettled (old Open Q#1/#2) —
+now closed in [[highway-network-references]] §6/§7.
+
+**User design constraints (2026-06-03 review):**
+- **Highways belong OUTSIDE the densest blocks** — realism (bypass rationale, §6) *and* an
+  on-app **visibility** win (a freeway buried in downtown is hard to see).
+- **Perpendicular freeway crossings with interchanges connecting them** are the target read.
+- **OK to bulldoze a block** for an interchange (holds for a *service* diamond/parclo; a
+  full **cloverleaf is a 350–400 m superblock**, §7 — metro-scale, not a single block).
+- **Cloverleaf is the desired aesthetic** for the system crossing — the spike's
+  `buildInterchangeRamps` cloverleaf glyph (4 quarter-loops) is good; **keep it**.
+
+**Rebuild = corridor model (built at the #14 scale spike, per §6 tiers):**
+1. **Route, don't draw.** Freeways = corridors between **metro-edge gateways**, routed
+   **tangent to / skirting the dense core** along **low-density district seams** using the
+   tensor-field grain — not chords through the centre.
+2. **Co-generate.** Lay the freeway corridor first; arterials/streets *respond* (feed
+   interchanges, grade-separate elsewhere). A crossing then *means* "an arterial needs the
+   other side," not "two lines intersected."
+3. **Straight mainlines, deliberate curves** — mostly tangent + occasional large-radius
+   bends at corridor turns (§4 radii), not a constant gentle bow on every spoke.
+4. **No ring at City scale** (§6: ring ≈ 10× the freeway threshold). City tier = **0–1
+   freeway skirting the core**; the ring + freeway×freeway system interchanges are a
+   **Metro-tier** unlock.
+
+**Disposition.** `feat/highway-crossings` stays a **parked reference + salvage branch**
+(NOT a PR — merging would ship the rejected look). Salvage into the rebuild: crossing
+detection (`segIntersect` + skew classify), gate1-safe 10 m segment resampling, ramp
+glyphs through the existing ribbon builder (no new mesh), and the **cloverleaf glyph**.
+The build folds into **Stage 3 scale** (deferred); the topology research above is the
+scale-independent prerequisite — **now done**.
+
 ## Stages (cheap/novel first; perf spend gated)
 
 | Stage | What | Cost | Verify |
@@ -113,8 +157,11 @@ Stages 0 and 1 are independent enough to build in parallel worktrees; they both 
   global — expanding moves them) and **road-network coherence across chunk seams**.
   → Needs a **research/decision pass before the scale build**; it decides whether the
   extent control is a smooth additive slider or a discrete regen.
-- **Highways spike (`feat/highway-crossings`) — parked until scale** (same as suburbs):
-  built + gate1-PASS, but freeways read better at metro; revisit at the chosen extent.
+- **Highways spike (`feat/highway-crossings`) — REJECTED as a generator model**
+  (2026-06-03 review), not merely parked. Geometry-first → "child's-drawing" read.
+  Rebuild on the **corridor model** at the scale spike; salvage the detection + cloverleaf
+  glyph. See "Highway rebuild — corridor model" above + [[highway-network-references]]
+  §6/§7. Branch kept as reference, not a PR.
 
 ## Stage 0 spike — review feedback (rebuild requirements)
 
