@@ -1,5 +1,6 @@
 "use client";
 
+import * as THREE from "three";
 import { useSceneStore, DEBUG_WIRE_COLOR } from "@/lib/state/sceneStore";
 import { CITY_SCALE } from "@/lib/seed/topology";
 
@@ -8,6 +9,12 @@ import { CITY_SCALE } from "@/lib/seed/topology";
 // around; 48 segments are enough to read as a circle at orbit distance without
 // chasing perfection. Far ground still fades into the fog colour (== sky bg)
 // so the edge stays invisible against the sky.
+//
+// DoubleSide (#38): in ortho at a low elevation, zooming out drops the bottom of
+// the frame below y=0; a single-sided (FrontSide) disc culls its backface there,
+// so you see THROUGH the ground to the sky ("under the world"). Rendering both
+// sides makes that dip read as dark ground instead. Zero framing change — the
+// disc is unchanged from above; only the underside now draws.
 export function Ground() {
   const mode = useSceneStore((s) => s.debug.renderModes.ground);
   const wireframe = mode === "wireframe";
@@ -18,6 +25,7 @@ export function Ground() {
         color={wireframe ? DEBUG_WIRE_COLOR : "#04060c"}
         toneMapped={false}
         wireframe={wireframe}
+        side={THREE.DoubleSide}
       />
     </mesh>
   );
