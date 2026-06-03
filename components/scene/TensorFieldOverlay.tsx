@@ -3,7 +3,7 @@
 import { useMemo, useEffect } from "react";
 import * as THREE from "three";
 import { useSceneStore } from "@/lib/state/sceneStore";
-import { CITY_CENTER, CITY_HALF_EXTENT } from "@/lib/seed/topology";
+import { CITY_CENTER, MAX_HALF_EXTENT } from "@/lib/seed/topology";
 import { computeLattice } from "@/lib/seed/lattice";
 import { buildTensorField } from "@/lib/seed/tensorField";
 
@@ -26,7 +26,9 @@ export function TensorFieldOverlay({ masterSeed }: { masterSeed: string }) {
     const field = buildTensorField(masterSeed, lattice);
     const cx = CITY_CENTER.x;
     const cz = CITY_CENTER.z;
-    const half = CITY_HALF_EXTENT;
+    // Cover the full MAX gen extent (#14) — the field is laid out at MAX, so a
+    // CITY_HALF_EXTENT overlay would show only the inner quarter of the city.
+    const half = MAX_HALF_EXTENT;
     const minX = cx - half;
     const minZ = cz - half;
     const step = (2 * half) / GRID_N;

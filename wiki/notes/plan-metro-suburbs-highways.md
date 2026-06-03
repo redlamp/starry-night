@@ -80,6 +80,50 @@ periphery ring** — the core is untouched and determinism holds.
   interchange as a single placeable module; circular arcs (no clothoids); 50:1–70:1
   merge taper drawn on ramps.
 
+## Highway rebuild — corridor model (2026-06-03 review + topology research)
+
+The first Stage-1 spike (`feat/highway-crossings`) was reviewed live and **rejected as a
+generator model** — it read as "child's-drawing" city planning.
+
+**Why the spike failed (geometry-first).** `generateFreeways` drew freeways from
+`centerX/centerZ/half` *only* — primitives (2–3 chords through a near-centre point + one
+circle arc) with **zero knowledge of the city fabric** (districts, density, arterial
+grid). A real network is a *response* to the land; the spike laid a *shape over* it. The
+beltway was an unanchored decorative arc bypassing nothing; the radials connected no
+destinations (chords overshooting the bbox, then clipped); crossings were "wherever two
+abstract lines met," with the ~1 mi cadence applied as cosmetic thinning. The macro
+topology was **vibes** because the topology research was unsettled (old Open Q#1/#2) —
+now closed in [[highway-network-references]] §6/§7.
+
+**User design constraints (2026-06-03 review):**
+- **Highways belong OUTSIDE the densest blocks** — realism (bypass rationale, §6) *and* an
+  on-app **visibility** win (a freeway buried in downtown is hard to see).
+- **Perpendicular freeway crossings with interchanges connecting them** are the target read.
+- **OK to bulldoze a block** for an interchange (holds for a *service* diamond/parclo; a
+  full **cloverleaf is a 350–400 m superblock**, §7 — metro-scale, not a single block).
+- **Cloverleaf is the desired aesthetic** for the system crossing — the spike's
+  `buildInterchangeRamps` cloverleaf glyph (4 quarter-loops) is good; **keep it**.
+
+**Rebuild = corridor model (built at the #14 scale spike, per §6 tiers):**
+1. **Route, don't draw.** Freeways = corridors between **metro-edge gateways**, routed
+   **tangent to / skirting the dense core** along **low-density district seams** using the
+   tensor-field grain — not chords through the centre.
+2. **Co-generate.** Lay the freeway corridor first; arterials/streets *respond* (feed
+   interchanges, grade-separate elsewhere). A crossing then *means* "an arterial needs the
+   other side," not "two lines intersected."
+3. **Straight mainlines, deliberate curves** — mostly tangent + occasional large-radius
+   bends at corridor turns (§4 radii), not a constant gentle bow on every spoke.
+4. **No ring at City scale** (§6: ring ≈ 10× the freeway threshold). City tier = **0–1
+   freeway skirting the core**; the ring + freeway×freeway system interchanges are a
+   **Metro-tier** unlock.
+
+**Disposition.** `feat/highway-crossings` stays a **parked reference + salvage branch**
+(NOT a PR — merging would ship the rejected look). Salvage into the rebuild: crossing
+detection (`segIntersect` + skew classify), gate1-safe 10 m segment resampling, ramp
+glyphs through the existing ribbon builder (no new mesh), and the **cloverleaf glyph**.
+The build folds into **Stage 3 scale** (deferred); the topology research above is the
+scale-independent prerequisite — **now done**.
+
 ## Stages (cheap/novel first; perf spend gated)
 
 | Stage | What | Cost | Verify |
@@ -95,13 +139,71 @@ Stages 0 and 1 are independent enough to build in parallel worktrees; they both 
 
 ## Decisions
 
-- **Extent target: defaulted to City-plus (~4 km, half≈2000)** — keeps the intimate-
-  skyline soul of the After Dark homage; full Metro (6 km) risks reading as flat noise
-  at orbit distance. *Revisit with the user; reversible (single `CITY_HALF_EXTENT` knob
-  + the `×k` derived-constant refactor in [[plan-city-scale-tiers]]).*
+- **Extent target — DECIDED 2026-06-03: Metro 6 km (half 3000)** as the MAX gen extent
+  under [[decision-additive-growth-citygen]] (generate-at-max + crop). The intimate-skyline
+  soul is preserved by the *crop* (default view), not by limiting MAX — so we take the full
+  Metro headroom (rural/fringe, core-skirting highways, suburbs all need periphery) and let
+  the slider crop down. Reversible (one constant).
 - **Perf gate before scaling:** do not grow extent past ~City-plus until the Worker +
   frustum-culling foundation lands (Stage 2). The density gradient cuts building count
   but not road/streetlight/atlas growth.
+- **Additive growth — RESOLVED 2026-06-03 → [[decision-additive-growth-citygen]].** Chose
+  **generate-at-max + crop**: always generate field/roads/districts at a fixed MAX (Metro)
+  extent (so the core is extent-invariant and never re-rolls), drive the size slider as a
+  **crop** only, and materialise buildings lazily within the crop. This is the user's own
+  proposal ("large generative field, build only the crop, defer/purge the rest"). It
+  sidesteps the genuinely-hard globals found in the code audit — long-streamline road seam
+  coherence, the global district flood-fill, and the global distance-to-centre character
+  re-ranking — by computing the full layout once and only *hiding* parts. Also fixes
+  seed-portability. Truly-infinite chunking (Option A) is the future upgrade, not needed
+  for v1. **This unblocks the scale spike.**
+- **Highways spike (`feat/highway-crossings`) — REJECTED as a generator model**
+  (2026-06-03 review), not merely parked. Geometry-first → "child's-drawing" read.
+  Rebuild on the **corridor model** at the scale spike; salvage the detection + cloverleaf
+  glyph. See "Highway rebuild — corridor model" above + [[highway-network-references]]
+  §6/§7. Branch kept as reference, not a PR.
+
+## Stage 0 spike — review feedback (rebuild requirements)
+
+`feat/suburbs-density` is a **parked spike** (good density scaffolding in `density.ts`,
+wrong building + lamp texture). Comments gathered reviewing it, to fold into the rebuild:
+
+- **Buildings (texture).** Per-lot random skip → sparse big "warehouse" boxes, 1–3 per
+  block. Wrong. Rebuild: density picks **smaller archetypes** toward the edge + **whole-
+  block / outer-district dropout**, keeping developed blocks **filled** with many small
+  buildings; varied block sizes + winding (see the suburban archetype taxonomy, captured
+  separately).
+- **Streetlights.** Suburbs read as **unlit / too dim**, and the core→residential
+  transition reads as a *dimming* gradient — wrong lever. Cause: lamp keep-curve floor
+  (0.18) **plus** the suburb street-sep ramp → far fewer minor streets → far fewer lamps.
+  Rebuild rules:
+  - **(a) Constant brightness** across bands — do NOT dim lamps toward the edge.
+  - **(b) Express sparseness via wider lamp SPACING** (more distance between lamps), not
+    by dropping/dimming into darkness — keep a floor, **never zero**.
+  - **(c) Stagger suburban local-street lamps** (zig-zag, alternating sides) instead of
+    parallel/opposite rows — ties to the FHWA one-sided/staggered/opposite layouts in
+    [[highway-network-references]].
+  - **(d) Subcentre stays lit like core.**
+- **Arterials.** Each suburban district gets **~1 arterial**, ideally **radiating to/from
+  the city centre** (a connector spoke) — not zero (the spike leaves arterials untouched)
+  and not the full downtown grid. Refines the rural rule: arterials taper to ~1-toward-
+  centre in the suburb band, → 0 in rural/fringe.
+- **Roads / subdivision (the spike's headline feature FAILED here).** Periphery waviness
+  did **not** produce visible winding — residential streets still read straight/grid-ish —
+  and **subdivision isn't showing** (the sep ramp over-coarsened → blocks read undivided).
+  Rebuild must produce: **visibly winding** residential streets; real **subdivision**
+  (smaller looping local streets carving blocks); and **cul-de-sacs / loops / dead-ends**
+  (spike streets are continuous through-streamlines — add true terminals). Likely needs a
+  different mechanism than "more waviness on the same streamlines".
+- **Block-size variation.** Spike coarsens uniformly; add per-area **size jitter** so
+  blocks vary across the suburb.
+- **Residential window signature.** Homes should read as a **few warm** window dots (warm
+  kelvin, low lit-ratio) vs the cool/dense core; spike leaves windows downtown-ish.
+- **Per-seed variety.** `/plan` rerolls read **samey**; rebuild should vary suburb
+  character more across seeds.
+- **Rural / fringe band — gated on the SCALE spike.** Couldn't see it at 3 km; needs a
+  larger extent before rural/fringe reads. That's a **separate spike** (city scale, #14);
+  do the suburbs rebuild *at that scale*, not at 3 km.
 
 ## Determinism contract (every gen stage)
 

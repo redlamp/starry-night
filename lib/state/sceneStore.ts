@@ -249,15 +249,31 @@ export const DEFAULT_TRAFFIC = { enabled: true, density: 1, highway: 4, arterial
 // ceiling and read too large/hot.
 export const DEFAULT_STREETLIGHTS = { enabled: true, size: 0.8, brightness: 0.85 };
 
+// Distance LOD for the streetlight + traffic point-clouds (#52). RENDER-only:
+// lights shrink + dim by CAMERA distance (world metres) past `near`, sitting at
+// the floors by `far`, and are dropped entirely past `cull`. Never touches
+// generated positions, so gate1 is unaffected. Tuned live per device (the
+// RTX 3080ti can afford a far `cull`; the Pixel 6 wants it tighter). Defaults
+// scaled to the default orbit distance (radius ~4800) so the near side of the
+// city stays full-bright and only the genuinely far/zoomed-out lights attenuate.
+export const DEFAULT_LOD = {
+  enabled: true,
+  near: 3200, // full size/brightness within this camera distance (m)
+  far: 9600, // ramp end — size/brightness reach the floors here (m)
+  cull: 16000, // drop the light beyond this camera distance (m); generous = off in normal view
+  sizeFloor: 0.5, // far size as a fraction of near
+  brightnessFloor: 0.4, // far brightness as a fraction of near
+};
+
 // Organic city footprint (#14). `circle` is the default look — a round footprint
 // masked over the fixed square layout. `square` = the original full-square field
 // (byte-identical no-op mask). `auto` lets each seed pick its own shape; the
 // other values force one shape (the debug switcher). See lib/seed/cityShape.ts.
 export const DEFAULT_CITY_SHAPE: CityShapeSetting = "circle";
-// Circle-mask radius as a fraction of the city half-extent. 1.0 touches the
-// square's edge midpoints; ~1.4 reaches the corners (full content). Only affects
-// the `circle` shape. Tunable via the City shape size slider.
-export const DEFAULT_CITY_SHAPE_SCALE = 1.0;
+// Circle crop radius as a fraction of the MAX (Metro) gen extent. 1.0 = the full
+// Metro disc (6 km across); 0.5 = a City-sized core (3 km, the default). Only affects
+// the `circle` shape. The City-shape "size" slider drives this, shown in km.
+export const DEFAULT_CITY_SHAPE_SCALE = 0.5;
 
 export const DEFAULT_FLY_SPEED = 14;
 // 360 at the City size (1500); base scales with the size knob via CITY_SCALE.
@@ -319,6 +335,7 @@ type AnySettingEntry =
   | SettingEntry<"debug">
   | SettingEntry<"traffic">
   | SettingEntry<"streetlights">
+  | SettingEntry<"lod">
   | SettingEntry<"cityShape">
   | SettingEntry<"cityShapeScale">;
 
@@ -356,6 +373,7 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "debug", defaultValue: DEFAULT_DEBUG, persist: false },
   { key: "traffic", defaultValue: DEFAULT_TRAFFIC, persist: true },
   { key: "streetlights", defaultValue: DEFAULT_STREETLIGHTS, persist: true },
+  { key: "lod", defaultValue: DEFAULT_LOD, persist: true },
   { key: "cityShape", defaultValue: DEFAULT_CITY_SHAPE, persist: true },
   { key: "cityShapeScale", defaultValue: DEFAULT_CITY_SHAPE_SCALE, persist: true },
 ];
@@ -389,6 +407,7 @@ type SavedConfig = {
   starIntro?: SceneState["starIntro"];
   traffic?: SceneState["traffic"];
   streetlights?: SceneState["streetlights"];
+  lod?: SceneState["lod"];
   cityShape?: CityShapeSetting;
   cityShapeScale?: number;
   // Only the layer-visibility toggles persist — topologyKind / arterialCount
@@ -649,6 +668,8 @@ type SceneState = {
   setTraffic: (patch: Partial<typeof DEFAULT_TRAFFIC>) => void;
   streetlights: typeof DEFAULT_STREETLIGHTS;
   setStreetlights: (patch: Partial<typeof DEFAULT_STREETLIGHTS>) => void;
+  lod: typeof DEFAULT_LOD;
+  setLod: (patch: Partial<typeof DEFAULT_LOD>) => void;
   perf: Perf;
   setPerf: (perf: Perf) => void;
   setSeed: (seed: string) => void;
@@ -736,14 +757,12 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setRetrigger: (retriggerSec) => set((s) => ({ intro: { ...s.intro, retriggerSec } })),
   setCycleJitter: (cycleJitter) => set((s) => ({ intro: { ...s.intro, cycleJitter } })),
   playIntro: () => set((s) => ({ intro: { ...s.intro, progress: 0, playing: true } })),
-  setStarIntroProgress: (progress) =>
-    set((s) => ({ starIntro: { ...s.starIntro, progress } })),
+  setStarIntroProgress: (progress) => set((s) => ({ starIntro: { ...s.starIntro, progress } })),
   setStarIntroPlaying: (playing) => set((s) => ({ starIntro: { ...s.starIntro, playing } })),
   setStarIntroDuration: (durationSec) =>
     set((s) => ({ starIntro: { ...s.starIntro, durationSec } })),
   setStarIntroMode: (mode) => set((s) => ({ starIntro: { ...s.starIntro, mode } })),
-  playStarIntro: () =>
-    set((s) => ({ starIntro: { ...s.starIntro, progress: 0, playing: true } })),
+  playStarIntro: () => set((s) => ({ starIntro: { ...s.starIntro, progress: 0, playing: true } })),
   playAllIntros: () =>
     set((s) => ({
       intro: { ...s.intro, progress: 0, playing: true },
@@ -819,6 +838,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setTraffic: (patch) => set((s) => ({ traffic: { ...s.traffic, ...patch } })),
   streetlights: DEFAULT_STREETLIGHTS,
   setStreetlights: (patch) => set((s) => ({ streetlights: { ...s.streetlights, ...patch } })),
+  lod: DEFAULT_LOD,
+  setLod: (patch) => set((s) => ({ lod: { ...s.lod, ...patch } })),
   perf: { fps: 0, triangles: 0, calls: 0, geometries: 0, textures: 0 },
   setPerf: (perf) => set({ perf }),
   setSeed: (masterSeed) => set({ masterSeed }),
