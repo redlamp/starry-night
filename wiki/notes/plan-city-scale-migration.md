@@ -72,7 +72,7 @@ tags:
 - [ ] **Step 5 — camera/look follow the crop (VISUAL — collaborate with the user; can't verify blind).**
   cameraView.ts:38 H, DEFAULT_ORBIT.radius
   (sceneStore:98), DEFAULT_ORTHO_SIZE (:264) → crop radius. **Fog near/far, haze, stars/moon
-  (sceneStore:113,120-124,162-179) → crop or literal, NOT doubled MAX** (critic #10). Keep zoom
+  (sceneStore:113,120-124,162-179) → crop or literal, NOT doubled MAX** (critic #10 — tracked as #54). Keep zoom
   clamps (CameraControls:73-74,85-86), Scene far (Scene.tsx:47), ground disc keyed off MAX.
   Vertical/height values stay unscaled (#47). PlanView BOTH half usages (PlanView:68 + the
   gridN=70 sample loop :84-99) — critic #11.
