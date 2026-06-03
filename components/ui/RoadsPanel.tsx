@@ -68,6 +68,57 @@ export function RoadsSection() {
   );
 }
 
+// Distance LOD (#52) — render-only attenuation/culling shared by streetlights +
+// traffic, so it renders BELOW both in the Roads panel (after TrafficSection).
+// `near`/`far` are the camera-distance ramp (m); past `cull` lights are dropped
+// (size 0). `cull` must be ≥ `far`; lower it on weaker GPUs (Pixel 6) for fps.
+export function LodSection() {
+  const lodEnabled = useSceneStore((s) => s.lod.enabled);
+  const setLod = useSceneStore((s) => s.setLod);
+  return (
+    <>
+      <hr className="border-foreground/10" />
+      <HeaderRow label="Distance LOD" on={lodEnabled} onChange={(v) => setLod({ enabled: v })} />
+      {lodEnabled ? <LodControls /> : null}
+    </>
+  );
+}
+
+function LodControls() {
+  const near = useSceneStore((s) => s.lod.near);
+  const far = useSceneStore((s) => s.lod.far);
+  const cull = useSceneStore((s) => s.lod.cull);
+  const setLod = useSceneStore((s) => s.setLod);
+  return (
+    <>
+      <ValueSlider
+        label="near m"
+        value={near}
+        min={500}
+        max={8000}
+        step={100}
+        onChange={(v) => setLod({ near: v })}
+      />
+      <ValueSlider
+        label="far m"
+        value={far}
+        min={1000}
+        max={16000}
+        step={100}
+        onChange={(v) => setLod({ far: v })}
+      />
+      <ValueSlider
+        label="cull m"
+        value={cull}
+        min={2000}
+        max={30000}
+        step={500}
+        onChange={(v) => setLod({ cull: v })}
+      />
+    </>
+  );
+}
+
 function StreetlightControls() {
   const size = useSceneStore((s) => s.streetlights.size);
   const brightness = useSceneStore((s) => s.streetlights.brightness);
@@ -177,7 +228,7 @@ function TriSwitch({
       aria-label={label}
       onClick={onClick}
       className={cn(
-        "relative inline-flex h-[18.4px] w-[32px] shrink-0 cursor-pointer items-center rounded-full border border-transparent transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
+        "focus-visible:border-ring focus-visible:ring-ring/50 relative inline-flex h-[18.4px] w-[32px] shrink-0 cursor-pointer items-center rounded-full border border-transparent transition-colors outline-none focus-visible:ring-3",
         state === "on" && "bg-primary",
         state === "mixed" && "bg-primary/45",
         state === "off" && "bg-input dark:bg-input/80",
@@ -185,8 +236,8 @@ function TriSwitch({
     >
       <span
         className={cn(
-          "block size-4 rounded-full bg-background transition-transform dark:bg-foreground",
-          state === "on" && "translate-x-[calc(100%-2px)] dark:bg-primary-foreground",
+          "bg-background dark:bg-foreground block size-4 rounded-full transition-transform",
+          state === "on" && "dark:bg-primary-foreground translate-x-[calc(100%-2px)]",
           state === "mixed" && "translate-x-[7px]",
           state === "off" && "translate-x-0",
         )}

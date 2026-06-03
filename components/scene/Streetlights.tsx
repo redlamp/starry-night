@@ -24,6 +24,12 @@ uniform float uBaseSize;
 uniform float uIntroProgress;
 uniform vec3 uIntroCityCenter;
 uniform float uIntroMaxRadius;
+uniform float uLodEnabled;
+uniform float uLodNear;
+uniform float uLodFar;
+uniform float uLodCull;
+uniform float uLodSizeFloor;
+uniform float uLodBrightFloor;
 attribute vec3 aColor;
 attribute float aFailing;
 attribute float aSeed;
@@ -32,6 +38,7 @@ varying vec3 vColor;
 varying float vWake;
 varying float vFailing;
 varying float vSeed;
+varying float vLodBright;
 void main() {
   vec4 mv = modelViewMatrix * vec4(position, 1.0);
   vDist = -mv.z;
@@ -46,10 +53,22 @@ void main() {
   vWake = smoothstep(threshold, threshold + 0.08, uIntroProgress);
 
   gl_Position = projectionMatrix * mv;
-  // Fixed apparent size. The default projection is orthographic, where screen
-  // size must NOT fall off with distance — the old 180/vDist term collapsed
-  // every light to the 2px floor at city-viewing distances, making them vanish.
-  gl_PointSize = clamp(uBaseSize * uPixelRatio, 2.0, 10.0);
+
+  // Distance LOD (#52). Attenuate by CAMERA distance in world space (not view-z)
+  // so it's projection-agnostic — correct under the default orthographic camera,
+  // where a perspective size falloff would be wrong. Far lights shrink + dim to
+  // the floors; past uLodCull the point is dropped (size 0 → never rasterised),
+  // cutting the additive overdraw that dominates cost at Metro scale.
+  vec3 worldPos = (modelMatrix * vec4(position, 1.0)).xyz;
+  float camDist = distance(worldPos, cameraPosition);
+  float lodT = uLodEnabled > 0.5 ? smoothstep(uLodNear, uLodFar, camDist) : 0.0;
+  float sizeAtten = mix(1.0, uLodSizeFloor, lodT);
+  vLodBright = mix(1.0, uLodBrightFloor, lodT);
+  float keep = (uLodEnabled > 0.5 && camDist > uLodCull) ? 0.0 : 1.0;
+
+  // Fixed apparent base size (the old 180/vDist term collapsed every light to the
+  // floor at city distances, making them vanish under ortho); LOD scales it.
+  gl_PointSize = keep * clamp(uBaseSize * uPixelRatio * sizeAtten, 2.0, 10.0);
 }
 `;
 
@@ -61,6 +80,7 @@ varying vec3 vColor;
 varying float vWake;
 varying float vFailing;
 varying float vSeed;
+varying float vLodBright;
 
 float hash11(float p) {
   p = fract(p * 0.1031);
@@ -84,8 +104,8 @@ void main() {
     bright = 0.18 + n * 0.82;
   }
 
-  float intensity = pow(core, 1.4) * 1.8 * uBrightness * vWake * bright;
-  gl_FragColor = vec4(vColor * intensity, core * vWake * bright);
+  float intensity = pow(core, 1.4) * 1.8 * uBrightness * vWake * bright * vLodBright;
+  gl_FragColor = vec4(vColor * intensity, core * vWake * bright * vLodBright);
 }
 `;
 
@@ -133,6 +153,12 @@ export function Streetlights({ masterSeed }: { masterSeed: string }) {
         uIntroCityCenter: { value: new THREE.Vector3() },
         uIntroMaxRadius: { value: maxR },
         uTime: sharedTime,
+        uLodEnabled: { value: 1 },
+        uLodNear: { value: 3200 },
+        uLodFar: { value: 7500 },
+        uLodCull: { value: 16000 },
+        uLodSizeFloor: { value: 0.5 },
+        uLodBrightFloor: { value: 0.4 },
       },
       transparent: true,
       depthWrite: false,
@@ -150,6 +176,14 @@ export function Streetlights({ masterSeed }: { masterSeed: string }) {
     // size + brightness are live multipliers (no regen) — base sprite is 6px.
     material.uniforms.uBaseSize.value = 6 * s.streetlights.size;
     material.uniforms.uBrightness.value = s.streetlights.brightness;
+    // Distance LOD (#52) — live, render-only.
+    const lod = s.lod;
+    material.uniforms.uLodEnabled.value = lod.enabled ? 1 : 0;
+    material.uniforms.uLodNear.value = lod.near;
+    material.uniforms.uLodFar.value = lod.far;
+    material.uniforms.uLodCull.value = lod.cull;
+    material.uniforms.uLodSizeFloor.value = lod.sizeFloor;
+    material.uniforms.uLodBrightFloor.value = lod.brightnessFloor;
   });
 
   if (!enabled) return null;

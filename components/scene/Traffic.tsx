@@ -28,7 +28,13 @@ export function Traffic({ masterSeed }: { masterSeed: string }) {
   const cityShapeScale = useSceneStore((s) => s.cityShapeScale);
 
   const points = useMemo(() => {
-    const t = buildTraffic(masterSeed, density, { highway, arterial, minor }, cityShape, cityShapeScale);
+    const t = buildTraffic(
+      masterSeed,
+      density,
+      { highway, arterial, minor },
+      cityShape,
+      cityShapeScale,
+    );
     const geo = new THREE.BufferGeometry();
     // `position` only defines the draw count; the real location is computed in
     // the vertex shader from aA/aB. Use aA so any bounds query is sane.
@@ -58,6 +64,12 @@ export function Traffic({ masterSeed }: { masterSeed: string }) {
         uIntro: sharedStreetlightIntroProgress,
         uIntroCenter: { value: new THREE.Vector3(0, 0, -120) },
         uIntroMaxRadius: { value: t.maxRadius },
+        uLodEnabled: { value: 1 },
+        uLodNear: { value: 3200 },
+        uLodFar: { value: 7500 },
+        uLodCull: { value: 16000 },
+        uLodSizeFloor: { value: 0.5 },
+        uLodBrightFloor: { value: 0.4 },
       },
       transparent: true,
       depthWrite: false,
@@ -86,6 +98,14 @@ export function Traffic({ masterSeed }: { masterSeed: string }) {
     state.camera.getWorldDirection(_viewDir);
     u.uViewDir.value.copy(_viewDir);
     u.uIntroCenter.value.set(s.orbit.centerX, 0, s.orbit.centerZ);
+    // Distance LOD (#52) — live, render-only; shares the streetlights' settings.
+    const lod = s.lod;
+    u.uLodEnabled.value = lod.enabled ? 1 : 0;
+    u.uLodNear.value = lod.near;
+    u.uLodFar.value = lod.far;
+    u.uLodCull.value = lod.cull;
+    u.uLodSizeFloor.value = lod.sizeFloor;
+    u.uLodBrightFloor.value = lod.brightnessFloor;
   });
 
   if (!enabled) return null;
