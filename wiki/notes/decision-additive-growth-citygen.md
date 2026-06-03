@@ -122,9 +122,13 @@ upgrade — and B's materialise/evict layer is reusable groundwork for it.
 
 ## Open follow-ups
 
-- **MAX extent value:** Metro (6 km) vs City-plus (4 km) — still the user's call
-  ([[plan-metro-suburbs-highways]] defaulted City-plus). Under B this is simply "the value
-  of the gen constant," fully reversible.
+- **MAX extent value — DECIDED 2026-06-03: Metro 6 km (half 3000).** Reasoning: under B,
+  MAX is *not* the default view — the crop is — so the larger extent gives the rural/fringe
+  band, core-skirting highways, and the suburbs rebuild the periphery they need, while the
+  slider crops back to an intimate skyline on demand. The decision note's old "flat noise
+  at orbit" worry was about the *default view*, which is just a crop setting, not MAX.
+  Higher one-time gen cost (~2.25× City-plus), bounded + cached. Fully reversible (one
+  constant).
 - **Eviction granularity** (per-lot vs per-tile) — a perf-tuning detail.
 - **Hitch-free live grow:** materialising a ring of new lots mid-drag may need
   throttling/async (ties to the Worker plan, Stage 2).

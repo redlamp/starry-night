@@ -139,10 +139,11 @@ Stages 0 and 1 are independent enough to build in parallel worktrees; they both 
 
 ## Decisions
 
-- **Extent target: defaulted to City-plus (~4 km, half≈2000)** — keeps the intimate-
-  skyline soul of the After Dark homage; full Metro (6 km) risks reading as flat noise
-  at orbit distance. *Revisit with the user; reversible (single `CITY_HALF_EXTENT` knob
-  + the `×k` derived-constant refactor in [[plan-city-scale-tiers]]).*
+- **Extent target — DECIDED 2026-06-03: Metro 6 km (half 3000)** as the MAX gen extent
+  under [[decision-additive-growth-citygen]] (generate-at-max + crop). The intimate-skyline
+  soul is preserved by the *crop* (default view), not by limiting MAX — so we take the full
+  Metro headroom (rural/fringe, core-skirting highways, suburbs all need periphery) and let
+  the slider crop down. Reversible (one constant).
 - **Perf gate before scaling:** do not grow extent past ~City-plus until the Worker +
   frustum-culling foundation lands (Stage 2). The density gradient cuts building count
   but not road/streetlight/atlas growth.
