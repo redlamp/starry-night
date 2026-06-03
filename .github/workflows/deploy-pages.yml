@@ -2,11 +2,11 @@ name: Deploy to GitHub Pages
 
 # Deploys TWO builds into one Pages artifact (the deploy-pages action replaces the
 # whole site, so root + /dev must ship together):
-#   root  → main           at basePath /starry-night        (production)
-#   /dev  → spike/city-scale at basePath /starry-night/dev   (in-progress preview)
+#   root  → main   at basePath /starry-night        (production)
+#   /dev  → dev    at basePath /starry-night/dev     (integration preview)
 # Triggered by pushes to main; use the "Run workflow" button (workflow_dispatch) to
-# refresh /dev after committing to the spike branch. The /dev build is non-fatal
-# (continue-on-error) so a broken spike can never block the production deploy.
+# refresh /dev after committing to the dev branch. The /dev build is non-fatal
+# (continue-on-error) so a broken dev can never block the production deploy.
 
 on:
   push:
@@ -47,16 +47,16 @@ jobs:
           bun install --frozen-lockfile
           bun run build
 
-      # --- preview: spike/city-scale → site/dev (/starry-night/dev) ---
+      # --- preview: dev branch → site/dev (/starry-night/dev) ---
       - name: Checkout dev branch
         uses: actions/checkout@v4
         with:
-          ref: spike/city-scale
+          ref: dev
           path: dev-src
 
       - name: Build dev (/dev)
         working-directory: dev-src
-        continue-on-error: true # a broken spike must not block the production deploy
+        continue-on-error: true # a broken dev must not block the production deploy
         env:
           NEXT_PUBLIC_BASE_PATH: /starry-night/dev
           NEXT_OUTPUT_EXPORT: "true"
