@@ -50,9 +50,11 @@ tags:
 - [ ] **Step 2 — pin GEN domain to MAX.** Re-key off GEN_SCALE/MAX: `generateTopology` half
   (topology.ts:203→208), `buildTensorRoadsImpl` bounds (cityGen.ts:350), tensorField half+N
   (tensorField.ts:58,67), lattice half (lattice.ts:53) **+ ramp ref (decision 2)**, district
-  `NET_GRID_STEPS` (district.ts:161) + topo.halfExtent (district.ts:192). Set the crop so
-  `scale*MAX = 1500` (scale 0.5) for the regression run → must reproduce the Step-1 golden
-  **byte-for-byte**. Expect the lattice ramp (decision 2) to be the divergence to fix.
+  `NET_GRID_STEPS` (district.ts:161) + topo.halfExtent (district.ts:192). Checkpoint: **gate1
+  PASS at MAX gen** (no overlaps / district band / in-bounds at half 3000 — needs Step 2b
+  first for the bounds + scan-box re-key). The golden WILL diff here (city is now Metro-gen
+  + rng-count still live) — that is expected, not a failure. Cross-crop invariance is the
+  Step-3 gate, not this step.
 - [ ] **Step 2b — gate1's own extent coupling.** gate1.ts:129 slack → MAX-derived; gate1.ts:186-187
   lattice scan box → ±MAX about CITY_CENTER (critic #3); make gate1 assert ACROSS {shape,scale}
   pairs, not same-arg twice (critic #4).
@@ -80,7 +82,12 @@ tags:
 
 ## Regression guards (in gate1 + cityGolden)
 
-- **Golden snapshot** (Step-1 contract): City-equivalent crop == today, byte-for-byte.
+- **Golden snapshot** = a DIFF/measurement tool, NOT a pass/fail match. Achieving
+  cross-crop invariance requires changing the seeding mechanism (random-bbox → per-cell
+  lattice), which necessarily changes the city — so existing seeds render a **one-time
+  different** (then stable + additive) city. This is the decision note's accepted "seeds
+  not portable across extent/lattice changes." The golden lets us SEE how much each seed
+  shifts (sanity: not wildly different), it is not required to stay byte-identical to today.
 - **Cross-crop core byte-identity**: seed-only artefacts invariant to shapeScale across
   crops {0.25, 0.5, 1.0, 1.4} — topology, field grid, districts, polylines, lot positions,
   **+ building id/windowSeed** (critic #1).
