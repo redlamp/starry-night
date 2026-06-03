@@ -45,6 +45,18 @@ export const CITY_HALF_EXTENT = 1500;
 // track the size knob. Exactly 1 at the base size — a no-op until the knob moves.
 export const CITY_SCALE = CITY_HALF_EXTENT / BASE_HALF_EXTENT;
 
+// --- #14 scale migration: generate-at-max + crop -----------------------------
+// The whole city is GENERATED at this fixed MAX extent (Metro, decided in
+// wiki/notes/decision-additive-growth-citygen.md + plan-metro-suburbs-highways.md);
+// the size slider becomes a CROP that only reveals/hides already-generated content,
+// so the core is extent-invariant and never re-rolls on a slider change.
+//
+// NOT YET WIRED (Step 1). Step 2 routes the generation constants (tensorField N,
+// tensorStreets MAX_PTS, district NET_GRID_STEPS, the gen bbox) through GEN_SCALE /
+// MAX_HALF_EXTENT, while CITY_SCALE stays the *look* scale (fog/haze/stars/camera).
+export const MAX_HALF_EXTENT = 3000;
+export const GEN_SCALE = MAX_HALF_EXTENT / BASE_HALF_EXTENT;
+
 const HIGHWAY_WIDTH = 28;
 
 // Ring topologies were over-represented; weighted down here. Crossroads 0.45 /
@@ -200,7 +212,10 @@ export function generateTopology(masterSeed: string): Topology {
   const kind = pickTopologyKind(rng);
   const cx = CITY_CENTER.x;
   const cz = CITY_CENTER.z;
-  const half = CITY_HALF_EXTENT;
+  // #14: generate the topology at the fixed MAX extent (Metro). topo.halfExtent
+  // then = MAX, so the tensor-road bbox (cityGen) + district raster auto-follow.
+  // The size slider crops post-gen — see wiki/notes/plan-city-scale-migration.md.
+  const half = MAX_HALF_EXTENT;
   let highways: Highway[] = [];
   switch (kind) {
     case "crossroads":

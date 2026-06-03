@@ -2,7 +2,7 @@ import seedrandom from "seedrandom";
 import { computeLattice } from "./lattice";
 import { buildTensorField, alignDir, type TensorField, type Vec2 } from "./tensorField";
 import type { RoadPoly, RoadTier } from "./streets";
-import { CITY_SCALE } from "./topology";
+import { GEN_SCALE } from "./topology";
 import type { ShapeMask } from "./cityShape";
 
 // Tensor-field streets. Roads are streamlines of the tensor field. Both the
@@ -18,7 +18,7 @@ import type { ShapeMask } from "./cityShape";
 // arterial-endpoint queue with no PRNG, then a seeded PRNG fallback).
 
 const DSTEP = 4;
-const MAX_PTS = Math.round(420 * CITY_SCALE); // streamline point cap — scales so long roads don't truncate
+const MAX_PTS = Math.round(420 * GEN_SCALE); // streamline point cap — keyed to MAX so far roads reach the full extent
 const MIN_PTS = 6;
 const SEED_TRIES = 200;
 

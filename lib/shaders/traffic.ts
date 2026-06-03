@@ -13,6 +13,12 @@ uniform float uTailIntensity;
 uniform float uIntro;         // streetlight intro progress 0..1 (shared driver)
 uniform vec3 uIntroCenter;    // city centre, for the center-out wake
 uniform float uIntroMaxRadius;
+uniform float uLodEnabled;    // distance LOD (#52)
+uniform float uLodNear;
+uniform float uLodFar;
+uniform float uLodCull;
+uniform float uLodSizeFloor;
+uniform float uLodBrightFloor;
 
 attribute vec3 aA;     // travel-start (lane-offset world point)
 attribute vec3 aB;     // travel-end
@@ -27,6 +33,7 @@ attribute float aSize;
 varying vec3 vColor;
 varying float vAlpha;
 varying float vEmit;
+varying float vLodBright;
 
 void main() {
   float t = fract(uTime * aSpeed + aPhase);
@@ -61,9 +68,18 @@ void main() {
   vColor = mix(aTail, aColor, headness);
   vEmit = mix(uTailIntensity, uHeadIntensity, headness);
 
+  // Distance LOD (#52): attenuate by CAMERA distance in world space (matches the
+  // streetlights), so far cars shrink + dim and cars past uLodCull are dropped —
+  // the additive-overdraw cut that keeps framerate as the city scales to Metro.
+  vec3 worldPos = (modelMatrix * vec4(p, 1.0)).xyz;
+  float camDist = distance(worldPos, cameraPosition);
+  float lodT = uLodEnabled > 0.5 ? smoothstep(uLodNear, uLodFar, camDist) : 0.0;
+  vLodBright = mix(1.0, uLodBrightFloor, lodT);
+  float keep = (uLodEnabled > 0.5 && camDist > uLodCull) ? 0.0 : 1.0;
+
   // Fixed apparent size (correct under the default orthographic projection;
   // points stay legible dots in perspective too). uSizeScale tunes globally.
-  gl_PointSize = clamp(aSize * uPixelRatio * uSizeScale, 1.0, 16.0);
+  gl_PointSize = keep * clamp(aSize * uPixelRatio * uSizeScale * mix(1.0, uLodSizeFloor, lodT), 1.0, 16.0);
 }
 `;
 
@@ -71,6 +87,7 @@ export const trafficFragmentShader = /* glsl */ `
 varying vec3 vColor;
 varying float vAlpha;
 varying float vEmit;
+varying float vLodBright;
 
 void main() {
   vec2 uv = gl_PointCoord * 2.0 - 1.0;
@@ -79,6 +96,7 @@ void main() {
   float glow = smoothstep(1.0, 0.0, r2); // soft round falloff
   // Hot core + glow, pushed above 1.0 so ACES gives it a little bloomy HDR pop.
   // Headlights emit brighter than tails (vEmit baked per car in the vertex stage).
-  gl_FragColor = vec4(vColor * vEmit * (0.35 + 0.65 * glow), vAlpha * glow);
+  // vLodBright dims distant cars (#52).
+  gl_FragColor = vec4(vColor * vEmit * (0.35 + 0.65 * glow) * vLodBright, vAlpha * glow * vLodBright);
 }
 `;

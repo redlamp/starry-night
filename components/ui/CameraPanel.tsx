@@ -14,6 +14,7 @@ import {
 import { randomSeed } from "@/lib/seed/rng";
 import { ARCHETYPE_ORDER, type Archetype } from "@/lib/seed/cityGen";
 import { CITY_SHAPES, type CityShapeSetting } from "@/lib/seed/cityShape";
+import { MAX_HALF_EXTENT } from "@/lib/seed/topology";
 import { cn, isTypingTarget } from "@/lib/utils";
 import {
   AppWindow,
@@ -63,7 +64,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DistrictsSection } from "@/components/ui/DistrictsPanel";
-import { RoadsSection, CityDetailsSection } from "@/components/ui/RoadsPanel";
+import { RoadsSection, LodSection, CityDetailsSection } from "@/components/ui/RoadsPanel";
 import {
   setCameraTab,
   currentCameraTab,
@@ -156,6 +157,10 @@ function ThemeToggle() {
 const RAD2DEG = 180 / Math.PI;
 const DEG2RAD = Math.PI / 180;
 
+// Full Metro crop diameter in km (2 × MAX half-extent). The City-shape "size" slider
+// works in km; cityShapeScale stays the 0..1 fraction-of-MAX it maps to.
+const CROP_FULL_KM = (2 * MAX_HALF_EXTENT) / 1000;
+
 function fmt(n: number, p = 2) {
   return n.toFixed(p);
 }
@@ -165,21 +170,59 @@ function fmt(n: number, p = 2) {
 // field toggle lives under "Debug View", not "Roads". Matching is AND-over-tokens
 // against label + value + keywords; matching sections auto-expand while searching.
 const SETTINGS_SECTIONS: { value: string; label: string; keywords: string }[] = [
-  { value: "pose", label: "Camera", keywords: "position rotation fov projection orthographic perspective look at orient pose lens" },
-  { value: "orbit", label: "Orbit", keywords: "elevation azimuth radius spin speed pause center focal auto rotate" },
+  {
+    value: "pose",
+    label: "Camera",
+    keywords: "position rotation fov projection orthographic perspective look at orient pose lens",
+  },
+  {
+    value: "orbit",
+    label: "Orbit",
+    keywords: "elevation azimuth radius spin speed pause center focal auto rotate",
+  },
   { value: "districts", label: "Districts", keywords: "shells borders outline color region zones" },
-  { value: "roads", label: "Roads", keywords: "highways arterials streets traffic cars headlights taillights planning tier ribbons network" },
-  { value: "city-details", label: "City Details", keywords: "shape circle square scale size buildings count footprint" },
-  { value: "stars", label: "Stars", keywords: "starfield twinkle sparkle color temperature density sky" },
+  {
+    value: "roads",
+    label: "Roads",
+    keywords:
+      "highways arterials streets traffic cars headlights taillights planning tier ribbons network",
+  },
+  {
+    value: "city-details",
+    label: "City Details",
+    keywords: "shape circle square scale size buildings count footprint",
+  },
+  {
+    value: "stars",
+    label: "Stars",
+    keywords: "starfield twinkle sparkle color temperature density sky",
+  },
   { value: "moon", label: "Moon", keywords: "phase distance halo glow" },
-  { value: "fog", label: "Fog", keywords: "haze ground near far density color exp2 distance depth" },
+  {
+    value: "fog",
+    label: "Fog",
+    keywords: "haze ground near far density color exp2 distance depth",
+  },
   { value: "windows", label: "Anti-Aliasing", keywords: "aa msaa samples smoothing jaggies moire" },
-  { value: "window-profiles", label: "Windows", keywords: "lit ratio flicker brightness emissive profiles glow building" },
-  { value: "intro", label: "Intro", keywords: "wake reveal duration streetlight stars speed animation startup" },
+  {
+    value: "window-profiles",
+    label: "Windows",
+    keywords: "lit ratio flicker brightness emissive profiles glow building",
+  },
+  {
+    value: "intro",
+    label: "Intro",
+    keywords: "wake reveal duration streetlight stars speed animation startup",
+  },
   { value: "live", label: "Live readout", keywords: "position rotation fov debug telemetry" },
   { value: "seed", label: "Seed", keywords: "reroll random refresh regenerate city" },
   { value: "perf", label: "Performance", keywords: "fps frame rate draw calls monitor gpu" },
-  { value: "debug", label: "Debug View", keywords: "render modes wireframe hidden tensor field flow visualization overlay building tint ground" },
+  {
+    value: "debug",
+    label: "Debug View",
+    keywords:
+      "render modes wireframe hidden tensor field flow visualization overlay building tint ground",
+  },
 ];
 
 function matchSection(query: string, s: (typeof SETTINGS_SECTIONS)[number]): boolean {
@@ -359,6 +402,7 @@ export function CameraPanel() {
             <Section value="roads" icon={Route} label="Roads" hidden={!show("roads")}>
               <RoadsSection />
               <TrafficSection />
+              <LodSection />
             </Section>
 
             <Section
@@ -695,9 +739,7 @@ function AntiAliasingSection() {
   const setWindowAA = useSceneStore((s) => s.setWindowAA);
   return (
     <>
-      <div className="text-foreground/55 text-[10px] tracking-wide uppercase">
-        Anti-alias / LOD
-      </div>
+      <div className="text-foreground/55 text-[10px] tracking-wide uppercase">Anti-alias / LOD</div>
       <ValueSlider
         label="edge AA"
         value={wa.edge}
@@ -1229,17 +1271,17 @@ function DebugSection() {
         onChange={(v) => setCityShape(v as CityShapeSetting)}
       />
       <ValueSlider
-        label="crop"
-        value={cityShapeScale}
-        min={0.4}
-        max={1.4}
-        step={0.05}
-        onChange={setCityShapeScale}
+        label="size km"
+        value={Math.round(cityShapeScale * CROP_FULL_KM * 10) / 10}
+        min={1.5}
+        max={CROP_FULL_KM}
+        step={0.5}
+        onChange={(km) => setCityShapeScale(km / CROP_FULL_KM)}
       />
       <div className="text-foreground/45 text-[11px] leading-snug">
-        Footprint mask. auto = each seed picks; square = full field. crop scales the kept
-        circle radius (1.0 ≈ map edges, 1.4 ≈ corners) — it does NOT change the city&apos;s
-        extent or density, only how much is kept. Changing either regenerates the city.
+        City size across, in km (circle crop). 3 km ≈ a downtown core; 6 km = the full Metro extent.
+        Reveals/hides the already-generated city (grow = reveal, never a re-roll) — only the seed
+        changes the city. auto = each seed picks; square = full field.
       </div>
 
       <SubHeader label="Building tint" />
@@ -1416,7 +1458,11 @@ function HeaderPauseButton({ tab }: { tab: CameraTab }) {
     <Button
       size="sm"
       onClick={toggle}
-      title={active ? `Resume ${what}${isOrbit ? " (Space)" : ""}` : `Pause ${what}${isOrbit ? " (Space)" : ""}`}
+      title={
+        active
+          ? `Resume ${what}${isOrbit ? " (Space)" : ""}`
+          : `Pause ${what}${isOrbit ? " (Space)" : ""}`
+      }
       aria-label={active ? `Resume ${what}` : `Pause ${what}`}
       className={cn(
         "min-w-[5.5rem] gap-1.5 font-medium",

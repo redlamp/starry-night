@@ -1,5 +1,5 @@
 import seedrandom from "seedrandom";
-import { CITY_CENTER, CITY_HALF_EXTENT, CITY_SCALE } from "./topology";
+import { CITY_CENTER, MAX_HALF_EXTENT, GEN_SCALE } from "./topology";
 import type { Lattice } from "./lattice";
 
 // Tensor field — the direction field the streets follow (the proper tensor-field
@@ -51,47 +51,85 @@ function basisWeight(b: Basis, x: number, z: number): number {
   return Math.exp(-b.decay * d2);
 }
 
+// Field morphology (#51) — each seed draws ONE family so cities don't all read
+// as the same near-uniform grid (dull) or sprout the same stark radial bullseye
+// (weird + too common). All families are realised as the SAME grid-basis layout
+// with a per-position orientation, so the streamline math + determinism are
+// unchanged; only how each basis's θ is chosen differs.
+//   warp  — θ rides a low-frequency sine → organic S-curving streets (no rings)
+//   shear — two grids at a 28–54° offset meeting at a smooth seam
+//   grid  — calm, but a mandatory gentle bend so it's never dead-straight
+//   radial— a compact off-centre roundabout (rare; tighter than before)
+type Morphology = "warp" | "shear" | "grid" | "radial";
+
+function pickMorphology(r: number): Morphology {
+  if (r < 0.34) return "warp";
+  if (r < 0.64) return "shear";
+  if (r < 0.86) return "grid";
+  return "radial";
+}
+
+function smoothstep(edge0: number, edge1: number, x: number): number {
+  const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
+  return t * t * (3 - 2 * t);
+}
+
 export function buildTensorField(masterSeed: string, lattice: Lattice): TensorField {
   const rng = seedrandom(`${masterSeed}::tensor::fields`);
   const cx = CITY_CENTER.x;
   const cz = CITY_CENTER.z;
-  const half = CITY_HALF_EXTENT;
+  const half = MAX_HALF_EXTENT; // #14: lay the field out at MAX; the crop is a post-filter
   const basis: Basis[] = [];
 
-  // 1. A 4×4 lattice of GRID basis fields, oriented by the center-anchored
-  //    lattice field (θ0 + gentle squared edge-drift, gate1-validated for small
-  //    neighbour-delta) plus a PER-SEED waviness × per-field jitter. Summing
-  //    grids at varying angles gives a coherently warping grid → curved streets.
-  //    waviness varies the amount per seed: some cities near-straight, some wavy
-  //    (the "responds to geography" feel) — no two read the same.
-  const N = Math.max(3, Math.round(4 * CITY_SCALE)); // grid-basis count — scales with size to hold grain
+  // Per-seed field parameters. `deviation` is the tunable spread within a family
+  // (#51): some cities calm, some strongly deformed — the future runtime slider
+  // would scale this. Draws happen up-front in a fixed order for determinism.
+  const morph = pickMorphology(rng());
+  const deviation = 0.7 + rng() * 0.9; // 0.7 … 1.6
+  const waveDir = rng() * Math.PI * 2; // direction the warp sine travels
+  const waveLambda = half * (0.8 + rng() * 1.2); // warp wavelength (m)
+  const wavePhase = rng() * Math.PI * 2;
+  const shearNormal = rng() * Math.PI; // boundary orientation for the shear seam
+  const shearDelta = ((28 + rng() * 26) * Math.PI) / 180; // grid-to-grid angle: 28–54°
+  const shearBand = half * (0.12 + rng() * 0.18); // half-width of the smooth seam
+  const radialAng = rng() * Math.PI * 2;
+  const radialRad = half * (0.28 + rng() * 0.22);
+
+  const warpAmp = (((morph === "warp" ? 26 : 9) * Math.PI) / 180) * deviation; // calm grid still bends gently
+  const JITTER = (4 * Math.PI) / 180; // ±2° per-basis texture so it's never mechanical
+
+  // N×N grid bases, each oriented by the lattice grain + the morphology's
+  // deviation. Summing them (Gaussian-weighted) yields a smoothly varying field.
+  const N = Math.max(3, Math.round(4 * GEN_SCALE)); // keyed to MAX (gen extent), constant across crops
   const span = half * 1.2;
-  const waviness = 0.6 + rng() * 1.4; // 0.6 (calm grid) … 2.0 (very wavy)
-  const jitterPeak = ((36 * Math.PI) / 180) * waviness; // ±18°·waviness
   for (let i = 0; i < N; i++) {
     for (let j = 0; j < N; j++) {
       const fx = cx + (i / (N - 1) - 0.5) * 2 * span;
       const fz = cz + (j / (N - 1) - 0.5) * 2 * span;
-      const theta = lattice.orientationAt(fx, fz) + (rng() - 0.5) * jitterPeak;
+      let theta = lattice.orientationAt(fx, fz); // base grain
+      if (morph === "shear") {
+        const sd = (fx - cx) * Math.cos(shearNormal) + (fz - cz) * Math.sin(shearNormal);
+        theta += (smoothstep(-shearBand, shearBand, sd) - 0.5) * shearDelta;
+      } else {
+        // warp + grid: a coherent sinusoidal bend across the field
+        const u = (fx - cx) * Math.cos(waveDir) + (fz - cz) * Math.sin(waveDir);
+        theta += warpAmp * Math.sin((2 * Math.PI * u) / waveLambda + wavePhase);
+      }
+      theta += (rng() - 0.5) * JITTER;
       basis.push({ kind: "grid", cx: fx, cz: fz, size: span * 0.62, decay: 1.3, theta });
     }
   }
 
-  // 2. A radial basis field — a roundabout/plaza district — on only ~35% of
-  //    seeds (feedback: circular arterials were appearing in every city). When
-  //    present it is compact + off-centre, so it yields ~one ring + short
-  //    spokes (a real roundabout), not 1-3 city-spanning circles. The roll +
-  //    placement draws happen unconditionally so the RNG stream stays aligned.
-  const plazaRoll = rng();
-  const ang = rng() * Math.PI * 2;
-  const rad = half * (0.3 + rng() * 0.25);
-  if (plazaRoll < 0.35) {
+  // Radial roundabout — only on the radial morphology (~14% of seeds). Compact +
+  // off-centre with a tight decay so it reads as ONE plaza district, not a
+  // city-spanning bullseye.
+  if (morph === "radial") {
     basis.push({
       kind: "radial",
-      cx: cx + Math.cos(ang) * rad,
-      cz: cz + Math.sin(ang) * rad,
-      size: half * 0.24,
-      decay: 2.8,
+      cx: cx + Math.cos(radialAng) * radialRad,
+      cz: cz + Math.sin(radialAng) * radialRad,
+      size: half * 0.2,
+      decay: 3.4,
       theta: 0,
     });
   }

@@ -130,6 +130,58 @@ simplification of AASHTO's true multifactor reality).
   access lanes it should read as clean paired white/red ribbons (the divided-
   carriageway look), reinforcing the freeway vs street distinction.
 
+## 6. Network topology — count & radial/ring (follow-up pass 2026-06-03)
+
+Closes Open Q#1 (the macro layout my first spike got wrong — it drew radials + a ring
+as decorative primitives because *this* was unsettled). Primary source: **Taillanter &
+Barthelemy, "Evolution of road infrastructure in large urban areas," Phys. Rev. E 107,
+034304 (2023)** — a cost-benefit model (construction + maintenance cost vs trip-duration
+saving) fit to **888 US cities** (1960s, when most US urban freeways + rings were built).
+
+**Two size-ordered transitions (the key result):**
+- **Urban freeway emerges at ~10,000 commuters.** Below that, surface arterials suffice.
+- **Ring road emerges at ~100,000 commuters** — roughly **10× the freeway threshold**. A
+  ring is a *big-city* feature; it appears only once a city has both core-bound *and*
+  substantial suburb-to-suburb travel for it to serve.
+- Corollary (their headline): for cities **< 1.4 M population**, the social cost
+  (pollution, health, severance) of an urban freeway *through* the core outweighs its
+  benefit — the historical "bisect downtown" freeway is a net negative at small/mid
+  scale. **Bypass / skirt is the better form**, which also matches the on-app visibility
+  win (freeways read better outside the densest blocks).
+- **Radial-before-ring is also a budget transition** (Barthelemy, *Optimal geometry of
+  transportation networks*): a small network budget spends on **radial branches**; only
+  as budget grows does adding a **ring** pay off. Same ordering — radials first, ring late.
+
+**Mapping to our tiers** ([[plan-city-scale-tiers]]) — "commuters" ≈ a proxy for our
+tier size; the *ordering and 10× ratio* are what transfer:
+
+| Tier | ~Extent | Freeway form |
+|---|---|---|
+| Town / District | ≤1.5 km | none — arterials only |
+| **City (current, 3 km)** | 3 km | **0–1 freeway, routed to SKIRT the dense core** (bypass rationale + visibility). **No ring.** |
+| Metro | 6+ km | 1–2 freeways + a ring earns its place; freeway×freeway system interchanges appear |
+
+So **no beltway at City scale** — it is below the ring threshold and reads as decoration
+(exactly the first spike's mistake). Route the one freeway *tangent* to the core, not
+through it. The ring + the system interchanges it creates are a **Metro-tier unlock**.
+
+## 7. System (freeway×freeway) interchange footprint — closes Open Q#2
+
+- **Full cloverleaf: 30–40+ acres = ~121,000–162,000 m²** → a ~**350–400 m square**,
+  bounding **radius ~175–200 m**. The *minimum* four-leg system form; loops at the
+  compressed-urban radius **150–200 ft (~46–61 m)**, 25–40 mph (matches §4 loop radii).
+- **Stack** — layered directional ramps, **less land than a cloverleaf** but tall (ramps
+  raised 60 ft+) and costly; preferred for high-volume freeway×freeway (no weaving).
+  Treat as a tighter module ~**250–300 m / radius ~140–160 m** when ROW is constrained.
+- **Placement reality check:** a cloverleaf is a **350–400 m superblock**, not "a block"
+  — at our 3 km City tier that's >10% of the whole map and would dominate. Another reason
+  system interchanges (and the ring that creates them) are a **Metro-tier** feature.
+  *Service* (freeway×arterial) interchanges stay the smaller ~1.5 km-module form usable
+  at City scale. *(The user's "bulldoze a block for an interchange" holds for a service
+  diamond/parclo; a full cloverleaf bulldozes a superblock — fine at metro, not at 3 km.)*
+- **Spike calibration:** the spike used system footprint radius 110–180 m — **bump to
+  ~175–200 m** for a true cloverleaf read at metro scale.
+
 ## Safe stylized simplifications
 
 - Reduce interchange type-selection to **ROW + volume** (drop topography/land-use).
@@ -147,20 +199,20 @@ simplification of AASHTO's true multifactor reality).
   decel ~150–1,060 ft) — refuted 1-2; use the volume-anchored ~1,200 ft accel figure.
 - ❌ Rural spacing "**2–6 mi**" phrasing — refuted 0-3 in favour of 2–3 mi.
 
-## Open questions (research did not settle)
+## Open questions
 
-1. **Metro freeway COUNT + parallel-freeway spacing** for a city of population N, and
-   radial-vs-beltway topology rules — the key input for *how many* freeways to
-   generate. (Confirmed arterial + interchange spacing, but not freeway count.)
-2. **Planar footprint (m) per freeway-freeway system interchange** (stack, full
-   cloverleaf, trumpet) as a bounding box for placement.
-3. **Pole spacing cadence** (luminaire-to-luminaire, as a multiple of mount height)
+**Resolved 2026-06-03** (follow-up pass — §6/§7):
+- ~~Q1 freeway COUNT + radial-vs-ring topology~~ → size-ordered thresholds (freeway
+  ~10k / ring ~100k commuters; radials-before-ring); **no ring at City scale** (§6).
+- ~~Q2 system-interchange footprint~~ → cloverleaf ~350–400 m (r≈175–200 m), stack
+  ~250–300 m (§7).
+
+Still open (tuning, resolvable during implementation — not blockers):
+1. **Pole spacing cadence** (luminaire-to-luminaire, as a multiple of mount height)
    to set the night light-dot rhythm.
-4. **Median + cross-section widths (m)** so the paired ribbons sit a believable gap
+2. **Median + cross-section widths (m)** so the paired ribbons sit a believable gap
    apart at metro scale.
-
-→ A focused follow-up pass on (1) and (2) is the natural prerequisite before coding
-#13; (3)/(4) are tuning details resolvable during implementation.
+3. **Parallel-freeway spacing** at metro scale (when 2+ freeways run the same corridor).
 
 ## Sources (primary unless noted)
 
@@ -175,6 +227,10 @@ simplification of AASHTO's true multifactor reality).
 | [FHWA-HRT-17-098](https://www.fhwa.dot.gov/publications/research/safety/17098/004.cfm) | min curve radius formula |
 | [FHWA Lighting Handbook §4](https://highways.dot.gov/safety/other/visibility/fhwa-lighting-handbook-august-2012/4-analysis-lighting-needs) · [§7](https://highways.dot.gov/safety/other/visibility/fhwa-lighting-handbook-august-2012/7-lighting-application) | CFL/CIL/PIL warrants, pole forms, paired ribbons |
 | [Chen et al. — tensor-field street modeling (SIGGRAPH '08)](https://www.sci.utah.edu/~chengu/street_sig08/street_sig08.pdf) | procedural method (already our arterial model) |
+| [Taillanter & Barthelemy, *Evolution of road infrastructure in large urban areas*, Phys. Rev. E 107, 034304 (2023)](https://arxiv.org/abs/2205.13194) | **§6** freeway ~10k / ring ~100k commuter thresholds; <1.4M = freeway-through-core net-negative |
+| [APS Physics Focus — *How a City's Highway Geometry Evolves*](https://physics.aps.org/articles/v16/34) | plain-language summary of the 888-city Barthelemy model |
+| [Rodrigue — *The Rationale of a Ring Road* (transportgeography.org)](https://transportgeography.org/contents/chapter8/transportation-urban-form/ring-road/) | **§6** ring bypasses core; redirects development to interchange-adjacent peripheral centres |
+| [Cloverleaf land-area (asmr.education / engineerfix)](https://asmr.education/faq/highways/cloverleaf-highway-interchange-design-explained) | **§7** full cloverleaf 30–40 acres; stack uses less land but taller/costlier |
 
 ## Cross-links
 
