@@ -146,17 +146,16 @@ Stages 0 and 1 are independent enough to build in parallel worktrees; they both 
 - **Perf gate before scaling:** do not grow extent past ~City-plus until the Worker +
   frustum-culling foundation lands (Stage 2). The density gradient cuts building count
   but not road/streetlight/atlas growth.
-- **Additive growth (open architecture question — raised 2026-06-03, GATES the scale
-  spike).** User wants extent to grow **additively**: expand outward, keep the existing
-  core unchanged — *not* regenerate the whole city. Today's gen is **global** (extent
-  changes RNG draw counts → a different city per size, per [[plan-city-scale-tiers]]),
-  so this is the *inverse* of current behaviour. True additivity needs **coordinate-local
-  / chunked** generation (a point's content from its own coords + seed, independent of the
-  global extent). Amenable: the tensor **field** (if basis placement is decoupled from
-  extent + anchored to a stable spatial hash). Hard: **L∞ Voronoi districts** (sites are
-  global — expanding moves them) and **road-network coherence across chunk seams**.
-  → Needs a **research/decision pass before the scale build**; it decides whether the
-  extent control is a smooth additive slider or a discrete regen.
+- **Additive growth — RESOLVED 2026-06-03 → [[decision-additive-growth-citygen]].** Chose
+  **generate-at-max + crop**: always generate field/roads/districts at a fixed MAX (Metro)
+  extent (so the core is extent-invariant and never re-rolls), drive the size slider as a
+  **crop** only, and materialise buildings lazily within the crop. This is the user's own
+  proposal ("large generative field, build only the crop, defer/purge the rest"). It
+  sidesteps the genuinely-hard globals found in the code audit — long-streamline road seam
+  coherence, the global district flood-fill, and the global distance-to-centre character
+  re-ranking — by computing the full layout once and only *hiding* parts. Also fixes
+  seed-portability. Truly-infinite chunking (Option A) is the future upgrade, not needed
+  for v1. **This unblocks the scale spike.**
 - **Highways spike (`feat/highway-crossings`) — REJECTED as a generator model**
   (2026-06-03 review), not merely parked. Geometry-first → "child's-drawing" read.
   Rebuild on the **corridor model** at the scale spike; salvage the detection + cloverleaf
