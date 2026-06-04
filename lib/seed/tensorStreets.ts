@@ -192,9 +192,12 @@ export function generateTensorStreets(
   bounds: BBox,
   mask: ShapeMask = () => 1,
   onLine?: StreetTraceHook,
+  // #40 prototype: trace through an externally-built field (e.g. one recovered
+  // from a hand sketch) instead of the seeded basis field. Undefined = exactly
+  // the original path, byte-identical.
+  fieldOverride?: TensorField,
 ): { arterials: RoadPoly[]; minorStreets: RoadPoly[] } {
-  const lattice = computeLattice(masterSeed);
-  const tf = buildTensorField(masterSeed, lattice);
+  const tf = fieldOverride ?? buildTensorField(masterSeed, computeLattice(masterSeed));
   const b: BBox = bounds;
 
   // Per-family, per-tier separation storages (cell ≥ finest dsep).
