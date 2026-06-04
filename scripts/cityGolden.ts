@@ -19,7 +19,10 @@
 import { mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
 import { generateCity } from "@/lib/seed/cityGen";
 import { computeLattice } from "@/lib/seed/lattice";
-import { CITY_CENTER } from "@/lib/seed/topology";
+import { CITY_CENTER, setCityTier } from "@/lib/seed/topology";
+
+// Pin the METRO tier (#58): the golden baseline + cross-crop contract are tier-stable.
+setCityTier("metro");
 
 const GOLDEN_PATH = "scripts/__golden__/city.json";
 const SEEDS = Array.from({ length: 10 }, (_, i) => `gate1-${i}`);
@@ -87,7 +90,9 @@ function capture() {
   writeFileSync(GOLDEN_PATH, JSON.stringify(fps, null, 2) + "\n");
   console.log(`captured ${fps.length} golden fingerprints → ${GOLDEN_PATH}`);
   for (const f of fps) {
-    console.log(`  ${f.seed.padEnd(10)} ${String(f.buildingCount).padStart(5)} bldg  full=${f.fullHash}`);
+    console.log(
+      `  ${f.seed.padEnd(10)} ${String(f.buildingCount).padStart(5)} bldg  full=${f.fullHash}`,
+    );
   }
 }
 
@@ -124,7 +129,7 @@ function check() {
 // post-filter — i.e. the per-cell rng rewrite (Step 3) is unnecessary for v1.
 function crosscrop() {
   const seeds = SEEDS.slice(0, 5);
-  const scales = [0.25, 0.5, 1.0]; // circle R = MAX_HALF_EXTENT*scale → 750 / 1500 / 3000(full)
+  const scales = [0.25, 0.5, 1.0]; // circle R = tier extent · scale → 750 / 1500 / 3000(full)
   let failed = 0;
   console.log("cross-crop invariance — nested circle crops, byte-identical on overlap\n");
   for (const seed of seeds) {

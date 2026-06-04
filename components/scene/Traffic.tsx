@@ -26,8 +26,10 @@ export function Traffic({ masterSeed }: { masterSeed: string }) {
   const minor = useSceneStore((s) => s.traffic.minor);
   const cityShape = useSceneStore((s) => s.cityShape);
   const cityShapeScale = useSceneStore((s) => s.cityShapeScale);
+  const citySize = useSceneStore((s) => s.citySize);
 
   const points = useMemo(() => {
+    void citySize; // tier drives the module-level gen extent (#58) — a switch must rebuild
     const t = buildTraffic(
       masterSeed,
       density,
@@ -80,7 +82,7 @@ export function Traffic({ masterSeed }: { masterSeed: string }) {
     const pts = new THREE.Points(geo, mat);
     pts.frustumCulled = false; // positions live in the shader; bounds are unknown
     return pts;
-  }, [masterSeed, density, highway, arterial, minor, cityShape, cityShapeScale]);
+  }, [masterSeed, density, highway, arterial, minor, cityShape, cityShapeScale, citySize]);
 
   useEffect(() => {
     return () => {

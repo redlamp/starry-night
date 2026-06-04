@@ -1,5 +1,5 @@
 import seedrandom from "seedrandom";
-import { generateTopology, type Topology, type Highway } from "./topology";
+import { generateTopology, maxHalfExtent, type Topology, type Highway } from "./topology";
 import {
   generateDistrictsFromNetwork,
   type District,
@@ -9,7 +9,12 @@ import {
 import { buildSilhouette, isHighRise, type SilhouetteField } from "./silhouette";
 import { generateTensorStreets } from "./tensorStreets";
 import { type RoadPoly } from "./streets";
-import { resolveCityShape, makeShapeMask, type CityShapeSetting, type ShapeMask } from "./cityShape";
+import {
+  resolveCityShape,
+  makeShapeMask,
+  type CityShapeSetting,
+  type ShapeMask,
+} from "./cityShape";
 
 // Any road tier, for the building-skip corridor test.
 type RoadLike = { vertices: Array<{ x: number; z: number }>; width: number; closed: boolean };
@@ -394,13 +399,16 @@ function buildTensorRoadsImpl(masterSeed: string) {
 // district overlays (/plan, scene shells, settings list) — all per seed. Cache
 // so the tensor field + the flood-fill districting run once per seed, and every
 // consumer agrees on the same districts the buildings were placed against.
+// All gen caches key on the CURRENT tier extent (#58) — a tier switch generates
+// a different city for the same seed, so a stale entry must never be served.
 const tensorRoadsCache = new Map<string, ReturnType<typeof buildTensorRoadsImpl>>();
 function buildTensorRoads(masterSeed: string) {
-  const hit = tensorRoadsCache.get(masterSeed);
+  const key = `${masterSeed}::${maxHalfExtent()}`;
+  const hit = tensorRoadsCache.get(key);
   if (hit) return hit;
   const result = buildTensorRoadsImpl(masterSeed);
   if (tensorRoadsCache.size > 64) tensorRoadsCache.clear();
-  tensorRoadsCache.set(masterSeed, result);
+  tensorRoadsCache.set(key, result);
   return result;
 }
 
@@ -614,12 +622,7 @@ function fillTensorBuildings(
         // Centre must clear EVERY road (not just corners) — catches a long
         // building straddling a perpendicular street between its corners.
         const centreClear = roadIndex.query(cx, cz).edge >= 0.5;
-        if (
-          field.classify(cx, cz) >= 0 &&
-          centreClear &&
-          !cornerOnRoad(f) &&
-          !overlapsPlaced(f)
-        ) {
+        if (field.classify(cx, cz) >= 0 && centreClear && !cornerOnRoad(f) && !overlapsPlaced(f)) {
           const lightingClass = LIGHTING_CLASS[character];
           const sil = isHighRise(character) ? (silhouetteByIndex.get(idx) ?? null) : null;
           const hm = sil ? sil.multiplier(cx, cz) : 1;
@@ -740,7 +743,7 @@ export function generateCity(
   shape: CityShapeSetting = "square",
   shapeScale = 1,
 ): CityData {
-  const key = `${rawSeed}::${shape}::${shapeScale}`;
+  const key = `${rawSeed}::${shape}::${shapeScale}::${maxHalfExtent()}`;
   const hit = cityCache.get(key);
   if (hit) return hit;
   const result = generateCityTensor(rawSeed, shape, shapeScale);
@@ -946,11 +949,25 @@ function generateStreetlightsTensor(
 
   const hwRng = seedrandom(`${masterSeed}::streetlights::highways`);
   for (const hw of topology.highways) {
-    emitRoadLights(hwRng, hw, "highway", () => bandPick(hwRng, HIGHWAY_ARTERIAL_KELVIN), 34, lights);
+    emitRoadLights(
+      hwRng,
+      hw,
+      "highway",
+      () => bandPick(hwRng, HIGHWAY_ARTERIAL_KELVIN),
+      34,
+      lights,
+    );
   }
   const artRng = seedrandom(`${masterSeed}::streetlights::arterials`);
   for (const a of arterials) {
-    emitRoadLights(artRng, a, "arterial", () => bandPick(artRng, HIGHWAY_ARTERIAL_KELVIN), 28, lights);
+    emitRoadLights(
+      artRng,
+      a,
+      "arterial",
+      () => bandPick(artRng, HIGHWAY_ARTERIAL_KELVIN),
+      28,
+      lights,
+    );
   }
   const minRng = seedrandom(`${masterSeed}::streetlights::minor`);
   for (const s of minorStreets) {
@@ -969,7 +986,7 @@ export function generateStreetlights(
   shape: CityShapeSetting = "square",
   shapeScale = 1,
 ): Streetlight[] {
-  const key = `${rawSeed}::${shape}::${shapeScale}`;
+  const key = `${rawSeed}::${shape}::${shapeScale}::${maxHalfExtent()}`;
   const hit = lightsCache.get(key);
   if (hit) return hit;
   const result = generateStreetlightsTensor(rawSeed, shape, shapeScale);

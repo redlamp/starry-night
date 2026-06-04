@@ -10,7 +10,9 @@ import { deflateSync } from "node:zlib";
 import { writeFileSync } from "node:fs";
 import { computeLattice } from "@/lib/seed/lattice";
 import { buildTensorField } from "@/lib/seed/tensorField";
-import { CITY_CENTER, MAX_HALF_EXTENT } from "@/lib/seed/topology";
+import { CITY_CENTER, maxHalfExtent, setCityTier } from "@/lib/seed/topology";
+
+setCityTier("metro"); // render fields at the Metro tier (#58)
 
 const PREFIX = process.argv[2] ?? "field";
 const COUNT = parseInt(process.argv[3] ?? "12", 10);
@@ -66,7 +68,7 @@ function line(x0: number, y0: number, x1: number, y1: number, r: number, g: numb
   }
 }
 
-const span = 2 * MAX_HALF_EXTENT;
+const span = 2 * maxHalfExtent();
 const mPerPx = span / PANEL;
 for (let s = 0; s < COUNT; s++) {
   const seed = `${PREFIX}-${s}`;
@@ -83,15 +85,15 @@ for (let s = 0; s < COUNT; s++) {
 
   for (let gi = 0; gi < GRID; gi++) {
     for (let gj = 0; gj < GRID; gj++) {
-      const wx = CITY_CENTER.x - MAX_HALF_EXTENT + ((gi + 0.5) / GRID) * span;
-      const wz = CITY_CENTER.z - MAX_HALF_EXTENT + ((gj + 0.5) / GRID) * span;
+      const wx = CITY_CENTER.x - maxHalfExtent() + ((gi + 0.5) / GRID) * span;
+      const wz = CITY_CENTER.z - maxHalfExtent() + ((gj + 0.5) / GRID) * span;
       const dir = field.sample(wx, wz, true);
       if (!dir) continue;
       const ang = Math.atan2(dir.z, dir.x);
       const hue = (((ang % Math.PI) + Math.PI) % Math.PI) / Math.PI;
       const [r, g, b] = hsl(hue, 0.8, 0.6);
-      const px0 = ox + ((wx - (CITY_CENTER.x - MAX_HALF_EXTENT)) / mPerPx);
-      const py0 = oy + ((wz - (CITY_CENTER.z - MAX_HALF_EXTENT)) / mPerPx);
+      const px0 = ox + (wx - (CITY_CENTER.x - maxHalfExtent())) / mPerPx;
+      const py0 = oy + (wz - (CITY_CENTER.z - maxHalfExtent())) / mPerPx;
       const L = TICK * 0.42;
       line(px0 - dir.x * L, py0 - dir.z * L, px0 + dir.x * L, py0 + dir.z * L, r, g, b);
     }
@@ -126,7 +128,8 @@ function chunk(type: string, data: Uint8Array): Uint8Array {
 }
 const stride = W * 3;
 const raw = new Uint8Array((stride + 1) * H);
-for (let y = 0; y < H; y++) raw.set(img.subarray(y * stride, (y + 1) * stride), y * (stride + 1) + 1);
+for (let y = 0; y < H; y++)
+  raw.set(img.subarray(y * stride, (y + 1) * stride), y * (stride + 1) + 1);
 const ihdr = new Uint8Array([...u32(W), ...u32(H), 8, 2, 0, 0, 0]);
 const sig = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
 const png = new Uint8Array([

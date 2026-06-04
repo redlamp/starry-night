@@ -14,7 +14,7 @@ import {
 import { randomSeed } from "@/lib/seed/rng";
 import { ARCHETYPE_ORDER, type Archetype } from "@/lib/seed/cityGen";
 import { CITY_SHAPES, type CityShapeSetting } from "@/lib/seed/cityShape";
-import { MAX_HALF_EXTENT } from "@/lib/seed/topology";
+import { CITY_TIERS, CITY_TIER_ORDER, type CityTier } from "@/lib/seed/topology";
 import { cn, isTypingTarget } from "@/lib/utils";
 import {
   AppWindow,
@@ -157,9 +157,14 @@ function ThemeToggle() {
 const RAD2DEG = 180 / Math.PI;
 const DEG2RAD = Math.PI / 180;
 
-// Full Metro crop diameter in km (2 × MAX half-extent). The City-shape "size" slider
-// works in km; cityShapeScale stays the 0..1 fraction-of-MAX it maps to.
-const CROP_FULL_KM = (2 * MAX_HALF_EXTENT) / 1000;
+// City size tiers (#58) — diameter km per tier, shown on the notched size slider.
+// Each notch is a DIFFERENT city for the same seed (re-roll, not growth).
+const tierKm = (t: CityTier) => (2 * CITY_TIERS[t]) / 1000;
+const TIER_LABELS: Record<CityTier, string> = {
+  town: "Town",
+  city: "City",
+  metro: "Metro",
+};
 
 function fmt(n: number, p = 2) {
   return n.toFixed(p);
@@ -1258,6 +1263,17 @@ function DebugSection() {
   const setCityShape = useSceneStore((s) => s.setCityShape);
   const cityShapeScale = useSceneStore((s) => s.cityShapeScale);
   const setCityShapeScale = useSceneStore((s) => s.setCityShapeScale);
+  const citySize = useSceneStore((s) => s.citySize);
+  const setCitySize = useSceneStore((s) => s.setCitySize);
+  const cropLock = useSceneStore((s) => s.cropLock);
+  const setCropLock = useSceneStore((s) => s.setCropLock);
+  const sizeKm = tierKm(citySize);
+  const tierIdx = CITY_TIER_ORDER.indexOf(citySize);
+  // Tier drag preview (#58): regenerating mid-drag would re-roll the city on
+  // every notch, so the slider previews (label updates live) and the store —
+  // and therefore generation — only updates on RELEASE (onValueCommitted).
+  const [dragTierIdx, setDragTierIdx] = useState<number | null>(null);
+  const shownTier = CITY_TIER_ORDER[dragTierIdx ?? tierIdx];
   // "all" tab reflects a shared mode, or sits blank when groups differ.
   const allMode = RENDER_GROUPS.every((g) => renderModes[g] === renderModes.buildings)
     ? renderModes.buildings
@@ -1270,18 +1286,44 @@ function DebugSection() {
         modes={CITY_SHAPE_MODES}
         onChange={(v) => setCityShape(v as CityShapeSetting)}
       />
-      <ValueSlider
-        label="size km"
-        value={Math.round(cityShapeScale * CROP_FULL_KM * 10) / 10}
-        min={1.5}
-        max={CROP_FULL_KM}
-        step={0.5}
-        onChange={(km) => setCityShapeScale(km / CROP_FULL_KM)}
-      />
+      {/* #58 size tier — notched: each notch generates a DIFFERENT city for the
+          same seed (a bigger canvas re-rolls the layout, it doesn't grow it). */}
+      <div className="flex items-center gap-2 text-xs">
+        <span className="text-foreground/70 w-16 shrink-0">size</span>
+        <Slider
+          min={0}
+          max={CITY_TIER_ORDER.length - 1}
+          step={1}
+          value={dragTierIdx ?? tierIdx}
+          onValueChange={(v) => setDragTierIdx(typeof v === "number" ? v : v[0])}
+          onValueCommitted={(v) => {
+            setDragTierIdx(null);
+            setCitySize(CITY_TIER_ORDER[typeof v === "number" ? v : v[0]]);
+          }}
+          className="flex-1"
+        />
+        <span className="text-foreground w-24 shrink-0 text-right font-mono tabular-nums">
+          {TIER_LABELS[shownTier]} ({tierKm(shownTier)} km)
+        </span>
+      </div>
+      <label className="flex cursor-pointer items-center justify-between gap-2 text-xs">
+        <span className="text-foreground/70">lock crop to city size</span>
+        <Switch checked={cropLock} onCheckedChange={setCropLock} />
+      </label>
+      {!cropLock ? (
+        <ValueSlider
+          label="crop km"
+          value={Math.round(cityShapeScale * sizeKm * 10) / 10}
+          min={1}
+          max={sizeKm}
+          step={0.5}
+          onChange={(km) => setCityShapeScale(Math.min(1, km / sizeKm))}
+        />
+      ) : null}
       <div className="text-foreground/45 text-[11px] leading-snug">
-        City size across, in km (circle crop). 3 km ≈ a downtown core; 6 km = the full Metro extent.
-        Reveals/hides the already-generated city (grow = reveal, never a re-roll) — only the seed
-        changes the city. auto = each seed picks; square = full field.
+        Size sets the generated extent (re-rolls the layout; bigger = slower to generate). Crop
+        reveals/hides the already-generated city — grow = reveal, never a re-roll. auto = each seed
+        picks its shape; square = full field.
       </div>
 
       <SubHeader label="Building tint" />

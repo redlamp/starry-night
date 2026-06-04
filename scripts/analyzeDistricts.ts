@@ -2,21 +2,22 @@
  * One-off diagnostic for the density-gradient feedback (#49):
  * "more districts, gradiate to low density sooner, high-rise too abundant."
  *   bun run scripts/analyzeDistricts.ts
- * Measures — at MAX (Metro) — district count + character mix, and the radial
+ * Measures — at the Metro tier — district count + character mix, and the radial
  * density profile: high-rise footprint share + mean height in concentric rings.
- * The R≤1500 ring is the DEFAULT crop (cityShapeScale 0.5) — what the user sees.
- * Pure measurement; no scene state, Date.now()-free.
+ * The R≤1500 ring is the City-crop view. Pure measurement; no scene state.
  */
 import { generateCity } from "@/lib/seed/cityGen";
-import { CITY_CENTER } from "@/lib/seed/topology";
+import { CITY_CENTER, setCityTier } from "@/lib/seed/topology";
+
+setCityTier("metro"); // measure at the Metro tier (#58) — the worst case for the gradient
 
 const SEEDS = Array.from({ length: 10 }, (_, i) => `gate1-${i}`);
-const RINGS = [0, 500, 1000, 1500, 2250, 3000]; // m from centre; 1500 = default crop edge
+const RINGS = [0, 500, 1000, 1500, 2250, 3000]; // m from centre; 1500 = City-crop edge
 
 const charCounts: Record<string, number> = {};
 let totalDistricts = 0;
 
-console.log("per-seed district count + character mix (at MAX, half 3000)\n");
+console.log("per-seed district count + character mix (Metro tier, half 3000)\n");
 console.log("seed         nDist  characters");
 for (const seed of SEEDS) {
   const city = generateCity(seed);
@@ -81,6 +82,4 @@ const hRow =
   "mean h (m)  " + meanHSum.map((s) => `${(s / SEEDS.length).toFixed(0)}m`.padStart(12)).join("");
 console.log(hrRow);
 console.log(hRow);
-console.log(
-  "\nthe 0-1500m columns are the DEFAULT crop — high-rise % there is the 'too abundant' metric.",
-);
+console.log("\nthe 0-1500m columns are the City-crop view — high-rise % there is the key metric.");

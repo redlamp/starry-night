@@ -81,10 +81,11 @@ function pickCorrelationMode(b: Building): number {
 export function InstancedCity({ masterSeed }: { masterSeed: string }) {
   const cityShape = useSceneStore((s) => s.cityShape);
   const cityShapeScale = useSceneStore((s) => s.cityShapeScale);
-  const { meshes, maxRadius } = useMemo(
-    () => buildMeshes(masterSeed, cityShape, cityShapeScale),
-    [masterSeed, cityShape, cityShapeScale],
-  );
+  const citySize = useSceneStore((s) => s.citySize);
+  const { meshes, maxRadius } = useMemo(() => {
+    void citySize; // tier drives the module-level gen extent (#58) — a switch must rebuild
+    return buildMeshes(masterSeed, cityShape, cityShapeScale);
+  }, [masterSeed, cityShape, cityShapeScale, citySize]);
   const hidden = useSceneStore((s) => s.debug.renderModes.buildings === "hidden");
 
   // Dispose old GPU resources when seed changes / unmounts.

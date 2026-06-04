@@ -13,7 +13,11 @@ export function DistrictsSection() {
   const showShells = useSceneStore((s) => s.cityPlanning.showDistrictShells);
   const setCityPlanning = useSceneStore((s) => s.setCityPlanning);
 
-  const districts = useMemo(() => tensorDistrictField(masterSeed).districts, [masterSeed]);
+  const citySize = useSceneStore((s) => s.citySize);
+  const districts = useMemo(() => {
+    void citySize; // tier drives the module-level gen extent (#58) — a switch must refresh
+    return tensorDistrictField(masterSeed).districts;
+  }, [masterSeed, citySize]);
 
   return (
     <>

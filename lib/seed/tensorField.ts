@@ -1,5 +1,5 @@
 import seedrandom from "seedrandom";
-import { CITY_CENTER, MAX_HALF_EXTENT, GEN_SCALE } from "./topology";
+import { CITY_CENTER, maxHalfExtent, genScale } from "./topology";
 import type { Lattice } from "./lattice";
 
 // Tensor field — the direction field the streets follow (the proper tensor-field
@@ -78,7 +78,7 @@ export function buildTensorField(masterSeed: string, lattice: Lattice): TensorFi
   const rng = seedrandom(`${masterSeed}::tensor::fields`);
   const cx = CITY_CENTER.x;
   const cz = CITY_CENTER.z;
-  const half = MAX_HALF_EXTENT; // #14: lay the field out at MAX; the crop is a post-filter
+  const half = maxHalfExtent(); // #14: lay the field out at the tier's full extent; the crop is a post-filter
   const basis: Basis[] = [];
 
   // Per-seed field parameters. `deviation` is the tunable spread within a family
@@ -100,7 +100,7 @@ export function buildTensorField(masterSeed: string, lattice: Lattice): TensorFi
 
   // N×N grid bases, each oriented by the lattice grain + the morphology's
   // deviation. Summing them (Gaussian-weighted) yields a smoothly varying field.
-  const N = Math.max(3, Math.round(4 * GEN_SCALE)); // keyed to MAX (gen extent), constant across crops
+  const N = Math.max(3, Math.round(4 * genScale())); // keyed to the gen extent (tier), constant across crops
   const span = half * 1.2;
   for (let i = 0; i < N; i++) {
     for (let j = 0; j < N; j++) {

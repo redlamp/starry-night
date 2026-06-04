@@ -29,8 +29,10 @@ export function Roads({ masterSeed }: { masterSeed: string }) {
   const setStreetCount = useSceneStore((s) => s.setStreetCount);
   const cityShape = useSceneStore((s) => s.cityShape);
   const cityShapeScale = useSceneStore((s) => s.cityShapeScale);
+  const citySize = useSceneStore((s) => s.citySize);
 
   const { geometries, kind, highwayCount, arterialCount, streetCount } = useMemo(() => {
+    void citySize; // tier drives the module-level gen extent (#58) — a switch must rebuild
     const city = generateCity(masterSeed, cityShape, cityShapeScale);
     const hwPolys: RoadPoly[] = city.topology.highways.map((h) => ({
       vertices: h.vertices,
@@ -58,7 +60,7 @@ export function Roads({ masterSeed }: { masterSeed: string }) {
       arterialCount: city.arterials.length,
       streetCount: city.streets.length,
     };
-  }, [masterSeed, cityShape, cityShapeScale]);
+  }, [masterSeed, cityShape, cityShapeScale, citySize]);
 
   useEffect(() => setTopologyKind(kind), [kind, setTopologyKind]);
   useEffect(() => setHighwayCount(highwayCount), [highwayCount, setHighwayCount]);

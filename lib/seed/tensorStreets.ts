@@ -2,7 +2,7 @@ import seedrandom from "seedrandom";
 import { computeLattice } from "./lattice";
 import { buildTensorField, alignDir, type TensorField, type Vec2 } from "./tensorField";
 import type { RoadPoly, RoadTier } from "./streets";
-import { GEN_SCALE } from "./topology";
+import { genScale } from "./topology";
 import type { ShapeMask } from "./cityShape";
 
 // Tensor-field streets. Roads are streamlines of the tensor field. Both the
@@ -18,7 +18,9 @@ import type { ShapeMask } from "./cityShape";
 // arterial-endpoint queue with no PRNG, then a seeded PRNG fallback).
 
 const DSTEP = 4;
-const MAX_PTS = Math.round(420 * GEN_SCALE); // streamline point cap — keyed to MAX so far roads reach the full extent
+// Streamline point cap — keyed to the gen extent (tier) so far roads reach the
+// full extent. A function (not a module const) so the tier can change at runtime.
+const maxPts = () => Math.round(420 * genScale());
 const MIN_PTS = 6;
 const SEED_TRIES = 200;
 
@@ -102,7 +104,8 @@ function trace(
     if (!prev) return pts;
     if (sign < 0) prev = { x: -prev.x, z: -prev.z };
     let p = { ...seed };
-    for (let n = 0; n < MAX_PTS; n++) {
+    const cap = maxPts();
+    for (let n = 0; n < cap; n++) {
       const dir = rk4(field, p, prev, major);
       if (!dir) break;
       const next = { x: p.x + dir.x * DSTEP, z: p.z + dir.z * DSTEP };
@@ -196,8 +199,28 @@ export function generateTensorStreets(
   const stRng = seedrandom(`${masterSeed}::tensor::seeds::st`);
 
   // Arterials — both families, wide separation → a coarse criss-cross grid.
-  const majA = traceTier(tf, true, ART_DSEP, artRng, b, [], SmajA, [{ s: SmajA, d: ART_DTEST }], mask);
-  const minA = traceTier(tf, false, ART_DSEP, artRng, b, [], SminA, [{ s: SminA, d: ART_DTEST }], mask);
+  const majA = traceTier(
+    tf,
+    true,
+    ART_DSEP,
+    artRng,
+    b,
+    [],
+    SmajA,
+    [{ s: SmajA, d: ART_DTEST }],
+    mask,
+  );
+  const minA = traceTier(
+    tf,
+    false,
+    ART_DSEP,
+    artRng,
+    b,
+    [],
+    SminA,
+    [{ s: SminA, d: ART_DTEST }],
+    mask,
+  );
 
   // Streets — both families, fine separation, seeded off arterial endpoints so
   // they branch from the arterials. Each street separates from same-family

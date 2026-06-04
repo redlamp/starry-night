@@ -18,8 +18,10 @@ const BORDER_Y = 0.3; // just above the fill so the line is never z-hidden
 
 export function DistrictShells({ masterSeed }: { masterSeed: string }) {
   const show = useSceneStore((s) => s.cityPlanning.showDistrictShells);
+  const citySize = useSceneStore((s) => s.citySize);
 
   const group = useMemo(() => {
+    void citySize; // tier drives the module-level gen extent (#58) — a switch must rebuild
     const field = tensorDistrictField(masterSeed);
     const { minX, maxX, minZ, maxZ } = field.bounds;
     const stepX = (maxX - minX) / OVERLAY_STEPS;
@@ -121,7 +123,7 @@ export function DistrictShells({ masterSeed }: { masterSeed: string }) {
     g.add(im);
     g.add(lines);
     return g;
-  }, [masterSeed]);
+  }, [masterSeed, citySize]);
 
   useEffect(() => {
     return () => {

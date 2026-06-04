@@ -8,14 +8,16 @@
 import { generateCity } from "@/lib/seed/cityGen";
 import { generateTensorStreets } from "@/lib/seed/tensorStreets";
 import { generateDistrictsFromNetwork } from "@/lib/seed/district";
-import { generateTopology, CITY_CENTER, MAX_HALF_EXTENT } from "@/lib/seed/topology";
+import { generateTopology, CITY_CENTER, maxHalfExtent, setCityTier } from "@/lib/seed/topology";
+
+setCityTier("metro"); // profile at the heaviest tier (#58)
 
 const ms = () => Date.now();
 const bounds = {
-  minX: CITY_CENTER.x - MAX_HALF_EXTENT,
-  maxX: CITY_CENTER.x + MAX_HALF_EXTENT,
-  minZ: CITY_CENTER.z - MAX_HALF_EXTENT,
-  maxZ: CITY_CENTER.z + MAX_HALF_EXTENT,
+  minX: CITY_CENTER.x - maxHalfExtent(),
+  maxX: CITY_CENTER.x + maxHalfExtent(),
+  minZ: CITY_CENTER.z - maxHalfExtent(),
+  maxZ: CITY_CENTER.z + maxHalfExtent(),
 };
 
 generateTensorStreets("warmup", bounds); // JIT warm-up (untimed)

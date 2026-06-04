@@ -15,8 +15,12 @@
  * from wiki/notes/decision-streets-first-city-generation.md.
  */
 import { generateCity, type Building } from "@/lib/seed/cityGen";
-import { CITY_CENTER, MAX_HALF_EXTENT } from "@/lib/seed/topology";
+import { CITY_CENTER, maxHalfExtent, setCityTier } from "@/lib/seed/topology";
 import { computeLattice } from "@/lib/seed/lattice";
+
+// The gate runs at the METRO tier (#58) so its assertions + the golden contract
+// are stable regardless of the app default.
+setCityTier("metro");
 
 type Vec = { x: number; z: number };
 
@@ -172,7 +176,7 @@ function checkSeed(seed: string) {
   if (orphans > 0) failures.push(`${orphans} buildings with unknown districtId`);
 
   // 4. In-bounds (+10% slack).
-  const slack = MAX_HALF_EXTENT * 1.1;
+  const slack = maxHalfExtent() * 1.1;
   const oob = buildings.filter(
     (b) => Math.abs(b.x - CITY_CENTER.x) > slack || Math.abs(b.z - CITY_CENTER.z) > slack,
   ).length;
@@ -229,8 +233,8 @@ function main() {
   const L2 = computeLattice("gate1-det");
   let latticeOk = L1.theta0 === L2.theta0 && L1.driftMag === L2.driftMag;
   let maxDelta = 0;
-  for (let x = CITY_CENTER.x - MAX_HALF_EXTENT; x <= CITY_CENTER.x + MAX_HALF_EXTENT; x += 200) {
-    for (let z = CITY_CENTER.z - MAX_HALF_EXTENT; z <= CITY_CENTER.z + MAX_HALF_EXTENT; z += 200) {
+  for (let x = CITY_CENTER.x - maxHalfExtent(); x <= CITY_CENTER.x + maxHalfExtent(); x += 200) {
+    for (let z = CITY_CENTER.z - maxHalfExtent(); z <= CITY_CENTER.z + maxHalfExtent(); z += 200) {
       if (L1.orientationAt(x, z) !== L2.orientationAt(x, z)) latticeOk = false;
       const d = Math.abs(L1.orientationAt(x, z) - L1.orientationAt(x + 50, z));
       if (d > maxDelta) maxDelta = d;

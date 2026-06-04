@@ -1,6 +1,13 @@
 import { create } from "zustand";
 
-import { CITY_SCALE, type TopologyKind } from "@/lib/seed/topology";
+import {
+  CITY_SCALE,
+  CITY_TIERS,
+  DEFAULT_CITY_TIER,
+  setCityTier,
+  type CityTier,
+  type TopologyKind,
+} from "@/lib/seed/topology";
 import type { CityShapeSetting } from "@/lib/seed/cityShape";
 import type { Archetype } from "@/lib/seed/cityGen";
 
@@ -270,10 +277,17 @@ export const DEFAULT_LOD = {
 // (byte-identical no-op mask). `auto` lets each seed pick its own shape; the
 // other values force one shape (the debug switcher). See lib/seed/cityShape.ts.
 export const DEFAULT_CITY_SHAPE: CityShapeSetting = "circle";
-// Circle crop radius as a fraction of the MAX (Metro) gen extent. 1.0 = the full
-// Metro disc (6 km across); 0.5 = a City-sized core (3 km, the default). Only affects
-// the `circle` shape. The City-shape "size" slider drives this, shown in km.
-export const DEFAULT_CITY_SHAPE_SCALE = 0.5;
+// City size tier (#58) — the GEN extent. Each tier is a DIFFERENT city for the
+// same seed (a bigger canvas re-rolls the layout; it does not grow the current
+// city outward). Gen cost ∝ extent²: town ~0.6 s, city ~2.5 s, metro ~8–10 s —
+// the City default keeps boot mobile-viable; Metro is opt-in.
+export const DEFAULT_CITY_SIZE: CityTier = DEFAULT_CITY_TIER;
+// Crop follows the tier while locked (the default): crop = the tier's full disc.
+export const DEFAULT_CROP_LOCK = true;
+// Circle crop radius as a fraction of the CURRENT tier's gen extent. 1.0 = the
+// tier's full disc (the default, lock ON); smaller reveals a core. Only affects
+// the `circle` shape. The City-shape "crop" slider drives this, shown in km.
+export const DEFAULT_CITY_SHAPE_SCALE = 1.0;
 
 export const DEFAULT_FLY_SPEED = 14;
 // 360 at the City size (1500); base scales with the size knob via CITY_SCALE.
@@ -337,7 +351,9 @@ type AnySettingEntry =
   | SettingEntry<"streetlights">
   | SettingEntry<"lod">
   | SettingEntry<"cityShape">
-  | SettingEntry<"cityShapeScale">;
+  | SettingEntry<"cityShapeScale">
+  | SettingEntry<"citySize">
+  | SettingEntry<"cropLock">;
 
 export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "cameraIntent", defaultValue: DEFAULT_INTENT, persist: true },
@@ -376,6 +392,8 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "lod", defaultValue: DEFAULT_LOD, persist: true },
   { key: "cityShape", defaultValue: DEFAULT_CITY_SHAPE, persist: true },
   { key: "cityShapeScale", defaultValue: DEFAULT_CITY_SHAPE_SCALE, persist: true },
+  { key: "citySize", defaultValue: DEFAULT_CITY_SIZE, persist: true },
+  { key: "cropLock", defaultValue: DEFAULT_CROP_LOCK, persist: true },
 ];
 
 // cityPlanning visibility toggles — persisted separately because `cityPlanning`
@@ -410,6 +428,8 @@ type SavedConfig = {
   lod?: SceneState["lod"];
   cityShape?: CityShapeSetting;
   cityShapeScale?: number;
+  citySize?: CityTier;
+  cropLock?: boolean;
   // Only the layer-visibility toggles persist — topologyKind / arterialCount
   // are per-seed runtime readouts, not settings.
   cityPlanning?: {
@@ -663,6 +683,10 @@ type SceneState = {
   setCityShape: (cityShape: CityShapeSetting) => void;
   cityShapeScale: number;
   setCityShapeScale: (cityShapeScale: number) => void;
+  citySize: CityTier;
+  setCitySize: (citySize: CityTier) => void;
+  cropLock: boolean;
+  setCropLock: (cropLock: boolean) => void;
   // Ambient traffic (research D) — opt-in car head/tail-lights.
   traffic: typeof DEFAULT_TRAFFIC;
   setTraffic: (patch: Partial<typeof DEFAULT_TRAFFIC>) => void;
@@ -834,6 +858,20 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setCityShape: (cityShape) => set({ cityShape }),
   cityShapeScale: DEFAULT_CITY_SHAPE_SCALE,
   setCityShapeScale: (cityShapeScale) => set({ cityShapeScale }),
+  citySize: DEFAULT_CITY_SIZE,
+  // Tier switch (#58): re-rolls the layout (the city is a function of seed +
+  // extent). Locked crop snaps to the new tier's full disc; unlocked preserves
+  // the ABSOLUTE crop km where possible (clamped to the new tier).
+  setCitySize: (citySize) =>
+    set((s) => {
+      const oldHalf = CITY_TIERS[s.citySize];
+      const newHalf = CITY_TIERS[citySize];
+      const cityShapeScale = s.cropLock ? 1 : Math.min(1, (s.cityShapeScale * oldHalf) / newHalf);
+      return { citySize, cityShapeScale };
+    }),
+  cropLock: DEFAULT_CROP_LOCK,
+  // Locking snaps the crop to the tier's full disc (that's what "locked" shows).
+  setCropLock: (cropLock) => set(cropLock ? { cropLock, cityShapeScale: 1 } : { cropLock }),
   traffic: DEFAULT_TRAFFIC,
   setTraffic: (patch) => set((s) => ({ traffic: { ...s.traffic, ...patch } })),
   streetlights: DEFAULT_STREETLIGHTS,
@@ -956,3 +994,12 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     }));
   },
 }));
+
+// Keep lib/seed's module-level gen extent in lockstep with the store's tier
+// (#58). A subscription (not just the setter) so EVERY path that writes
+// `citySize` — setCitySize, Reset, Revert, saved-config load — syncs the
+// generators before their next call. Initial sync covers a persisted boot value.
+setCityTier(useSceneStore.getState().citySize);
+useSceneStore.subscribe((s, prev) => {
+  if (s.citySize !== prev.citySize) setCityTier(s.citySize);
+});

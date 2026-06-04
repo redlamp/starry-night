@@ -45,17 +45,44 @@ export const CITY_HALF_EXTENT = 1500;
 // track the size knob. Exactly 1 at the base size — a no-op until the knob moves.
 export const CITY_SCALE = CITY_HALF_EXTENT / BASE_HALF_EXTENT;
 
-// --- #14 scale migration: generate-at-max + crop -----------------------------
-// The whole city is GENERATED at this fixed MAX extent (Metro, decided in
-// wiki/notes/decision-additive-growth-citygen.md + plan-metro-suburbs-highways.md);
-// the size slider becomes a CROP that only reveals/hides already-generated content,
-// so the core is extent-invariant and never re-rolls on a slider change.
+// --- #14 / #58: generate-at-max + crop, with a runtime SIZE TIER --------------
+// The whole city is GENERATED at the current tier's extent (decided in
+// wiki/notes/decision-additive-growth-citygen.md); the crop slider only
+// reveals/hides already-generated content, so the core never re-rolls on a crop
+// change. The TIER (#58) sets that gen extent at runtime: each tier is a
+// DIFFERENT city for the same seed (a bigger canvas changes the draw sequence —
+// switching tiers re-rolls, it does not grow the current city outward). Gen cost
+// ∝ extent², so the City default boots ~4× faster than Metro.
 //
-// NOT YET WIRED (Step 1). Step 2 routes the generation constants (tensorField N,
-// tensorStreets MAX_PTS, district NET_GRID_STEPS, the gen bbox) through GEN_SCALE /
-// MAX_HALF_EXTENT, while CITY_SCALE stays the *look* scale (fog/haze/stars/camera).
-export const MAX_HALF_EXTENT = 3000;
-export const GEN_SCALE = MAX_HALF_EXTENT / BASE_HALF_EXTENT;
+// Tier names are by DIAMETER (matches the crop slider's km): town 1.5 km,
+// city 3 km (default), metro 6 km. CITY_SCALE stays the *look* scale
+// (fog/haze/stars/camera) — do not couple it to the tier.
+export const CITY_TIERS = {
+  town: 750, // 1.5 km across
+  city: 1500, // 3 km across (default)
+  metro: 3000, // 6 km across
+} as const;
+export type CityTier = keyof typeof CITY_TIERS;
+export const DEFAULT_CITY_TIER: CityTier = "city";
+export const CITY_TIER_ORDER: CityTier[] = ["town", "city", "metro"];
+
+let genHalfExtent: number = CITY_TIERS[DEFAULT_CITY_TIER];
+
+// Set the gen extent for everything generated AFTER this call. The store's tier
+// setter (and each script) drives it; gen caches key on the extent so stale
+// cities are never served across a tier switch.
+export function setCityTier(tier: CityTier): void {
+  genHalfExtent = CITY_TIERS[tier];
+}
+// Current gen half-extent (was the MAX_HALF_EXTENT constant). Read at CALL time
+// inside generators — never capture it in a module-level constant.
+export function maxHalfExtent(): number {
+  return genHalfExtent;
+}
+// Gen density scale vs the hand-tuned 750 base (was the GEN_SCALE constant).
+export function genScale(): number {
+  return genHalfExtent / BASE_HALF_EXTENT;
+}
 
 const HIGHWAY_WIDTH = 28;
 
@@ -215,7 +242,7 @@ export function generateTopology(masterSeed: string): Topology {
   // #14: generate the topology at the fixed MAX extent (Metro). topo.halfExtent
   // then = MAX, so the tensor-road bbox (cityGen) + district raster auto-follow.
   // The size slider crops post-gen — see wiki/notes/plan-city-scale-migration.md.
-  const half = MAX_HALF_EXTENT;
+  const half = maxHalfExtent();
   let highways: Highway[] = [];
   switch (kind) {
     case "crossroads":

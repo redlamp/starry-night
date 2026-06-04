@@ -61,7 +61,9 @@ void main() {
 export function Beacons({ masterSeed }: { masterSeed: string }) {
   const cityShape = useSceneStore((s) => s.cityShape);
   const cityShapeScale = useSceneStore((s) => s.cityShapeScale);
+  const citySize = useSceneStore((s) => s.citySize);
   const { geometry, material } = useMemo(() => {
+    void citySize; // tier drives the module-level gen extent (#58) — a switch must rebuild
     const beacons = generateAviationBeacons(masterSeed, cityShape, cityShapeScale);
     const positions = new Float32Array(beacons.length * 3);
     const phases = new Float32Array(beacons.length);
@@ -95,7 +97,7 @@ export function Beacons({ masterSeed }: { masterSeed: string }) {
       toneMapped: false,
     });
     return { geometry: geo, material: mat };
-  }, [masterSeed, cityShape, cityShapeScale]);
+  }, [masterSeed, cityShape, cityShapeScale, citySize]);
 
   useEffect(() => {
     return () => {

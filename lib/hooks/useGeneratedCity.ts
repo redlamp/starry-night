@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { generateCity } from "@/lib/seed/cityGen";
+import { useSceneStore } from "@/lib/state/sceneStore";
 import type { CityShapeSetting } from "@/lib/seed/cityShape";
+import type { CityTier } from "@/lib/seed/topology";
 
 // First-load jank fix (#44): the cold `generateCity(seed, shape, scale)` call is
 // the dominant CPU cost on mount (~200ms in-browser, builds the tensor field,
@@ -31,8 +33,8 @@ import type { CityShapeSetting } from "@/lib/seed/cityShape";
 // hook can decide between sync-now and defer.
 const warmedKeys = new Set<string>();
 
-function cityKey(seed: string, shape: CityShapeSetting, scale: number): string {
-  return `${seed}::${shape}::${scale}`;
+function cityKey(seed: string, shape: CityShapeSetting, scale: number, tier: CityTier): string {
+  return `${seed}::${shape}::${scale}::${tier}`;
 }
 
 // Run `cb` off the mount-critical path: prefer requestIdleCallback (yields until
@@ -81,7 +83,10 @@ export function useGeneratedCity(
   shape: CityShapeSetting,
   scale: number,
 ): { ready: boolean } {
-  const key = cityKey(seed, shape, scale);
+  // Tier (#58) joins the key so a size switch re-warms: the store subscription
+  // has already pointed the generators at the new extent by the time we run.
+  const citySize = useSceneStore((s) => s.citySize);
+  const key = cityKey(seed, shape, scale, citySize);
 
   // Track which key the current `ready` value belongs to, so a key change is
   // detected during render (the "adjust state when a prop changes" pattern)

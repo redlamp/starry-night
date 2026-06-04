@@ -10,13 +10,15 @@
 import { deflateSync } from "node:zlib";
 import { writeFileSync } from "node:fs";
 import { generateCity } from "@/lib/seed/cityGen";
-import { CITY_CENTER, MAX_HALF_EXTENT } from "@/lib/seed/topology";
+import { CITY_CENTER, maxHalfExtent, setCityTier } from "@/lib/seed/topology";
 import { CHARACTER_COLOR } from "@/lib/seed/district";
+
+setCityTier("metro"); // render at the Metro tier (#58)
 
 const SEEDS = ["gate1-0", "gate1-2", "gate1-5"];
 const PANEL = 560; // px per seed panel
 const PAD = 8;
-const SPAN = 2 * MAX_HALF_EXTENT; // world metres mapped across a panel
+const SPAN = 2 * maxHalfExtent(); // world metres mapped across a panel
 const mPerPx = SPAN / PANEL;
 
 const W = SEEDS.length * PANEL + (SEEDS.length + 1) * PAD;
@@ -47,8 +49,8 @@ for (let s = 0; s < SEEDS.length; s++) {
 
   // world (x,z) → panel pixel. world x∈[cx−H,cx+H] → [0,PANEL]; z up = −y.
   const toPx = (wx: number, wz: number) => ({
-    x: ox + Math.round((wx - (CITY_CENTER.x - MAX_HALF_EXTENT)) / mPerPx),
-    y: oy + Math.round((wz - (CITY_CENTER.z - MAX_HALF_EXTENT)) / mPerPx),
+    x: ox + Math.round((wx - (CITY_CENTER.x - maxHalfExtent())) / mPerPx),
+    y: oy + Math.round((wz - (CITY_CENTER.z - maxHalfExtent())) / mPerPx),
   });
 
   // buildings, painter-sorted shortest→tallest so towers sit on top
@@ -64,13 +66,7 @@ for (let s = 0; s < SEEDS.length; s++) {
     const rad = b.height > 70 ? 1 : 0; // tall = 3x3, else 1px
     for (let dy = -rad; dy <= rad; dy++)
       for (let dx = -rad; dx <= rad; dx++)
-        px(
-          p.x + dx,
-          p.y + dy,
-          Math.min(255, r * k),
-          Math.min(255, g * k),
-          Math.min(255, bl * k),
-        );
+        px(p.x + dx, p.y + dy, Math.min(255, r * k), Math.min(255, g * k), Math.min(255, bl * k));
   }
 
   // crop rings: R1500 (default view) bright, R3000 (full extent) dim
@@ -82,7 +78,13 @@ for (let s = 0; s < SEEDS.length; s++) {
     const rpx = R / mPerPx;
     for (let a = 0; a < 2048; a++) {
       const ang = (a / 2048) * Math.PI * 2;
-      px(Math.round(cp.x + Math.cos(ang) * rpx), Math.round(cp.y + Math.sin(ang) * rpx), cr, cg, cb);
+      px(
+        Math.round(cp.x + Math.cos(ang) * rpx),
+        Math.round(cp.y + Math.sin(ang) * rpx),
+        cr,
+        cg,
+        cb,
+      );
     }
   }
 }
