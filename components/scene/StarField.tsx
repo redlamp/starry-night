@@ -196,6 +196,7 @@ export function StarField({ masterSeed, count, radius, depth, size = 1.5 }: Prop
       blending: THREE.AdditiveBlending,
       fog: false,
     });
+    mat.name = "starField"; // so a shader error names its material
 
     return { geometry: geo, material: mat };
   }, [masterSeed, count, radius, depth, size]);

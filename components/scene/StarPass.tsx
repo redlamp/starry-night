@@ -9,7 +9,7 @@ import * as THREE from "three";
 // Locking the star pass to a wider fov keeps the star density similar in
 // perspective and orthographic modes; the city is unaffected because it
 // renders in the main scene with its own camera/projection.
-const STAR_FOV = 60;
+export const STAR_FOV = 60;
 
 // Renders its children (the star field) in a dedicated perspective pass drawn
 // *before* the main scene. The main camera is often orthographic (city framing,

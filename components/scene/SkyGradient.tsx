@@ -45,6 +45,7 @@ export function SkyGradient({
         depthTest: false,
         fog: false,
         toneMapped: false,
+        name: "skyGradient", // so a shader error names its material
       }),
     // Material is created once; uniforms are pushed via the effects below.
     // eslint-disable-next-line react-hooks/exhaustive-deps

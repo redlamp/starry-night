@@ -130,7 +130,13 @@ export const DEFAULT_STARS = {
   radius: 4500 * CITY_SCALE,
   depth: 360 * CITY_SCALE,
   count: 24000,
-  factor: 36,
+  factor: 50,
+  // #26 meteors: min/max seconds between streaks + master toggle. Each fired
+  // streak rolls the NEXT gap uniformly in [min, max] (seeded rng chain in
+  // ShootingStars — deterministic per masterSeed).
+  shootingMin: 2,
+  shootingMax: 40,
+  meteorsEnabled: true,
 };
 // Window shader AA / LOD / occupancy tuning, exposed live via the Windows panel.
 //   edge    — fwidth edge-AA multiplier (higher = softer window edges)
@@ -487,9 +493,11 @@ function readSavedConfig(): SavedConfig | null {
     if (parsed.stars && parsed.stars.factor > 80) {
       parsed.stars.factor = DEFAULT_STARS.factor;
     }
-    // Forward-fill new lod fields (e.g. #55 `tiles`) into configs saved before
-    // they existed, so an old save can't silently disable a newer feature.
+    // Forward-fill new fields (e.g. #55 lod.tiles, #26 stars.shootingMin/Max)
+    // into configs saved before they existed, so an old save can't silently
+    // disable a newer feature.
     if (parsed.lod) parsed.lod = { ...DEFAULT_LOD, ...parsed.lod };
+    if (parsed.stars) parsed.stars = { ...DEFAULT_STARS, ...parsed.stars };
     return parsed as SavedConfig;
   } catch {
     return null;
@@ -522,10 +530,8 @@ type SceneState = {
   setCaptureMode: (captureMode: boolean) => void;
   moonFollowCamera: boolean;
   setMoonFollowCamera: (v: boolean) => void;
-  stars: { radius: number; depth: number; count: number; factor: number };
-  setStars: (
-    patch: Partial<{ radius: number; depth: number; count: number; factor: number }>,
-  ) => void;
+  stars: typeof DEFAULT_STARS;
+  setStars: (patch: Partial<typeof DEFAULT_STARS>) => void;
   windowAA: typeof DEFAULT_WINDOW_AA;
   setWindowAA: (patch: Partial<typeof DEFAULT_WINDOW_AA>) => void;
   windowMode: "simple" | "advanced";
