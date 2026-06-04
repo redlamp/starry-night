@@ -5,6 +5,8 @@ Map of Content for external references that shape direction.
 ## Visual references
 
 - [[after-dark-starry-night-original]] — YT capture of the original Berkeley Systems *After Dark* "Starry Night" Mac screensaver; the primary homage anchor (ambient behaviour + pacing)
+- [[night-sky-reference-real]] — #26 research pass: Bortle skyglow color/extent, magnitude-band star counts + 2.512× brightness law, elevation-driven twinkle, moon 21.84° halo physics, moonlit-sky behavior
+- [[night-sky-reference-stylized]] — #26 research pass: the original decoded from `starryn` C source (exact constants), Outer Wilds/BotW/Firewatch/Van Gogh/Ghibli techniques, Three.js recipes (gradient dithering, fog-chunk override → #54)
 - [[streets-of-rage-intro]] — Sega 1991 intro screen; primary direct color/shape/layout anchor for v1 (see [[decision-streets-of-rage-direction]])
 - [[map-layout-references]] — real city-plan screenshots + OSM links + figure-ground refs; the seam-street fork (SF Market St = one shared diagonal boulevard, not per-boundary lanes) for issues #33/#34
 
