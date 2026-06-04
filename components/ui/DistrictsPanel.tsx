@@ -15,11 +15,13 @@ export function DistrictsSection() {
 
   const citySize = useSceneStore((s) => s.citySize);
   const citySketch = useSceneStore((s) => s.citySketch);
+  const fieldDeviation = useSceneStore((s) => s.fieldDeviation);
   const districts = useMemo(() => {
     void citySize; // tier drives the module-level gen extent (#58) — a switch must refresh
     void citySketch; // a registered sketch is a different city (#40) — likewise
+    void fieldDeviation; // deviation scale (#51) — likewise
     return tensorDistrictField(masterSeed).districts;
-  }, [masterSeed, citySize, citySketch]);
+  }, [masterSeed, citySize, citySketch, fieldDeviation]);
 
   return (
     <>

@@ -1,10 +1,10 @@
 [
   {
     "seed": "gate1-0",
-    "buildingCount": 23491,
+    "buildingCount": 25559,
     "districtCount": 48,
-    "fullHash": "b91aab12",
-    "buildingsHash": "7e383042",
+    "fullHash": "bd0c91b5",
+    "buildingsHash": "733a8e77",
     "roadsHash": "05d4833e",
     "orientHash": "f366a1a4",
     "districts": [
@@ -348,10 +348,10 @@
   },
   {
     "seed": "gate1-1",
-    "buildingCount": 23998,
+    "buildingCount": 26085,
     "districtCount": 48,
-    "fullHash": "681d64f5",
-    "buildingsHash": "d63abfc1",
+    "fullHash": "7df893e8",
+    "buildingsHash": "2d5c03e2",
     "roadsHash": "b31e7e37",
     "orientHash": "6f004c9b",
     "districts": [
@@ -695,10 +695,10 @@
   },
   {
     "seed": "gate1-2",
-    "buildingCount": 24619,
+    "buildingCount": 26632,
     "districtCount": 48,
-    "fullHash": "bfa1accc",
-    "buildingsHash": "7c47fb6f",
+    "fullHash": "6aec2c72",
+    "buildingsHash": "3a219ae9",
     "roadsHash": "618f7791",
     "orientHash": "e700e5cb",
     "districts": [
@@ -1042,10 +1042,10 @@
   },
   {
     "seed": "gate1-3",
-    "buildingCount": 23688,
+    "buildingCount": 25875,
     "districtCount": 48,
-    "fullHash": "4b1638e8",
-    "buildingsHash": "91aa608b",
+    "fullHash": "5b0df02c",
+    "buildingsHash": "15f80607",
     "roadsHash": "9c5fe4d4",
     "orientHash": "458ee033",
     "districts": [
@@ -1389,10 +1389,10 @@
   },
   {
     "seed": "gate1-4",
-    "buildingCount": 23934,
+    "buildingCount": 26262,
     "districtCount": 48,
-    "fullHash": "31c0df0b",
-    "buildingsHash": "86f45bec",
+    "fullHash": "5e0ba49d",
+    "buildingsHash": "42b0d1b2",
     "roadsHash": "863dafd5",
     "orientHash": "4fd11fc9",
     "districts": [
@@ -1736,10 +1736,10 @@
   },
   {
     "seed": "gate1-5",
-    "buildingCount": 23897,
+    "buildingCount": 25795,
     "districtCount": 48,
-    "fullHash": "b0af3b13",
-    "buildingsHash": "07e81feb",
+    "fullHash": "22b1795c",
+    "buildingsHash": "58522604",
     "roadsHash": "939074ee",
     "orientHash": "80e426ab",
     "districts": [
@@ -2083,10 +2083,10 @@
   },
   {
     "seed": "gate1-6",
-    "buildingCount": 23526,
+    "buildingCount": 25856,
     "districtCount": 48,
-    "fullHash": "d4d0aa71",
-    "buildingsHash": "33f468a8",
+    "fullHash": "1aee1f65",
+    "buildingsHash": "bf241764",
     "roadsHash": "c9b8d3fa",
     "orientHash": "32de8e1e",
     "districts": [
@@ -2430,10 +2430,10 @@
   },
   {
     "seed": "gate1-7",
-    "buildingCount": 24317,
+    "buildingCount": 26339,
     "districtCount": 48,
-    "fullHash": "b56762f8",
-    "buildingsHash": "f0627a7c",
+    "fullHash": "28250661",
+    "buildingsHash": "053a7edf",
     "roadsHash": "3e633e50",
     "orientHash": "808c8bb8",
     "districts": [
@@ -2777,10 +2777,10 @@
   },
   {
     "seed": "gate1-8",
-    "buildingCount": 23426,
+    "buildingCount": 25678,
     "districtCount": 48,
-    "fullHash": "be7108d9",
-    "buildingsHash": "03996063",
+    "fullHash": "d7ccd713",
+    "buildingsHash": "caec9199",
     "roadsHash": "c5c4f97e",
     "orientHash": "50ced39c",
     "districts": [
@@ -3124,10 +3124,10 @@
   },
   {
     "seed": "gate1-9",
-    "buildingCount": 24526,
+    "buildingCount": 26282,
     "districtCount": 45,
-    "fullHash": "d82adabc",
-    "buildingsHash": "e7820c33",
+    "fullHash": "c382f219",
+    "buildingsHash": "7c2a7b28",
     "roadsHash": "5a7f6bee",
     "orientHash": "35760c2d",
     "districts": [

@@ -1281,6 +1281,10 @@ function DebugSection() {
   // and therefore generation — only updates on RELEASE (onValueCommitted).
   const [dragTierIdx, setDragTierIdx] = useState<number | null>(null);
   const shownTier = CITY_TIER_ORDER[dragTierIdx ?? tierIdx];
+  // Deviation drag preview (#51) — same regen-on-release pattern.
+  const fieldDeviation = useSceneStore((s) => s.fieldDeviation);
+  const setFieldDeviation = useSceneStore((s) => s.setFieldDeviation);
+  const [dragDeviation, setDragDeviation] = useState<number | null>(null);
   // "all" tab reflects a shared mode, or sits blank when groups differ.
   const allMode = RENDER_GROUPS.every((g) => renderModes[g] === renderModes.buildings)
     ? renderModes.buildings
@@ -1331,6 +1335,30 @@ function DebugSection() {
         Size sets the generated extent (re-rolls the layout; bigger = slower to generate). Crop
         reveals/hides the already-generated city — grow = reveal, never a re-roll. auto = each seed
         picks its shape; square = full field.
+      </div>
+      {/* #51 deviation — scales each seed's rolled field deformation. Regen on
+          RELEASE only (same drag-preview rationale as the size tier). */}
+      <div className="flex items-center gap-2 text-xs">
+        <span className="text-foreground/70 w-16 shrink-0">deviation</span>
+        <Slider
+          min={0.25}
+          max={2}
+          step={0.05}
+          value={dragDeviation ?? fieldDeviation}
+          onValueChange={(v) => setDragDeviation(typeof v === "number" ? v : v[0])}
+          onValueCommitted={(v) => {
+            setDragDeviation(null);
+            setFieldDeviation(typeof v === "number" ? v : v[0]);
+          }}
+          className="flex-1"
+        />
+        <span className="text-foreground w-24 shrink-0 text-right font-mono tabular-nums">
+          ×{(dragDeviation ?? fieldDeviation).toFixed(2)}
+        </span>
+      </div>
+      <div className="text-foreground/45 text-[11px] leading-snug">
+        Deviation scales how hard the street field bends (re-rolls on release). ×1 = the seed&apos;s
+        own character; lower = calmer grids, higher = stronger warps/shears.
       </div>
 
       <SubHeader label="Building tint" />

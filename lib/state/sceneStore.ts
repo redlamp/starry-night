@@ -11,6 +11,7 @@ import {
 import type { CityShapeSetting } from "@/lib/seed/cityShape";
 import type { Archetype } from "@/lib/seed/cityGen";
 import { setCitySketch } from "@/lib/seed/citySketch";
+import { setFieldDeviation as setFieldDeviationModule } from "@/lib/seed/tensorField";
 import type { SketchTensorSource } from "@/lib/sketch/orientationField";
 
 export type LightingMode = "classic" | "modern";
@@ -359,7 +360,8 @@ type AnySettingEntry =
   | SettingEntry<"cityShapeScale">
   | SettingEntry<"citySize">
   | SettingEntry<"cropLock">
-  | SettingEntry<"fpsHud">;
+  | SettingEntry<"fpsHud">
+  | SettingEntry<"fieldDeviation">;
 
 export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "cameraIntent", defaultValue: DEFAULT_INTENT, persist: true },
@@ -402,6 +404,8 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "cropLock", defaultValue: DEFAULT_CROP_LOCK, persist: true },
   // On-screen FPS badge — persisted so a perf pass survives reloads.
   { key: "fpsHud", defaultValue: false as const, persist: true },
+  // Tensor-field deviation scale (#51) — gen input, persisted.
+  { key: "fieldDeviation", defaultValue: 1, persist: true },
 ];
 
 // cityPlanning visibility toggles — persisted separately because `cityPlanning`
@@ -439,6 +443,7 @@ type SavedConfig = {
   citySize?: CityTier;
   cropLock?: boolean;
   fpsHud?: boolean;
+  fieldDeviation?: number;
   // Only the layer-visibility toggles persist — topologyKind / arterialCount
   // are per-seed runtime readouts, not settings.
   cityPlanning?: {
@@ -707,6 +712,10 @@ type SceneState = {
   // On-screen FPS badge (FpsHud) — toggled from the Performance section.
   fpsHud: boolean;
   setFpsHud: (fpsHud: boolean) => void;
+  // Tensor-field deviation scale (#51) — gen input; 1 = the seeded default,
+  // <1 calms every city, >1 deforms harder. Changing it regenerates.
+  fieldDeviation: number;
+  setFieldDeviation: (fieldDeviation: number) => void;
   // Ambient traffic (research D) — opt-in car head/tail-lights.
   traffic: typeof DEFAULT_TRAFFIC;
   setTraffic: (patch: Partial<typeof DEFAULT_TRAFFIC>) => void;
@@ -896,6 +905,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setCitySketch: (citySketch) => set({ citySketch }),
   fpsHud: false,
   setFpsHud: (fpsHud) => set({ fpsHud }),
+  fieldDeviation: 1,
+  setFieldDeviation: (fieldDeviation) => set({ fieldDeviation }),
   traffic: DEFAULT_TRAFFIC,
   setTraffic: (patch) => set((s) => ({ traffic: { ...s.traffic, ...patch } })),
   streetlights: DEFAULT_STREETLIGHTS,
@@ -1033,4 +1044,10 @@ useSceneStore.subscribe((s, prev) => {
 setCitySketch(useSceneStore.getState().citySketch);
 useSceneStore.subscribe((s, prev) => {
   if (s.citySketch !== prev.citySketch) setCitySketch(s.citySketch);
+});
+
+// ...and the tensor-field deviation scale (#51).
+setFieldDeviationModule(useSceneStore.getState().fieldDeviation);
+useSceneStore.subscribe((s, prev) => {
+  if (s.fieldDeviation !== prev.fieldDeviation) setFieldDeviationModule(s.fieldDeviation);
 });

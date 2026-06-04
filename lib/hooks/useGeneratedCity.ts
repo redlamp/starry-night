@@ -88,11 +88,12 @@ export function useGeneratedCity(
   // Tier (#58) joins the key so a size switch re-warms: the store subscription
   // has already pointed the generators at the new extent by the time we run.
   const citySize = useSceneStore((s) => s.citySize);
-  // Sketch (#40) likewise — registering/clearing a sketch is a different city.
-  // The store subscription has already mirrored it into the gen registry, so
-  // sketchKey() is current by the time this render runs.
+  // Sketch (#40) + deviation (#51) likewise — each is a different city. The
+  // store subscriptions have already mirrored them into the gen modules, so
+  // sketchKey()/fieldDeviation() are current by the time this render runs.
   const citySketch = useSceneStore((s) => s.citySketch);
-  const key = `${cityKey(seed, shape, scale, citySize)}::${sketchKey()}`;
+  const deviation = useSceneStore((s) => s.fieldDeviation);
+  const key = `${cityKey(seed, shape, scale, citySize)}::${sketchKey()}::${deviation}`;
   void citySketch; // the key reads the module registry; this subscription triggers the re-render
 
   // Track which key the current `ready` value belongs to, so a key change is

@@ -18,6 +18,7 @@ import {
   type ShapeMask,
 } from "./cityShape";
 import { citySketchTensor, sketchKey } from "./citySketch";
+import { fieldDeviation } from "./tensorField";
 
 // Any road tier, for the building-skip corridor test.
 type RoadLike = { vertices: Array<{ x: number; z: number }>; width: number; closed: boolean };
@@ -521,7 +522,7 @@ function buildTensorRoadsImpl(masterSeed: string, onLine?: StreetTraceHook) {
 // a different city for the same seed, so a stale entry must never be served.
 const tensorRoadsCache = new Map<string, ReturnType<typeof buildTensorRoadsImpl>>();
 function buildTensorRoads(masterSeed: string, onLine?: StreetTraceHook) {
-  const key = `${masterSeed}::${maxHalfExtent()}::${sketchKey()}`;
+  const key = `${masterSeed}::${maxHalfExtent()}::${sketchKey()}::${fieldDeviation()}`;
   const hit = tensorRoadsCache.get(key);
   if (hit) return hit; // warm cache → nothing streams (the result lands at once anyway)
   const result = buildTensorRoadsImpl(masterSeed, onLine);
@@ -593,7 +594,7 @@ export function primeCityCaches(
 ): void {
   const { roads, city, lights } = bundle;
   const field = districtFieldFromRaster(roads.districts, roads.bounds, roads.raster);
-  const roadsKey = `${rawSeed}::${maxHalfExtent()}::${sketchKey()}`;
+  const roadsKey = `${rawSeed}::${maxHalfExtent()}::${sketchKey()}::${fieldDeviation()}`;
   if (tensorRoadsCache.size > 64) tensorRoadsCache.clear();
   tensorRoadsCache.set(roadsKey, {
     topology: roads.topology,
@@ -601,7 +602,7 @@ export function primeCityCaches(
     arterials: roads.arterials,
     minorStreets: roads.minorStreets,
   });
-  const key = `${rawSeed}::${shape}::${shapeScale}::${maxHalfExtent()}::${sketchKey()}`;
+  const key = `${rawSeed}::${shape}::${shapeScale}::${maxHalfExtent()}::${sketchKey()}::${fieldDeviation()}`;
   if (cityCache.size > 64) cityCache.clear();
   cityCache.set(key, city);
   if (lightsCache.size > 64) lightsCache.clear();
@@ -852,6 +853,93 @@ function fillTensorBuildings(
       }
     }
   }
+
+  // --- #50: interior fill --------------------------------------------------
+  // Frontage rows leave block HEARTS empty (visible holes in residential /
+  // industrial superblocks). Second pass: scan a jittered grid over the
+  // district bounds and drop road-ALIGNED buildings in the interior band —
+  // beyond the frontage row (≥18m off the kerb network) but still inside a
+  // block (≤55m; past that is roadless fringe, which stays empty). Density is
+  // per-character (industrial yards fill hardest, heritage courts stay airy).
+  // Own rng stream so the frontage rows above are byte-identical to pre-#50.
+  // Same corridor + overlap gates as frontage (shared bIndex), so gate1's
+  // road-hit / overlap asserts hold.
+  const INTERIOR_NEAR = 18;
+  const INTERIOR_FAR = 55;
+  const INTERIOR_DENSITY: Record<DistrictCharacter, number> = {
+    downtown: 0.4,
+    subcentre: 0.4,
+    heritage: 0.3,
+    residential: 0.55,
+    industrial: 0.7,
+    "mixed-use": 0.5,
+  };
+  const irng = seedrandom(`${masterSeed}::tensor::buildings::interior`);
+  const ISTEP = 26; // sample pitch (m) — finer than the smallest block grammar
+  const ib = field.bounds;
+  for (let gx = ib.minX + ISTEP / 2; gx < ib.maxX; gx += ISTEP) {
+    for (let gz = ib.minZ + ISTEP / 2; gz < ib.maxZ; gz += ISTEP) {
+      const px = gx + (irng() - 0.5) * ISTEP * 0.7;
+      const pz = gz + (irng() - 0.5) * ISTEP * 0.7;
+      const densityRoll = irng();
+      const idx = field.classify(px, pz);
+      if (idx < 0) continue;
+      const q = roadIndex.query(px, pz);
+      if (q.edge < INTERIOR_NEAR || q.edge > INTERIOR_FAR) continue;
+      const district = field.districts[idx];
+      const character = district.character;
+      if (densityRoll > INTERIOR_DENSITY[character]) continue;
+      const grammar = GRAMMAR[character];
+      const prox = coreProx(px, pz);
+      const archetype = pickArchetype(irng, character, prox);
+      const dims = dimensionsForArchetype(archetype, irng);
+      const hJ = 0.78 + irng() * 0.44;
+      const outlierH = irng() < 0.06 ? (irng() < 0.5 ? 0.6 : 1.5) : 1.0;
+      // Align to the nearest road's bearing (a back building still faces the
+      // street grid) with a touch of yard jitter.
+      const rotationY = q.ang + (irng() - 0.5) * 0.1;
+      const f: Footprint = { x: px, z: pz, width: dims.width, depth: dims.depth, rotationY };
+      if (!cornerOnRoad(f) && !overlapsPlaced(f)) {
+        const lightingClass = LIGHTING_CLASS[character];
+        const sil = isHighRise(character) ? (silhouetteByIndex.get(idx) ?? null) : null;
+        const hm = sil ? sil.multiplier(px, pz) : 1;
+        // Interiors sit a notch lower than their frontage (light wells, backs).
+        const height = dims.height * grammar.heightCap * hm * hJ * outlierH * 0.92;
+        const pitch = ARCHETYPE_PITCH[archetype];
+        const ageScale = lightingClass === "oldtown" ? AGE_PITCH_SCALE : 1;
+        const colJitter = 1 + (irng() - 0.5) * 0.16;
+        const floorJitter = 1 + (irng() - 0.5) * 0.16;
+        const floors = Math.max(2, Math.round(height / (pitch.floor * ageScale * floorJitter)));
+        const colsPerFace = Math.max(
+          3,
+          Math.round(dims.width / (pitch.col * ageScale * colJitter)),
+        );
+        buildings.push({
+          id: id++,
+          x: px,
+          z: pz,
+          width: dims.width,
+          depth: dims.depth,
+          height,
+          rotationY,
+          archetype,
+          layer: layerForZ(pz),
+          district: lightingClass,
+          districtId: district.id,
+          coreProximity: prox,
+          windowSeed: irng(),
+          rowsPerFloor: 1,
+          colsPerFace,
+          floors,
+        });
+        const k = `${Math.floor(px / BCELL)},${Math.floor(pz / BCELL)}`;
+        const l = bIndex.get(k);
+        if (l) l.push(f);
+        else bIndex.set(k, [f]);
+      }
+    }
+  }
+
   return buildings;
 }
 
@@ -936,7 +1024,7 @@ export function generateCity(
   shape: CityShapeSetting = "square",
   shapeScale = 1,
 ): CityData {
-  const key = `${rawSeed}::${shape}::${shapeScale}::${maxHalfExtent()}::${sketchKey()}`;
+  const key = `${rawSeed}::${shape}::${shapeScale}::${maxHalfExtent()}::${sketchKey()}::${fieldDeviation()}`;
   const hit = cityCache.get(key);
   if (hit) return hit;
   const result = generateCityTensor(rawSeed, shape, shapeScale);
@@ -1298,7 +1386,7 @@ export function generateStreetlights(
   shape: CityShapeSetting = "square",
   shapeScale = 1,
 ): Streetlight[] {
-  const key = `${rawSeed}::${shape}::${shapeScale}::${maxHalfExtent()}::${sketchKey()}`;
+  const key = `${rawSeed}::${shape}::${shapeScale}::${maxHalfExtent()}::${sketchKey()}::${fieldDeviation()}`;
   const hit = lightsCache.get(key);
   if (hit) return hit;
   const result = generateStreetlightsTensor(rawSeed, shape, shapeScale);

@@ -62,6 +62,7 @@ const workerBundle = await new Promise<CityBundle>((resolve, reject) => {
     scale: SCALE,
     tier: TIER,
     sketch: null,
+    deviation: 1,
   });
 });
 worker.terminate();

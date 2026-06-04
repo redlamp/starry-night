@@ -18,6 +18,7 @@
 import { buildCityBundle } from "@/lib/seed/cityGen";
 import { setCityTier, type CityTier } from "@/lib/seed/topology";
 import { setCitySketch } from "@/lib/seed/citySketch";
+import { setFieldDeviation } from "@/lib/seed/tensorField";
 import type { CityShapeSetting } from "@/lib/seed/cityShape";
 import type { SketchTensorSource } from "@/lib/sketch/orientationField";
 
@@ -31,6 +32,8 @@ export type CityGenRequest = {
   // registers the sketch (or clears it) before generating, mirroring the main
   // thread's registry so the bundle matches the caller's cache keys.
   sketch: SketchTensorSource | null;
+  // #51: runtime tensor-field deviation scale (1 = the seeded default).
+  deviation: number;
 };
 
 // One traced road, decimated for display: [x0, z0, x1, z1, ...].
@@ -51,10 +54,11 @@ const DECIMATE = 5; // keep every 5th vertex (plus the last) for the display tra
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
 
 ctx.onmessage = (e: MessageEvent<CityGenRequest>) => {
-  const { reqId, seed, shape, scale, tier, sketch } = e.data;
+  const { reqId, seed, shape, scale, tier, sketch, deviation } = e.data;
   try {
     setCityTier(tier); // the worker's module extent is independent of the main thread's
-    setCitySketch(sketch); // ...and so is its sketch registry (#40)
+    setCitySketch(sketch ?? null); // ...and so is its sketch registry (#40)
+    setFieldDeviation(deviation ?? 1); // ...and its deviation scale (#51); default = seeded
     let batch: TracedLine[] = [];
     const flush = () => {
       if (!batch.length) return;

@@ -62,6 +62,19 @@ function basisWeight(b: Basis, x: number, z: number): number {
 //   radial— a compact off-centre roundabout (rare; tighter than before)
 type Morphology = "warp" | "shear" | "grid" | "radial";
 
+// #51: runtime deviation scale — multiplies each seed's rolled deviation
+// (0.7…1.6). 1 = exactly the seeded value (x*1 === x, so the default is
+// byte-identical); <1 calms every city, >1 deforms harder. Same module-mirror
+// pattern as setCityTier / setCitySketch: the store is the source of truth,
+// gen caches key on the current value.
+let deviationScale = 1;
+export function setFieldDeviation(v: number): void {
+  deviationScale = v;
+}
+export function fieldDeviation(): number {
+  return deviationScale;
+}
+
 function pickMorphology(r: number): Morphology {
   if (r < 0.34) return "warp";
   if (r < 0.64) return "shear";
@@ -85,12 +98,12 @@ export function buildTensorField(masterSeed: string, lattice: Lattice): TensorFi
   // (#51): some cities calm, some strongly deformed — the future runtime slider
   // would scale this. Draws happen up-front in a fixed order for determinism.
   const morph = pickMorphology(rng());
-  const deviation = 0.7 + rng() * 0.9; // 0.7 … 1.6
+  const deviation = (0.7 + rng() * 0.9) * deviationScale; // seeded 0.7…1.6 × runtime scale (#51)
   const waveDir = rng() * Math.PI * 2; // direction the warp sine travels
   const waveLambda = half * (0.8 + rng() * 1.2); // warp wavelength (m)
   const wavePhase = rng() * Math.PI * 2;
   const shearNormal = rng() * Math.PI; // boundary orientation for the shear seam
-  const shearDelta = ((28 + rng() * 26) * Math.PI) / 180; // grid-to-grid angle: 28–54°
+  const shearDelta = (((28 + rng() * 26) * Math.PI) / 180) * deviationScale; // grid-to-grid angle: 28–54° × scale (#51)
   const shearBand = half * (0.12 + rng() * 0.18); // half-width of the smooth seam
   const radialAng = rng() * Math.PI * 2;
   const radialRad = half * (0.28 + rng() * 0.22);
