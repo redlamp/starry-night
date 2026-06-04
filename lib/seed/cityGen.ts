@@ -1,5 +1,5 @@
 import seedrandom from "seedrandom";
-import { generateTopology, maxHalfExtent, type Topology, type Highway } from "./topology";
+import { generateTopology, maxHalfExtent, genScale, type Topology, type Highway } from "./topology";
 import {
   generateDistrictsFromNetwork,
   districtFieldFromRaster,
@@ -343,6 +343,22 @@ function totalTurn(r: { vertices: Array<{ x: number; z: number }> }): number {
 
 const RING_TURN = (200 * Math.PI) / 180; // ≥ ~200° of turning reads as circular
 
+// #13: overall bearing of a road (endpoint to endpoint), folded to [0, π) —
+// promotion wants DIVERSE bearings so the freeway network criss-crosses
+// instead of stacking parallel routes.
+function bearingOf(r: { vertices: Array<{ x: number; z: number }> }): number {
+  const v = r.vertices;
+  const th = Math.atan2(v[v.length - 1].z - v[0].z, v[v.length - 1].x - v[0].x);
+  return ((th % Math.PI) + Math.PI) % Math.PI;
+}
+
+function bearingDiff(a: number, b: number): number {
+  const d = Math.abs(a - b) % Math.PI;
+  return Math.min(d, Math.PI - d);
+}
+
+const HIGHWAY_MIN_BEARING_DIFF = (28 * Math.PI) / 180; // promoted routes must diverge ≥ 28°
+
 // Shared tensor road build (used by both the city + streetlight tensor paths so
 // they agree). Ring-like arterials are demoted to minor STREETS (a circular road
 // should be a street, never an arterial/highway). The highway is the longest,
@@ -381,24 +397,48 @@ function buildTensorRoadsImpl(masterSeed: string, onLine?: StreetTraceHook) {
     ...ringArts.map((r, i) => ({ ...r, id: `minor-ring-${i}`, width: 9, tier: "minor" as const })),
   ];
 
-  let highways: Highway[] = [];
-  let outArterials = arterials;
-  let best: RoadPoly | null = null;
-  let bestScore = 0;
-  for (const a of arterials) {
-    const score = roadLength(a) - 250 * totalTurn(a); // long + straight wins
-    if (roadLength(a) > 700 && score > bestScore) {
-      best = a;
-      bestScore = score;
+  // #13 Phase 1: promote a small freeway NETWORK, not one lonely route. Count
+  // scales with the tier (town 1 / city 2 / metro 3); candidates are the long,
+  // largely-straight arterials, picked greedily by score with a mutual bearing
+  // gate so the network criss-crosses the map instead of stacking parallels.
+  // Districts are unaffected: walls below are the highways+arterials UNION,
+  // identical whichever bucket a road lands in.
+  const maxHighways = Math.min(3, Math.max(1, Math.round(genScale() * 0.75)));
+  const candidates = arterials
+    .map((a) => ({ a, score: roadLength(a) - 250 * totalTurn(a), bearing: bearingOf(a) }))
+    .filter((c) => roadLength(c.a) > 700 && c.score > 0)
+    .sort((p, q) => q.score - p.score);
+  const picked: typeof candidates = [];
+  for (const c of candidates) {
+    if (picked.length >= maxHighways) break;
+    if (picked.every((p) => bearingDiff(p.bearing, c.bearing) >= HIGHWAY_MIN_BEARING_DIFF)) {
+      picked.push(c);
     }
   }
-  if (best) {
-    const hwId = best.id;
-    highways = [
-      { id: "highway-0", closed: false, vertices: best.vertices, width: 28, tier: "highway" },
-    ];
-    outArterials = arterials.filter((a) => a.id !== hwId);
+  // Bearing diversity often saturates at 2 (the two streamline families) —
+  // fill remaining slots with PARALLEL routes offset across town, like real
+  // metro freeway pairs. Midpoint separation keyed to the extent.
+  if (picked.length < maxHighways) {
+    const minSep = maxHalfExtent() * 0.45;
+    const midOf = (r: RoadPoly) => r.vertices[Math.floor(r.vertices.length / 2)];
+    for (const c of candidates) {
+      if (picked.length >= maxHighways) break;
+      if (picked.some((p) => p.a.id === c.a.id)) continue;
+      const m = midOf(c.a);
+      if (picked.every((p) => Math.hypot(midOf(p.a).x - m.x, midOf(p.a).z - m.z) >= minSep)) {
+        picked.push(c);
+      }
+    }
   }
+  const pickedIds = new Set(picked.map((p) => p.a.id));
+  const highways: Highway[] = picked.map((p, i) => ({
+    id: `highway-${i}`,
+    closed: false,
+    vertices: p.a.vertices,
+    width: 28,
+    tier: "highway",
+  }));
+  const outArterials = arterials.filter((a) => !pickedIds.has(a.id));
 
   const topology: Topology = { ...rawTopo, highways };
   // Districts follow the road network: arterials + the highway are HARD WALLS,
@@ -975,6 +1015,115 @@ function emitRoadLights(
   }
 }
 
+// --- #13 Phase 2: interchange glow ------------------------------------------
+// Where two highways cross, a real freeway has an interchange — at night that
+// reads as four glowing cloverleaf loops. No geometry: deterministic ramp-light
+// clusters added to the streetlight set (the de-bunch pass then knits them into
+// the road lighting). Crossing detection is segment×segment on decimated
+// polylines; near-parallel overlaps (< 25°) and crossings within 150m of an
+// already-found interchange are skipped.
+
+type Crossing = { x: number; z: number; d1: [number, number]; d2: [number, number] };
+
+const INTERCHANGE_MIN_ANGLE = (25 * Math.PI) / 180;
+const INTERCHANGE_MIN_DIST = 150;
+const RAMP_LOOP_RADIUS = 38; // cloverleaf loop radius (m)
+const RAMP_LOOP_OFFSET = 70; // loop centre distance from the crossing point (m)
+const RAMP_LIGHTS_PER_LOOP = 10;
+
+function segIntersect(
+  ax: number,
+  az: number,
+  bx: number,
+  bz: number,
+  cx: number,
+  cz: number,
+  dx: number,
+  dz: number,
+): [number, number] | null {
+  const r1x = bx - ax;
+  const r1z = bz - az;
+  const r2x = dx - cx;
+  const r2z = dz - cz;
+  const den = r1x * r2z - r1z * r2x;
+  if (Math.abs(den) < 1e-9) return null;
+  const t = ((cx - ax) * r2z - (cz - az) * r2x) / den;
+  const u = ((cx - ax) * r1z - (cz - az) * r1x) / den;
+  if (t < 0 || t > 1 || u < 0 || u > 1) return null;
+  return [ax + t * r1x, az + t * r1z];
+}
+
+function findHighwayCrossings(highways: Highway[]): Crossing[] {
+  const out: Crossing[] = [];
+  const STEP = 3; // decimate verts (RK4 ~4m apart → ~12m segments): plenty for detection
+  for (let i = 0; i < highways.length; i++) {
+    for (let j = i + 1; j < highways.length; j++) {
+      const va = highways[i].vertices;
+      const vb = highways[j].vertices;
+      for (let p = STEP; p < va.length; p += STEP) {
+        for (let q = STEP; q < vb.length; q += STEP) {
+          const hit = segIntersect(
+            va[p - STEP].x,
+            va[p - STEP].z,
+            va[p].x,
+            va[p].z,
+            vb[q - STEP].x,
+            vb[q - STEP].z,
+            vb[q].x,
+            vb[q].z,
+          );
+          if (!hit) continue;
+          const a1 = Math.atan2(va[p].z - va[p - STEP].z, va[p].x - va[p - STEP].x);
+          const a2 = Math.atan2(vb[q].z - vb[q - STEP].z, vb[q].x - vb[q - STEP].x);
+          if (
+            bearingDiff(
+              ((a1 % Math.PI) + Math.PI) % Math.PI,
+              ((a2 % Math.PI) + Math.PI) % Math.PI,
+            ) < INTERCHANGE_MIN_ANGLE
+          )
+            continue;
+          if (out.some((c) => Math.hypot(c.x - hit[0], c.z - hit[1]) < INTERCHANGE_MIN_DIST))
+            continue;
+          out.push({
+            x: hit[0],
+            z: hit[1],
+            d1: [Math.cos(a1), Math.sin(a1)],
+            d2: [Math.cos(a2), Math.sin(a2)],
+          });
+        }
+      }
+    }
+  }
+  return out;
+}
+
+// Four light loops in the four quadrants between the two roads' directions.
+function emitInterchangeLights(rng: () => number, c: Crossing, out: Streetlight[]) {
+  const sum: [number, number] = [c.d1[0] + c.d2[0], c.d1[1] + c.d2[1]];
+  const dif: [number, number] = [c.d1[0] - c.d2[0], c.d1[1] - c.d2[1]];
+  for (const b of [sum, dif]) {
+    const len = Math.hypot(b[0], b[1]);
+    if (len < 1e-6) continue;
+    b[0] /= len;
+    b[1] /= len;
+  }
+  for (const [bx, bz] of [sum, [-sum[0], -sum[1]], dif, [-dif[0], -dif[1]]] as const) {
+    const cx = c.x + bx * RAMP_LOOP_OFFSET;
+    const cz = c.z + bz * RAMP_LOOP_OFFSET;
+    for (let k = 0; k < RAMP_LIGHTS_PER_LOOP; k++) {
+      const ang = (k / RAMP_LIGHTS_PER_LOOP) * Math.PI * 2;
+      out.push({
+        x: cx + Math.cos(ang) * RAMP_LOOP_RADIUS,
+        y: 7 + (rng() - 0.5) * 0.4,
+        z: cz + Math.sin(ang) * RAMP_LOOP_RADIUS,
+        kelvin: bandPick(rng, HIGHWAY_ARTERIAL_KELVIN),
+        isFailing: rng() < FAILURE_RATE,
+        tier: "highway",
+      });
+    }
+  }
+}
+
 // Global de-bunch pass: keep a lamp only if no already-kept lamp sits within
 // `minDist`. Deterministic — input order (highway → arterial → local) decides
 // which lamp wins, so main-road lamps survive over crowding local ones. Spatial
@@ -1046,6 +1195,12 @@ function generateStreetlightsTensor(
       34,
       lights,
     );
+  }
+  // #13 Phase 2: interchange ramp loops where highways cross. Own seeded
+  // stream so adding/removing interchanges never shifts road-lamp draws.
+  const interRng = seedrandom(`${masterSeed}::streetlights::interchanges`);
+  for (const c of findHighwayCrossings(topology.highways)) {
+    emitInterchangeLights(interRng, c, lights);
   }
   const artRng = seedrandom(`${masterSeed}::streetlights::arterials`);
   for (const a of arterials) {
