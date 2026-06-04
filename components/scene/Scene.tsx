@@ -70,7 +70,9 @@ export function Scene() {
       <ambientLight intensity={0.04} />
 
       <StarPass backgroundColor={fog.color} haze={<GroundHaze />}>
-        <SkyGradient horizonColor={fog.color} zenithColor="#050a18" />
+        {/* #26: zenith lifted from near-black to a saturated indigo (research:
+            night reads luminous via deep blue + warm contrast, never #000). */}
+        <SkyGradient horizonColor={fog.color} zenithColor="#070b22" />
         <StarField
           masterSeed={masterSeed}
           radius={stars.radius}

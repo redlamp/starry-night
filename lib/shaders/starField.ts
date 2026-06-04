@@ -9,6 +9,7 @@ export const starFieldVertexShader = /* glsl */ `
   attribute float aTwinkle;    // 0..1 — twinkle amplitude (brightness-weighted)
   attribute float aSparkleSeed;// 0..1 — seed for occasional impulse sparkle
   attribute vec3 aColor;       // RGB stellar-class colour, desaturated for dim
+  attribute float aBase;       // per-star base intensity (#26 magnitude flux law)
   // .x = random, .y = brightness rank (0 = brightest), .z = heightNorm (0=bottom, 1=zenith).
   attribute vec3 aIntroBaselines;
 
@@ -54,7 +55,10 @@ export const starFieldVertexShader = /* glsl */ `
     float eligible = step(0.5, aTwinkle);
     float sparkle = eligible * step(0.97, roll) * exp(-bucketAge * 9.0) * 1.6;
 
-    vBrightness = baseTwinkle + sparkle;
+    // Base intensity carries the 2.512×/magnitude flux ratio (#26): faint
+    // stars dim in LIGHT, not just point size — the field reads mostly-faint
+    // with a few standouts, like a real city sky.
+    vBrightness = (baseTwinkle + sparkle) * aBase;
     vColor = aColor;
 
     // Intro wake-mask. Pick baseline by mode, cap at 0.7 then add tiny
