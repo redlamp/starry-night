@@ -10,6 +10,7 @@ export const starFieldVertexShader = /* glsl */ `
   attribute float aSparkleSeed;// 0..1 — seed for occasional impulse sparkle
   attribute vec3 aColor;       // RGB stellar-class colour, desaturated for dim
   attribute float aBase;       // per-star base intensity (#26 magnitude flux law)
+  attribute float aHalo;       // 1 = hero star/planet: tight core + wide Van Gogh halo
   // .x = random, .y = brightness rank (0 = brightest), .z = heightNorm (0=bottom, 1=zenith).
   attribute vec3 aIntroBaselines;
 
@@ -21,6 +22,7 @@ export const starFieldVertexShader = /* glsl */ `
   varying float vBrightness;
   varying float vWake;
   varying vec3 vColor;
+  varying float vHalo;
 
   // 1D hash for sparkle impulse buckets.
   float hash11(float p) {
@@ -60,6 +62,7 @@ export const starFieldVertexShader = /* glsl */ `
     // with a few standouts, like a real city sky.
     vBrightness = (baseTwinkle + sparkle) * aBase;
     vColor = aColor;
+    vHalo = aHalo;
 
     // Intro wake-mask. Pick baseline by mode, cap at 0.7 then add tiny
     // per-star jitter (≤0.15) so the smoothstep saturates before
@@ -85,17 +88,26 @@ export const starFieldFragmentShader = /* glsl */ `
   varying float vBrightness;
   varying float vWake;
   varying vec3 vColor;
+  varying float vHalo;
 
   void main() {
     // Round point with soft edge via gl_PointCoord.
     vec2 uv = gl_PointCoord - vec2(0.5);
     float r = length(uv);
     if (r > 0.5) discard;
-    float alpha = smoothstep(0.5, 0.15, r) * vWake;
+    // Hero stars/planets (#26, the Van Gogh read): a tight incandescent core
+    // wrapped in a wide, faint halo — radiance faked by outward gradation, not
+    // raw brightness. Ordinary stars keep the plain soft disc.
+    float plain = smoothstep(0.5, 0.15, r);
+    float core = smoothstep(0.17, 0.04, r);
+    float halo = smoothstep(0.5, 0.08, r) * 0.22;
+    float shape = mix(plain, core + halo, vHalo);
+    float alpha = shape * vWake;
     if (alpha <= 0.001) discard;
     // Per-star colour × twinkle × ACES headroom. vBrightness can exceed 1 on
     // sparkle frames — additive blending + tone mapping handles the overshoot.
-    vec3 col = vColor * vBrightness * 1.4;
+    float boost = mix(1.4, 1.7, vHalo * core); // the core itself burns hotter
+    vec3 col = vColor * vBrightness * boost;
     gl_FragColor = vec4(col, alpha);
   }
 `;

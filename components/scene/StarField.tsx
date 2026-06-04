@@ -83,6 +83,7 @@ export function StarField({ masterSeed, count, radius, depth, size = 1.5 }: Prop
     const sparkleSeeds = new Float32Array(total);
     const colors = new Float32Array(total * 3);
     const bases = new Float32Array(total); // per-star base intensity (#26 flux law)
+    const halos = new Float32Array(total); // 1 = hero star/planet (core + wide halo)
     // Intro-mode baselines packed per-star:
     //   .x = random       (aPhase already, kept here for shader convenience)
     //   .y = 1 - sizeRank (brightness: big stars = low baseline = wake early)
@@ -113,7 +114,12 @@ export function StarField({ masterSeed, count, radius, depth, size = 1.5 }: Prop
       // flux per band. Size follows the square root so bright stars grow but
       // the flux difference is carried by intensity (aBase), not just area.
       const s = sampleBrightness(rng());
-      sizes[i] = size * (0.5 + 1.7 * Math.sqrt(s));
+      // Hero stars (#26 slice 2): the flux law makes s > 0.55 rare (~0.5% — a
+      // handful per sky). They get the Van Gogh treatment: a much larger point
+      // canvas the fragment shader paints as tight core + wide faint halo.
+      const hero = s > 0.55;
+      halos[i] = hero ? 1 : 0;
+      sizes[i] = size * (0.5 + 1.7 * Math.sqrt(s)) * (hero ? 2.6 : 1);
       bases[i] = 0.5 + 1.0 * s;
 
       const phase = rng();
@@ -145,8 +151,9 @@ export function StarField({ masterSeed, count, radius, depth, size = 1.5 }: Prop
       positions[i * 3 + 0] = r * Math.cos(alt) * Math.cos(theta);
       positions[i * 3 + 1] = r * Math.sin(alt);
       positions[i * 3 + 2] = r * Math.cos(alt) * Math.sin(theta);
-      sizes[i] = size * 2.7;
+      sizes[i] = size * 2.7 * 1.8; // halo canvas — fragment paints core + glow
       bases[i] = 1.7; // outshines every star
+      halos[i] = 1; // planets glow (Venus read)
       const phase = rng();
       phases[i] = phase;
       freqs[i] = 0;
@@ -170,6 +177,7 @@ export function StarField({ masterSeed, count, radius, depth, size = 1.5 }: Prop
     geo.setAttribute("aSparkleSeed", new THREE.BufferAttribute(sparkleSeeds, 1));
     geo.setAttribute("aColor", new THREE.BufferAttribute(colors, 3));
     geo.setAttribute("aBase", new THREE.BufferAttribute(bases, 1));
+    geo.setAttribute("aHalo", new THREE.BufferAttribute(halos, 1));
     geo.setAttribute("aIntroBaselines", new THREE.BufferAttribute(introBaselines, 3));
 
     const mat = new THREE.ShaderMaterial({

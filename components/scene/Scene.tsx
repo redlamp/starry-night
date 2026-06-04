@@ -24,6 +24,7 @@ import { DistrictShells } from "./DistrictShells";
 import { TensorFieldOverlay } from "./TensorFieldOverlay";
 import { Traffic } from "./Traffic";
 import { GenTrace } from "./GenTrace";
+import { ShootingStars } from "./ShootingStars";
 import { useGeneratedCity } from "@/lib/hooks/useGeneratedCity";
 
 export function Scene() {
@@ -80,6 +81,9 @@ export function Scene() {
           count={stars.count}
           size={stars.factor}
         />
+        {/* #26: rare tapering streak (~every 40s), homage to the original's
+            shooting stars. Shader-clocked, deterministic per seed. */}
+        <ShootingStars masterSeed={masterSeed} radius={stars.radius} />
       </StarPass>
 
       <Moon />
