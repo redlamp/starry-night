@@ -1122,21 +1122,28 @@ function IntroSection() {
   const playAllIntros = useSceneStore((s) => s.playAllIntros);
   const windowModes = ["random", "district", "outside-in", "inside-out", "far-to-near"] as const;
   const starModes = ["random", "bright-first", "horizon-first", "zenith-first"] as const;
-  // Speed presets: Default = the slow ambient wake (windows 240s / stars 360s);
-  // Fast = a quick 30s/30s cascade. Empty when durations have been hand-tuned.
+  // Speed presets: Default = the slow ambient wake (windows 240s / stars 240s /
+  // streetlights 60s); Fast = a quick 30s/30s cascade with a 10s streetlight
+  // wake. Empty when durations have been hand-tuned.
   const speedPreset =
-    intro.durationSec === 240 && starIntro.durationSec === 240
+    intro.durationSec === 240 &&
+    starIntro.durationSec === 240 &&
+    intro.streetlightDurationSec === 60
       ? "default"
-      : intro.durationSec === 30 && starIntro.durationSec === 30
+      : intro.durationSec === 30 &&
+          starIntro.durationSec === 30 &&
+          intro.streetlightDurationSec === 10
         ? "fast"
         : "";
   const applyIntroSpeed = (v: string) => {
     if (v === "default") {
       setIntroDuration(240);
       setStarIntroDuration(240);
+      setStreetlightDuration(60);
     } else if (v === "fast") {
       setIntroDuration(30);
       setStarIntroDuration(30);
+      setStreetlightDuration(10);
     }
   };
   return (
