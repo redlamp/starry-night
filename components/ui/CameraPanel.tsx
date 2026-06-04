@@ -735,6 +735,49 @@ function StarsSection() {
         step={100}
         onChange={(count) => setStars({ count })}
       />
+      {/* #26 meteors: toggle + min/max seconds between streaks. Each fired
+          streak rolls the next gap uniformly inside this range. */}
+      <div className="flex items-center gap-2 text-xs">
+        <span className="text-foreground/70 w-14 shrink-0">meteors</span>
+        <Switch
+          checked={stars.meteorsEnabled}
+          onCheckedChange={(meteorsEnabled) => setStars({ meteorsEnabled })}
+          aria-label="Enable meteors"
+        />
+        <Slider
+          min={0.01}
+          max={180}
+          step={0.01}
+          value={[stars.shootingMin, stars.shootingMax]}
+          onValueChange={(v) => {
+            const [shootingMin, shootingMax] = v as number[];
+            setStars({ shootingMin, shootingMax });
+          }}
+          className="flex-1"
+        />
+        <input
+          type="number"
+          step={1}
+          value={stars.shootingMin}
+          onChange={(e) => {
+            const v = Math.max(0.01, parseFloat(e.target.value) || 0.01);
+            setStars({ shootingMin: Math.min(v, stars.shootingMax) });
+          }}
+          aria-label="Min seconds between meteors"
+          className="border-foreground/15 bg-background/60 text-foreground w-13 rounded border px-1.5 py-0.5 tabular-nums"
+        />
+        <input
+          type="number"
+          step={1}
+          value={stars.shootingMax}
+          onChange={(e) => {
+            const v = Math.max(0.01, parseFloat(e.target.value) || 0.01);
+            setStars({ shootingMax: Math.max(v, stars.shootingMin) });
+          }}
+          aria-label="Max seconds between meteors"
+          className="border-foreground/15 bg-background/60 text-foreground w-13 rounded border px-1.5 py-0.5 tabular-nums"
+        />
+      </div>
     </>
   );
 }

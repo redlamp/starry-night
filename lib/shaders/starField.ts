@@ -4,10 +4,10 @@
 
 export const starFieldVertexShader = /* glsl */ `
   attribute float aSize;       // base size in pixels at depth = 1 unit
-  attribute float aPhase;      // 0..1 — random phase offset per star
-  attribute float aFreq;       // ~0.4..1.4 — per-star twinkle frequency
-  attribute float aTwinkle;    // 0..1 — twinkle amplitude (brightness-weighted)
-  attribute float aSparkleSeed;// 0..1 — seed for occasional impulse sparkle
+  attribute float aPhase;      // 0..1 - random phase offset per star
+  attribute float aFreq;       // ~0.4..1.4 - per-star twinkle frequency
+  attribute float aTwinkle;    // 0..1 - twinkle amplitude (brightness-weighted)
+  attribute float aSparkleSeed;// 0..1 - seed for occasional impulse sparkle
   attribute vec3 aColor;       // RGB stellar-class colour, desaturated for dim
   attribute float aBase;       // per-star base intensity (#26 magnitude flux law)
   attribute float aHalo;       // 1 = hero star/planet: tight core + wide Van Gogh halo
@@ -57,16 +57,16 @@ export const starFieldVertexShader = /* glsl */ `
     float eligible = step(0.5, aTwinkle);
     float sparkle = eligible * step(0.97, roll) * exp(-bucketAge * 9.0) * 1.6;
 
-    // Base intensity carries the 2.512×/magnitude flux ratio (#26): faint
-    // stars dim in LIGHT, not just point size — the field reads mostly-faint
+    // Base intensity carries the 2.512x/magnitude flux ratio (#26): faint
+    // stars dim in LIGHT, not just point size - the field reads mostly-faint
     // with a few standouts, like a real city sky.
     vBrightness = (baseTwinkle + sparkle) * aBase;
     vColor = aColor;
     vHalo = aHalo;
 
     // Intro wake-mask. Pick baseline by mode, cap at 0.7 then add tiny
-    // per-star jitter (≤0.15) so the smoothstep saturates before
-    // uStarIntroProgress = 1.0 — every star ends fully lit at intro end.
+    // per-star jitter (<=0.15) so the smoothstep saturates before
+    // uStarIntroProgress = 1.0 - every star ends fully lit at intro end.
     float baseline = 0.0;
     if (uStarIntroMode == 0) {
       baseline = aIntroBaselines.x;
@@ -96,7 +96,7 @@ export const starFieldFragmentShader = /* glsl */ `
     float r = length(uv);
     if (r > 0.5) discard;
     // Hero stars/planets (#26, the Van Gogh read): a tight incandescent core
-    // wrapped in a wide, faint halo — radiance faked by outward gradation, not
+    // wrapped in a wide, faint halo - radiance faked by outward gradation, not
     // raw brightness. Ordinary stars keep the plain soft disc.
     float plain = smoothstep(0.5, 0.15, r);
     float core = smoothstep(0.17, 0.04, r);
@@ -104,8 +104,8 @@ export const starFieldFragmentShader = /* glsl */ `
     float shape = mix(plain, core + halo, vHalo);
     float alpha = shape * vWake;
     if (alpha <= 0.001) discard;
-    // Per-star colour × twinkle × ACES headroom. vBrightness can exceed 1 on
-    // sparkle frames — additive blending + tone mapping handles the overshoot.
+    // Per-star colour x twinkle x ACES headroom. vBrightness can exceed 1 on
+    // sparkle frames - additive blending + tone mapping handles the overshoot.
     float boost = mix(1.4, 1.7, vHalo * core); // the core itself burns hotter
     vec3 col = vColor * vBrightness * boost;
     gl_FragColor = vec4(col, alpha);
