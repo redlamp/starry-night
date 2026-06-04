@@ -357,7 +357,55 @@ function bearingDiff(a: number, b: number): number {
   return Math.min(d, Math.PI - d);
 }
 
-const HIGHWAY_MIN_BEARING_DIFF = (28 * Math.PI) / 180; // promoted routes must diverge ≥ 28°
+// Two candidates trace the SAME corridor when they run nearly parallel AND
+// nearly on top of each other — a promotion exclusion (#13). Crossing,
+// diagonal, and offset-parallel routes are all legitimate freeway layouts;
+// the angles a city gets are whatever its field morphology produces.
+const CORRIDOR_BEARING = (10 * Math.PI) / 180;
+
+// Freeways need freeway curvature (#13): reject a candidate if any ~200m
+// stretch turns more than ~35° (≈ 330m minimum radius). This is what stops a
+// streamline that grazes a RADIAL plaza from being promoted — the field yanks
+// it around the centre in a tight arc no real freeway would take — while a
+// gentle beltway sweep (large radius) still qualifies. The global 250·turn
+// score penalty can't catch this: a very long route can absorb one sharp bend.
+const HW_TURN_WINDOW_M = 200;
+const HW_MAX_WINDOW_TURN = (35 * Math.PI) / 180;
+
+function maxWindowTurn(r: { vertices: Array<{ x: number; z: number }> }, windowM: number): number {
+  const v = r.vertices;
+  if (v.length < 3) return 0;
+  // Unwrapped cumulative heading + arc length per segment, then the max net
+  // heading change across any window of `windowM` metres (two pointers).
+  const heads: number[] = [];
+  const lens: number[] = [];
+  let acc = 0;
+  let prev = 0;
+  let unwrapped = 0;
+  for (let i = 1; i < v.length; i++) {
+    const h = Math.atan2(v[i].z - v[i - 1].z, v[i].x - v[i - 1].x);
+    if (i === 1) {
+      unwrapped = h;
+    } else {
+      let d = h - prev;
+      while (d > Math.PI) d -= 2 * Math.PI;
+      while (d < -Math.PI) d += 2 * Math.PI;
+      unwrapped += d;
+    }
+    prev = h;
+    acc += Math.hypot(v[i].x - v[i - 1].x, v[i].z - v[i - 1].z);
+    heads.push(unwrapped);
+    lens.push(acc);
+  }
+  let maxTurn = 0;
+  let j = 0;
+  for (let i = 0; i < heads.length; i++) {
+    while (lens[i] - lens[j] > windowM) j++;
+    const t = Math.abs(heads[i] - heads[j]);
+    if (t > maxTurn) maxTurn = t;
+  }
+  return maxTurn;
+}
 
 // Shared tensor road build (used by both the city + streetlight tensor paths so
 // they agree). Ring-like arterials are demoted to minor STREETS (a circular road
@@ -397,38 +445,54 @@ function buildTensorRoadsImpl(masterSeed: string, onLine?: StreetTraceHook) {
     ...ringArts.map((r, i) => ({ ...r, id: `minor-ring-${i}`, width: 9, tier: "minor" as const })),
   ];
 
-  // #13 Phase 1: promote a small freeway NETWORK, not one lonely route. Count
-  // scales with the tier (town 1 / city 2 / metro 3); candidates are the long,
-  // largely-straight arterials, picked greedily by score with a mutual bearing
-  // gate so the network criss-crosses the map instead of stacking parallels.
+  // #13 Phase 1: promote a freeway network with PER-SEED character. The tier
+  // sets a ceiling (town 1 / city 2 / metro 3); the seed rolls the actual count
+  // — a small town can have no freeway at all, a metro always has at least one.
+  // Candidates are the long, largely-straight arterials by score; the only
+  // exclusion is a same-corridor dedupe, so the angles between routes are
+  // whatever the field morphology gives (criss-cross, diagonal, parallel pair).
   // Districts are unaffected: walls below are the highways+arterials UNION,
   // identical whichever bucket a road lands in.
-  const maxHighways = Math.min(3, Math.max(1, Math.round(genScale() * 0.75)));
+  const hwCeil = Math.min(3, Math.max(1, Math.round(genScale() * 0.75)));
+  const hwRoll = seedrandom(`${masterSeed}::tensor::highways`)();
+  const targetHighways =
+    hwCeil <= 1
+      ? hwRoll < 0.35
+        ? 0
+        : 1
+      : hwCeil === 2
+        ? hwRoll < 0.15
+          ? 0
+          : hwRoll < 0.55
+            ? 1
+            : 2
+        : hwRoll < 0.25
+          ? 1
+          : hwRoll < 0.6
+            ? 2
+            : 3;
   const candidates = arterials
     .map((a) => ({ a, score: roadLength(a) - 250 * totalTurn(a), bearing: bearingOf(a) }))
-    .filter((c) => roadLength(c.a) > 700 && c.score > 0)
+    .filter(
+      (c) =>
+        roadLength(c.a) > 700 &&
+        c.score > 0 &&
+        // freeway-grade curvature only — see maxWindowTurn (radial-plaza guard)
+        maxWindowTurn(c.a, HW_TURN_WINDOW_M) <= HW_MAX_WINDOW_TURN,
+    )
     .sort((p, q) => q.score - p.score);
+  const corridorDist = maxHalfExtent() * 0.3;
+  const midOf = (r: RoadPoly) => r.vertices[Math.floor(r.vertices.length / 2)];
   const picked: typeof candidates = [];
   for (const c of candidates) {
-    if (picked.length >= maxHighways) break;
-    if (picked.every((p) => bearingDiff(p.bearing, c.bearing) >= HIGHWAY_MIN_BEARING_DIFF)) {
-      picked.push(c);
-    }
-  }
-  // Bearing diversity often saturates at 2 (the two streamline families) —
-  // fill remaining slots with PARALLEL routes offset across town, like real
-  // metro freeway pairs. Midpoint separation keyed to the extent.
-  if (picked.length < maxHighways) {
-    const minSep = maxHalfExtent() * 0.45;
-    const midOf = (r: RoadPoly) => r.vertices[Math.floor(r.vertices.length / 2)];
-    for (const c of candidates) {
-      if (picked.length >= maxHighways) break;
-      if (picked.some((p) => p.a.id === c.a.id)) continue;
-      const m = midOf(c.a);
-      if (picked.every((p) => Math.hypot(midOf(p.a).x - m.x, midOf(p.a).z - m.z) >= minSep)) {
-        picked.push(c);
-      }
-    }
+    if (picked.length >= targetHighways) break;
+    const m = midOf(c.a);
+    const sameCorridor = picked.some(
+      (p) =>
+        bearingDiff(p.bearing, c.bearing) < CORRIDOR_BEARING &&
+        Math.hypot(midOf(p.a).x - m.x, midOf(p.a).z - m.z) < corridorDist,
+    );
+    if (!sameCorridor) picked.push(c);
   }
   const pickedIds = new Set(picked.map((p) => p.a.id));
   const highways: Highway[] = picked.map((p, i) => ({

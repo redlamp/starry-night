@@ -10,15 +10,23 @@ import { generateCity, generateStreetlights } from "@/lib/seed/cityGen";
 import { CITY_CENTER, maxHalfExtent, setCityTier } from "@/lib/seed/topology";
 import { encodePngRGB } from "./sketchField";
 
-setCityTier("metro");
+// args: [tier] [seed...] — e.g. `bun run scripts/highwayPlan.ts city plan-3 plan-4`
+const args = process.argv.slice(2);
+const TIER = args[0] === "town" || args[0] === "city" || args[0] === "metro" ? args[0] : "metro";
+const seedArgs = args[0] === TIER ? args.slice(1) : args;
+setCityTier(TIER);
 
-const SEEDS = ["gate1-0", "gate1-1", "gate1-2"];
-const PANEL = 700;
+const SEEDS = seedArgs.length
+  ? seedArgs
+  : ["gate1-0", "gate1-1", "gate1-2", "gate1-3", "gate1-4", "gate1-5"];
+const COLS = 3;
+const PANEL = 560;
 const PAD = 8;
 const SPAN = 2 * maxHalfExtent();
 const mPerPx = SPAN / PANEL;
-const W = SEEDS.length * PANEL + (SEEDS.length + 1) * PAD;
-const H = PANEL + 2 * PAD;
+const W = COLS * PANEL + (COLS + 1) * PAD;
+const ROWS = Math.ceil(SEEDS.length / COLS);
+const H = ROWS * PANEL + (ROWS + 1) * PAD;
 const img = new Uint8Array(W * H * 3);
 
 function px(x: number, y: number, r: number, g: number, b: number) {
@@ -32,8 +40,8 @@ function px(x: number, y: number, r: number, g: number, b: number) {
 }
 
 for (let s = 0; s < SEEDS.length; s++) {
-  const ox = PAD + s * (PANEL + PAD);
-  const oy = PAD;
+  const ox = PAD + (s % COLS) * (PANEL + PAD);
+  const oy = PAD + Math.floor(s / COLS) * (PANEL + PAD);
   for (let yy = 0; yy < PANEL; yy++)
     for (let xx = 0; xx < PANEL; xx++) px(ox + xx, oy + yy, 8, 11, 22);
   const toPx = (wx: number, wz: number) => ({
@@ -107,3 +115,14 @@ writeFileSync("samples/highway-plan.png", encodePngRGB(img, W, H));
 console.log(
   `wrote samples/highway-plan.png (${W}x${H}) — gold = highways, bright dots = highway lights`,
 );
+
+// Count survey at the smaller tiers — shows the per-seed roll (0 possible).
+// Skipped when explicit seeds were passed (single-case reproduction).
+if (!seedArgs.length) {
+  for (const tier of ["town", "city"] as const) {
+    setCityTier(tier);
+    const counts: number[] = [];
+    for (let i = 0; i < 12; i++) counts.push(generateCity(`gate1-${i}`).topology.highways.length);
+    console.log(`${tier} highway counts (12 seeds): ${counts.join(" ")}`);
+  }
+}
