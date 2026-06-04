@@ -6,6 +6,7 @@ import { useSceneStore } from "@/lib/state/sceneStore";
 import { CITY_CENTER, maxHalfExtent } from "@/lib/seed/topology";
 import { computeLattice } from "@/lib/seed/lattice";
 import { buildTensorField } from "@/lib/seed/tensorField";
+import { citySketchTensor } from "@/lib/seed/citySketch";
 
 // Tensor Field view (#40 Phase 1). Visualises the direction field that the road
 // network follows: a grid of short "ticks" laid on the ground, each aligned to
@@ -21,11 +22,15 @@ const OVERLAY_Y = 0.4; // above ground (0) + district shells (0.25), below the b
 export function TensorFieldOverlay({ masterSeed }: { masterSeed: string }) {
   const show = useSceneStore((s) => s.debug.showTensorField);
   const citySize = useSceneStore((s) => s.citySize);
+  const citySketch = useSceneStore((s) => s.citySketch);
 
   const mesh = useMemo(() => {
     void citySize; // tier drives the module-level gen extent (#58) — a switch must rebuild
-    const lattice = computeLattice(masterSeed);
-    const field = buildTensorField(masterSeed, lattice);
+    void citySketch; // sketch swap likewise (#40) — the registry is already synced
+    // A registered sketch (#40) replaces the seeded basis field — show the field
+    // the roads actually followed.
+    const sketch = citySketchTensor();
+    const field = sketch ? sketch.field : buildTensorField(masterSeed, computeLattice(masterSeed));
     const cx = CITY_CENTER.x;
     const cz = CITY_CENTER.z;
     // Cover the tier's full gen extent (#14/#58) — the field is laid out at the
@@ -88,7 +93,7 @@ export function TensorFieldOverlay({ masterSeed }: { masterSeed: string }) {
     im.instanceMatrix.needsUpdate = true;
     if (im.instanceColor) im.instanceColor.needsUpdate = true;
     return im;
-  }, [masterSeed, citySize]);
+  }, [masterSeed, citySize, citySketch]);
 
   useEffect(() => {
     return () => {

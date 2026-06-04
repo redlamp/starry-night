@@ -248,6 +248,27 @@ export function recoverOrientationField(
   };
 }
 
+// The minimal slice of an OrientationField the tensor wrapper needs — plain
+// data, structured-clone-safe, so a sketch can travel to the gen worker and
+// live in the scene store without dragging the full recovery output along.
+export type SketchTensorSource = Pick<
+  OrientationField,
+  "W" | "H" | "grid" | "gw" | "gh" | "theta" | "coh" | "valid"
+>;
+
+export function toSketchTensorSource(f: OrientationField): SketchTensorSource {
+  return {
+    W: f.W,
+    H: f.H,
+    grid: f.grid,
+    gw: f.gw,
+    gh: f.gh,
+    theta: f.theta,
+    coh: f.coh,
+    valid: f.valid,
+  };
+}
+
 export type SketchTensor = {
   field: TensorField;
   mask: (x: number, z: number) => number; // ShapeMask-compatible ink mask
@@ -258,16 +279,21 @@ export type SketchTensor = {
 
 // Wrap the recovered grid in the TensorField interface the tracer consumes.
 // worldWidth = metres the page spans; wMin = min interpolated stroke weight
-// below which the field is degenerate (no ink → streamlines stop).
+// below which the field is degenerate (no ink → streamlines stop); origin =
+// world position of the page's top-left corner (default 0,0 — the script /
+// lab convention; the city centres the page on CITY_CENTER instead).
 export function makeSketchTensor(
-  f: OrientationField,
+  f: SketchTensorSource,
   worldWidth: number,
   wMin: number,
+  origin: { x: number; z: number } = { x: 0, z: 0 },
 ): SketchTensor {
   const S = worldWidth / f.W;
 
   // weight = bilinear(valid ? coherence : 0); doubles as the ink mask.
-  const tensorAt = (x: number, z: number): { a: number; b: number; w: number } => {
+  const tensorAt = (wx: number, wz: number): { a: number; b: number; w: number } => {
+    const x = wx - origin.x;
+    const z = wz - origin.z;
     const gx = x / S / f.grid - 0.5;
     const gy = z / S / f.grid - 0.5;
     const x0 = Math.floor(gx);
@@ -305,7 +331,12 @@ export function makeSketchTensor(
   return {
     field,
     mask: (x, z) => (tensorAt(x, z).w >= wMin ? 1 : 0),
-    bounds: { minX: 0, maxX: f.W * S, minZ: 0, maxZ: f.H * S },
+    bounds: {
+      minX: origin.x,
+      maxX: origin.x + f.W * S,
+      minZ: origin.z,
+      maxZ: origin.z + f.H * S,
+    },
     metersPerPx: S,
     weightAt: (x, z) => tensorAt(x, z).w,
   };

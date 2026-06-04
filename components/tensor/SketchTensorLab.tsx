@@ -21,9 +21,11 @@ import {
 import {
   recoverOrientationField,
   makeSketchTensor,
+  toSketchTensorSource,
   RECOVER_DEFAULTS,
 } from "@/lib/sketch/orientationField";
 import { generateTensorStreets } from "@/lib/seed/tensorStreets";
+import { useSceneStore } from "@/lib/state/sceneStore";
 
 // Sketch → tensor lab (#40). Drop a photo of a hand-hatched sketch and watch
 // it become a street-traceable tensor field — recovery, internalized tensor
@@ -167,6 +169,10 @@ export function SketchTensorLab() {
   // sidebar width — drag the border to resize
   const [sideW, setSideW] = useState(300);
   const sideDrag = useRef(false);
+
+  // city bridge (#40) — register the recovered field as the scene's street plan
+  const storeSketch = useSceneStore((s) => s.citySketch);
+  const setStoreSketch = useSceneStore((s) => s.setCitySketch);
 
   const fileRef = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -476,6 +482,29 @@ export function SketchTensorLab() {
                   <Dices size={16} />
                 </Button>
               </div>
+            </Section>
+
+            <Section title="city">
+              <Button
+                variant="outline"
+                className="w-full"
+                disabled={!field}
+                onClick={() => {
+                  if (field) setStoreSketch(toSketchTensorSource(field));
+                }}
+              >
+                Use in city
+              </Button>
+              {storeSketch ? (
+                <Button variant="ghost" className="w-full" onClick={() => setStoreSketch(null)}>
+                  Clear city sketch
+                </Button>
+              ) : null}
+              <p className="text-xs text-zinc-500">
+                {storeSketch
+                  ? "Sketch registered — the scene + /plan follow this field. Session-only."
+                  : "Registers this field as the city's street plan (#40)."}
+              </p>
             </Section>
 
             {field ? (

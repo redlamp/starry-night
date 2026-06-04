@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { generateCity, primeCityCaches } from "@/lib/seed/cityGen";
+import { sketchKey } from "@/lib/seed/citySketch";
 import { generateCityInWorker } from "@/lib/workers/cityGenClient";
 import { useSceneStore } from "@/lib/state/sceneStore";
 import type { CityShapeSetting } from "@/lib/seed/cityShape";
@@ -87,7 +88,12 @@ export function useGeneratedCity(
   // Tier (#58) joins the key so a size switch re-warms: the store subscription
   // has already pointed the generators at the new extent by the time we run.
   const citySize = useSceneStore((s) => s.citySize);
-  const key = cityKey(seed, shape, scale, citySize);
+  // Sketch (#40) likewise — registering/clearing a sketch is a different city.
+  // The store subscription has already mirrored it into the gen registry, so
+  // sketchKey() is current by the time this render runs.
+  const citySketch = useSceneStore((s) => s.citySketch);
+  const key = `${cityKey(seed, shape, scale, citySize)}::${sketchKey()}`;
+  void citySketch; // the key reads the module registry; this subscription triggers the re-render
 
   // Track which key the current `ready` value belongs to, so a key change is
   // detected during render (the "adjust state when a prop changes" pattern)

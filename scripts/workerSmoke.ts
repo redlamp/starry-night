@@ -55,7 +55,14 @@ const workerBundle = await new Promise<CityBundle>((resolve, reject) => {
     clearTimeout(timer);
     reject(new Error(`worker error: ${err.message ?? err}`));
   };
-  worker.postMessage({ reqId: 1, seed: SEED, shape: SHAPE, scale: SCALE, tier: TIER });
+  worker.postMessage({
+    reqId: 1,
+    seed: SEED,
+    shape: SHAPE,
+    scale: SCALE,
+    tier: TIER,
+    sketch: null,
+  });
 });
 worker.terminate();
 const workerHash = hashBundle(workerBundle);

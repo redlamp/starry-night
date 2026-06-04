@@ -10,6 +10,8 @@ import {
 } from "@/lib/seed/topology";
 import type { CityShapeSetting } from "@/lib/seed/cityShape";
 import type { Archetype } from "@/lib/seed/cityGen";
+import { setCitySketch } from "@/lib/seed/citySketch";
+import type { SketchTensorSource } from "@/lib/sketch/orientationField";
 
 export type LightingMode = "classic" | "modern";
 export type QualityTier = "low" | "med" | "high" | "ultra";
@@ -687,6 +689,11 @@ type SceneState = {
   setCitySize: (citySize: CityTier) => void;
   cropLock: boolean;
   setCropLock: (cropLock: boolean) => void;
+  // Sketch-driven city (#40) — gen input; a registered sketch's field + ink
+  // mask replace the seeded basis field. Session-only (not persisted): re-drop
+  // the sketch on /tensor to restore it.
+  citySketch: SketchTensorSource | null;
+  setCitySketch: (citySketch: SketchTensorSource | null) => void;
   // Ambient traffic (research D) — opt-in car head/tail-lights.
   traffic: typeof DEFAULT_TRAFFIC;
   setTraffic: (patch: Partial<typeof DEFAULT_TRAFFIC>) => void;
@@ -872,6 +879,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   cropLock: DEFAULT_CROP_LOCK,
   // Locking snaps the crop to the tier's full disc (that's what "locked" shows).
   setCropLock: (cropLock) => set(cropLock ? { cropLock, cityShapeScale: 1 } : { cropLock }),
+  citySketch: null,
+  setCitySketch: (citySketch) => set({ citySketch }),
   traffic: DEFAULT_TRAFFIC,
   setTraffic: (patch) => set((s) => ({ traffic: { ...s.traffic, ...patch } })),
   streetlights: DEFAULT_STREETLIGHTS,
@@ -1002,4 +1011,11 @@ export const useSceneStore = create<SceneState>((set, get) => ({
 setCityTier(useSceneStore.getState().citySize);
 useSceneStore.subscribe((s, prev) => {
   if (s.citySize !== prev.citySize) setCityTier(s.citySize);
+});
+
+// Same lockstep for the sketch registry (#40): the store is the source of
+// truth, lib/seed/citySketch is the module mirror the generators read.
+setCitySketch(useSceneStore.getState().citySketch);
+useSceneStore.subscribe((s, prev) => {
+  if (s.citySketch !== prev.citySketch) setCitySketch(s.citySketch);
 });

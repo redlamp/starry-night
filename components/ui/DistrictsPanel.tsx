@@ -14,10 +14,12 @@ export function DistrictsSection() {
   const setCityPlanning = useSceneStore((s) => s.setCityPlanning);
 
   const citySize = useSceneStore((s) => s.citySize);
+  const citySketch = useSceneStore((s) => s.citySketch);
   const districts = useMemo(() => {
     void citySize; // tier drives the module-level gen extent (#58) — a switch must refresh
+    void citySketch; // a registered sketch is a different city (#40) — likewise
     return tensorDistrictField(masterSeed).districts;
-  }, [masterSeed, citySize]);
+  }, [masterSeed, citySize, citySketch]);
 
   return (
     <>

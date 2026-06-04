@@ -17,6 +17,7 @@ import {
   type CityShapeSetting,
   type ShapeMask,
 } from "./cityShape";
+import { citySketchTensor, sketchKey } from "./citySketch";
 
 // Any road tier, for the building-skip corridor test.
 type RoadLike = { vertices: Array<{ x: number; z: number }>; width: number; closed: boolean };
@@ -360,7 +361,18 @@ function buildTensorRoadsImpl(masterSeed: string, onLine?: StreetTraceHook) {
     minZ: rawTopo.centerZ - rawTopo.halfExtent,
     maxZ: rawTopo.centerZ + rawTopo.halfExtent,
   };
-  const gen = generateTensorStreets(masterSeed, bounds, undefined, onLine);
+  // #40: a registered sketch replaces the seeded basis field AND becomes the
+  // street mask (its ink is the footprint). Everything downstream — district
+  // walls, flood-fill, frontage buildings, streetlights — derives from these
+  // roads, so the whole city follows the sketch with no further changes.
+  const sketch = citySketchTensor();
+  const gen = generateTensorStreets(
+    masterSeed,
+    bounds,
+    sketch ? sketch.mask : undefined,
+    onLine,
+    sketch ? sketch.field : undefined,
+  );
 
   const ringArts = gen.arterials.filter((a) => totalTurn(a) >= RING_TURN);
   const arterials = gen.arterials.filter((a) => totalTurn(a) < RING_TURN);
@@ -405,7 +417,7 @@ function buildTensorRoadsImpl(masterSeed: string, onLine?: StreetTraceHook) {
 // a different city for the same seed, so a stale entry must never be served.
 const tensorRoadsCache = new Map<string, ReturnType<typeof buildTensorRoadsImpl>>();
 function buildTensorRoads(masterSeed: string, onLine?: StreetTraceHook) {
-  const key = `${masterSeed}::${maxHalfExtent()}`;
+  const key = `${masterSeed}::${maxHalfExtent()}::${sketchKey()}`;
   const hit = tensorRoadsCache.get(key);
   if (hit) return hit; // warm cache → nothing streams (the result lands at once anyway)
   const result = buildTensorRoadsImpl(masterSeed, onLine);
@@ -477,7 +489,7 @@ export function primeCityCaches(
 ): void {
   const { roads, city, lights } = bundle;
   const field = districtFieldFromRaster(roads.districts, roads.bounds, roads.raster);
-  const roadsKey = `${rawSeed}::${maxHalfExtent()}`;
+  const roadsKey = `${rawSeed}::${maxHalfExtent()}::${sketchKey()}`;
   if (tensorRoadsCache.size > 64) tensorRoadsCache.clear();
   tensorRoadsCache.set(roadsKey, {
     topology: roads.topology,
@@ -485,7 +497,7 @@ export function primeCityCaches(
     arterials: roads.arterials,
     minorStreets: roads.minorStreets,
   });
-  const key = `${rawSeed}::${shape}::${shapeScale}::${maxHalfExtent()}`;
+  const key = `${rawSeed}::${shape}::${shapeScale}::${maxHalfExtent()}::${sketchKey()}`;
   if (cityCache.size > 64) cityCache.clear();
   cityCache.set(key, city);
   if (lightsCache.size > 64) lightsCache.clear();
@@ -787,7 +799,11 @@ function generateCityTensor(
   // Base layout is always the full square (shape-independent, cached per seed).
   const { topology, field, arterials, minorStreets } = buildTensorRoads(masterSeed);
   const roads: RoadLike[] = [...topology.highways, ...arterials, ...minorStreets];
-  const buildings = fillTensorBuildings(masterSeed, field, roads);
+  let buildings = fillTensorBuildings(masterSeed, field, roads);
+  // Sketch ink is the footprint (#40): roads already stop at the ink edge, but a
+  // kerbside building's centre can land just past it — clip, like the shape mask.
+  const sketch = citySketchTensor();
+  if (sketch) buildings = buildings.filter((b) => sketch.mask(b.x, b.z) >= 0.5);
 
   const resolved = resolveCityShape(shape, masterSeed);
   if (resolved === "square") {
@@ -816,7 +832,7 @@ export function generateCity(
   shape: CityShapeSetting = "square",
   shapeScale = 1,
 ): CityData {
-  const key = `${rawSeed}::${shape}::${shapeScale}::${maxHalfExtent()}`;
+  const key = `${rawSeed}::${shape}::${shapeScale}::${maxHalfExtent()}::${sketchKey()}`;
   const hit = cityCache.get(key);
   if (hit) return hit;
   const result = generateCityTensor(rawSeed, shape, shapeScale);
@@ -1047,7 +1063,11 @@ function generateStreetlightsTensor(
     emitRoadLights(minRng, s, "local", (x, z) => bandPick(minRng, localBand(x, z)), 40, lights);
   }
   // De-bunch across all tiers before clipping to the footprint mask.
-  const deduped = dedupeByMinDistance(lights, STREETLIGHT_MIN_DIST);
+  let deduped = dedupeByMinDistance(lights, STREETLIGHT_MIN_DIST);
+  // Sketch ink is the footprint (#40) — kerb-offset lamps can sit just past the
+  // ink edge the road stopped at; clip them like the buildings.
+  const sketch = citySketchTensor();
+  if (sketch) deduped = deduped.filter((l) => sketch.mask(l.x, l.z) >= 0.5);
   const resolved = resolveCityShape(shape, masterSeed);
   if (resolved === "square") return deduped;
   const mask = makeShapeMask(resolved, shapeScale);
@@ -1059,7 +1079,7 @@ export function generateStreetlights(
   shape: CityShapeSetting = "square",
   shapeScale = 1,
 ): Streetlight[] {
-  const key = `${rawSeed}::${shape}::${shapeScale}::${maxHalfExtent()}`;
+  const key = `${rawSeed}::${shape}::${shapeScale}::${maxHalfExtent()}::${sketchKey()}`;
   const hit = lightsCache.get(key);
   if (hit) return hit;
   const result = generateStreetlightsTensor(rawSeed, shape, shapeScale);

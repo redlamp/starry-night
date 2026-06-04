@@ -17,7 +17,9 @@
 // (same seed after a tier round-trip); structured-cloning ~1.25 MB costs ~ms.
 import { buildCityBundle } from "@/lib/seed/cityGen";
 import { setCityTier, type CityTier } from "@/lib/seed/topology";
+import { setCitySketch } from "@/lib/seed/citySketch";
 import type { CityShapeSetting } from "@/lib/seed/cityShape";
+import type { SketchTensorSource } from "@/lib/sketch/orientationField";
 
 export type CityGenRequest = {
   reqId: number;
@@ -25,6 +27,10 @@ export type CityGenRequest = {
   shape: CityShapeSetting;
   scale: number;
   tier: CityTier;
+  // #40: sketch-driven city. Typed arrays structured-clone cleanly; the worker
+  // registers the sketch (or clears it) before generating, mirroring the main
+  // thread's registry so the bundle matches the caller's cache keys.
+  sketch: SketchTensorSource | null;
 };
 
 // One traced road, decimated for display: [x0, z0, x1, z1, ...].
@@ -45,9 +51,10 @@ const DECIMATE = 5; // keep every 5th vertex (plus the last) for the display tra
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
 
 ctx.onmessage = (e: MessageEvent<CityGenRequest>) => {
-  const { reqId, seed, shape, scale, tier } = e.data;
+  const { reqId, seed, shape, scale, tier, sketch } = e.data;
   try {
     setCityTier(tier); // the worker's module extent is independent of the main thread's
+    setCitySketch(sketch); // ...and so is its sketch registry (#40)
     let batch: TracedLine[] = [];
     const flush = () => {
       if (!batch.length) return;
