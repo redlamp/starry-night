@@ -358,7 +358,8 @@ type AnySettingEntry =
   | SettingEntry<"cityShape">
   | SettingEntry<"cityShapeScale">
   | SettingEntry<"citySize">
-  | SettingEntry<"cropLock">;
+  | SettingEntry<"cropLock">
+  | SettingEntry<"fpsHud">;
 
 export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "cameraIntent", defaultValue: DEFAULT_INTENT, persist: true },
@@ -399,6 +400,8 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "cityShapeScale", defaultValue: DEFAULT_CITY_SHAPE_SCALE, persist: true },
   { key: "citySize", defaultValue: DEFAULT_CITY_SIZE, persist: true },
   { key: "cropLock", defaultValue: DEFAULT_CROP_LOCK, persist: true },
+  // On-screen FPS badge — persisted so a perf pass survives reloads.
+  { key: "fpsHud", defaultValue: false as const, persist: true },
 ];
 
 // cityPlanning visibility toggles — persisted separately because `cityPlanning`
@@ -435,6 +438,7 @@ type SavedConfig = {
   cityShapeScale?: number;
   citySize?: CityTier;
   cropLock?: boolean;
+  fpsHud?: boolean;
   // Only the layer-visibility toggles persist — topologyKind / arterialCount
   // are per-seed runtime readouts, not settings.
   cityPlanning?: {
@@ -700,6 +704,9 @@ type SceneState = {
   // the sketch on /tensor to restore it.
   citySketch: SketchTensorSource | null;
   setCitySketch: (citySketch: SketchTensorSource | null) => void;
+  // On-screen FPS badge (FpsHud) — toggled from the Performance section.
+  fpsHud: boolean;
+  setFpsHud: (fpsHud: boolean) => void;
   // Ambient traffic (research D) — opt-in car head/tail-lights.
   traffic: typeof DEFAULT_TRAFFIC;
   setTraffic: (patch: Partial<typeof DEFAULT_TRAFFIC>) => void;
@@ -887,6 +894,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setCropLock: (cropLock) => set(cropLock ? { cropLock, cityShapeScale: 1 } : { cropLock }),
   citySketch: null,
   setCitySketch: (citySketch) => set({ citySketch }),
+  fpsHud: false,
+  setFpsHud: (fpsHud) => set({ fpsHud }),
   traffic: DEFAULT_TRAFFIC,
   setTraffic: (patch) => set((s) => ({ traffic: { ...s.traffic, ...patch } })),
   streetlights: DEFAULT_STREETLIGHTS,

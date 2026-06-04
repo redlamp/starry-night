@@ -1,6 +1,7 @@
 import { Scene } from "@/components/scene/Scene";
 import { CameraPanel } from "@/components/ui/CameraPanel";
 import { SeedControls } from "@/components/ui/SeedControls";
+import { FpsHud } from "@/components/ui/FpsHud";
 import { CaptureBoot } from "@/components/scene/CaptureBoot";
 import { ViewHotkeys } from "@/components/scene/ViewHotkeys";
 
@@ -13,6 +14,7 @@ export default function Page() {
       <div className="pointer-events-none absolute inset-0">
         <CameraPanel />
         <SeedControls />
+        <FpsHud />
       </div>
     </main>
   );
