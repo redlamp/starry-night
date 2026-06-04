@@ -131,6 +131,7 @@ function traceTier(
   own: GridStorage,
   sep: Sep[],
   mask: ShapeMask,
+  onLine?: (pts: Vec2[]) => void,
 ): Vec2[][] {
   const lines: Vec2[][] = [];
   const accept = (seed: Vec2): boolean => {
@@ -140,6 +141,7 @@ function traceTier(
     if (line.length < MIN_PTS) return false;
     for (const p of line) own.add(p);
     lines.push(line);
+    onLine?.(line); // EMIT-ONLY (#59 streaming) — consumes no rng, alters no state
     return true;
   };
   for (const s of seedQueue) accept(s);
@@ -180,10 +182,16 @@ function toPolys(lines: Vec2[][], width: number, tier: RoadTier, prefix: string)
   }));
 }
 
+// Optional streaming hook (#59): fired once per ACCEPTED streamline, in trace
+// order, with the raw polyline + its tier. Emit-only — the hook consumes no rng
+// and mutates nothing, so a hooked run is byte-identical to an unhooked one.
+export type StreetTraceHook = (pts: Vec2[], tier: "arterial" | "minor") => void;
+
 export function generateTensorStreets(
   masterSeed: string,
   bounds: BBox,
   mask: ShapeMask = () => 1,
+  onLine?: StreetTraceHook,
 ): { arterials: RoadPoly[]; minorStreets: RoadPoly[] } {
   const lattice = computeLattice(masterSeed);
   const tf = buildTensorField(masterSeed, lattice);
@@ -209,6 +217,7 @@ export function generateTensorStreets(
     SmajA,
     [{ s: SmajA, d: ART_DTEST }],
     mask,
+    onLine ? (l) => onLine(l, "arterial") : undefined,
   );
   const minA = traceTier(
     tf,
@@ -220,6 +229,7 @@ export function generateTensorStreets(
     SminA,
     [{ s: SminA, d: ART_DTEST }],
     mask,
+    onLine ? (l) => onLine(l, "arterial") : undefined,
   );
 
   // Streets — both families, fine separation, seeded off arterial endpoints so
@@ -240,6 +250,7 @@ export function generateTensorStreets(
       { s: SmajA, d: ST_DTEST },
     ],
     mask,
+    onLine ? (l) => onLine(l, "minor") : undefined,
   );
   const minS = traceTier(
     tf,
@@ -254,6 +265,7 @@ export function generateTensorStreets(
       { s: SminA, d: ST_DTEST },
     ],
     mask,
+    onLine ? (l) => onLine(l, "minor") : undefined,
   );
 
   const arterials = [

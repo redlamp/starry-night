@@ -9,7 +9,7 @@ import {
   type DistrictRaster,
 } from "./district";
 import { buildSilhouette, isHighRise, type SilhouetteField } from "./silhouette";
-import { generateTensorStreets } from "./tensorStreets";
+import { generateTensorStreets, type StreetTraceHook } from "./tensorStreets";
 import { type RoadPoly } from "./streets";
 import {
   resolveCityShape,
@@ -348,7 +348,7 @@ const RING_TURN = (200 * Math.PI) / 180; // ≥ ~200° of turning reads as circu
 // largely-straight arterial that spans the map; the old random-tilt topology
 // highways are dropped (out of place against the tensor flow). Districts still
 // use the raw topology for their macro regions (the character overlay).
-function buildTensorRoadsImpl(masterSeed: string) {
+function buildTensorRoadsImpl(masterSeed: string, onLine?: StreetTraceHook) {
   const rawTopo = dropRadialSpokes(generateTopology(masterSeed));
   // The tensor streamlines only need the city extent — districts are derived
   // FROM the finished network below, not the other way round. This base network
@@ -360,7 +360,7 @@ function buildTensorRoadsImpl(masterSeed: string) {
     minZ: rawTopo.centerZ - rawTopo.halfExtent,
     maxZ: rawTopo.centerZ + rawTopo.halfExtent,
   };
-  const gen = generateTensorStreets(masterSeed, bounds);
+  const gen = generateTensorStreets(masterSeed, bounds, undefined, onLine);
 
   const ringArts = gen.arterials.filter((a) => totalTurn(a) >= RING_TURN);
   const arterials = gen.arterials.filter((a) => totalTurn(a) < RING_TURN);
@@ -404,11 +404,11 @@ function buildTensorRoadsImpl(masterSeed: string) {
 // All gen caches key on the CURRENT tier extent (#58) — a tier switch generates
 // a different city for the same seed, so a stale entry must never be served.
 const tensorRoadsCache = new Map<string, ReturnType<typeof buildTensorRoadsImpl>>();
-function buildTensorRoads(masterSeed: string) {
+function buildTensorRoads(masterSeed: string, onLine?: StreetTraceHook) {
   const key = `${masterSeed}::${maxHalfExtent()}`;
   const hit = tensorRoadsCache.get(key);
-  if (hit) return hit;
-  const result = buildTensorRoadsImpl(masterSeed);
+  if (hit) return hit; // warm cache → nothing streams (the result lands at once anyway)
+  const result = buildTensorRoadsImpl(masterSeed, onLine);
   if (tensorRoadsCache.size > 64) tensorRoadsCache.clear();
   tensorRoadsCache.set(key, result);
   return result;
@@ -443,12 +443,15 @@ export type CityBundle = {
 };
 
 // Worker-side: run the full pipeline (current tier) and flatten to plain data.
+// `onLine` (#59 streaming) fires per accepted streamline DURING the road trace —
+// emit-only, so a hooked run is byte-identical; silent when the cache is warm.
 export function buildCityBundle(
   rawSeed: string,
   shape: CityShapeSetting = "square",
   shapeScale = 1,
+  onLine?: StreetTraceHook,
 ): CityBundle {
-  const { topology, field, arterials, minorStreets } = buildTensorRoads(rawSeed);
+  const { topology, field, arterials, minorStreets } = buildTensorRoads(rawSeed, onLine);
   return {
     roads: {
       topology,

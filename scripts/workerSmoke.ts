@@ -7,7 +7,7 @@
 import { buildCityBundle, tensorDistrictField, type CityBundle } from "@/lib/seed/cityGen";
 import { districtFieldFromRaster } from "@/lib/seed/district";
 import { setCityTier, CITY_CENTER, type CityTier } from "@/lib/seed/topology";
-import type { CityGenResponse } from "@/lib/workers/cityGen.worker";
+import type { CityGenMessage, TracedLine } from "@/lib/workers/cityGen.worker";
 
 const SEED = "gate1-0";
 const SHAPE = "circle" as const;
@@ -39,9 +39,14 @@ const syncHash = hashBundle(syncBundle);
 const worker = new Worker(new URL("../lib/workers/cityGen.worker.ts", import.meta.url), {
   type: "module",
 });
+const streamed: TracedLine[] = [];
 const workerBundle = await new Promise<CityBundle>((resolve, reject) => {
   const timer = setTimeout(() => reject(new Error("worker timed out (30s)")), 30_000);
-  worker.onmessage = (e: MessageEvent<CityGenResponse>) => {
+  worker.onmessage = (e: MessageEvent<CityGenMessage>) => {
+    if (e.data.type === "progress") {
+      streamed.push(...e.data.lines);
+      return;
+    }
     clearTimeout(timer);
     if (e.data.ok) resolve(e.data.bundle);
     else reject(new Error(e.data.error));
@@ -87,6 +92,19 @@ console.log(
   `classify reconstruction: ${classifyMismatch === 0 ? "PASS" : `FAIL (${classifyMismatch} mismatches)`}`,
 );
 if (classifyMismatch > 0) failed++;
+
+// 5. Streaming (#59 Phase B): every traced road must have streamed exactly once.
+//    Ring demotion + highway promotion move roads BETWEEN final buckets but
+//    conserve the total, so streamed == arterials + minor + highways.
+const expectedLines =
+  workerBundle.roads.arterials.length +
+  workerBundle.roads.minorStreets.length +
+  workerBundle.roads.topology.highways.length;
+const streamOk = streamed.length === expectedLines && streamed.every((l) => l.pts.length >= 4);
+console.log(
+  `streamed lines: ${streamed.length} (expected ${expectedLines}) ${streamOk ? "PASS" : "FAIL"}`,
+);
+if (!streamOk) failed++;
 
 console.log(failed === 0 ? "\nWORKER SMOKE PASS" : `\nWORKER SMOKE FAIL (${failed})`);
 process.exit(failed === 0 ? 0 : 1);

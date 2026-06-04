@@ -23,6 +23,7 @@ import { Roads } from "./Roads";
 import { DistrictShells } from "./DistrictShells";
 import { TensorFieldOverlay } from "./TensorFieldOverlay";
 import { Traffic } from "./Traffic";
+import { GenTrace } from "./GenTrace";
 import { useGeneratedCity } from "@/lib/hooks/useGeneratedCity";
 
 export function Scene() {
@@ -97,7 +98,12 @@ export function Scene() {
           <DistrictShells masterSeed={masterSeed} />
           <TensorFieldOverlay masterSeed={masterSeed} />
         </>
-      ) : null}
+      ) : (
+        /* #59: while the worker generates, the streamed road trace draws the
+           network in — the city literally sketches itself, then the real
+           layers swap in the moment the bundle lands. */
+        <GenTrace masterSeed={masterSeed} />
+      )}
       <FocalIndicator />
     </Canvas>
   );
