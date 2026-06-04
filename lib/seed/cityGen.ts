@@ -2,9 +2,11 @@ import seedrandom from "seedrandom";
 import { generateTopology, maxHalfExtent, type Topology, type Highway } from "./topology";
 import {
   generateDistrictsFromNetwork,
+  districtFieldFromRaster,
   type District,
   type DistrictCharacter,
   type DistrictField,
+  type DistrictRaster,
 } from "./district";
 import { buildSilhouette, isHighRise, type SilhouetteField } from "./silhouette";
 import { generateTensorStreets } from "./tensorStreets";
@@ -417,6 +419,74 @@ function buildTensorRoads(masterSeed: string) {
 // Shape-independent: the field is the full square; shapes clip the output.
 export function tensorDistrictField(rawSeed: string): DistrictField {
   return buildTensorRoads(rawSeed).field;
+}
+
+// --- #59 worker transfer: serialisable bundle + cache priming ----------------
+// generateCity's heavy work runs in a Web Worker; structured clone drops the
+// one closure in the pipeline (DistrictField.classify), so the worker posts the
+// field's raster and the main thread reconstructs it. Priming writes the SAME
+// module caches the synchronous path uses, so every existing consumer
+// (generateCity / tensorDistrictField / generateStreetlights / overlays) hits a
+// warm cache unchanged — the worker is purely a scheduling change.
+
+export type CityBundle = {
+  roads: {
+    topology: Topology;
+    arterials: RoadPoly[];
+    minorStreets: RoadPoly[];
+    districts: DistrictField["districts"];
+    bounds: DistrictField["bounds"];
+    raster: DistrictRaster;
+  };
+  city: CityData;
+  lights: Streetlight[];
+};
+
+// Worker-side: run the full pipeline (current tier) and flatten to plain data.
+export function buildCityBundle(
+  rawSeed: string,
+  shape: CityShapeSetting = "square",
+  shapeScale = 1,
+): CityBundle {
+  const { topology, field, arterials, minorStreets } = buildTensorRoads(rawSeed);
+  return {
+    roads: {
+      topology,
+      arterials,
+      minorStreets,
+      districts: field.districts,
+      bounds: field.bounds,
+      raster: field.raster,
+    },
+    city: generateCity(rawSeed, shape, shapeScale),
+    lights: generateStreetlights(rawSeed, shape, shapeScale),
+  };
+}
+
+// Main-thread-side: seed the module caches from a worker-built bundle. Keys use
+// the CURRENT tier extent — the caller must only prime a bundle generated for
+// the tier the main thread is on (the client matches request/response by key).
+export function primeCityCaches(
+  rawSeed: string,
+  shape: CityShapeSetting,
+  shapeScale: number,
+  bundle: CityBundle,
+): void {
+  const { roads, city, lights } = bundle;
+  const field = districtFieldFromRaster(roads.districts, roads.bounds, roads.raster);
+  const roadsKey = `${rawSeed}::${maxHalfExtent()}`;
+  if (tensorRoadsCache.size > 64) tensorRoadsCache.clear();
+  tensorRoadsCache.set(roadsKey, {
+    topology: roads.topology,
+    field,
+    arterials: roads.arterials,
+    minorStreets: roads.minorStreets,
+  });
+  const key = `${rawSeed}::${shape}::${shapeScale}::${maxHalfExtent()}`;
+  if (cityCache.size > 64) cityCache.clear();
+  cityCache.set(key, city);
+  if (lightsCache.size > 64) lightsCache.clear();
+  lightsCache.set(key, lights);
 }
 
 // --- Tensor building fill -------------------------------------------------

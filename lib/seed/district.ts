@@ -31,12 +31,51 @@ export type District = {
   color: string; // hex, for the plan-view district fill overlay
 };
 
+// Serialisable core of the classify lookup (#59): the dense per-cell label grid
+// plus its exact geometry. `classify` is a closure and cannot cross a worker
+// boundary (structured clone drops functions) — transferring the raster and
+// rebuilding via districtFieldFromRaster yields a byte-identical classify.
+export type DistrictRaster = {
+  label: Int16Array;
+  n: number; // raster steps per axis
+  step: number; // cell size (m) — stored, not re-derived, so FP math matches exactly
+};
+
 export type DistrictField = {
   districts: District[];
   // World point → district index, or -1 if it lands on a dropped micro-cell.
   classify: (x: number, z: number) => number;
   bounds: { minX: number; maxX: number; minZ: number; maxZ: number };
+  raster: DistrictRaster;
 };
+
+// Build the classify closure from the raster — the ONE implementation, used by
+// both generateDistrictsFromNetwork and the worker-side reconstruction, so the
+// two can never drift.
+function makeClassify(
+  bounds: DistrictField["bounds"],
+  raster: DistrictRaster,
+): (x: number, z: number) => number {
+  const { minX, maxX, minZ, maxZ } = bounds;
+  const { label, n, step } = raster;
+  const clampG = (g: number) => (g < 0 ? 0 : g > n - 1 ? n - 1 : g);
+  return (x: number, z: number): number => {
+    if (x < minX || x > maxX || z < minZ || z > maxZ) return -1;
+    const gx = clampG(Math.floor((x - minX) / step));
+    const gz = clampG(Math.floor((z - minZ) / step));
+    return label[gx * n + gz];
+  };
+}
+
+// Reconstruct a DistrictField from its serialisable parts (#59) — the worker
+// posts {districts, bounds, raster}; the main thread rebuilds the closure.
+export function districtFieldFromRaster(
+  districts: District[],
+  bounds: DistrictField["bounds"],
+  raster: DistrictRaster,
+): DistrictField {
+  return { districts, bounds, raster, classify: makeClassify(bounds, raster) };
+}
 
 const CARDINALS = ["E", "NE", "N", "NW", "W", "SW", "S", "SE"] as const;
 const CARDINAL_NAMES: Record<string, string> = {
@@ -459,12 +498,8 @@ export function generateDistrictsFromNetwork(
   const rng = seedrandom(`${masterSeed}::districts`);
   const characters = assignCharacters(rng, topo, stats);
 
-  const classify = (x: number, z: number): number => {
-    if (x < minX || x > maxX || z < minZ || z > maxZ) return -1;
-    const gx = clampG(Math.floor((x - minX) / step));
-    const gz = clampG(Math.floor((z - minZ) / step));
-    return denseLabel[gx * N + gz];
-  };
+  const raster: DistrictRaster = { label: denseLabel, n: N, step };
+  const classify = makeClassify({ minX, maxX, minZ, maxZ }, raster);
 
   const districts: District[] = acc.map((a, idx) => {
     const character = characters[idx];
@@ -488,7 +523,7 @@ export function generateDistrictsFromNetwork(
     };
   });
 
-  return { districts, classify, bounds: { minX, maxX, minZ, maxZ } };
+  return { districts, classify, bounds: { minX, maxX, minZ, maxZ }, raster };
 }
 
 export { CHARACTER_COLOR };

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { generateCity } from "@/lib/seed/cityGen";
+import { generateCity, primeCityCaches } from "@/lib/seed/cityGen";
+import { generateCityInWorker } from "@/lib/workers/cityGenClient";
 import { useSceneStore } from "@/lib/state/sceneStore";
 import type { CityShapeSetting } from "@/lib/seed/cityShape";
 import type { CityTier } from "@/lib/seed/topology";
@@ -106,17 +107,44 @@ export function useGeneratedCity(
   useEffect(() => {
     if (warmedKeys.has(key)) return; // already warm — nothing to schedule
     let cancelled = false;
-    const cancel = scheduleOffCritical(() => {
-      if (cancelled) return;
-      generateCity(seed, shape, scale); // warms cityGen's cache + the shared field
+    let cancelFallback: (() => void) | null = null;
+    const finish = () => {
       warmedKeys.add(key);
       setState({ key, ready: true });
-    });
+    };
+    // Sync fallback — the pre-#59 path: one cold generateCity on an idle
+    // callback. Fine at Town/City cost; only the worker makes Metro painless.
+    const startSyncFallback = () =>
+      scheduleOffCritical(() => {
+        if (cancelled) return;
+        generateCity(seed, shape, scale); // warms cityGen's cache + the shared field
+        finish();
+      });
+
+    // #59: prefer the worker — generation runs off-thread and the main thread
+    // only pays the cache-priming copy. Falls back to sync when Workers are
+    // unavailable (SSR mismatch, old browser) or the worker crashes.
+    const viaWorker = generateCityInWorker(seed, shape, scale, citySize);
+    if (viaWorker) {
+      viaWorker
+        .then((bundle) => {
+          if (cancelled) return;
+          // The store subscription has already pointed the main thread's gen
+          // extent at `citySize`, so the prime keys match this bundle's tier.
+          primeCityCaches(seed, shape, scale, bundle);
+          finish();
+        })
+        .catch(() => {
+          if (!cancelled) cancelFallback = startSyncFallback();
+        });
+    } else {
+      cancelFallback = startSyncFallback();
+    }
     return () => {
       cancelled = true;
-      cancel();
+      cancelFallback?.();
     };
-  }, [key, seed, shape, scale]);
+  }, [key, seed, shape, scale, citySize]);
 
   return { ready };
 }
