@@ -1,8 +1,15 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
+import {
+  partitionByTile,
+  visibleTiles,
+  compactVisible,
+  type CompactChannel,
+  type TilePartition,
+} from "@/lib/scene/tileCull";
 import {
   generateCity,
   ARCHETYPE_ORDER,
@@ -78,15 +85,33 @@ function pickCorrelationMode(b: Building): number {
   return 2;
 }
 
+type TiledMesh = {
+  mesh: THREE.InstancedMesh;
+  partition: TilePartition;
+  channels: CompactChannel[];
+};
+
 export function InstancedCity({ masterSeed }: { masterSeed: string }) {
   const cityShape = useSceneStore((s) => s.cityShape);
   const cityShapeScale = useSceneStore((s) => s.cityShapeScale);
   const citySize = useSceneStore((s) => s.citySize);
-  const { meshes, maxRadius } = useMemo(() => {
+  const citySketch = useSceneStore((s) => s.citySketch);
+  const { entries, maxRadius } = useMemo(() => {
     void citySize; // tier drives the module-level gen extent (#58) — a switch must rebuild
+    void citySketch; // a registered sketch is a different city (#40) — likewise
     return buildMeshes(masterSeed, cityShape, cityShapeScale);
-  }, [masterSeed, cityShape, cityShapeScale, citySize]);
+  }, [masterSeed, cityShape, cityShapeScale, citySize, citySketch]);
+  const meshes = useMemo(() => entries.map((e) => e.mesh), [entries]);
   const hidden = useSceneStore((s) => s.debug.renderModes.buildings === "hidden");
+
+  // #55 per-frame tile cull state — one signature per archetype mesh, reset on
+  // regen so the first frame always materialises.
+  const frustum = useRef(new THREE.Frustum());
+  const visible = useRef<number[]>([]);
+  const lastSigs = useRef<string[]>([]);
+  useEffect(() => {
+    lastSigs.current = entries.map(() => "");
+  }, [entries]);
 
   // Dispose old GPU resources when seed changes / unmounts.
   useEffect(() => {
@@ -104,8 +129,25 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
   // Per-frame: refresh the intro-related uniforms that depend on live state
   // (camera pose for far-to-near mode, orbit centre, mode int). progress/mode
   // values themselves point at sharedIntro singletons so no per-frame work.
-  useFrame(() => {
+  useFrame((state) => {
     const s = useSceneStore.getState();
+
+    // #55 per-tile culling: lower each archetype mesh's instance count to the
+    // frustum-visible tiles. Instance copies fire only when a mesh's visible
+    // tile set changes; a still camera costs only the AABB tests.
+    for (let e = 0; e < entries.length; e++) {
+      const { mesh, partition, channels } = entries[e];
+      if (s.lod.tiles && partition.tiles.length > 1) {
+        const sig = visibleTiles(partition, state.camera, frustum.current, visible.current);
+        if (sig !== lastSigs.current[e]) {
+          lastSigs.current[e] = sig;
+          mesh.count = compactVisible(partition, visible.current, channels);
+        }
+      } else if (lastSigs.current[e] !== "ALL") {
+        lastSigs.current[e] = "ALL";
+        mesh.count = compactVisible(partition, null, channels);
+      }
+    }
     for (const m of meshes) {
       const mat = m.material as THREE.ShaderMaterial;
       mat.uniforms.uIntroCityCenter.value.set(s.orbit.centerX, 0, s.orbit.centerZ);
@@ -151,9 +193,9 @@ function buildMeshes(
   masterSeed: string,
   shape: CityShapeSetting,
   shapeScale: number,
-): { meshes: THREE.InstancedMesh[]; maxRadius: number } {
+): { entries: TiledMesh[]; maxRadius: number } {
   const { buildings } = generateCity(masterSeed, shape, shapeScale);
-  if (buildings.length === 0) return { meshes: [], maxRadius: 1 };
+  if (buildings.length === 0) return { entries: [], maxRadius: 1 };
 
   let maxRadius = 1;
   let maxHeight = 1;
@@ -197,7 +239,7 @@ function buildMeshes(
   }
 
   // 4. One InstancedMesh per archetype, sharing the atlas.
-  const meshes: THREE.InstancedMesh[] = [];
+  const entries: TiledMesh[] = [];
   const matrix = new THREE.Matrix4();
   const position = new THREE.Vector3();
   const quaternion = new THREE.Quaternion();
@@ -205,7 +247,18 @@ function buildMeshes(
   const euler = new THREE.Euler();
   const color = new THREE.Color();
 
-  for (const list of byArchetype.values()) {
+  for (const rawList of byArchetype.values()) {
+    // #55: store instances TILE-MAJOR (each world tile's buildings contiguous)
+    // so the frame loop can materialise visible tiles with plain slice copies.
+    // The atlas above is packed once over ALL buildings — per-building windows
+    // are untouched by the ordering; only GPU buffer layout changes.
+    const partition = partitionByTile(
+      rawList.length,
+      (i) => rawList[i].x,
+      (i) => rawList[i].z,
+      (i) => rawList[i].height + 10,
+    );
+    const list = Array.from(partition.order, (idx) => rawList[idx]);
     const N = list.length;
     const geo = new THREE.BoxGeometry(1, 1, 1);
 
@@ -330,9 +383,59 @@ function buildMeshes(
     );
 
     mesh.instanceMatrix.needsUpdate = true;
-    mesh.frustumCulled = false; // bounds are union of all instances; cheaper to skip cull than compute.
-    meshes.push(mesh);
+    mesh.frustumCulled = false; // we cull per TILE (#55), finer than a whole-mesh test.
+
+    // #55 source records: stable tile-major copies the frame loop compacts from.
+    // The attribute arrays themselves are the (mutated) draw buffers.
+    const channels: CompactChannel[] = [
+      {
+        src: (mesh.instanceMatrix.array as Float32Array).slice(),
+        dst: mesh.instanceMatrix,
+        itemSize: 16,
+      },
+      {
+        src: aAtlasOffset.slice(),
+        dst: geo.getAttribute("aAtlasOffset") as THREE.InstancedBufferAttribute,
+        itemSize: 2,
+      },
+      {
+        src: aAtlasSize.slice(),
+        dst: geo.getAttribute("aAtlasSize") as THREE.InstancedBufferAttribute,
+        itemSize: 2,
+      },
+      {
+        src: aGrid.slice(),
+        dst: geo.getAttribute("aGrid") as THREE.InstancedBufferAttribute,
+        itemSize: 3,
+      },
+      {
+        src: aFacadeColor.slice(),
+        dst: geo.getAttribute("aFacadeColor") as THREE.InstancedBufferAttribute,
+        itemSize: 3,
+      },
+      {
+        src: aFacadeGlow.slice(),
+        dst: geo.getAttribute("aFacadeGlow") as THREE.InstancedBufferAttribute,
+        itemSize: 1,
+      },
+      {
+        src: aBuildingHash.slice(),
+        dst: geo.getAttribute("aBuildingHash") as THREE.InstancedBufferAttribute,
+        itemSize: 1,
+      },
+      {
+        src: aMisc.slice(),
+        dst: geo.getAttribute("aMisc") as THREE.InstancedBufferAttribute,
+        itemSize: 3,
+      },
+      {
+        src: aDebugDistrictColor.slice(),
+        dst: geo.getAttribute("aDebugDistrictColor") as THREE.InstancedBufferAttribute,
+        itemSize: 3,
+      },
+    ];
+    entries.push({ mesh, partition, channels });
   }
 
-  return { meshes, maxRadius };
+  return { entries, maxRadius };
 }

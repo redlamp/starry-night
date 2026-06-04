@@ -272,6 +272,9 @@ export const DEFAULT_LOD = {
   cull: 16000, // drop the light beyond this camera distance (m); generous = off in normal view
   sizeFloor: 0.5, // far size as a fraction of near
   brightnessFloor: 0.4, // far brightness as a fraction of near
+  // #55 per-tile culling + lazy materialisation: offscreen tiles of buildings /
+  // streetlights / traffic are not materialised at all. Render-only.
+  tiles: true,
 };
 
 // Organic city footprint (#14). `circle` is the default look — a round footprint
@@ -475,6 +478,9 @@ function readSavedConfig(): SavedConfig | null {
     if (parsed.stars && parsed.stars.factor > 80) {
       parsed.stars.factor = DEFAULT_STARS.factor;
     }
+    // Forward-fill new lod fields (e.g. #55 `tiles`) into configs saved before
+    // they existed, so an old save can't silently disable a newer feature.
+    if (parsed.lod) parsed.lod = { ...DEFAULT_LOD, ...parsed.lod };
     return parsed as SavedConfig;
   } catch {
     return null;

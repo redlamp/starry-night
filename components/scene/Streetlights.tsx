@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useRef, useEffect } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 import { generateStreetlights } from "@/lib/seed/cityGen";
@@ -9,6 +9,13 @@ import { SCENE_WB_GAIN } from "@/lib/color/whiteBalance";
 import { sharedStreetlightIntroProgress } from "@/lib/shaders/sharedIntro";
 import { sharedTime } from "@/lib/shaders/sharedTime";
 import { useSceneStore } from "@/lib/state/sceneStore";
+import {
+  partitionByTile,
+  reorderToTiles,
+  visibleTiles,
+  compactVisible,
+  type CompactChannel,
+} from "@/lib/scene/tileCull";
 
 function applyWb(c: THREE.Color): THREE.Color {
   return new THREE.Color(
@@ -114,7 +121,7 @@ export function Streetlights({ masterSeed }: { masterSeed: string }) {
   const cityShape = useSceneStore((s) => s.cityShape);
   const cityShapeScale = useSceneStore((s) => s.cityShapeScale);
   const citySize = useSceneStore((s) => s.citySize);
-  const { geometry, material, maxRadius } = useMemo(() => {
+  const { geometry, material, maxRadius, partition, channels } = useMemo(() => {
     void citySize; // tier drives the module-level gen extent (#58) — a switch must rebuild
     const lights = generateStreetlights(masterSeed, cityShape, cityShapeScale);
     const positions = new Float32Array(lights.length * 3);
@@ -136,11 +143,37 @@ export function Streetlights({ masterSeed }: { masterSeed: string }) {
       failing[i] = l.isFailing ? 1 : 0;
       seeds[i] = (Math.sin(i * 12.9898) * 43758.5453) % 1;
     }
+
+    // #55 tile partition: source records tile-major; the draw buffers start as
+    // a full copy (everything materialised) and the frame loop compacts them to
+    // the visible tiles. aSeed stays keyed to the original index via reorder, so
+    // per-lamp flicker identity is independent of tile layout.
+    const part = partitionByTile(
+      lights.length,
+      (i) => lights[i].x,
+      (i) => lights[i].z,
+      (i) => lights[i].y,
+    );
+    const srcPositions = reorderToTiles(part, positions, 3);
+    const srcColors = reorderToTiles(part, colors, 3);
+    const srcFailing = reorderToTiles(part, failing, 1);
+    const srcSeeds = reorderToTiles(part, seeds, 1);
+
     const geo = new THREE.BufferGeometry();
-    geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-    geo.setAttribute("aColor", new THREE.BufferAttribute(colors, 3));
-    geo.setAttribute("aFailing", new THREE.BufferAttribute(failing, 1));
-    geo.setAttribute("aSeed", new THREE.BufferAttribute(seeds, 1));
+    geo.setAttribute("position", new THREE.BufferAttribute(srcPositions.slice(), 3));
+    geo.setAttribute("aColor", new THREE.BufferAttribute(srcColors.slice(), 3));
+    geo.setAttribute("aFailing", new THREE.BufferAttribute(srcFailing.slice(), 1));
+    geo.setAttribute("aSeed", new THREE.BufferAttribute(srcSeeds.slice(), 1));
+    const chans: CompactChannel[] = [
+      {
+        src: srcPositions,
+        dst: geo.getAttribute("position") as THREE.BufferAttribute,
+        itemSize: 3,
+      },
+      { src: srcColors, dst: geo.getAttribute("aColor") as THREE.BufferAttribute, itemSize: 3 },
+      { src: srcFailing, dst: geo.getAttribute("aFailing") as THREE.BufferAttribute, itemSize: 1 },
+      { src: srcSeeds, dst: geo.getAttribute("aSeed") as THREE.BufferAttribute, itemSize: 1 },
+    ];
 
     const mat = new THREE.ShaderMaterial({
       vertexShader,
@@ -168,10 +201,19 @@ export function Streetlights({ masterSeed }: { masterSeed: string }) {
       fog: false,
       toneMapped: false,
     });
-    return { geometry: geo, material: mat, maxRadius: maxR };
+    return { geometry: geo, material: mat, maxRadius: maxR, partition: part, channels: chans };
   }, [masterSeed, cityShape, cityShapeScale, citySize]);
 
-  useFrame(() => {
+  // #55 per-frame tile cull state. Signature resets when the geometry swaps so
+  // the first frame after a regen always materialises.
+  const frustum = useRef(new THREE.Frustum());
+  const visible = useRef<number[]>([]);
+  const lastSig = useRef("");
+  useEffect(() => {
+    lastSig.current = "";
+  }, [geometry]);
+
+  useFrame((state) => {
     const s = useSceneStore.getState();
     material.uniforms.uIntroCityCenter.value.set(s.orbit.centerX, 0, s.orbit.centerZ);
     material.uniforms.uIntroMaxRadius.value = maxRadius;
@@ -186,6 +228,20 @@ export function Streetlights({ masterSeed }: { masterSeed: string }) {
     material.uniforms.uLodCull.value = lod.cull;
     material.uniforms.uLodSizeFloor.value = lod.sizeFloor;
     material.uniforms.uLodBrightFloor.value = lod.brightnessFloor;
+
+    // #55 per-tile culling: materialise only frustum-visible tiles. Copies fire
+    // only when the visible tile SET changes (camera crossing tile boundaries);
+    // a still camera costs ~tile-count AABB tests and nothing else.
+    if (lod.tiles && partition.tiles.length > 1) {
+      const sig = visibleTiles(partition, state.camera, frustum.current, visible.current);
+      if (sig !== lastSig.current) {
+        lastSig.current = sig;
+        geometry.setDrawRange(0, compactVisible(partition, visible.current, channels));
+      }
+    } else if (lastSig.current !== "ALL") {
+      lastSig.current = "ALL";
+      geometry.setDrawRange(0, compactVisible(partition, null, channels));
+    }
   });
 
   if (!enabled) return null;

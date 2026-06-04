@@ -88,9 +88,16 @@ function LodControls() {
   const near = useSceneStore((s) => s.lod.near);
   const far = useSceneStore((s) => s.lod.far);
   const cull = useSceneStore((s) => s.lod.cull);
+  const tiles = useSceneStore((s) => s.lod.tiles);
   const setLod = useSceneStore((s) => s.setLod);
   return (
     <>
+      {/* #55 per-tile culling — offscreen tiles of buildings/lights/traffic are
+          not materialised at all (render-only; off = whole-city draws). */}
+      <div className="flex items-center justify-between gap-2 text-xs">
+        <span className="text-foreground/70">tile culling</span>
+        <Switch checked={tiles} onCheckedChange={(v) => setLod({ tiles: v })} />
+      </div>
       <ValueSlider
         label="near m"
         value={near}
