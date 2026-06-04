@@ -21,12 +21,7 @@ export function FocalIndicator() {
   if (mode !== "orbit" || !show) return null;
 
   return (
-    <Html
-      position={[centerX, lookAtY, centerZ]}
-      center
-      zIndexRange={[100, 0]}
-      pointerEvents="none"
-    >
+    <Html position={[centerX, lookAtY, centerZ]} center zIndexRange={[100, 0]} pointerEvents="none">
       <div
         style={{
           opacity: focalDragging ? 1 : 0.45,

@@ -117,8 +117,7 @@ export function CameraControls() {
     const now = performance.now();
     const elapsed = (now - orbitStart.current) / 1000;
     const sweepDeg = (elapsed / Math.max(1, lastPeriod.current)) * 360;
-    const currentAz =
-      ((useSceneStore.getState().orbit.azimuthDeg + sweepDeg) % 360 + 360) % 360;
+    const currentAz = (((useSceneStore.getState().orbit.azimuthDeg + sweepDeg) % 360) + 360) % 360;
     setOrbit({ azimuthDeg: currentAz });
     orbitStart.current = now;
     lastPeriod.current = orbit.periodSec;
@@ -235,7 +234,7 @@ export function CameraControls() {
           const now = performance.now();
           const elapsed = (now - orbitStart.current) / 1000;
           const sweepDeg = (elapsed / Math.max(1, s.orbit.periodSec)) * 360;
-          const az = ((s.orbit.azimuthDeg + sweepDeg) % 360 + 360) % 360;
+          const az = (((s.orbit.azimuthDeg + sweepDeg) % 360) + 360) % 360;
           s.setOrbit({ azimuthDeg: az });
           orbitStart.current = now;
         } else {
@@ -318,7 +317,7 @@ export function CameraControls() {
         if (paused) {
           const elapsed = (now - orbitStart.current) / 1000;
           const sweepDeg = (elapsed / Math.max(1, orbit.periodSec)) * 360;
-          azBase = ((orbit.azimuthDeg + sweepDeg) % 360 + 360) % 360;
+          azBase = (((orbit.azimuthDeg + sweepDeg) % 360) + 360) % 360;
           setOrbit({ azimuthDeg: azBase });
           orbitStart.current = now;
         } else {
@@ -411,7 +410,7 @@ export function CameraControls() {
       // what the useFrame sweep renders.
       const elapsed = s.orbitPaused ? 0 : (now - orbitStart.current) / 1000;
       const sweepDeg = (elapsed / Math.max(1, s.orbit.periodSec)) * 360;
-      const az = ((s.orbit.azimuthDeg + sweepDeg) % 360 + 360) % 360;
+      const az = (((s.orbit.azimuthDeg + sweepDeg) % 360) + 360) % 360;
       setOrbit({ azimuthDeg: az });
       orbitStart.current = now;
     };
@@ -503,8 +502,7 @@ export function CameraControls() {
           const midY = (pts[0].y + pts[1].y) / 2;
           const focalSpeed = newRadius * FOCAL_Y_SENSITIVITY_RATIO;
           const newLookAtY = clamp(
-            pinch.current.startLookAtY -
-              (midY - pinch.current.startMidY) * focalSpeed,
+            pinch.current.startLookAtY - (midY - pinch.current.startMidY) * focalSpeed,
             LOOK_AT_Y_MIN,
             LOOK_AT_Y_MAX,
           );
@@ -519,8 +517,7 @@ export function CameraControls() {
         // arrives. Sensitivity scales with orbit.radius so far-out cameras get
         // proportional drag distance.
         const dy = e.clientY - dragBase.current.startY;
-        const focalSpeed =
-          useSceneStore.getState().orbit.radius * FOCAL_Y_SENSITIVITY_RATIO;
+        const focalSpeed = useSceneStore.getState().orbit.radius * FOCAL_Y_SENSITIVITY_RATIO;
         const newLookAtY = clamp(
           dragBase.current.lookAtY - dy * focalSpeed,
           LOOK_AT_Y_MIN,
@@ -533,7 +530,7 @@ export function CameraControls() {
       const dx = e.clientX - dragBase.current.startX;
       const dy = e.clientY - dragBase.current.startY;
       const newAz =
-        ((dragBase.current.azimuthDeg - dx * ORBIT_YAW_SENSITIVITY) % 360 + 360) % 360;
+        (((dragBase.current.azimuthDeg - dx * ORBIT_YAW_SENSITIVITY) % 360) + 360) % 360;
       const newEl = clamp(
         dragBase.current.elevationDeg + dy * ORBIT_PITCH_SENSITIVITY,
         ORBIT_ELEVATION_MIN,

@@ -86,10 +86,7 @@ export function IntroTicker() {
 
     // Star intro — progress-driven wake (no cycle), no startTime stamp needed.
     if (s.starIntro.playing) {
-      const next = Math.min(
-        1,
-        s.starIntro.progress + dt / Math.max(0.1, s.starIntro.durationSec),
-      );
+      const next = Math.min(1, s.starIntro.progress + dt / Math.max(0.1, s.starIntro.durationSec));
       s.setStarIntroProgress(next);
       sharedStarIntroProgress.value = next;
       if (next >= 1) s.setStarIntroPlaying(false);

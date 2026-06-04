@@ -91,7 +91,7 @@ export function Moon() {
       const p = meshRef.current.position;
       setMoonLive({
         position: [p.x, p.y, p.z],
-        azimuthDeg: ((azimuth * RAD2DEG) % 360 + 360) % 360,
+        azimuthDeg: (((azimuth * RAD2DEG) % 360) + 360) % 360,
         elevationDeg: moon.elevationDeg,
         distance: moon.distance,
       });

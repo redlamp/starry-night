@@ -6,10 +6,7 @@ import { useSceneStore } from "@/lib/state/sceneStore";
 import { deriveSeed } from "@/lib/seed/rng";
 import { sharedTime } from "@/lib/shaders/sharedTime";
 import { sharedStarIntroProgress, sharedStarIntroMode } from "@/lib/shaders/sharedIntro";
-import {
-  starFieldVertexShader,
-  starFieldFragmentShader,
-} from "@/lib/shaders/starField";
+import { starFieldVertexShader, starFieldFragmentShader } from "@/lib/shaders/starField";
 
 type Props = {
   masterSeed: string;
@@ -45,11 +42,7 @@ function pickStarColor(r: number, brightnessRank: number): [number, number, numb
   // Desaturate dim stars toward white — perceptually accurate (rods are
   // colour-blind, so faint stars look neutral while bright stars show hue).
   const sat = 0.25 + 0.75 * brightnessRank;
-  return [
-    1 + (picked[0] - 1) * sat,
-    1 + (picked[1] - 1) * sat,
-    1 + (picked[2] - 1) * sat,
-  ];
+  return [1 + (picked[0] - 1) * sat, 1 + (picked[1] - 1) * sat, 1 + (picked[2] - 1) * sat];
 }
 
 /**
@@ -61,13 +54,7 @@ function pickStarColor(r: number, brightnessRank: number): [number, number, numb
  * upward so the sky reads as densely populated above the horizon and sparse
  * below.
  */
-export function StarField({
-  masterSeed,
-  count,
-  radius,
-  depth,
-  size = 1.5,
-}: Props) {
+export function StarField({ masterSeed, count, radius, depth, size = 1.5 }: Props) {
   const { geometry, material } = useMemo(() => {
     const rng = deriveSeed(masterSeed, "stars");
 

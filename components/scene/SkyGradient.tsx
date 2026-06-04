@@ -3,10 +3,7 @@
 import { useEffect, useMemo } from "react";
 import * as THREE from "three";
 import { useSceneStore } from "@/lib/state/sceneStore";
-import {
-  skyGradientVertexShader,
-  skyGradientFragmentShader,
-} from "@/lib/shaders/skyGradient";
+import { skyGradientVertexShader, skyGradientFragmentShader } from "@/lib/shaders/skyGradient";
 
 // Inside-out sphere painted by skyGradient shader. Drawn first in the star
 // scene (renderOrder=-1) so stars composite on top.

@@ -41,10 +41,7 @@ export function StarPass({
 
   const starScene = useMemo(() => new THREE.Scene(), []);
   const hazeScene = useMemo(() => new THREE.Scene(), []);
-  const starCamera = useMemo(
-    () => new THREE.PerspectiveCamera(50, 1, 0.5, 12000),
-    [],
-  );
+  const starCamera = useMemo(() => new THREE.PerspectiveCamera(50, 1, 0.5, 12000), []);
 
   // The sky colour lives on the star pass (drawn first). The main scene must
   // have no background, or three would force-clear over the stars even with

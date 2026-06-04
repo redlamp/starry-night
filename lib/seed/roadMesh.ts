@@ -68,16 +68,7 @@ export function buildRoadGeometry(polys: RoadPoly[]): THREE.BufferGeometry {
       // Perpendicular offset (rotate direction 90°), scaled to half-width.
       const nx = (-dzs / len) * half;
       const nz = (dxs / len) * half;
-      quad(
-        a.x + nx,
-        a.z + nz,
-        a.x - nx,
-        a.z - nz,
-        b.x - nx,
-        b.z - nz,
-        b.x + nx,
-        b.z + nz,
-      );
+      quad(a.x + nx, a.z + nz, a.x - nx, a.z - nz, b.x - nx, b.z - nz, b.x + nx, b.z + nz);
     }
 
     // Round caps at the two open ends; round joins only at interior vertices

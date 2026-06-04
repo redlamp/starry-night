@@ -96,7 +96,15 @@ export function buildTraffic(
   const rng = seedrandom(`${masterSeed}::traffic`);
   const city = generateCity(masterSeed, shape, shapeScale);
 
-  type Seg = { ax: number; az: number; bx: number; bz: number; len: number; cfg: TierCfg; mult: number };
+  type Seg = {
+    ax: number;
+    az: number;
+    bx: number;
+    bz: number;
+    len: number;
+    cfg: TierCfg;
+    mult: number;
+  };
   const segs: Seg[] = [];
   const collect = (verts: Vert[], tier: "highway" | "arterial" | "minor") => {
     const cfg = tierCfg(tier);

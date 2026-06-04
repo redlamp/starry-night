@@ -31,8 +31,7 @@ export function ProjectionBlender() {
   const radius = useSceneStore((s) => s.orbit.radius);
 
   useFrame(() => {
-    if (!(camera as THREE.Camera & { isPerspectiveCamera?: boolean }).isPerspectiveCamera)
-      return;
+    if (!(camera as THREE.Camera & { isPerspectiveCamera?: boolean }).isPerspectiveCamera) return;
     // Always rebuild the pure perspective matrix first, so when a blend ends at
     // 0 the camera doesn't keep rendering with the last-computed override.
     camera.fov = fov;
