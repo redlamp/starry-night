@@ -12,6 +12,7 @@
 import { generateCity } from "@/lib/seed/cityGen";
 import { setCityTier } from "@/lib/seed/topology";
 import { buildRevealSchedule, type RevealTier, type RevealPolyInput } from "@/lib/scene/roadReveal";
+import { buildRoadGeometry } from "@/lib/seed/roadMesh";
 
 setCityTier("city");
 const city = generateCity("gate1-0");
@@ -116,6 +117,26 @@ const tiers: Array<[RevealTier, RevealPolyInput[]]> = [
     if (t > ringMax) ringMax = t;
   }
   check("closed ring max ≤ 1", ringMax <= 1 + 1e-9, `max=${ringMax}`);
+}
+
+// 6. geometry back-compat — aReveal exists, one value per vertex, all zero
+//    without revealOf (back-compat with Roads.tsx before Task 4 wires it in).
+{
+  const stPolys = city.streets.map((s) => ({ vertices: s.vertices, width: s.width }));
+  const geoPlain = buildRoadGeometry(stPolys);
+  const plainReveal = geoPlain.getAttribute("aReveal");
+  const allZero = (plainReveal.array as Float32Array).every((x) => x === 0);
+  check(
+    "geometry back-compat",
+    plainReveal.count === geoPlain.getAttribute("position").count && allZero,
+  );
+
+  // 7. geometry reveal range — schedule-fed values all within [0, 1+1e-9].
+  const geo = buildRoadGeometry(stPolys, (p, arc) => sched.revealAt(2, p, arc));
+  const arr = geo.getAttribute("aReveal").array as Float32Array;
+  let out = 0;
+  for (const x of arr) if (x < 0 || x > 1 + 1e-9) out++;
+  check("geometry reveal range", out === 0, `${out} out of range`);
 }
 
 console.log(failed === 0 ? "\nREVEAL SANITY PASS" : `\nREVEAL SANITY FAIL (${failed})`);
