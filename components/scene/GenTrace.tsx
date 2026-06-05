@@ -8,6 +8,7 @@ import { subscribeGenProgress } from "@/lib/workers/cityGenClient";
 import { sharedTime } from "@/lib/shaders/sharedTime";
 import { sharedRoadRevealProgress } from "@/lib/shaders/sharedIntro";
 import { genTraceVertexShader, genTraceFragmentShader } from "@/lib/shaders/genTrace";
+import { sketchKey } from "@/lib/seed/citySketch";
 
 // #59 Phase B, softened (spec 2026-06-05-road-reveal-cascade): accepted
 // streamlines stroke on (draw-on via aBirth/aFrac) in a dim blueprint palette,
@@ -20,11 +21,23 @@ const ARTERIAL_RGB: [number, number, number] = [0.38, 0.48, 0.66]; // dimmed fro
 const MINOR_RGB: [number, number, number] = [0.12, 0.18, 0.32];
 
 export function GenTrace({ masterSeed }: { masterSeed: string }) {
+  // Composite key mirrors RoadRevealTicker's: any gen-input change that produces
+  // a different city resets the accumulators, even without a seed change. This
+  // became necessary once GenTrace is mounted unconditionally — previously a
+  // tier/shape change would unmount+remount it and clear the refs via component
+  // lifetime. Now we drive the same reset explicitly.
+  const cityShape = useSceneStore((s) => s.cityShape);
+  const cityShapeScale = useSceneStore((s) => s.cityShapeScale);
+  const citySize = useSceneStore((s) => s.citySize);
+  const fieldDeviation = useSceneStore((s) => s.fieldDeviation);
+  const key = `${masterSeed}::${cityShape}::${cityShapeScale}::${citySize}::${sketchKey()}::${fieldDeviation}`;
+
   const [geometry, setGeometry] = useState<THREE.BufferGeometry | null>(null);
   const positionsRef = useRef<number[]>([]);
   const colorsRef = useRef<number[]>([]);
   const birthsRef = useRef<number[]>([]);
   const fracsRef = useRef<number[]>([]);
+  const disposeArmed = useRef(false);
 
   const materialRef = useRef<THREE.ShaderMaterial>(
     null,
@@ -52,6 +65,7 @@ export function GenTrace({ masterSeed }: { masterSeed: string }) {
     colorsRef.current = [];
     birthsRef.current = [];
     fracsRef.current = [];
+    disposeArmed.current = false;
     const unsubscribe = subscribeGenProgress((e) => {
       const s = useSceneStore.getState();
       if (
@@ -93,6 +107,7 @@ export function GenTrace({ masterSeed }: { masterSeed: string }) {
       geo.setAttribute("aColor", new THREE.Float32BufferAttribute(col.slice(), 3));
       geo.setAttribute("aBirth", new THREE.Float32BufferAttribute(birth.slice(), 1));
       geo.setAttribute("aFrac", new THREE.Float32BufferAttribute(frac.slice(), 1));
+      disposeArmed.current = false; // a late batch after a dispose must be able to dispose again
       setGeometry((old) => {
         old?.dispose();
         return geo;
@@ -109,15 +124,19 @@ export function GenTrace({ masterSeed }: { masterSeed: string }) {
         return null;
       });
     };
-  }, [masterSeed]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- masterSeed is encoded in key; listing both would be redundant but the linter can't see through the template literal
+  }, [key]); // key matches RoadRevealTicker's composite identity — see declaration above
 
   // Fade beneath the cascade; release the geometry once fully invisible.
+  // disposeArmed prevents redundant setState calls in the 1–2 frames that run
+  // with the stale closure after the first setGeometry(null) is dispatched.
   useFrame(() => {
     const m = materialRef.current;
     if (!m) return;
     const fade = 1 - sharedRoadRevealProgress.value;
     m.uniforms.uFade.value = fade;
-    if (fade <= 0 && geometry) {
+    if (fade <= 0 && geometry && !disposeArmed.current) {
+      disposeArmed.current = true;
       setGeometry((old) => {
         old?.dispose();
         return null;
