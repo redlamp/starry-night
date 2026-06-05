@@ -8,7 +8,7 @@ import { subscribeGenProgress } from "@/lib/workers/cityGenClient";
 import { sharedTime } from "@/lib/shaders/sharedTime";
 import { sharedRoadRevealProgress } from "@/lib/shaders/sharedIntro";
 import { genTraceVertexShader, genTraceFragmentShader } from "@/lib/shaders/genTrace";
-import { sketchKey } from "@/lib/seed/citySketch";
+import { cityIdentityKey } from "@/lib/seed/cityIdentity";
 
 // #59 Phase B, softened (spec 2026-06-05-road-reveal-cascade): accepted
 // streamlines stroke on (draw-on via aBirth/aFrac) in a dim blueprint palette,
@@ -30,7 +30,7 @@ export function GenTrace({ masterSeed }: { masterSeed: string }) {
   const cityShapeScale = useSceneStore((s) => s.cityShapeScale);
   const citySize = useSceneStore((s) => s.citySize);
   const fieldDeviation = useSceneStore((s) => s.fieldDeviation);
-  const key = `${masterSeed}::${cityShape}::${cityShapeScale}::${citySize}::${sketchKey()}::${fieldDeviation}`;
+  const key = cityIdentityKey(masterSeed, cityShape, cityShapeScale, citySize, fieldDeviation);
 
   const [geometry, setGeometry] = useState<THREE.BufferGeometry | null>(null);
   const positionsRef = useRef<number[]>([]);

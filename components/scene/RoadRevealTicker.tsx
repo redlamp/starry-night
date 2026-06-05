@@ -4,7 +4,7 @@ import { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useSceneStore } from "@/lib/state/sceneStore";
 import { sharedRoadRevealProgress } from "@/lib/shaders/sharedIntro";
-import { sketchKey } from "@/lib/seed/citySketch";
+import { cityIdentityKey } from "@/lib/seed/cityIdentity";
 import type { CityTier } from "@/lib/seed/topology";
 
 // Advances the road-reveal cascade: 0 at the moment a NEW city's data is ready,
@@ -27,7 +27,7 @@ export function RoadRevealTicker({ cityReady }: { cityReady: boolean }) {
   const fieldDeviation = useSceneStore((s) => s.fieldDeviation);
   // Key captures every gen input that produces a different city. Changing any
   // field resets elapsed so the cascade replays from 0 when the new city lands.
-  const key = `${masterSeed}::${cityShape}::${cityShapeScale}::${citySize}::${sketchKey()}::${fieldDeviation}`;
+  const key = cityIdentityKey(masterSeed, cityShape, cityShapeScale, citySize, fieldDeviation);
 
   const lastKey = useRef<string | null>(null);
   const elapsed = useRef(0);
