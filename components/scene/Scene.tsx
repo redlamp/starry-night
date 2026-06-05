@@ -110,12 +110,10 @@ export function Scene() {
           <DistrictShells masterSeed={masterSeed} />
           <TensorFieldOverlay masterSeed={masterSeed} />
         </>
-      ) : (
-        /* #59: while the worker generates, the streamed road trace draws the
-           network in — the city literally sketches itself, then the real
-           layers swap in the moment the bundle lands. */
-        <GenTrace masterSeed={masterSeed} />
-      )}
+      ) : null}
+      {/* #59 Phase B: trace mounts unconditionally so it outlives cityReady and
+          can fade beneath the cascade rather than blinking out on the swap. */}
+      <GenTrace masterSeed={masterSeed} />
       <FocalIndicator />
     </Canvas>
   );
