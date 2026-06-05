@@ -60,8 +60,12 @@ export function Scene() {
       <ProjectionBlender />
       <PerfMonitor />
       <TimeTicker />
-      <IntroTicker />
+      {/* RoadRevealTicker MUST mount before IntroTicker: useFrame runs in mount
+          order, and IntroTicker's reveal gate reads sharedRoadRevealProgress —
+          if the gate ran first it would see the singleton's initial 1 on the
+          first frame of a cold load and fire the intro ungated. */}
       <RoadRevealTicker cityReady={cityReady} />
+      <IntroTicker />
 
       {fog.enabled ? (
         fog.mode === "exp2" ? (
