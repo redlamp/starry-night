@@ -36,6 +36,7 @@ export function buildRoadGeometry(
     reveals.push(rA, rA, rB, rA, rB, rB);
   };
 
+  // Round join / cap: a triangle fan disc of radius `r` centred on (vx,vz).
   const disc = (vx: number, vz: number, r: number, rv: number) => {
     for (let k = 0; k < JOIN_SEGS; k++) {
       const a0 = (k / JOIN_SEGS) * Math.PI * 2;
@@ -71,6 +72,7 @@ export function buildRoadGeometry(
       const dxs = b.x - a.x;
       const dzs = b.z - a.z;
       const len = Math.hypot(dxs, dzs) || 1;
+      // Perpendicular offset (rotate direction 90°), scaled to half-width.
       const nx = (-dzs / len) * half;
       const nz = (dxs / len) * half;
       quad(
@@ -80,6 +82,9 @@ export function buildRoadGeometry(
       );
     }
 
+    // Round caps at the two open ends; round joins only at interior vertices
+    // that bend enough to leave a notch (most tensor steps are near-straight, so
+    // this keeps the triangle count low while smoothing the visible corners).
     for (let i = 0; i < v.length; i++) {
       const interior = i > 0 && i < v.length - 1;
       const isEndCap = !p.closed && (i === 0 || i === v.length - 1);
