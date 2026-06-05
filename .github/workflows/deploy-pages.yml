@@ -1,5 +1,13 @@
 name: Deploy to GitHub Pages
 
+# Deploys TWO builds into one Pages artifact (the deploy-pages action replaces the
+# whole site, so root + /dev must ship together):
+#   root  → main   at basePath /starry-night        (production)
+#   /dev  → dev    at basePath /starry-night/dev     (integration preview)
+# Triggered by pushes to main; use the "Run workflow" button (workflow_dispatch) to
+# refresh /dev after committing to the dev branch. The /dev build is non-fatal
+# (continue-on-error) so a broken dev can never block the production deploy.
+
 on:
   push:
     branches: [main]
@@ -9,6 +17,12 @@ concurrency:
   group: pages
   cancel-in-progress: false
 
+# #62: opt in to Node 24 ahead of GitHub's 2026-06-16 forced default —
+# actions/deploy-pages@v4 (and friends) still declare Node 20, which the
+# runner deprecation warning flags on every deploy.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 permissions:
   contents: read
   pages: write
@@ -17,26 +31,58 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      NEXT_PUBLIC_BASE_PATH: /starry-night
-      NEXT_OUTPUT_EXPORT: "true"
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
 
-      - name: Install deps
-        run: bun install --frozen-lockfile
+      # --- production: main → site root (/starry-night) ---
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: main-src
 
-      - name: Build static export
-        run: bun run build
+      - name: Build main (root)
+        working-directory: main-src
+        env:
+          NEXT_PUBLIC_BASE_PATH: /starry-night
+          NEXT_OUTPUT_EXPORT: "true"
+        run: |
+          bun install --frozen-lockfile
+          bun run build
 
-      - name: Add .nojekyll
-        run: touch out/.nojekyll
+      # --- preview: dev branch → site/dev (/starry-night/dev) ---
+      - name: Checkout dev branch
+        uses: actions/checkout@v4
+        with:
+          ref: dev
+          path: dev-src
+
+      - name: Build dev (/dev)
+        working-directory: dev-src
+        continue-on-error: true # a broken dev must not block the production deploy
+        env:
+          NEXT_PUBLIC_BASE_PATH: /starry-night/dev
+          NEXT_OUTPUT_EXPORT: "true"
+        run: |
+          bun install --frozen-lockfile
+          bun run build
+
+      # --- assemble one artifact: root + /dev ---
+      - name: Assemble site
+        run: |
+          mkdir -p site
+          cp -r main-src/out/. site/
+          if [ -d dev-src/out ]; then
+            mkdir -p site/dev
+            cp -r dev-src/out/. site/dev/
+            echo "dev preview included"
+          else
+            echo "::warning::dev build produced no output — /dev not updated this run"
+          fi
+          touch site/.nojekyll
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
@@ -44,7 +90,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: out
+          path: site
 
   deploy:
     needs: build
