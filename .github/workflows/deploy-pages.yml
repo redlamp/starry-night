@@ -17,6 +17,12 @@ concurrency:
   group: pages
   cancel-in-progress: false
 
+# #62: opt in to Node 24 ahead of GitHub's 2026-06-16 forced default —
+# actions/deploy-pages@v4 (and friends) still declare Node 20, which the
+# runner deprecation warning flags on every deploy.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 permissions:
   contents: read
   pages: write
