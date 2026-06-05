@@ -11,7 +11,7 @@
  */
 import { generateCity } from "@/lib/seed/cityGen";
 import { setCityTier } from "@/lib/seed/topology";
-import { buildRevealSchedule, type RevealTier } from "@/lib/scene/roadReveal";
+import { buildRevealSchedule, type RevealTier, type RevealPolyInput } from "@/lib/scene/roadReveal";
 
 setCityTier("city");
 const city = generateCity("gate1-0");
@@ -30,7 +30,7 @@ const check = (name: string, ok: boolean, detail = "") => {
   if (!ok) failed++;
 };
 
-const tiers: Array<[RevealTier, { vertices: { x: number; z: number }[] }[]]> = [
+const tiers: Array<[RevealTier, RevealPolyInput[]]> = [
   [0, highways],
   [1, arterials],
   [2, streets],
@@ -91,6 +91,31 @@ const tiers: Array<[RevealTier, { vertices: { x: number; z: number }[] }[]]> = [
   }
   check("child after parent", bad === 0, `${bad}/${attached} attached violate`);
   console.log(`  (info) ${attached} attached children`);
+}
+
+// 5. closed ring — synthetic fixture (current seeds may have no rings, but
+//    topology kinds ring/ring-radial produce closed highways): the wave grows
+//    both ways around and never exceeds 1.
+{
+  const ring = [
+    {
+      vertices: [
+        { x: 0, z: -200 },
+        { x: 200, z: 0 },
+        { x: 0, z: 200 },
+        { x: -200, z: 0 },
+      ],
+      closed: true as const,
+    },
+  ];
+  const rs = buildRevealSchedule(ring, [], [], { x: 0, z: 0 });
+  const info = rs.polyInfo(0, 0);
+  let ringMax = -Infinity;
+  for (let f = 0; f <= 1.0001; f += 0.02) {
+    const t = rs.revealAt(0, 0, info.len * f);
+    if (t > ringMax) ringMax = t;
+  }
+  check("closed ring max ≤ 1", ringMax <= 1 + 1e-9, `max=${ringMax}`);
 }
 
 console.log(failed === 0 ? "\nREVEAL SANITY PASS" : `\nREVEAL SANITY FAIL (${failed})`);

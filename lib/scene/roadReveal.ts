@@ -13,12 +13,14 @@ export type RevealTier = 0 | 1 | 2; // 0 highways, 1 arterials, 2 streets
 
 // Abstract m/s — only ratios matter (the result is normalized). LAG is the
 // beat between a junction lighting up and its child starting to grow.
+// Streets (900) intentionally outpace arterials (700): streets are short spurs
+// that should snap in behind the wavefront, while arterials draw long and stately.
 const SPEED: Record<RevealTier, number> = { 0: 1200, 1: 700, 2: 900 };
 const RADIAL_SPEED = 900;
 const ATTACH_EPS = 60; // m — max junction distance for a parent attach
 const LAG = 0.15; // s
 
-type PolySched = {
+export type PolySched = {
   start: number; // seconds at which growth begins from attachArc
   attachArc: number;
   speed: number;
@@ -99,6 +101,10 @@ export function buildRevealSchedule(
   // --- Tier 0: highways grow from their point nearest the centre. -----------
   for (let p = 0; p < highways.length; p++) {
     const poly = highways[p];
+    if (poly.vertices.length === 0) {
+      tiers[0].push({ start: 0, attachArc: 0, speed: SPEED[0], len: 0, closed: false, cum: [0], parentTime: null });
+      continue;
+    }
     const closed = poly.closed ?? false;
     const cum = cumLengths(poly.vertices, closed);
     const len = cum[cum.length - 1];
@@ -126,6 +132,8 @@ export function buildRevealSchedule(
   // --- Tiers 1, 2: attach to the previous tier by proximity. ----------------
   for (const tier of [1, 2] as RevealTier[]) {
     const parentTier = (tier - 1) as RevealTier;
+    // Cell (100) sized so the scan radius for ATTACH_EPS (60) stays 1 ring —
+    // r = ceil(60/100) = 1; grow the cell if EPS ever exceeds it.
     const hash = new PointHash(100);
     inputs[parentTier].forEach((poly, pi) => {
       const cum = tiers[parentTier][pi].cum;
@@ -134,6 +142,10 @@ export function buildRevealSchedule(
 
     for (let p = 0; p < inputs[tier].length; p++) {
       const poly = inputs[tier][p];
+      if (poly.vertices.length === 0) {
+        tiers[tier].push({ start: 0, attachArc: 0, speed: SPEED[tier], len: 0, closed: false, cum: [0], parentTime: null });
+        continue;
+      }
       const closed = poly.closed ?? false;
       const cum = cumLengths(poly.vertices, closed);
       const len = cum[cum.length - 1];
@@ -189,6 +201,9 @@ export function buildRevealSchedule(
     for (let p = 0; p < tiers[tier].length; p++) {
       const s = tiers[tier][p];
       maxT = Math.max(maxT, rawAt(tier, p, 0), rawAt(tier, p, s.len));
+      // Closed ring: both endpoints map to the same arc via arcDist; the true
+      // maximum is the halfway point on the opposite side of the attach.
+      if (s.closed) maxT = Math.max(maxT, rawAt(tier, p, s.attachArc + s.len / 2));
     }
   const inv = maxT > 0 ? 1 / maxT : 1;
 
