@@ -5,6 +5,10 @@ import * as THREE from "three";
 import { useSceneStore } from "@/lib/state/sceneStore";
 import { generateCity } from "@/lib/seed/cityGen";
 import { buildRoadGeometry, type RoadPoly } from "@/lib/seed/roadMesh";
+import { buildRevealSchedule } from "@/lib/scene/roadReveal";
+import { CITY_CENTER } from "@/lib/seed/topology";
+import { sharedRoadRevealProgress } from "@/lib/shaders/sharedIntro";
+import { roadRevealVertexShader, roadRevealFragmentShader } from "@/lib/shaders/roadReveal";
 
 // In-scene road surfaces: smooth asphalt ribbons (round-joined vector strokes)
 // along the highway + arterial + street network. One merged BufferGeometry per
@@ -49,11 +53,19 @@ export function Roads({ masterSeed }: { masterSeed: string }) {
       width: s.width,
       closed: false,
     }));
+    // Build the reveal schedule once per city (pure function of geometry).
+    // CITY_CENTER is the topology gen-space centre used for radial ordering.
+    const schedule = buildRevealSchedule(
+      hwPolys.map((p) => ({ vertices: p.vertices, closed: p.closed })),
+      artPolys.map((p) => ({ vertices: p.vertices })),
+      stPolys.map((p) => ({ vertices: p.vertices })),
+      CITY_CENTER,
+    );
     return {
       geometries: {
-        highways: buildRoadGeometry(hwPolys),
-        arterials: buildRoadGeometry(artPolys),
-        streets: buildRoadGeometry(stPolys),
+        highways: buildRoadGeometry(hwPolys, (p, arc) => schedule.revealAt(0, p, arc)),
+        arterials: buildRoadGeometry(artPolys, (p, arc) => schedule.revealAt(1, p, arc)),
+        streets: buildRoadGeometry(stPolys, (p, arc) => schedule.revealAt(2, p, arc)),
       },
       kind: city.topology.kind,
       highwayCount: city.topology.highways.length,
@@ -116,25 +128,34 @@ function RoadTier({
   order: number;
   wireframe: boolean;
 }) {
-  return (
-    <mesh geometry={geometry} position={[0, ROAD_Y, 0]} renderOrder={order}>
-      {/* Coplanar with the ground → polygonOffset pulls the road's depth toward
-          the camera so it wins the depth test (no z-fight moiré). depthWrite off
-          so it doesn't occlude buildings/lights. */}
-      <meshBasicMaterial
-        color={color}
-        toneMapped={false}
-        side={THREE.DoubleSide}
-        polygonOffset
-        polygonOffsetFactor={-2}
-        polygonOffsetUnits={-2}
-        depthWrite={false}
-        // Road highlights ignore scene fog so the tier tint stays crisp at
-        // distance (matches Traffic's fog:false); asphalt is near ground-colour
-        // anyway, so losing its fog fade is imperceptible.
-        fog={false}
-        wireframe={wireframe}
-      />
-    </mesh>
-  );
+  const material = useMemo(() => {
+    const m = new THREE.ShaderMaterial({
+      vertexShader: roadRevealVertexShader,
+      fragmentShader: roadRevealFragmentShader,
+      uniforms: {
+        uColor: { value: new THREE.Color(color) },
+        // uProgress is the shared singleton by reference — same pattern as
+        // InstancedCity.tsx:316 (sharedTime). Do NOT clone via UniformsUtils.
+        uProgress: sharedRoadRevealProgress,
+        uTipWidth: { value: 0.04 },
+      },
+      side: THREE.DoubleSide,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
+      depthWrite: false,
+      // fog and toneMapped are irrelevant to ShaderMaterial (it manages its own
+      // output), but set them to match the old meshBasicMaterial intent.
+      fog: false,
+      toneMapped: false,
+    });
+    return m;
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- material is per-mount; color applied imperatively below
+  }, []);
+  useEffect(() => () => material.dispose(), [material]);
+  // Apply colour + wireframe on every render so prop changes take effect without
+  // remounting (useMemo deps intentionally empty to avoid re-creating the material).
+  material.uniforms.uColor.value.set(color);
+  material.wireframe = wireframe;
+  return <mesh geometry={geometry} material={material} position={[0, ROAD_Y, 0]} renderOrder={order} />;
 }

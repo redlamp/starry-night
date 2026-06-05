@@ -284,6 +284,10 @@ export const DEFAULT_LOD = {
   tiles: true,
 };
 
+// Road reveal cascade (#road-reveal): duration of the draw-on animation per city.
+// 0 = instant (pre-feature behaviour); scaled by TIER_DURATION_MUL in the ticker.
+export const DEFAULT_ROAD_REVEAL = { durationSec: 4 };
+
 // Organic city footprint (#14). `circle` is the default look — a round footprint
 // masked over the fixed square layout. `square` = the original full-square field
 // (byte-identical no-op mask). `auto` lets each seed pick its own shape; the
@@ -362,6 +366,7 @@ type AnySettingEntry =
   | SettingEntry<"traffic">
   | SettingEntry<"streetlights">
   | SettingEntry<"lod">
+  | SettingEntry<"roadReveal">
   | SettingEntry<"cityShape">
   | SettingEntry<"cityShapeScale">
   | SettingEntry<"citySize">
@@ -404,6 +409,7 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "traffic", defaultValue: DEFAULT_TRAFFIC, persist: true },
   { key: "streetlights", defaultValue: DEFAULT_STREETLIGHTS, persist: true },
   { key: "lod", defaultValue: DEFAULT_LOD, persist: true },
+  { key: "roadReveal", defaultValue: DEFAULT_ROAD_REVEAL, persist: true },
   { key: "cityShape", defaultValue: DEFAULT_CITY_SHAPE, persist: true },
   { key: "cityShapeScale", defaultValue: DEFAULT_CITY_SHAPE_SCALE, persist: true },
   { key: "citySize", defaultValue: DEFAULT_CITY_SIZE, persist: true },
@@ -444,6 +450,7 @@ type SavedConfig = {
   traffic?: SceneState["traffic"];
   streetlights?: SceneState["streetlights"];
   lod?: SceneState["lod"];
+  roadReveal?: SceneState["roadReveal"];
   cityShape?: CityShapeSetting;
   cityShapeScale?: number;
   citySize?: CityTier;
@@ -729,6 +736,8 @@ type SceneState = {
   setStreetlights: (patch: Partial<typeof DEFAULT_STREETLIGHTS>) => void;
   lod: typeof DEFAULT_LOD;
   setLod: (patch: Partial<typeof DEFAULT_LOD>) => void;
+  roadReveal: typeof DEFAULT_ROAD_REVEAL;
+  setRoadReveal: (patch: Partial<typeof DEFAULT_ROAD_REVEAL>) => void;
   perf: Perf;
   setPerf: (perf: Perf) => void;
   setSeed: (seed: string) => void;
@@ -919,6 +928,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setStreetlights: (patch) => set((s) => ({ streetlights: { ...s.streetlights, ...patch } })),
   lod: DEFAULT_LOD,
   setLod: (patch) => set((s) => ({ lod: { ...s.lod, ...patch } })),
+  roadReveal: DEFAULT_ROAD_REVEAL,
+  setRoadReveal: (patch) => set((s) => ({ roadReveal: { ...s.roadReveal, ...patch } })),
   perf: { fps: 0, triangles: 0, calls: 0, geometries: 0, textures: 0 },
   setPerf: (perf) => set({ perf }),
   setSeed: (masterSeed) => set({ masterSeed }),

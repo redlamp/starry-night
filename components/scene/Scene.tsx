@@ -18,6 +18,7 @@ import { TimeTicker } from "./TimeTicker";
 import { ProjectionBlender } from "./ProjectionBlender";
 import { FocalIndicator } from "./FocalIndicator";
 import { IntroTicker } from "./IntroTicker";
+import { RoadRevealTicker } from "./RoadRevealTicker";
 import { GroundHaze } from "./GroundHaze";
 import { Roads } from "./Roads";
 import { DistrictShells } from "./DistrictShells";
@@ -60,6 +61,7 @@ export function Scene() {
       <PerfMonitor />
       <TimeTicker />
       <IntroTicker />
+      <RoadRevealTicker cityReady={cityReady} />
 
       {fog.enabled ? (
         fog.mode === "exp2" ? (
