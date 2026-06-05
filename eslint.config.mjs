@@ -18,6 +18,10 @@ const eslintConfig = [
     rules: {
       "react-hooks/immutability": "off",
       "react-hooks/purity": "off",
+      // R3F's imperative model reads/writes refs outside effects (useFrame,
+      // in-render adjust pattern). Disabled for the same reason as the two
+      // rules above — React Compiler is not adopted in this project.
+      "react-hooks/refs": "off",
     },
   },
 ];

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect } from "react";
+import { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useSceneStore } from "@/lib/state/sceneStore";
 import { sharedRoadRevealProgress } from "@/lib/shaders/sharedIntro";
@@ -29,16 +29,16 @@ export function RoadRevealTicker({ cityReady }: { cityReady: boolean }) {
   // field resets elapsed so the cascade replays from 0 when the new city lands.
   const key = `${masterSeed}::${cityShape}::${cityShapeScale}::${citySize}::${sketchKey()}::${fieldDeviation}`;
 
+  const lastKey = useRef<string | null>(null);
   const elapsed = useRef(0);
-
-  // Reset elapsed when the city identity changes. useEffect runs after paint
-  // (same frame as cityReady flipping to true for a new seed), which means the
-  // cascade holds at 0 for exactly one paint before the timer restarts — this
-  // is imperceptible and avoids the react-hooks/refs "no ref access in render"
-  // lint constraint while preserving the reset-on-new-city contract.
-  useEffect(() => {
+  // New city: reset DURING render (not in an effect) so no useFrame tick can
+  // observe the previous city's elapsed — R3F's rAF loop runs decoupled from
+  // React's passive-effect flush, and a stale value here paints the new
+  // network fully revealed for a frame before the cascade restarts.
+  if (lastKey.current !== key) {
+    lastKey.current = key;
     elapsed.current = 0;
-  }, [key]);
+  }
 
   useFrame((_, dt) => {
     const s = useSceneStore.getState();

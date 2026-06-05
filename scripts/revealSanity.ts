@@ -10,7 +10,7 @@
  *   bun run scripts/revealSanity.ts
  */
 import { generateCity } from "@/lib/seed/cityGen";
-import { setCityTier } from "@/lib/seed/topology";
+import { setCityTier, CITY_CENTER } from "@/lib/seed/topology";
 import { buildRevealSchedule, type RevealTier, type RevealPolyInput } from "@/lib/scene/roadReveal";
 import { buildRoadGeometry } from "@/lib/seed/roadMesh";
 
@@ -19,7 +19,7 @@ const city = generateCity("gate1-0");
 const highways = city.topology.highways.map((h) => ({ vertices: h.vertices, closed: h.closed }));
 const arterials = city.arterials.map((a) => ({ vertices: a.vertices }));
 const streets = city.streets.map((s) => ({ vertices: s.vertices }));
-const centre = { x: 0, z: 0 };
+const centre = CITY_CENTER;
 
 const build = () => buildRevealSchedule(highways, arterials, streets, centre);
 const sched = build();
