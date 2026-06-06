@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Road Reveal Choreography — motion / naming / timing prototype</title>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/gsap.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.13.0/dist/GSDevTools.min.js"></script>
+<style>
+  /* shadcn dark-theme approximation: zinc tokens, the app's night palette for accents */
+  :root {
+    color-scheme: dark;
+    --background:#0a0c12; --card:#11141d; --border:#262b3b; --input:#1c2233;
+    --foreground:#e6e9f0; --muted:#8b93a7; --primary:#f0c850; --ring:#3a4360;
+  }
+  * { box-sizing:border-box; }
+  body { background:var(--background); color:var(--foreground);
+         font-family:ui-sans-serif,system-ui,"Segoe UI",sans-serif; margin:0; padding:24px;
+         display:flex; flex-direction:column; align-items:center; gap:14px; }
+  h1 { font-size:18px; font-weight:600; margin:0; letter-spacing:-0.01em; }
+  .sub { color:var(--muted); font-size:13px; margin:0; max-width:1020px; text-align:center; }
+  .wrap { display:flex; gap:16px; flex-wrap:wrap; justify-content:center; align-items:flex-start; }
+  canvas { background:#06070b; border-radius:12px; border:1px solid var(--border); display:block; }
+
+  /* card */
+  .card { background:var(--card); border:1px solid var(--border); border-radius:12px;
+          padding:14px 16px; width:320px; display:flex; flex-direction:column; gap:10px; }
+  .card h2 { font-size:11px; font-weight:600; letter-spacing:.08em; text-transform:uppercase;
+             color:var(--muted); margin:0; }
+
+  /* button */
+  .btn { background:var(--input); color:var(--foreground); border:1px solid var(--border);
+         border-radius:8px; padding:6px 14px; font-size:13px; cursor:pointer;
+         transition:background .15s,border-color .15s; }
+  .btn:hover { background:#252d44; }
+  .btn.primary { background:var(--primary); color:#0a0c12; border-color:var(--primary); font-weight:600; }
+  .btn.outline-active { border-color:var(--primary); color:var(--primary); }
+
+  /* control row: label | slider | stepper */
+  .ctl { display:grid; grid-template-columns:96px 1fr 86px; align-items:center; gap:10px; font-size:12px; }
+  .ctl > span { color:var(--muted); }
+
+  /* slider (shadcn look: thin track, round thumb) */
+  input[type=range] { -webkit-appearance:none; appearance:none; width:100%; height:18px; background:transparent; cursor:pointer; }
+  input[type=range]::-webkit-slider-runnable-track { height:6px; border-radius:9999px; background:var(--input); }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; height:16px; margin-top:-5px;
+    border-radius:9999px; background:var(--foreground); border:1px solid var(--border);
+    box-shadow:0 1px 2px rgba(0,0,0,.5); }
+  input[type=range]:focus-visible { outline:2px solid var(--ring); outline-offset:2px; border-radius:9999px; }
+
+  /* number field with steppers (mirrors components/ui/number-field.tsx) */
+  .numfield { display:flex; align-items:stretch; border:1px solid var(--border); border-radius:8px;
+              background:var(--input); overflow:hidden; height:28px; }
+  .numfield input { width:100%; min-width:0; background:transparent; border:0; color:var(--foreground);
+                    font-size:12px; text-align:center; font-variant-numeric:tabular-nums; }
+  .numfield input:focus { outline:none; }
+  .numfield .steps { display:flex; flex-direction:column; border-left:1px solid var(--border); }
+  .numfield .steps button { all:unset; cursor:pointer; width:18px; flex:1; display:flex; align-items:center;
+                            justify-content:center; color:var(--muted); font-size:8px; line-height:1; }
+  .numfield .steps button:hover { background:#252d44; color:var(--foreground); }
+
+  /* select */
+  select { background:var(--input); color:var(--foreground); border:1px solid var(--border);
+           border-radius:8px; padding:5px 8px; font-size:12px; }
+
+  .phasename { font-size:14px; font-weight:600; height:18px; margin-top:8px; }
+
+  /* layered actor tracks (video-editor style) — overlaps read vertically */
+  .tracks { position:relative; width:720px; margin-top:10px; background:var(--card);
+            border:1px solid var(--border); border-radius:10px; padding:8px 10px 10px; cursor:crosshair; }
+  .trow { display:grid; grid-template-columns:96px 1fr; align-items:center; gap:8px; }
+  .trow > span { font-size:10.5px; letter-spacing:.05em; text-transform:uppercase; color:var(--muted); }
+  .lane { position:relative; height:18px; background:#0d1018; border-radius:4px; margin:3px 0; overflow:hidden; }
+  .bar { position:absolute; top:2px; bottom:2px; border-radius:3px; }
+  .bar.editable { cursor:grab; }
+  .bar.editable:active { cursor:grabbing; }
+  /* edge grips: 8px resize zones on editable spans */
+  .bar.editable::before, .bar.editable::after { content:''; position:absolute; top:0; bottom:0;
+    width:8px; cursor:ew-resize; }
+  .bar.editable::before { left:0; border-left:2px solid rgba(0,0,0,.35); border-radius:3px 0 0 3px; }
+  .bar.editable::after { right:0; border-right:2px solid rgba(0,0,0,.35); border-radius:0 3px 3px 0; }
+  .lane .gateline.editable { cursor:ew-resize; width:6px; margin-left:-2px; background:linear-gradient(90deg,transparent 2px,#ff8fa3 2px,#ff8fa3 4px,transparent 4px); }
+  .bar.glint    { background:#f7f1d8; }
+  .bar.trace    { background:#36456a; }
+  .bar.cascade  { background:var(--primary); }
+  .bar.tips     { background:rgba(255,255,255,.85); }
+  .bar.bld      { background:#c98a3d; }
+  .lane .gateline { position:absolute; top:0; bottom:0; width:2px; background:#ff8fa3; }
+  .ruler { position:relative; height:14px; margin:0 0 2px; }
+  .ruler i { position:absolute; top:0; bottom:0; border-left:1px solid var(--border); font-style:normal;
+             font-size:9px; color:var(--muted); padding-left:3px; line-height:14px; }
+  .tplayhead { position:absolute; top:8px; bottom:10px; width:2px; background:#fff; pointer-events:none; z-index:2; }
+  .phasename .dim { color:var(--muted); font-weight:400; }
+
+  /* cast list */
+  .cast { max-width:1020px; width:100%; display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:4px 28px; }
+  .cast section { border-left:2px solid var(--border); padding:2px 0 2px 12px; transition:border-color .2s; }
+  .cast section.on { border-left-color:var(--primary); }
+  .cast h3 { font-size:13px; font-weight:600; margin:0; }
+  .cast section.on h3 { color:var(--primary); }
+  .cast p { font-size:12px; color:var(--muted); margin:2px 0 0; line-height:1.5; }
+</style>
+</head>
+<body>
+<h1>Road Reveal Choreography</h1>
+<p class="sub">GSAP timeline, three acts: the <b>scout glint</b> leads as the guiding light, the <b>blueprint trace</b>
+sketches in behind it, the <b>cascade</b> builds the real network. Knob names match
+<code>lib/scene/roadReveal.ts</code> / the reveal shader; companion to <code>wiki/notes/road-reveal-choreography.md</code>.</p>
+
+<div class="wrap">
+  <div>
+    <canvas id="c" width="720" height="450"></canvas>
+    <!-- GSDevTools mounts here: the real GSAP timeline UI — scrub, play, speed,
+         loop, and the act labels (scout / trace / cascade) on the actual track. -->
+    <div id="devtools" style="position:relative;width:720px;margin-top:10px"></div>
+    <!-- layered tracks: one lane per actor on the same time axis (GSDevTools is
+         single-track). Click/drag any lane to scrub; playhead synced both ways. -->
+    <div class="tracks" id="tracks"></div>
+    <div class="phasename" id="phasename"></div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:12px">
+    <div class="card">
+      <h2>Playback</h2>
+      <button class="btn outline-active" id="coldBtn" style="align-self:flex-start">cold cache (with trace)</button>
+      <div style="font-size:11px;color:var(--muted);line-height:1.5">
+        Transport lives in the GSAP track under the canvas. The <b>@ s</b> knobs
+        below are timeline insert positions — pull them together to overlap acts.
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Scout Glint — the guiding light</h2>
+      <div class="ctl"><span>glint @ s</span><input type="range" id="glintAt" min="0" max="4" step="0.05" value="0"><div class="numfield" data-for="glintAt"></div></div>
+      <div class="ctl"><span>glint s</span><input type="range" id="glintDur" min="0.2" max="3" step="0.1" value="0.9"><div class="numfield" data-for="glintDur"></div></div>
+      <div class="ctl"><span>glint width</span><input type="range" id="tipw" min="0.005" max="0.08" step="0.005" value="0.015"><div class="numfield" data-for="tipw"></div></div>
+      <div class="ctl"><span>ease</span><select id="glintEase" class="easeSel" data-default="none" style="grid-column:2/4"></select></div>
+    </div>
+
+    <div class="card">
+      <h2>Blueprint Trace — tween</h2>
+      <div class="ctl"><span>trace @ s</span><input type="range" id="traceAt" min="0" max="6" step="0.05" value="0.3"><div class="numfield" data-for="traceAt"></div></div>
+      <div class="ctl"><span>trace s</span><input type="range" id="traceDur" min="0.5" max="6" step="0.1" value="2.2"><div class="numfield" data-for="traceDur"></div></div>
+      <div class="ctl"><span>draw-on s</span><input type="range" id="drawOn" min="0.1" max="1.5" step="0.05" value="0.4"><div class="numfield" data-for="drawOn"></div></div>
+      <div class="ctl"><span>stagger</span><input type="range" id="stagger" min="0" max="1" step="0.05" value="0.7"><div class="numfield" data-for="stagger"></div></div>
+      <div class="ctl"><span>draw ease</span><select id="ease" class="easeSel" data-default="power2.out" style="grid-column:2/4"></select></div>
+      <div class="ctl"><span>clock ease</span><select id="traceEase" class="easeSel" data-default="none" style="grid-column:2/4"></select></div>
+    </div>
+
+    <div class="card">
+      <h2>Cascade</h2>
+      <div class="ctl"><span>cascade @ s</span><input type="range" id="cascadeAt" min="0" max="8" step="0.05" value="1.6"><div class="numfield" data-for="cascadeAt"></div></div>
+      <div class="ctl"><span>duration s</span><input type="range" id="dur" min="1" max="10" step="0.5" value="4"><div class="numfield" data-for="dur"></div></div>
+      <div class="ctl"><span>RADIAL_SPEED</span><input type="range" id="radial" min="500" max="4000" step="100" value="2000"><div class="numfield" data-for="radial"></div></div>
+      <div class="ctl"><span>SPEED ×</span><input type="range" id="speedx" min="0.5" max="3" step="0.1" value="1"><div class="numfield" data-for="speedx"></div></div>
+      <div class="ctl"><span>TAIL_EASE</span><input type="range" id="tail" min="0.4" max="1" step="0.05" value="0.7"><div class="numfield" data-for="tail"></div></div>
+      <div class="ctl"><span>REVEAL_GATE</span><input type="range" id="gate" min="0" max="0.8" step="0.05" value="0.35"><div class="numfield" data-for="gate"></div></div>
+      <div class="ctl"><span>ease</span><select id="cascadeEase" class="easeSel" data-default="none" style="grid-column:2/4"></select></div>
+    </div>
+  </div>
+</div>
+
+<div class="cast" id="cast">
+  <section id="a-glint"><h3>Scout Glint</h3><p>The guiding light. A point races the highway spine before anything exists — every later act follows the path it announces.</p></section>
+  <section id="a-trace"><h3>Blueprint Trace</h3><p>The plan sketching itself behind the light: dim lines draw on, ordered outward from the centre, while the worker generates.</p></section>
+  <section id="a-cascade"><h3>Cascade</h3><p>The build. Highways grow from their centre-nearest point, arterials sprout at junctions after a beat (LAG), streets snap in behind the wavefront.</p></section>
+  <section id="a-tip"><h3>Construction Tip</h3><p>The white band hugging each wavefront. Retires by 92% of the cascade so the closing stragglers land quietly.</p></section>
+  <section id="a-tail"><h3>Straggler Tail</h3><p>The late, sparse end of the schedule — far radial orphans. TAIL_EASE bunches them into a closing group instead of lone streaks.</p></section>
+  <section id="a-gate"><h3>Intro Gate</h3><p>The hold on the building wake-up until the wave is ~35% out. Roads lead, buildings follow; streetlights and traffic ride the intro timeline.</p></section>
+  <section id="a-settled"><h3>Settled City</h3><p>Flat tier colours, tips retired, trace gone. The screensaver proper.</p></section>
+</div>
+
+<script>
+// ---------- deterministic synthetic city ------------------------------------
+let _s = 42;
+const rnd = () => (_s = (_s * 1664525 + 1013904223) >>> 0) / 4294967296;
+const CX = 360, CY = 225;
+
+function polyLen(pts){let L=0;for(let i=1;i<pts.length;i++)L+=Math.hypot(pts[i].x-pts[i-1].x,pts[i].y-pts[i-1].y);return L;}
+function pointAt(pts,d){for(let i=1;i<pts.length;i++){const seg=Math.hypot(pts[i].x-pts[i-1].x,pts[i].y-pts[i-1].y);
+  if(d<=seg){const f=seg?d/seg:0;return{x:pts[i-1].x+(pts[i].x-pts[i-1].x)*f,y:pts[i-1].y+(pts[i].y-pts[i-1].y)*f};}d-=seg;}
+  return pts[pts.length-1];}
+
+function buildNetwork(){
+  _s=42; const lines=[];
+  const mk=(x0,y0,x1,y1,w)=>{const p=[],n=16;for(let i=0;i<=n;i++){const t=i/n;
+    p.push({x:x0+(x1-x0)*t+Math.sin(t*Math.PI*2+rnd()*2)*w, y:y0+(y1-y0)*t+Math.cos(t*Math.PI*1.5+rnd()*2)*w});}return p;};
+  const hw=[mk(-30,290,750,160,12), mk(220,480,500,-30,12)]
+    .map(p=>({pts:p,tier:'hw',len:polyLen(p),parent:null}));
+  lines.push(...hw);
+  for(const h of hw){const n=6;for(let k=1;k<=n;k++){
+    const d=(h.len*k)/(n+1)+(rnd()-0.5)*24; const a0=pointAt(h.pts,d), a1=pointAt(h.pts,d+2);
+    const ang=Math.atan2(a1.y-a0.y,a1.x-a0.x)+(rnd()<0.5?1:-1)*Math.PI/2+(rnd()-0.5)*0.5;
+    const L=80+rnd()*100; const pts=[];
+    for(let i=0;i<=8;i++){const t=i/8;
+      pts.push({x:a0.x+Math.cos(ang+Math.sin(t*3)*0.12)*L*t, y:a0.y+Math.sin(ang+Math.sin(t*3)*0.12)*L*t});}
+    lines.push({pts,tier:'art',len:polyLen(pts),parent:{line:h,dist:d}});}}
+  const arts=lines.filter(l=>l.tier==='art');
+  for(const a of arts){const n=Math.max(2,Math.floor(a.len/34));
+    for(let k=1;k<=n;k++){const d=(a.len*k)/(n+1);
+      const s0=pointAt(a.pts,d), s1=pointAt(a.pts,Math.min(d+2,a.len));
+      const base=Math.atan2(s1.y-s0.y,s1.x-s0.x);
+      for(const side of [1,-1]){ if(rnd()<0.25) continue;
+        const ang=base+side*Math.PI/2+(rnd()-0.5)*0.35; const L=22+rnd()*32;
+        lines.push({pts:[s0,{x:s0.x+Math.cos(ang)*L,y:s0.y+Math.sin(ang)*L}],tier:'st',len:L,parent:{line:a,dist:d}});}}}
+  for(let k=0;k<7;k++){const ang=rnd()*6.283, r=190+rnd()*110;
+    const x=CX+Math.cos(ang)*r*1.45, y=CY+Math.sin(ang)*r*0.95, a2=rnd()*6.283, L=24+rnd()*30;
+    lines.push({pts:[{x,y},{x:x+Math.cos(a2)*L,y:y+Math.sin(a2)*L}],tier:'st',len:L,parent:null});}
+  _s=7; const buildings=[];
+  for(const l of lines){ if(l.tier==='hw') continue;
+    const n=Math.max(1,Math.floor(l.len/30));
+    for(let k=0;k<n;k++){ if(rnd()<0.35) continue;
+      const p=pointAt(l.pts,rnd()*l.len); const off=6+rnd()*10, a=rnd()*6.283;
+      buildings.push({x:p.x+Math.cos(a)*off, y:p.y+Math.sin(a)*off, j:rnd()});}}
+  // radial order for the trace (the blueprint follows the guiding light outward)
+  for(const l of lines){ let best=Infinity;
+    for(const p of l.pts) best=Math.min(best,Math.hypot(p.x-CX,p.y-CY));
+    l.radial=best; }
+  const maxR=Math.max(...lines.map(l=>l.radial));
+  for(const l of lines) l.radial/=maxR;
+  return {lines, buildings};
+}
+const NET = buildNetwork();
+const STYLE={hw:{c:'#f0c850',w:3},art:{c:'#7fa8d0',w:1.9},st:{c:'#5fb89e',w:1.1}};
+const TRACE={hw:'#9eb4ff',art:'#9eb4ff',st:'#36456a'};
+const TIER_SPEED={hw:3400,art:2000,st:2600};
+const ATTACH_LAG=0.15;
+const WORLD=4; // px → "m"
+
+// ---------- schedule (faithful port of buildRevealSchedule) -----------------
+function buildSchedule(P){
+  const start=new Map(), attach=new Map();
+  const startOf=(l)=>{
+    if(start.has(l)) return start.get(l);
+    let s, at=0;
+    if(l.parent){ s=startOf(l.parent.line)
+        + (Math.abs(l.parent.dist-attach.get(l.parent.line))*WORLD)/(TIER_SPEED[l.parent.line.tier]*P.speedx)
+        + ATTACH_LAG; }
+    else { let best=Infinity, bestArc=0, acc=0;
+      for(let i=0;i<l.pts.length;i++){
+        if(i>0) acc+=Math.hypot(l.pts[i].x-l.pts[i-1].x,l.pts[i].y-l.pts[i-1].y);
+        const d=Math.hypot(l.pts[i].x-CX,l.pts[i].y-CY);
+        if(d<best){best=d;bestArc=acc;}}
+      at=bestArc; s=(best*WORLD)/P.radial + (l.tier!=='hw'?ATTACH_LAG:0);
+    }
+    attach.set(l,at); start.set(l,s); return s;
+  };
+  let maxT=0;
+  for(const l of NET.lines){ const s=startOf(l), a=attach.get(l);
+    maxT=Math.max(maxT, s+Math.max(a,(l.len-a))*WORLD/(TIER_SPEED[l.tier]*P.speedx)); }
+  const inv=maxT>0?1/maxT:1;
+  const revealAt=(l,arc)=>Math.pow((start.get(l)+Math.abs(arc-attach.get(l))*WORLD/(TIER_SPEED[l.tier]*P.speedx))*inv, P.tail);
+  let scoutSpan=0;
+  for(const l of NET.lines) if(l.tier==='hw')
+    scoutSpan=Math.max(scoutSpan, revealAt(l,0), revealAt(l,l.len));
+  return {revealAt, attachOf:(l)=>attach.get(l), scoutSpan};
+}
+
+// ---------- canvas helpers ---------------------------------------------------
+const ctx=document.getElementById('c').getContext('2d');
+function drawSpanAlong(l, fromArc, toArc, color, width, alpha){
+  if(toArc<=fromArc) return;
+  ctx.strokeStyle=color; ctx.lineWidth=width; ctx.globalAlpha=alpha;
+  ctx.lineCap='round'; ctx.lineJoin='round'; ctx.beginPath();
+  const STEP=Math.max(2,(toArc-fromArc)/24);
+  let first=true;
+  for(let d=fromArc; d<=toArc+0.001; d+=STEP){
+    const p=pointAt(l.pts,Math.min(d,l.len));
+    if(first){ctx.moveTo(p.x,p.y);first=false;} else ctx.lineTo(p.x,p.y);}
+  ctx.stroke(); ctx.globalAlpha=1;
+}
+function revealedRange(sched,l,t){
+  const a=sched.attachOf(l);
+  if(sched.revealAt(l,a)>t) return null;
+  const solve=(lo,hi)=>{ for(let i=0;i<18;i++){const mid=(lo+hi)/2;
+      if(sched.revealAt(l,mid)<=t) lo=mid; else hi=mid;} return lo; };
+  return [solve(a,0), solve(a,l.len)];
+}
+function smooth(a,b,x){const u=Math.max(0,Math.min(1,(x-a)/(b-a)));return u*u*(3-2*u);}
+
+// ---------- params + GSAP timeline ------------------------------------------
+gsap.registerPlugin(GSDevTools);
+// Shared ease menu for every actor — outs for arrivals, INS for departures /
+// gathering momentum, inOuts for symmetric moves.
+const EASES=['none',
+  'power1.in','power2.in','power3.in','expo.in','sine.in','circ.in','back.in(1.5)',
+  'power1.out','power2.out','power3.out','expo.out','sine.out','circ.out','back.out(1.4)',
+  'sine.inOut','power2.inOut','expo.inOut'];
+document.querySelectorAll('select.easeSel').forEach(sel=>{
+  sel.innerHTML=EASES.map(e=>`<option${e===sel.dataset.default?' selected':''}>${e}</option>`).join('');
+});
+const IDS=['glintAt','glintDur','tipw','glintEase','traceAt','traceDur','drawOn','stagger','ease','traceEase',
+           'cascadeAt','dur','radial','speedx','tail','gate','cascadeEase'];
+const P={};
+const STR_IDS=new Set(['ease','glintEase','traceEase','cascadeEase']);
+function readParams(){ for(const id of IDS){ const el=document.getElementById(id);
+  P[id]= STR_IDS.has(id)? el.value : +el.value; } }
+
+let cold=true, sched=null, tl=null, devtools=null;
+// S is the tweened state: one clock per act. GSAP owns the timing; the canvas
+// is a pure function of S each tick. Acts are inserted at ABSOLUTE timeline
+// positions (the "@ s" knobs) so they can overlap freely.
+const S={glint:0, trace:0, master:0};
+
+function rebuild(keepProgress){
+  const prog = keepProgress && tl ? tl.progress() : 0;
+  readParams(); sched=buildSchedule(P);
+  if(devtools) devtools.kill();
+  if(tl) tl.kill();
+  S.glint=0; S.trace=0; S.master=0;
+  tl=gsap.timeline({paused:true, onUpdate:render, onComplete:render});
+  tl.addLabel('scout', P.glintAt);
+  tl.to(S,{glint:1, duration:P.glintDur, ease:P.glintEase}, P.glintAt);
+  if(cold){
+    tl.addLabel('trace', P.traceAt);
+    // clock ease shapes the whole trace act (stagger pacing); the per-line
+    // draw ease shapes each individual line inside it
+    tl.to(S,{trace:1, duration:P.traceDur, ease:P.traceEase}, P.traceAt);
+  }
+  tl.addLabel('cascade', P.cascadeAt);
+  // cascade ease warps the master clock ON TOP of TAIL_EASE's t^k remap
+  tl.to(S,{master:1, duration:P.dur, ease:P.cascadeEase}, P.cascadeAt);
+  tl.progress(prog);
+  // GSDevTools = GSAP's own transport: scrub, play, speed, loop, in/out points,
+  // and the act labels rendered on the real track.
+  devtools=GSDevTools.create({animation: tl, container:'#devtools', globalSync:false});
+  layoutTracks();
+  render();
+}
+
+// ---------- layered actor tracks ----------------------------------------------
+const tracksEl=document.getElementById('tracks');
+function layoutTracks(){
+  const total=tl.duration();
+  const pct=(s)=>Math.max(0,Math.min(100,(s/total)*100));
+  const bar=(cls,from,to,edit='')=>
+    `<div class="bar ${cls}${edit?' editable':''}" ${edit}
+       style="left:${pct(from)}%;width:${Math.max(0.4,pct(to)-pct(from))}%"></div>`;
+  const row=(label,laneHtml)=>`<div class="trow"><span>${label}</span><div class="lane">${laneHtml}</div></div>`;
+
+  let ticks='';
+  for(let s=0;s<=Math.floor(total);s++) ticks+=`<i style="left:${pct(s)}%">${s}s</i>`;
+
+  const cascadeFrom=P.cascadeAt, cascadeTo=P.cascadeAt+P.dur;
+  const gateS=P.cascadeAt+P.gate*P.dur;
+  let html=`<div class="trow"><span></span><div class="ruler">${ticks}</div></div>`;
+  html+=row('scout glint', bar('glint',P.glintAt,P.glintAt+P.glintDur,
+    'data-startid="glintAt" data-durid="glintDur"'));
+  if(cold) html+=row('blueprint trace', bar('trace',P.traceAt,P.traceAt+P.traceDur,
+    'data-startid="traceAt" data-durid="traceDur"'));
+  html+=row('cascade', bar('cascade',cascadeFrom,cascadeTo,
+    'data-startid="cascadeAt" data-durid="dur"')
+    +`<div class="gateline editable" style="left:${pct(gateS)}%"></div>`);
+  // construction tips live inside the cascade, retiring over its 80–92% window
+  html+=row('construction tips', bar('tips',cascadeFrom,cascadeFrom+P.dur*0.92));
+  html+=row('buildings wake', bar('bld',gateS,cascadeTo));
+  html+=`<div class="tplayhead" id="tplayhead"></div>`;
+  tracksEl.innerHTML=html;
+  attachBarDrag(total);
+}
+
+// ---------- direct manipulation: drag spans to move, drag edges to resize ------
+function syncFieldFor(rangeEl){
+  const nf=document.querySelector(`.numfield[data-for=${rangeEl.id}] input`);
+  if(nf) nf.value=+(+rangeEl.value).toFixed(3);
+}
+function attachBarDrag(totalAtLayout){
+  const laneRect=()=>tracksEl.querySelector('.lane').getBoundingClientRect();
+  const clampR=(el,v)=>Math.max(+el.min,Math.min(+el.max,v));
+  tracksEl.querySelectorAll('.bar.editable').forEach(barEl=>{
+    barEl.addEventListener('pointerdown',(e)=>{
+      e.stopPropagation(); // don't trigger the lane scrubber
+      const startEl=document.getElementById(barEl.dataset.startid);
+      const durEl=document.getElementById(barEl.dataset.durid);
+      const spp=totalAtLayout/laneRect().width; // seconds per pixel
+      const x0=e.clientX, s0=+startEl.value, d0=+durEl.value;
+      const br=barEl.getBoundingClientRect();
+      const mode=(x0-br.left<8)?'l':(br.right-x0<8)?'r':'move';
+      barEl.setPointerCapture(e.pointerId);
+      const onMove=(ev)=>{
+        const ds=(ev.clientX-x0)*spp;
+        let s=s0, d=d0;
+        if(mode==='move') s=clampR(startEl,s0+ds);
+        else if(mode==='r') d=clampR(durEl,d0+ds);
+        else { // left edge: start moves, right edge stays put
+          s=clampR(startEl,s0+ds);
+          d=clampR(durEl,d0+(s0-s));
+        }
+        startEl.value=s; durEl.value=d;
+        syncFieldFor(startEl); syncFieldFor(durEl);
+        // live feedback against the layout-time axis; renormalize on release
+        barEl.style.left=(s/totalAtLayout*100)+'%';
+        barEl.style.width=Math.max(0.4,(d/totalAtLayout*100))+'%';
+      };
+      const onUp=()=>{
+        barEl.removeEventListener('pointermove',onMove);
+        barEl.removeEventListener('pointerup',onUp);
+        rebuild(true); // re-time the GSAP timeline + re-lay the tracks
+      };
+      barEl.addEventListener('pointermove',onMove);
+      barEl.addEventListener('pointerup',onUp);
+    });
+  });
+  // the intro-gate line drags within the cascade span
+  const gl=tracksEl.querySelector('.gateline.editable');
+  if(gl) gl.addEventListener('pointerdown',(e)=>{
+    e.stopPropagation();
+    gl.setPointerCapture(e.pointerId);
+    const gateEl=document.getElementById('gate');
+    const onMove=(ev)=>{
+      const r=laneRect();
+      const sec=((ev.clientX-r.left)/r.width)*totalAtLayout;
+      const frac=clampR(gateEl,(sec-P.cascadeAt)/P.dur);
+      gateEl.value=frac; syncFieldFor(gateEl);
+      gl.style.left=(((P.cascadeAt+frac*P.dur)/totalAtLayout)*100)+'%';
+    };
+    const onUp=()=>{ gl.removeEventListener('pointermove',onMove);
+      gl.removeEventListener('pointerup',onUp); rebuild(true); };
+    gl.addEventListener('pointermove',onMove);
+    gl.addEventListener('pointerup',onUp);
+  });
+}
+// click/drag any lane to scrub (syncs the GSAP timeline; GSDevTools follows)
+let scrubbing=false;
+const trackScrub=(e)=>{
+  const lane=tracksEl.querySelector('.lane'); if(!lane) return;
+  const r=lane.getBoundingClientRect();
+  const frac=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width));
+  tl.pause(); tl.time(frac*tl.duration());
+};
+tracksEl.addEventListener('pointerdown',(e)=>{scrubbing=true;tracksEl.setPointerCapture(e.pointerId);trackScrub(e);});
+tracksEl.addEventListener('pointermove',(e)=>{ if(scrubbing) trackScrub(e); });
+tracksEl.addEventListener('pointerup',()=>scrubbing=false);
+
+// ---------- render ------------------------------------------------------------
+function render(){
+  ctx.clearRect(0,0,720,450);
+  const t=S.master;
+  const traceFade=Math.max(0,1-t*2.2);
+  const easeFn=gsap.parseEase(P.ease);
+
+  // Act 2 — blueprint trace, radially staggered so it visibly follows the light
+  if(cold && S.trace>0 && traceFade>0){
+    const window_=Math.min(0.95, P.drawOn/P.traceDur);
+    for(const l of NET.lines){
+      const birth=l.radial*P.stagger*(1-window_);
+      const u=(S.trace-birth)/window_;
+      if(u<=0) continue;
+      const drawn=easeFn(Math.max(0,Math.min(1,u)));
+      // grow from the line's centre-nearest arc outward both ways (same anchor
+      // the glint and cascade use) — not endpoint-to-endpoint
+      const a=sched.attachOf(l);
+      drawSpanAlong(l,a-drawn*a,a+drawn*(l.len-a),
+        TRACE[l.tier],STYLE[l.tier].w*0.55,(l.tier==='st'?0.28:0.42)*traceFade);
+    }
+  }
+
+  // Act 1 — scout glint (the guiding light), racing the highway spine
+  if(S.glint>0 && S.glint<1){
+    const scoutT=S.glint*sched.scoutSpan, band=P.tipw*2;
+    for(const l of NET.lines){ if(l.tier!=='hw') continue;
+      const r=revealedRange(sched,l,Math.min(scoutT+band,1)); if(!r) continue;
+      const rIn=revealedRange(sched,l,Math.max(scoutT-band,0));
+      for(const side of [[r[0],rIn?rIn[0]:sched.attachOf(l)],[rIn?rIn[1]:sched.attachOf(l),r[1]]])
+        drawSpanAlong(l,Math.min(...side),Math.max(...side),'#ffffff',STYLE.hw.w,0.95);
+    }
+  }
+
+  // Act 3 — cascade with construction tips
+  if(t>0){
+    const retire=1-smooth(0.80,0.92,t);
+    for(const l of NET.lines){
+      const r=revealedRange(sched,l,t); if(!r) continue;
+      drawSpanAlong(l,r[0],r[1],STYLE[l.tier].c,STYLE[l.tier].w,1);
+      if(retire>0 && t<1){
+        const rT=revealedRange(sched,l,Math.max(0,t-P.tipw));
+        for(const [a,b] of [[r[0],rT?rT[0]:r[0]],[rT?rT[1]:r[1],r[1]]])
+          if(Math.abs(b-a)>0.4) drawSpanAlong(l,Math.min(a,b),Math.max(a,b),'#ffffff',STYLE[l.tier].w,0.85*retire);
+      }
+    }
+  }
+
+  // buildings wake behind the intro gate, radially
+  if(t>=P.gate && P.gate<1){
+    const maxR=Math.hypot(420,260);
+    for(const b of NET.buildings){
+      const rr=Math.hypot(b.x-CX,b.y-CY)/maxR;
+      const wake=P.gate+(rr*0.55+b.j*0.25)*(1-P.gate);
+      if(t<wake) continue;
+      const a=Math.min(1,(t-wake)/0.08);
+      ctx.globalAlpha=0.55*a+0.35*a*Math.abs(Math.sin(b.j*40));
+      ctx.fillStyle='#ffd9a0'; ctx.fillRect(b.x,b.y,1.8,1.8); ctx.globalAlpha=1;
+    }
+  }
+
+  updateChrome();
+}
+
+// ---------- chrome -------------------------------------------------------------
+// Acts can overlap now, so the label lists every act currently on stage.
+function updateChrome(){
+  // playhead across the layered tracks (positioned against a real lane rect so
+  // it always lines up with the bars regardless of padding/label widths)
+  const ph=document.getElementById('tplayhead');
+  const lane=tracksEl.querySelector('.lane');
+  if(ph&&lane&&tl){
+    const lr=lane.getBoundingClientRect(), tr=tracksEl.getBoundingClientRect();
+    ph.style.left=(lr.left-tr.left+(tl.time()/tl.duration())*lr.width)+'px';
+  }
+  const t=S.master;
+  const inGlint=S.glint>0&&S.glint<1;
+  const inTrace=cold&&S.trace>0&&S.trace<1;
+  const states={ 'a-glint':inGlint, 'a-trace':inTrace,
+    'a-cascade':t>0&&t<1, 'a-tip':t>0&&t<0.92, 'a-tail':t>0.7&&t<1,
+    'a-gate':t>=P.gate&&t<1, 'a-settled':t>=1 };
+  for(const id in states) document.getElementById(id).classList.toggle('on',states[id]);
+  const acts=[];
+  if(inGlint) acts.push('SCOUT GLINT');
+  if(inTrace) acts.push('BLUEPRINT TRACE');
+  if(t>0&&t<1) acts.push(`CASCADE t=${t.toFixed(2)}${t>=P.gate?' + buildings':''}`);
+  if(t>=1) acts.push('SETTLED CITY');
+  document.getElementById('phasename').innerHTML = acts.length
+    ? acts.join(' <span class="dim">·</span> ')
+    : '<span class="dim">ready</span>';
+}
+
+// ---------- shadcn-style number-field steppers ----------------------------------
+function makeNumField(holder){
+  const id=holder.dataset.for, range=document.getElementById(id);
+  const step=+range.step||1, min=+range.min, max=+range.max;
+  holder.innerHTML=`<input type="number" step="${step}" min="${min}" max="${max}" value="${range.value}">
+    <div class="steps"><button type="button" aria-label="increment">▲</button>
+    <button type="button" aria-label="decrement">▼</button></div>`;
+  const num=holder.querySelector('input');
+  const [up,down]=holder.querySelectorAll('button');
+  const apply=v=>{ v=Math.max(min,Math.min(max,v)); range.value=v; num.value=+v.toFixed(4);
+    range.dispatchEvent(new Event('input',{bubbles:true})); };
+  num.addEventListener('change',()=>apply(+num.value||min));
+  up.addEventListener('click',()=>apply(+range.value+step));
+  down.addEventListener('click',()=>apply(+range.value-step));
+  range.addEventListener('input',()=>{ if(document.activeElement!==num) num.value=+(+range.value).toFixed(4); });
+}
+document.querySelectorAll('.numfield').forEach(makeNumField);
+
+// ---------- controls -------------------------------------------------------------
+// Debounced: GSDevTools re-creates its DOM on rebuild — once per drag, not per tick.
+let rebuildT=0;
+const queueRebuild=()=>{ clearTimeout(rebuildT); rebuildT=setTimeout(()=>rebuild(true),120); };
+for(const id of IDS) document.getElementById(id).addEventListener('input',queueRebuild);
+const coldBtn=document.getElementById('coldBtn');
+coldBtn.addEventListener('click',()=>{ cold=!cold;
+  coldBtn.textContent=cold?'cold cache (with trace)':'warm cache (no trace)';
+  coldBtn.classList.toggle('outline-active',cold);
+  rebuild(false); });
+
+rebuild(false);
+</script>
+</body>
+</html>

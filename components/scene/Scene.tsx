@@ -18,6 +18,7 @@ import { TimeTicker } from "./TimeTicker";
 import { ProjectionBlender } from "./ProjectionBlender";
 import { FocalIndicator } from "./FocalIndicator";
 import { IntroTicker } from "./IntroTicker";
+import { RoadRevealTicker } from "./RoadRevealTicker";
 import { GroundHaze } from "./GroundHaze";
 import { Roads } from "./Roads";
 import { DistrictShells } from "./DistrictShells";
@@ -59,6 +60,11 @@ export function Scene() {
       <ProjectionBlender />
       <PerfMonitor />
       <TimeTicker />
+      {/* RoadRevealTicker MUST mount before IntroTicker: useFrame runs in mount
+          order, and IntroTicker's reveal gate reads sharedRoadRevealProgress —
+          if the gate ran first it would see the singleton's initial 1 on the
+          first frame of a cold load and fire the intro ungated. */}
+      <RoadRevealTicker cityReady={cityReady} />
       <IntroTicker />
 
       {fog.enabled ? (
@@ -104,12 +110,10 @@ export function Scene() {
           <DistrictShells masterSeed={masterSeed} />
           <TensorFieldOverlay masterSeed={masterSeed} />
         </>
-      ) : (
-        /* #59: while the worker generates, the streamed road trace draws the
-           network in — the city literally sketches itself, then the real
-           layers swap in the moment the bundle lands. */
-        <GenTrace masterSeed={masterSeed} />
-      )}
+      ) : null}
+      {/* #59 Phase B: trace mounts unconditionally so it outlives cityReady and
+          can fade beneath the cascade rather than blinking out on the swap. */}
+      <GenTrace masterSeed={masterSeed} />
       <FocalIndicator />
     </Canvas>
   );

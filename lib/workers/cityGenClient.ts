@@ -10,8 +10,9 @@
 import type { CityBundle } from "@/lib/seed/cityGen";
 import type { CityShapeSetting } from "@/lib/seed/cityShape";
 import type { CityTier } from "@/lib/seed/topology";
-import { activeCitySketch, sketchKey } from "@/lib/seed/citySketch";
+import { activeCitySketch } from "@/lib/seed/citySketch";
 import { fieldDeviation } from "@/lib/seed/tensorField";
+import { cityIdentityKey } from "@/lib/seed/cityIdentity";
 import type { CityGenRequest, CityGenMessage, TracedLine } from "./cityGen.worker";
 
 export type GenProgressEvent = {
@@ -94,7 +95,7 @@ export function generateCityInWorker(
   // The sketch rides the main thread's registry (synced by the store before any
   // consumer regenerates) — the key matches the gen caches' sketchKey() so a
   // sketch flip can't be served a stale no-sketch bundle.
-  const key = `${seed}::${shape}::${scale}::${tier}::${sketchKey()}::${fieldDeviation()}`;
+  const key = cityIdentityKey(seed, shape, scale, tier, fieldDeviation());
   const existing = inFlight.get(key);
   if (existing) return existing;
   const reqId = ++seq;

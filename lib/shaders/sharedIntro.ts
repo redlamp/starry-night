@@ -33,3 +33,8 @@ export const sharedStarIntroMode: { value: number } = { value: 0 };
 // the window-intro progress scaled by streetlightDurationSec, so they pop in
 // quickly instead of waiting out the multi-minute window wake.
 export const sharedStreetlightIntroProgress: { value: number } = { value: 0 };
+
+// Road reveal cascade (spec 2026-06-05): 0 → drawing, 1 → settled. Driven by
+// RoadRevealTicker; consumed by the three Roads tier materials + GenTrace's
+// fade. Starts at 1 so anything rendered before the ticker mounts is visible.
+export const sharedRoadRevealProgress: { value: number } = { value: 1 };

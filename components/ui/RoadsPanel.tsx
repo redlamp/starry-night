@@ -22,6 +22,8 @@ export function RoadsSection() {
   const setCityPlanning = useSceneStore((s) => s.setCityPlanning);
   const showStreetlights = useSceneStore((s) => s.streetlights.enabled);
   const setStreetlights = useSceneStore((s) => s.setStreetlights);
+  const revealDuration = useSceneStore((s) => s.roadReveal.durationSec);
+  const setRoadReveal = useSceneStore((s) => s.setRoadReveal);
 
   const allOn = showHighways && showArterials && showStreets;
   const anyOn = showHighways || showArterials || showStreets;
@@ -56,6 +58,14 @@ export function RoadsSection() {
         label="Streets"
         on={showStreets}
         onChange={(v) => setCityPlanning({ showStreets: v })}
+      />
+      <ValueSlider
+        label="reveal s"
+        value={revealDuration}
+        min={0}
+        max={10}
+        step={0.5}
+        onChange={(v) => setRoadReveal({ durationSec: v })}
       />
       <hr className="border-foreground/10" />
       <HeaderRow

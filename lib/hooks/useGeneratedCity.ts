@@ -2,11 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { generateCity, primeCityCaches } from "@/lib/seed/cityGen";
-import { sketchKey } from "@/lib/seed/citySketch";
+import { cityIdentityKey } from "@/lib/seed/cityIdentity";
 import { generateCityInWorker } from "@/lib/workers/cityGenClient";
 import { useSceneStore } from "@/lib/state/sceneStore";
 import type { CityShapeSetting } from "@/lib/seed/cityShape";
-import type { CityTier } from "@/lib/seed/topology";
 
 // First-load jank fix (#44): the cold `generateCity(seed, shape, scale)` call is
 // the dominant CPU cost on mount (~200ms in-browser, builds the tensor field,
@@ -34,10 +33,6 @@ import type { CityTier } from "@/lib/seed/topology";
 // store the heavy CityData here; we only track which keys are known-warm so the
 // hook can decide between sync-now and defer.
 const warmedKeys = new Set<string>();
-
-function cityKey(seed: string, shape: CityShapeSetting, scale: number, tier: CityTier): string {
-  return `${seed}::${shape}::${scale}::${tier}`;
-}
 
 // Run `cb` off the mount-critical path: prefer requestIdleCallback (yields until
 // the browser is idle, so first paint wins), fall back to a double rAF (after the
@@ -93,7 +88,7 @@ export function useGeneratedCity(
   // sketchKey()/fieldDeviation() are current by the time this render runs.
   const citySketch = useSceneStore((s) => s.citySketch);
   const deviation = useSceneStore((s) => s.fieldDeviation);
-  const key = `${cityKey(seed, shape, scale, citySize)}::${sketchKey()}::${deviation}`;
+  const key = cityIdentityKey(seed, shape, scale, citySize, deviation);
   void citySketch; // the key reads the module registry; this subscription triggers the re-render
 
   // Track which key the current `ready` value belongs to, so a key change is

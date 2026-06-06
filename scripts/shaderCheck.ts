@@ -9,6 +9,8 @@ import { parser } from "@shaderfrog/glsl-parser";
 import { shootingStarVertexShader, shootingStarFragmentShader } from "@/lib/shaders/shootingStar";
 import { starFieldVertexShader, starFieldFragmentShader } from "@/lib/shaders/starField";
 import { skyGradientVertexShader, skyGradientFragmentShader } from "@/lib/shaders/skyGradient";
+import { roadRevealVertexShader, roadRevealFragmentShader } from "@/lib/shaders/roadReveal";
+import { genTraceVertexShader, genTraceFragmentShader } from "@/lib/shaders/genTrace";
 
 // Minimal stand-in for three's injected vertex prelude.
 const VERTEX_PRELUDE = `
@@ -35,6 +37,10 @@ const CASES: Array<[string, string, string]> = [
   ["starField.fragment", FRAGMENT_PRELUDE, starFieldFragmentShader],
   ["skyGradient.vertex", VERTEX_PRELUDE, skyGradientVertexShader],
   ["skyGradient.fragment", FRAGMENT_PRELUDE, skyGradientFragmentShader],
+  ["roadReveal.vertex", VERTEX_PRELUDE, roadRevealVertexShader],
+  ["roadReveal.fragment", FRAGMENT_PRELUDE, roadRevealFragmentShader],
+  ["genTrace.vertex", VERTEX_PRELUDE, genTraceVertexShader],
+  ["genTrace.fragment", FRAGMENT_PRELUDE, genTraceFragmentShader],
 ];
 
 let failed = 0;
