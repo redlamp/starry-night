@@ -149,8 +149,11 @@ export const DEFAULT_STARS = {
 //             on in 2..4 column banks instead of all at once — banks of light
 //             switches flipped down the hall.
 //   curtain — share of correlated office towers (office-block / spire) whose
-//             facades pin to continuous glass: full-bleed width, slim spandrel
-//             between floors. Ribbon towers beside punched-window neighbours.
+//             BAND floors render as curtainW glass — ribbon floors on
+//             otherwise normal facades, corner piers, per-face wake clocks.
+//   curtainW— pane fill on those towers. 0.99 default keeps hairline mullions;
+//             exactly 1.0 turns lit floors into one continuous window (the
+//             full curtain look — opt-in because it reads as a neon tube).
 export const DEFAULT_WINDOW_AA = {
   edge: 1.1,
   lodNear: 0.2,
@@ -159,6 +162,7 @@ export const DEFAULT_WINDOW_AA = {
   churn: 0.2,
   stagger: 0.5,
   curtain: 0.3,
+  curtainW: 0.99,
 };
 
 // Per-archetype window glass-to-cell fraction. Width AND height are
@@ -188,7 +192,9 @@ export const DEFAULT_WINDOW_PROFILES: Record<Archetype, WindowProfile> = {
   "residential-tower": { wMin: 0.38, wMax: 0.54, hMin: 0.48, hMax: 0.64 },
   "narrow-tower": { wMin: 0.62, wMax: 0.78, hMin: 0.64, hMax: 0.8 },
   "office-block": { wMin: 0.7, wMax: 0.86, hMin: 0.52, hMax: 0.68 },
-  spire: { wMin: 0.74, wMax: 0.9, hMin: 0.7, hMax: 0.86 },
+  // Spire width tops at 0.99: rolls ≥ 0.98 snap to exact 1.0 in the shader,
+  // so a sliver of spires organically reads as seamless glass.
+  spire: { wMin: 0.74, wMax: 0.99, hMin: 0.7, hMax: 0.86 },
 };
 // Moon halo: billboard glow around the moon disc. radiusMul scales the halo
 // plane relative to the moon radius; innerRadius is the 0..0.5 fraction of the

@@ -110,6 +110,7 @@ uniform float uRetrigger;
 uniform float uCycleJitter; // 0..1 amplitude on per-window cycle randomness
 uniform float uStagger;     // share of correlated floors that switch on in banks
 uniform float uCurtainShare; // share of correlated office towers with full-glass facades
+uniform float uCurtainWidth; // pane fill on curtain towers; 1.0 = seamless one-window floors
 uniform float uOrthoBlend;      // 0 = perspective, 1 = orthographic; LOD bypass scales by (1-this)
 uniform float uAaEdge;          // fwidth edge-AA multiplier (window-quality panel)
 uniform float uLodNear;         // cells-per-pixel where distance wash starts
@@ -228,6 +229,10 @@ void main() {
   vec2 cellCentreUv = (atlasCell + 0.5) / vGrid.xy;
   vec2 atlasUv = vAtlasOffset + cellCentreUv * vAtlasSize;
   vec4 state = texture2D(uWindowAtlas, atlasUv);
+  // Correlated band cell (atlas alpha ≈ 0.78): part of a row painted as one
+  // lit unit. Sampled this early because both the curtain treatment (fraction
+  // pinning below) and the wake/cycle timing key off it.
+  bool isBand = state.a > 0.7 && state.a < 0.9;
 
   // Per-archetype window fraction, selected by archetype index. A constant-
   // bounded loop (not dynamic uniform indexing) keeps this GLSL ES 1.00 safe.
@@ -267,17 +272,38 @@ void main() {
   }
   fracW = clamp(fracW, 0.05, 1.0);
   fracH = clamp(fracH, 0.05, 1.0);
-  // Curtain wall: a seeded share of correlated OFFICE buildings (archetype
-  // 5 office-block / 6 spire — never warehouses) reads as continuous glass:
-  // width pinned full-bleed (the phantom-mullion fade above takes the cell
-  // seams out) and height high with a slim spandrel band between floors.
-  // Pairs with the floor-banded atlas these buildings already carry — lit
-  // floors become mullion-free ribbons beside punched-window neighbours.
-  // Live uniform; overrides the panel ranges for the rolled buildings.
-  if (rowCoherent > 0.5 && vGrid.z > 4.5 &&
+  // RNG rolls land INSIDE a [min, max] range, never on its endpoint — so a
+  // range topping out near 1.0 would otherwise never produce one truly
+  // seamless facade. Snap rolls ≥ 0.98 to exact 1.0: with the spire width
+  // ceiling at its 0.99 default, the top slice of rolls becomes organic
+  // full-bleed towers. Runs BEFORE the curtain override below, so the
+  // crt-width knob (0.99 default) keeps its hairline panes instead of
+  // snapping to seamless.
+  fracW = fracW >= 0.98 ? 1.0 : fracW;
+  fracH = fracH >= 0.98 ? 1.0 : fracH;
+  // Curtain wall: on a seeded share of correlated OFFICE buildings (archetype
+  // 5 office-block / 6 spire — never warehouses), the correlated BAND floors
+  // render as curtain glass: width pinned to uCurtainWidth (hairline panes at
+  // the 0.99 default; one continuous window at exactly 1.0), height high with
+  // a slim spandrel. FLOORS, not buildings — the tower's other floors keep
+  // their punched windows, so a curtain tower reads as a normal facade with
+  // occasional glass ribbons (an all-glass building read as a neon tube,
+  // 2026-06-06). Live uniforms; override the panel ranges for those cells.
+  float isCurtain = 0.0;
+  if (rowCoherent > 0.5 && vGrid.z > 4.5 && isBand &&
       hash11(vBuildingHash * 4.1 + 67.0) < uCurtainShare) {
-    fracW = 1.0;
+    isCurtain = 1.0;
+    // 1 in 5 curtain towers goes FULL curtain — exact 1.0 — so true curtains
+    // occur occasionally without touching the knobs (an rng roll alone never
+    // lands exactly on 1.0). The rest take the crt-width knob.
+    float fullRoll = hash11(vBuildingHash * 8.3 + 147.0);
+    fracW = fullRoll < 0.2 ? 1.0 : uCurtainWidth;
     fracH = mix(0.72, 0.92, hash11(vBuildingHash * 6.7 + 31.0));
+    // Corner piers: the outermost column on each face keeps a reduced pane,
+    // terminating each face's ribbon at a visible structural pier instead of
+    // letting the glass wrap the corner as one continuous window.
+    float pierCol = floor(cell.x);
+    if (pierCol < 0.5 || pierCol > vGrid.x - 1.5) fracW = min(fracW, 0.78);
   }
   float halfW = fracW * 0.5;
   float halfH = fracH * 0.5;
@@ -302,10 +328,12 @@ void main() {
     (1.0 - smoothstep(0.5 + halfH - aaY, 0.5 + halfH + aaY, cellLocal.y));
   // Full-bleed panes: the smoothstep pair pins the window edge ON the cell
   // boundary, so even at fraction 1.0 the mask dips to 0.5 there — a phantom
-  // mullion line. Fade the dip out over the last few % of fraction so 1.0
-  // reads as truly continuous glass (curtain-wall ribbons).
-  wMaskX = mix(wMaskX, 1.0, smoothstep(0.475, 0.4995, halfW));
-  wMaskY = mix(wMaskY, 1.0, smoothstep(0.475, 0.4995, halfH));
+  // mullion line. Fade the dip out over the LAST ~1% only (0.991 → 0.999), so
+  // 0.99 keeps hairline mullions and exactly 1.0 reads as truly continuous
+  // glass — the "whole floor is one window" curtain look is opt-in at 1.0,
+  // never an accident of a high slider.
+  wMaskX = mix(wMaskX, 1.0, smoothstep(0.4955, 0.4995, halfW));
+  wMaskY = mix(wMaskY, 1.0, smoothstep(0.4955, 0.4995, halfH));
   float wMask = wMaskX * wMaskY;
   bool inWindow = wMask > 0.01;
 
@@ -316,12 +344,14 @@ void main() {
   // existing flicker / twinkle behaviour stays scoped to the atlas-lit subset
   // (alpha encoding 128 = TV-blue, 255 = steady).
   if (inWindow) {
-    // Correlated band cells (atlas alpha ≈ 0.78) share their timing: a
-    // whole-floor band uses one clock for the row on EVERY face (jx = 0); a
-    // fractional band keys per face, so each side's segment wakes on its own.
-    // Per-window / per-block cells keep per-cell timing via the column term.
-    bool isBand = state.a > 0.7 && state.a < 0.9;
-    float jx = isBand ? vFaceId * 31.0 * fracFloor : cellId.x;
+    // Correlated band cells share their timing: a whole-floor band uses one
+    // clock for the row on EVERY face (jx = 0); fractional bands AND curtain
+    // floors key per face, so each side wakes and cycles on its own — a lit
+    // curtain floor lights face-by-face instead of snapping on as a ring
+    // around the building. Per-window / per-block cells keep per-cell timing
+    // via the column term.
+    float faceClock = max(fracFloor, isCurtain);
+    float jx = isBand ? vFaceId * 31.0 * faceClock : cellId.x;
     float seed = hash11(jx + cellId.y * 17.0 + vBuildingHash);
 
     bool isTv = state.a > 0.2 && state.a < 0.7;
@@ -334,6 +364,15 @@ void main() {
         float tick = floor(uTime * 3.0);
         float n = hash11(tick + seed * 100.0);
         brightness = 0.4 + n * 0.6;
+      } else if (isBand) {
+        // Texture within a band: static per-pane luminance jitter (±18%) so a
+        // lit floor reads as glass panels over one interior — furniture,
+        // blinds, depth — rather than a uniform glowing strip. Curtain panes
+        // get a 15% lift: more glass lets more light out, and it keeps the
+        // ribbons legible at orbit distance where their hairline mullions
+        // are sub-pixel.
+        brightness = 0.82 + 0.36 * hash11(cellId.x * 9.1 + cellId.y * 4.3 + vBuildingHash + 151.0);
+        brightness *= 1.0 + 0.15 * isCurtain;
       }
       lit = state.rgb * uEmissiveBoost * brightness;
     } else {
@@ -393,6 +432,10 @@ void main() {
       // lockstep; at jitter=1 multipliers span 0..2.
       float onSec = max(0.5, uOffCycle * (1.0 - uCycleJitter + onJitter * uCycleJitter * 2.0));
       float offSec = max(0.5, uRetrigger * (1.0 - uCycleJitter + offJitter * uCycleJitter * 2.0));
+      // Curtain ribbons hold their light 4x longer — trading floors and
+      // cleaning crews, not apartment lamps. Keeps the city's statement
+      // pieces visible instead of duty-cycling them away 1/3 of the time.
+      if (isCurtain > 0.5) onSec *= 4.0;
       float elapsed = uTime - wakeTime;
       float period = onSec + offSec;
       float phase = mod(elapsed, period);
@@ -403,7 +446,9 @@ void main() {
     // actually lights — length and position hashed independently per face, so
     // the sides are deliberately uneven: a quarter here, the full row there,
     // nothing on the back. pow() skews the length roll toward partial fills.
-    if (fracFloor > 0.5 && isBand) {
+    // Curtain floors are exempt — a curtain ribbon spans its whole face (the
+    // per-face unevenness they keep is the independent wake clock).
+    if (fracFloor > 0.5 && isBand && isCurtain < 0.5) {
       float col = floor(cell.x);
       float u1 = hash11(vFaceId * 3.7 + cellId.y * 13.1 + vBuildingHash + 101.0);
       float u2 = hash11(vFaceId * 9.3 + cellId.y * 5.7 + vBuildingHash + 137.0);

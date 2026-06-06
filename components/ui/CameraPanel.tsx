@@ -918,6 +918,7 @@ function WindowsSection() {
   const setWindowMode = useSceneStore((s) => s.setWindowMode);
   const stagger = useSceneStore((s) => s.windowAA.stagger);
   const curtain = useSceneStore((s) => s.windowAA.curtain);
+  const curtainW = useSceneStore((s) => s.windowAA.curtainW);
   const setWindowAA = useSceneStore((s) => s.setWindowAA);
   return (
     <>
@@ -967,8 +968,20 @@ function WindowsSection() {
         onChange={(v) => setWindowAA({ curtain: v })}
       />
       <div className="text-foreground/55 text-[10px] leading-snug">
-        Share of correlated office towers whose facades pin to continuous glass — full-bleed
-        ribbon floors beside punched-window neighbours.
+        Share of correlated office towers whose banded floors render as curtain glass — ribbon
+        floors on otherwise normal facades, piers at the corners.
+      </div>
+      <ValueSlider
+        label="crt width"
+        value={curtainW}
+        min={0.85}
+        max={1}
+        step={0.01}
+        onChange={(v) => setWindowAA({ curtainW: v })}
+      />
+      <div className="text-foreground/55 text-[10px] leading-snug">
+        Pane fill on curtain towers. 0.99 keeps hairline mullions; exactly 1.0 merges each lit
+        floor into one continuous window. 1 in 5 curtain towers rolls full regardless.
       </div>
     </>
   );
