@@ -1,7 +1,5 @@
 # CLAUDE.md
 
-Guidance for Claude Code working in this repository.
-
 ## Project
 
 **Starry Night** (working title) — a modernized homage to the Berkeley Systems After Dark "Starry Night" screensaver. Web-based ambient cityscape with low-poly 3D, seeded procedural generation, and socioeconomic lighting logic.
@@ -30,28 +28,20 @@ If a request conflicts with the PRD or a `decision-*.md` note, surface the confl
 
 ## Git workflow
 
-**Branches**: `main` ← `dev` ← `feature/*`. Feature off `dev`. Delete after merge.
-**Merge styles** (adopted 2026-06-05): feature → dev with `--no-ff` (bubble groups the feature); dev → main with `--ff-only` (main = bookmark on dev's line; tag main per promotion). If `--ff-only` refuses, main has commits dev lacks — back-merge main into dev first, never force.
-**Direct-to-main**: CI/hotfix only, and back-merge into dev in the same session (the deploy workflow runs from main's copy).
+**Branches**: `main` ← `dev` ← `feature/*`. Feature off `dev`; delete after merge. Stay on the current feature branch — a new `feature/*` only when the domain shifts (camera → fog → wiki) or the user closes the concept.
+**Merge styles** (2026-06-05): feature → dev with `--no-ff`; dev → main with `--ff-only` (main = bookmark on dev's line; tag main per promotion). If `--ff-only` refuses, main has commits dev lacks — back-merge main into dev first, never force.
+**Direct-to-main**: CI/hotfix only, and back-merge into dev the same session.
 **Deploy source**: `main`.
-
-### Defaults
-
-- Do not commit. Leave changes uncommitted and report what changed.
-- Stay on the current feature branch. A new `feature/*` only when the domain shifts (camera → fog → wiki) or the user closes the concept.
-- Never bundle "I shipped X" with "want me to push?". Separate lines, declined by default.
-
-### End-of-turn structure
-
-Lead with the next concrete step for the current concept (what to try next, design questions, things to verify). If a commit, merge, or push feels warranted, offer it last as a single optional line. Never lead with it.
-
-If the user is mid-feedback or mid-iteration, skip the offer entirely.
 
 ### Commit, merge, push
 
-Commits are not hook-gated — local, reversible. Still: do not commit without a user signal ("ship it", "commit it", "next", "move on", "yes, commit"). Default = leave changes uncommitted, report what changed.
+- Default: do not commit — leave changes uncommitted and report what changed. Commit only on a user signal ("ship it", "commit it", "next", "move on", "yes, commit").
+- Merge, push, and any `--force` variant are blocked by `.claude/hooks/git-gate.sh`. When blocked, show the command you would run and wait for an unblock signal ("ship it", "next", "move on", explicit "yes, merge / push").
+- Never bundle "I shipped X" with "want me to push?" — separate lines, declined by default.
 
-Merge, push, and any `--force` variant are blocked by `.claude/hooks/git-gate.sh`. When blocked, show the command you would run and wait. Unblock signals: "ship it", "next", "move on", or an explicit "yes, merge / push".
+### End-of-turn structure
+
+Lead with the next concrete step for the current concept (what to try next, design questions, things to verify). If a commit, merge, or push feels warranted, offer it last as a single optional line — never lead with it. If the user is mid-feedback or mid-iteration, skip the offer entirely.
 
 ## Commands
 
