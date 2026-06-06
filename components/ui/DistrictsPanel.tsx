@@ -2,8 +2,7 @@
 
 import { useMemo } from "react";
 import { useSceneStore } from "@/lib/state/sceneStore";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { Switch } from "@/components/ui/switch";
 import { tensorDistrictField } from "@/lib/seed/cityGen";
 
 // Districts layer controls. Toggle the colour-coded shell overlay and list the
@@ -49,18 +48,7 @@ function ToggleRow({ label, on, onClick }: { label: string; on: boolean; onClick
   return (
     <div className="flex items-center justify-between gap-2 text-xs">
       <span className="text-foreground/70">{label}</span>
-      <Button
-        variant="secondary"
-        size="sm"
-        onClick={onClick}
-        className={cn(
-          on
-            ? "bg-foreground text-background hover:bg-foreground"
-            : "bg-foreground/10 text-foreground hover:bg-foreground/20",
-        )}
-      >
-        {on ? "on" : "off"}
-      </Button>
+      <Switch checked={on} onCheckedChange={onClick} aria-label={`Toggle ${label}`} />
     </div>
   );
 }

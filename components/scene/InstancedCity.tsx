@@ -18,7 +18,7 @@ import {
   type Building,
 } from "@/lib/seed/cityGen";
 import type { CityShapeSetting } from "@/lib/seed/cityShape";
-import { FACADE_BY_LAYER, GLOW_BY_LAYER, generateWindowTexture } from "@/lib/seed/lightingGen";
+import { facadeColorFor, facadeGlowFor, generateWindowTexture } from "@/lib/seed/lightingGen";
 import { packWindowAtlas, type PackInput } from "@/lib/scene/atlasPacker";
 import { cityVertexShader, cityFragmentShader } from "@/lib/shaders/cityInstanced";
 import { sharedTime } from "@/lib/shaders/sharedTime";
@@ -342,12 +342,12 @@ function buildMeshes(
       aGrid[i * 3 + 1] = b.floors;
       aGrid[i * 3 + 2] = ARCHETYPE_ORDER.indexOf(b.archetype);
 
-      color.set(FACADE_BY_LAYER[b.layer]);
+      facadeColorFor(b, color);
       aFacadeColor[i * 3 + 0] = color.r;
       aFacadeColor[i * 3 + 1] = color.g;
       aFacadeColor[i * 3 + 2] = color.b;
 
-      aFacadeGlow[i] = GLOW_BY_LAYER[b.layer];
+      aFacadeGlow[i] = facadeGlowFor(b);
       aBuildingHash[i] = b.windowSeed * 1000;
       aMisc[i * 3 + 0] = DISTRICT_TO_IDX[b.district] ?? 0;
       aMisc[i * 3 + 1] = pickCorrelationMode(b);

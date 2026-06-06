@@ -2,7 +2,7 @@
 
 import { useSceneStore } from "@/lib/state/sceneStore";
 import { Switch } from "@/components/ui/switch";
-import { Slider } from "@/components/ui/slider";
+import { ValueSlider } from "@/components/ui/value-slider";
 import { cn } from "@/lib/utils";
 
 const TOPOLOGY_LABELS: Record<string, string> = {
@@ -152,44 +152,8 @@ function StreetlightControls() {
   );
 }
 
-// Compact labelled slider (mirrors CameraPanel's ValueSlider, kept local to
-// avoid exporting it across panels).
-function ValueSlider({
-  label,
-  value,
-  min,
-  max,
-  step,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  step: number;
-  onChange: (v: number) => void;
-}) {
-  return (
-    <div className={cn("flex items-center gap-2 text-xs")}>
-      <span className="text-foreground/70 w-16 shrink-0">{label}</span>
-      <Slider
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onValueChange={(v) => onChange(typeof v === "number" ? v : v[0])}
-        className="flex-1"
-      />
-      <input
-        type="number"
-        step={step}
-        value={value}
-        onChange={(e) => onChange(parseFloat(e.target.value) || min)}
-        className="border-foreground/15 bg-background/60 text-foreground w-14 rounded border px-1.5 py-0.5 tabular-nums"
-      />
-    </div>
-  );
-}
+// ValueSlider now shared from components/ui/value-slider.tsx (base-ui
+// number-field stepper + label scrubbing).
 
 // Read-only per-seed readouts — topology + tier counts.
 export function CityDetailsSection() {

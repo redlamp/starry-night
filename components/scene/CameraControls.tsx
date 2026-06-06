@@ -6,6 +6,7 @@ import * as THREE from "three";
 import { useSceneStore, type CameraIntent, type Vec3 } from "@/lib/state/sceneStore";
 import { enterFlyMode, enterOrbitMode } from "@/lib/scene/cameraView";
 import { CITY_SCALE } from "@/lib/seed/topology";
+import { isTypingTarget } from "@/lib/utils";
 
 function easeInOutCubic(t: number) {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
@@ -192,24 +193,17 @@ export function CameraControls() {
   };
 
   useEffect(() => {
-    const isTyping = () => {
-      const el = typeof document !== "undefined" ? document.activeElement : null;
-      if (!el) return false;
-      const tag = el.tagName;
-      return (
-        tag === "INPUT" ||
-        tag === "TEXTAREA" ||
-        tag === "SELECT" ||
-        (el as HTMLElement).isContentEditable
-      );
-    };
     const onDown = (e: KeyboardEvent) => {
-      if (isTyping()) return; // typing in a field (e.g. settings search) never drives the camera
+      // Typing in a real text field (e.g. settings search) never drives the
+      // camera — but a panel slider/switch holding focus after a click must
+      // not eat hotkeys (shared guard skips non-text inputs).
+      if (isTypingTarget(e)) return;
       const currentMode = useSceneStore.getState().cameraMode;
       const k = keyOf(e);
       if (k && currentMode === "fly") {
         keys.current[k] = true;
-        if (k === "space") e.preventDefault();
+        // Space would scroll, arrows would nudge a still-focused panel slider.
+        if (k === "space" || e.key.startsWith("Arrow")) e.preventDefault();
       }
       if (e.repeat) return;
       const key = e.key.toLowerCase();
@@ -417,6 +411,10 @@ export function CameraControls() {
 
     const onPointerDown = (e: PointerEvent) => {
       if (e.pointerType === "mouse" && e.button !== 0 && e.button !== 2) return;
+      // Clicking the scene hands keyboard back to the world: drop any focus a
+      // panel control kept after its last click (canvas itself isn't focusable,
+      // so without this the panel held focus forever).
+      (document.activeElement as HTMLElement | null)?.blur?.();
       // Prevent native gestures (pinch-zoom, double-tap zoom, scroll) on touch.
       // The body sets `touch-action: none` so this is belt-and-braces.
       e.preventDefault();

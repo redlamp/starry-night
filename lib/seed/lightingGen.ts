@@ -2,7 +2,7 @@ import seedrandom from "seedrandom";
 import * as THREE from "three";
 import { kelvinToColor, lerpKelvin } from "@/lib/color/kelvin";
 import { SCENE_WB_GAIN } from "@/lib/color/whiteBalance";
-import type { Archetype, Building, Layer } from "./cityGen";
+import type { Archetype, Building } from "./cityGen";
 
 type LightingProfile = {
   litRatio: number;
@@ -21,7 +21,7 @@ type Mood = "warm" | "cool" | "sparse" | "blazing" | "neutral" | "neutral-white"
 const COOL_POP_EXTRA_OFFICE = 0.08;
 const COOL_POP_EXTRA_NEUTRAL = 0.06;
 
-function profileFor(arch: Archetype, layer: Layer): LightingProfile {
+function profileFor(arch: Archetype): LightingProfile {
   const base = (() => {
     switch (arch) {
       case "residential-tower":
@@ -82,8 +82,10 @@ function profileFor(arch: Archetype, layer: Layer): LightingProfile {
         };
     }
   })();
-  if (layer === "front") return { ...base, litRatio: base.litRatio * 0.75 };
-  if (layer === "back") return { ...base, litRatio: base.litRatio * 0.35, brightRatio: 0 };
+  // The old front/mid/back Z-layer biases (×0.75 / ×0.35 lit) lived here —
+  // removed with the still-frame depth bands: they dimmed a fixed world-Z
+  // stripe regardless of where the orbit camera looked. Variety now comes
+  // from moods, district class, and the per-building facade jitter.
   return base;
 }
 
@@ -248,7 +250,7 @@ export type WindowDataTexture = {
 
 export function generateWindowTexture(masterSeed: string, building: Building): WindowDataTexture {
   const rng = seedrandom(`${masterSeed}::lighting::${building.id}::${building.windowSeed}`);
-  const baseProfile = profileFor(building.archetype, building.layer);
+  const baseProfile = profileFor(building.archetype);
   const mood = pickMood(rng, building);
   const profile = applyMood(baseProfile, mood);
 
@@ -287,15 +289,35 @@ export function generateWindowTexture(masterSeed: string, building: Building): W
   return { texture, cols, rows };
 }
 
-// Muted, low-saturation. Mid keeps slight teal tint; front near-black; back deep navy.
-export const FACADE_BY_LAYER: Record<Layer, string> = {
-  front: "#08080f",
-  mid: "#243648",
-  back: "#0c121e",
-};
+// ---------------------------------------------------------------------------
+// Facade base colour (replaces the FACADE_BY_LAYER world-Z bands, which painted
+// a visible stripe across the city diameter under the orbit camera).
+//
+// Pure per-building random, drawn from a night-material gamut: mostly cool
+// blue-blacks (glass/concrete in sodium-less dark), a warm-masonry minority,
+// with a WIDE lightness spread — at night + ACES the deep values compress
+// hard, so visible neighbour separation needs lightness range, not hue alone.
+// Deterministic from the building's existing windowSeed — no new gen inputs,
+// city data (and the golden) untouched.
+function hash01(x: number): number {
+  const s = Math.sin(x * 127.1) * 43758.5453;
+  return s - Math.floor(s);
+}
 
-export const GLOW_BY_LAYER: Record<Layer, number> = {
-  front: 0,
-  mid: 0.1,
-  back: 0,
-};
+export function facadeColorFor(building: Building, out: THREE.Color): THREE.Color {
+  const r1 = hash01(building.windowSeed * 311.7);
+  const r2 = hash01(building.windowSeed * 269.5);
+  const r3 = hash01(building.windowSeed * 183.3);
+  const r4 = hash01(building.windowSeed * 97.3);
+  // ~30% warm masonry hues, the rest cool blue-blacks.
+  const h = r1 < 0.3 ? 0.05 + r2 * 0.06 : 0.55 + r2 * 0.1;
+  const s = 0.08 + r3 * 0.22;
+  const l = 0.045 + r4 * 0.075; // 0.045..0.12 — wide enough to read at night
+  return out.setHSL(h, s, l, THREE.SRGBColorSpace);
+}
+
+/** Facade glow: faint downtown ambience (street-light bounce on glass) that
+ * fades with distance from the core — replaces the old mid-band-only glow. */
+export function facadeGlowFor(building: Building): number {
+  return building.coreProximity * 0.06;
+}
