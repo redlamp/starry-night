@@ -31,6 +31,42 @@ const ST_DTEST = 54;
 
 type BBox = { minX: number; maxX: number; minZ: number; maxZ: number };
 
+// #63 profiling — opt-in counters for the trace hot loop. Off = one null check
+// per call site. Emit-only (no rng, no state): a profiled run is byte-identical
+// to a clean one; only wall-clock differs from the timer overhead.
+export type StreetsProfile = {
+  fieldSamples: number;
+  fieldMs: number; // includes ~1 timer-pair per sample — calibrate in the caller
+  isFreeCalls: number;
+  blockedMs: number;
+  tracesAccepted: number;
+  tracesRejected: number;
+  acceptedTraceMs: number; // includes fieldMs/blockedMs spent inside those traces
+  rejectedTraceMs: number;
+  acceptedPts: number;
+  tiers: { majA: number; minA: number; majS: number; minS: number };
+};
+let prof: StreetsProfile | null = null;
+export function startStreetsProfile(): void {
+  prof = {
+    fieldSamples: 0,
+    fieldMs: 0,
+    isFreeCalls: 0,
+    blockedMs: 0,
+    tracesAccepted: 0,
+    tracesRejected: 0,
+    acceptedTraceMs: 0,
+    rejectedTraceMs: 0,
+    acceptedPts: 0,
+    tiers: { majA: 0, minA: 0, majS: 0, minS: 0 },
+  };
+}
+export function endStreetsProfile(): StreetsProfile | null {
+  const p = prof;
+  prof = null;
+  return p;
+}
+
 class GridStorage {
   private cells = new Map<string, Vec2[]>();
   constructor(private size: number) {}
@@ -64,6 +100,19 @@ class GridStorage {
 type Sep = { s: GridStorage; d: number };
 
 function blocked(sep: Sep[], p: Vec2): boolean {
+  if (prof) {
+    const t0 = performance.now();
+    let hit = false;
+    for (const { s, d } of sep) {
+      prof.isFreeCalls++;
+      if (!s.isFree(p, d)) {
+        hit = true;
+        break; // same short-circuit as the clean path
+      }
+    }
+    prof.blockedMs += performance.now() - t0;
+    return hit;
+  }
   for (const { s, d } of sep) if (!s.isFree(p, d)) return true;
   return false;
 }
@@ -136,8 +185,21 @@ function traceTier(
   const lines: Vec2[][] = [];
   const accept = (seed: Vec2): boolean => {
     if (mask(seed.x, seed.z) < 0.5) return false; // seed outside the footprint
+    if (prof) prof.isFreeCalls++;
     if (!own.isFree(seed, dsep)) return false;
+    const t0 = prof ? performance.now() : 0;
     const line = trace(field, seed, major, sep, b, mask);
+    if (prof) {
+      const dt = performance.now() - t0;
+      if (line.length < MIN_PTS) {
+        prof.tracesRejected++;
+        prof.rejectedTraceMs += dt;
+      } else {
+        prof.tracesAccepted++;
+        prof.acceptedTraceMs += dt;
+        prof.acceptedPts += line.length;
+      }
+    }
     if (line.length < MIN_PTS) return false;
     for (const p of line) own.add(p);
     lines.push(line);
@@ -197,7 +259,29 @@ export function generateTensorStreets(
   // the original path, byte-identical.
   fieldOverride?: TensorField,
 ): { arterials: RoadPoly[]; minorStreets: RoadPoly[] } {
-  const tf = fieldOverride ?? buildTensorField(masterSeed, computeLattice(masterSeed));
+  const tfBase = fieldOverride ?? buildTensorField(masterSeed, computeLattice(masterSeed));
+  // #63 profiling: wrap sample() to count/time field evaluation. Returns the
+  // inner result untouched, so traced geometry is byte-identical.
+  const p63 = prof;
+  const tf: TensorField = p63
+    ? {
+        ...tfBase,
+        sample: (x, z, major) => {
+          p63.fieldSamples++;
+          const t0 = performance.now();
+          const r = tfBase.sample(x, z, major);
+          p63.fieldMs += performance.now() - t0;
+          return r;
+        },
+      }
+    : tfBase;
+  const timed = (slot: keyof StreetsProfile["tiers"], run: () => Vec2[][]): Vec2[][] => {
+    if (!p63) return run();
+    const t0 = performance.now();
+    const lines = run();
+    p63.tiers[slot] += performance.now() - t0;
+    return lines;
+  };
   const b: BBox = bounds;
 
   // Per-family, per-tier separation storages (cell ≥ finest dsep).
@@ -210,29 +294,33 @@ export function generateTensorStreets(
   const stRng = seedrandom(`${masterSeed}::tensor::seeds::st`);
 
   // Arterials — both families, wide separation → a coarse criss-cross grid.
-  const majA = traceTier(
-    tf,
-    true,
-    ART_DSEP,
-    artRng,
-    b,
-    [],
-    SmajA,
-    [{ s: SmajA, d: ART_DTEST }],
-    mask,
-    onLine ? (l) => onLine(l, "arterial") : undefined,
+  const majA = timed("majA", () =>
+    traceTier(
+      tf,
+      true,
+      ART_DSEP,
+      artRng,
+      b,
+      [],
+      SmajA,
+      [{ s: SmajA, d: ART_DTEST }],
+      mask,
+      onLine ? (l) => onLine(l, "arterial") : undefined,
+    ),
   );
-  const minA = traceTier(
-    tf,
-    false,
-    ART_DSEP,
-    artRng,
-    b,
-    [],
-    SminA,
-    [{ s: SminA, d: ART_DTEST }],
-    mask,
-    onLine ? (l) => onLine(l, "arterial") : undefined,
+  const minA = timed("minA", () =>
+    traceTier(
+      tf,
+      false,
+      ART_DSEP,
+      artRng,
+      b,
+      [],
+      SminA,
+      [{ s: SminA, d: ART_DTEST }],
+      mask,
+      onLine ? (l) => onLine(l, "arterial") : undefined,
+    ),
   );
 
   // Streets — both families, fine separation, seeded off arterial endpoints so
@@ -240,35 +328,39 @@ export function generateTensorStreets(
   // streets AND same-family arterials (parallel spacing), but crosses the
   // perpendicular family freely → a fine criss-cross street grid between arterials.
   const artEnds = endpointsSorted(majA, minA);
-  const majS = traceTier(
-    tf,
-    true,
-    ST_DSEP,
-    stRng,
-    b,
-    artEnds,
-    SmajS,
-    [
-      { s: SmajS, d: ST_DTEST },
-      { s: SmajA, d: ST_DTEST },
-    ],
-    mask,
-    onLine ? (l) => onLine(l, "minor") : undefined,
+  const majS = timed("majS", () =>
+    traceTier(
+      tf,
+      true,
+      ST_DSEP,
+      stRng,
+      b,
+      artEnds,
+      SmajS,
+      [
+        { s: SmajS, d: ST_DTEST },
+        { s: SmajA, d: ST_DTEST },
+      ],
+      mask,
+      onLine ? (l) => onLine(l, "minor") : undefined,
+    ),
   );
-  const minS = traceTier(
-    tf,
-    false,
-    ST_DSEP,
-    stRng,
-    b,
-    artEnds,
-    SminS,
-    [
-      { s: SminS, d: ST_DTEST },
-      { s: SminA, d: ST_DTEST },
-    ],
-    mask,
-    onLine ? (l) => onLine(l, "minor") : undefined,
+  const minS = timed("minS", () =>
+    traceTier(
+      tf,
+      false,
+      ST_DSEP,
+      stRng,
+      b,
+      artEnds,
+      SminS,
+      [
+        { s: SminS, d: ST_DTEST },
+        { s: SminA, d: ST_DTEST },
+      ],
+      mask,
+      onLine ? (l) => onLine(l, "minor") : undefined,
+    ),
   );
 
   const arterials = [
