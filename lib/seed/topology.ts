@@ -58,8 +58,8 @@ export const CITY_SCALE = CITY_HALF_EXTENT / BASE_HALF_EXTENT;
 // Metropolis (8). Numeric keys so display names stay pure UI: renaming a notch
 // can never re-scale a saved session or a script baseline (the old town/city/
 // metro strings would have, the moment the names moved). Legacy mapping:
-// town 1.5 km → 2, city 3 km → 3, metro 6 km → 6. Display names live in the
-// debug panel (CameraPanel TIER_LABELS). CITY_SCALE stays the *look* scale
+// town 1.5 km → 2, city 3 km → 3, metro 6 km → 6. Display names live in
+// components/ui/cityTiers.ts (TIER_LABELS). CITY_SCALE stays the *look* scale
 // (fog/haze/stars/camera) — do not couple it to the tier.
 export const CITY_TIERS = {
   1: 500, // Truck Stop

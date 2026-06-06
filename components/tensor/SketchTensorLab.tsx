@@ -7,17 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Slider } from "@/components/ui/slider";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
-import {
-  NumberField,
-  NumberFieldScrubArea,
-  NumberFieldGroup,
-  NumberFieldDecrement,
-  NumberFieldInput,
-  NumberFieldIncrement,
-} from "@/components/ui/number-field";
+import { LabSection as Section, LabSlider } from "@/components/ui/lab-controls";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   recoverOrientationField,
   makeSketchTensor,
@@ -78,78 +70,6 @@ const LAYER_LABELS: Record<keyof Layers, string> = {
   crosses: "tensor crosses",
   streets: "streets",
 };
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-2.5">
-      <Separator className="bg-zinc-800" />
-      <h2 className="font-mono text-xs tracking-wider text-zinc-500 uppercase">{title}</h2>
-      {children}
-    </div>
-  );
-}
-
-// Slider + number-field stepper, both bound to the same committed value. The
-// slider keeps a local drag preview — heavy recomputes fire on release only
-// (same pattern as the city-size tier slider); the stepper (and scrubbing the
-// label) commits directly, for dialling exact values.
-function LabSlider({
-  label,
-  min,
-  max,
-  step,
-  value,
-  onCommit,
-}: {
-  label: string;
-  min: number;
-  max: number;
-  step: number;
-  value: number;
-  onCommit: (v: number) => void;
-}) {
-  const [drag, setDrag] = useState<number | null>(null);
-  const shown = drag ?? value;
-  const commit = (v: number) => onCommit(Math.min(max, Math.max(min, v)));
-  return (
-    <NumberField
-      value={shown}
-      min={min}
-      max={max}
-      step={step}
-      onValueChange={(v) => {
-        if (v !== null && v !== shown) {
-          setDrag(null);
-          commit(v);
-        }
-      }}
-      className="w-full"
-    >
-      <div className="flex w-full items-center gap-2">
-        <NumberFieldScrubArea className="w-20 shrink-0">
-          <span className="text-xs text-zinc-400">{label}</span>
-        </NumberFieldScrubArea>
-        <Slider
-          min={min}
-          max={max}
-          step={step}
-          value={shown}
-          onValueChange={(v) => setDrag(typeof v === "number" ? v : v[0])}
-          onValueCommitted={(v) => {
-            setDrag(null);
-            commit(typeof v === "number" ? v : v[0]);
-          }}
-          className="flex-1"
-        />
-        <NumberFieldGroup className="w-24 shrink-0">
-          <NumberFieldDecrement />
-          <NumberFieldInput className="font-mono text-xs" />
-          <NumberFieldIncrement />
-        </NumberFieldGroup>
-      </div>
-    </NumberField>
-  );
-}
 
 export function SketchTensorLab() {
   const [img, setImg] = useState<SketchImage | null>(null);
@@ -367,221 +287,246 @@ export function SketchTensorLab() {
     : 0;
 
   return (
-    <main
-      className="fixed inset-0 flex bg-[#080c18] text-white"
-      onDragOver={(e) => e.preventDefault()}
-      onDrop={(e) => {
-        e.preventDefault();
-        const file = e.dataTransfer.files[0];
-        if (file?.type.startsWith("image/")) void loadFile(file, file.name);
-      }}
-    >
-      {/* Left sidebar — all settings */}
-      <aside className="shrink-0" style={{ width: sideW }}>
-        <ScrollArea className="h-full">
-          <div className="flex flex-col gap-4 p-4">
-            <div className="flex items-baseline justify-between">
-              <h1 className="font-mono text-sm text-zinc-300">Tensor lab</h1>
-              <Link
-                href="/"
-                className="text-sm text-zinc-400 underline-offset-4 hover:text-white hover:underline"
-              >
-                ← scene
-              </Link>
-            </div>
-            <p className="-mt-3 text-xs text-zinc-500">sketch → field → streets</p>
-
-            <Section title="sketch">
-              <input
-                ref={fileRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) void loadFile(file, file.name);
-                  e.target.value = "";
-                }}
-              />
-              <Button variant="outline" className="w-full" onClick={() => fileRef.current?.click()}>
-                {img ? "Replace sketch" : "Load sketch"}
-              </Button>
-              {img ? <p className="truncate font-mono text-xs text-zinc-500">{img.name}</p> : null}
-            </Section>
-
-            <Section title="layers">
-              {(Object.keys(DEFAULT_LAYERS) as (keyof Layers)[]).map((key) => (
-                <Label
-                  key={key}
-                  className="flex w-full cursor-pointer items-center gap-2 text-sm text-zinc-200"
+    <TooltipProvider>
+      <main
+        className="fixed inset-0 flex bg-[#080c18] text-white"
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => {
+          e.preventDefault();
+          const file = e.dataTransfer.files[0];
+          if (file?.type.startsWith("image/")) void loadFile(file, file.name);
+        }}
+      >
+        {/* Left sidebar — all settings */}
+        <aside className="shrink-0" style={{ width: sideW }}>
+          <ScrollArea className="h-full">
+            <div className="flex flex-col gap-4 p-4">
+              <div className="flex items-baseline justify-between">
+                <h1 className="font-mono text-sm text-zinc-300">Tensor lab</h1>
+                <Button
+                  variant="link"
+                  size="xs"
+                  className="px-0 text-zinc-400 hover:text-white"
+                  render={<Link href="/" />}
+                  nativeButton={false}
                 >
-                  <Switch checked={layers[key]} onCheckedChange={() => toggleLayer(key)} />
-                  {LAYER_LABELS[key]}
-                </Label>
-              ))}
-            </Section>
+                  ← scene
+                </Button>
+              </div>
+              <p className="-mt-3 text-xs text-zinc-500">sketch → field → streets</p>
 
-            <Section title="field">
-              <LabSlider
-                label="smooth"
-                min={3}
-                max={14}
-                step={1}
-                value={smoothR}
-                onCommit={setSmoothR}
-              />
-              <LabSlider
-                label="coherence"
-                min={0.05}
-                max={0.5}
-                step={0.01}
-                value={minCoherence}
-                onCommit={setMinCoherence}
-              />
-              <LabSlider
-                label="ink gate"
-                min={0}
-                max={0.8}
-                step={0.05}
-                value={minEnergyPct}
-                onCommit={setMinEnergyPct}
-              />
-            </Section>
-
-            <Section title="streets">
-              <LabSlider
-                label="page km"
-                min={1.5}
-                max={6}
-                step={0.5}
-                value={worldKm}
-                onCommit={setWorldKm}
-              />
-              <LabSlider
-                label="degenerate"
-                min={0.01}
-                max={0.2}
-                step={0.01}
-                value={wMin}
-                onCommit={setWMin}
-              />
-              <div className="flex w-full items-center gap-2">
-                <span className="w-20 shrink-0 text-xs text-zinc-400">seed</span>
-                <Input
-                  value={seed}
-                  onChange={(e) => setSeed(e.target.value)}
-                  className="h-8 min-w-0 flex-1 font-mono text-sm"
+              <Section title="sketch">
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) void loadFile(file, file.name);
+                    e.target.value = "";
+                  }}
                 />
                 <Button
                   variant="outline"
-                  size="icon"
-                  onClick={() => setSeed(Math.random().toString(36).slice(2, 8))}
-                  title="Reroll seed"
-                  aria-label="Reroll seed"
+                  className="w-full"
+                  onClick={() => fileRef.current?.click()}
                 >
-                  <Dices size={16} />
+                  {img ? "Replace sketch" : "Load sketch"}
                 </Button>
-              </div>
-            </Section>
-
-            <Section title="city">
-              <Button
-                variant="outline"
-                className="w-full"
-                disabled={!field}
-                onClick={() => {
-                  if (field) setStoreSketch(toSketchTensorSource(field));
-                }}
-              >
-                Use in city
-              </Button>
-              {storeSketch ? (
-                <Button variant="ghost" className="w-full" onClick={() => setStoreSketch(null)}>
-                  Clear city sketch
-                </Button>
-              ) : null}
-              <p className="text-xs text-zinc-500">
-                {storeSketch
-                  ? "Sketch registered — the scene + /plan follow this field. Session-only."
-                  : "Registers this field as the city's street plan (#40)."}
-              </p>
-            </Section>
-
-            {field ? (
-              <Section title="stats">
-                <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 font-mono text-xs text-zinc-400">
-                  <dt className="text-zinc-500">cells</dt>
-                  <dd className="text-right tabular-nums">
-                    {field.validCount}/{field.gw * field.gh}
-                  </dd>
-                  <dt className="text-zinc-500">coherence</dt>
-                  <dd className="text-right tabular-nums">{field.seedCoherence.toFixed(2)}</dd>
-                  <dt className="text-zinc-500">sign flips</dt>
-                  <dd className="text-right tabular-nums">{field.flips}</dd>
-                  {trace ? (
-                    <>
-                      <dt className="text-zinc-500">arterials</dt>
-                      <dd className="text-right tabular-nums">{trace.arterials.length}</dd>
-                      <dt className="text-zinc-500">streets</dt>
-                      <dd className="text-right tabular-nums">{trace.minorStreets.length}</dd>
-                      <dt className="text-zinc-500">network</dt>
-                      <dd className="text-right tabular-nums">{totalKm.toFixed(1)} km</dd>
-                    </>
-                  ) : null}
-                </dl>
+                {img ? (
+                  <p className="truncate font-mono text-xs text-zinc-500">{img.name}</p>
+                ) : null}
               </Section>
-            ) : null}
-          </div>
-        </ScrollArea>
-      </aside>
 
-      {/* Drag handle — the sidebar border */}
-      <div
-        role="separator"
-        aria-orientation="vertical"
-        title="Drag to resize"
-        className="w-1 shrink-0 cursor-col-resize touch-none bg-zinc-800 transition-colors hover:bg-sky-600 active:bg-sky-500"
-        onPointerDown={(e) => {
-          sideDrag.current = true;
-          e.currentTarget.setPointerCapture(e.pointerId);
-        }}
-        onPointerMove={(e) => {
-          if (sideDrag.current) setSideW(Math.min(520, Math.max(220, e.clientX)));
-        }}
-        onPointerUp={(e) => {
-          sideDrag.current = false;
-          if (e.currentTarget.hasPointerCapture(e.pointerId))
-            e.currentTarget.releasePointerCapture(e.pointerId);
-        }}
-        onPointerCancel={() => {
-          sideDrag.current = false;
-        }}
-      />
+              {/* Label left, switch right — the main settings panel's ToggleRow
+                  arrangement. */}
+              <Section title="layers">
+                {(Object.keys(DEFAULT_LAYERS) as (keyof Layers)[]).map((key) => (
+                  <Label
+                    key={key}
+                    className="flex w-full cursor-pointer items-center justify-between gap-2 text-xs font-normal text-zinc-300"
+                  >
+                    {LAYER_LABELS[key]}
+                    <Switch checked={layers[key]} onCheckedChange={() => toggleLayer(key)} />
+                  </Label>
+                ))}
+              </Section>
 
-      {/* Canvas area */}
-      <section className="flex min-w-0 flex-1 flex-col p-4">
-        {img && field ? (
-          <div className="flex min-h-0 flex-1 items-center justify-center">
-            <canvas
-              ref={canvasRef}
-              className="max-h-full max-w-full rounded border border-zinc-800"
-            />
-          </div>
-        ) : (
-          <div className="flex flex-1 items-center justify-center">
-            <button
-              onClick={() => fileRef.current?.click()}
-              className="flex h-64 w-full max-w-2xl cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-zinc-700 text-zinc-400 transition-colors hover:border-sky-600 hover:text-zinc-200"
-            >
-              <span className="text-lg">Drop a hatched sketch photo</span>
-              <span className="text-sm text-zinc-500">
-                click to browse · or paste from clipboard
-              </span>
-              {error ? <span className="text-sm text-red-400">{error}</span> : null}
-            </button>
-          </div>
-        )}
-      </section>
-    </main>
+              <Section title="field">
+                <LabSlider
+                  label="smooth"
+                  min={3}
+                  max={14}
+                  step={1}
+                  value={smoothR}
+                  onCommit={setSmoothR}
+                />
+                <LabSlider
+                  label="coherence"
+                  min={0.05}
+                  max={0.5}
+                  step={0.01}
+                  value={minCoherence}
+                  onCommit={setMinCoherence}
+                />
+                <LabSlider
+                  label="ink gate"
+                  min={0}
+                  max={0.8}
+                  step={0.05}
+                  value={minEnergyPct}
+                  onCommit={setMinEnergyPct}
+                />
+              </Section>
+
+              <Section title="streets">
+                <LabSlider
+                  label="page km"
+                  min={1.5}
+                  max={6}
+                  step={0.5}
+                  value={worldKm}
+                  onCommit={setWorldKm}
+                />
+                <LabSlider
+                  label="degenerate"
+                  min={0.01}
+                  max={0.2}
+                  step={0.01}
+                  value={wMin}
+                  onCommit={setWMin}
+                />
+                <div className="flex w-full items-center gap-2">
+                  <span className="w-20 shrink-0 text-xs text-zinc-400">seed</span>
+                  <Input
+                    value={seed}
+                    onChange={(e) => setSeed(e.target.value)}
+                    className="h-8 min-w-0 flex-1 font-mono text-sm"
+                  />
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={() => setSeed(Math.random().toString(36).slice(2, 8))}
+                          aria-label="Reroll seed"
+                        />
+                      }
+                    >
+                      <Dices size={16} />
+                    </TooltipTrigger>
+                    <TooltipContent>Reroll seed</TooltipContent>
+                  </Tooltip>
+                </div>
+              </Section>
+
+              <Section title="city">
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  disabled={!field}
+                  onClick={() => {
+                    if (field) setStoreSketch(toSketchTensorSource(field));
+                  }}
+                >
+                  Use in city
+                </Button>
+                {storeSketch ? (
+                  <Button variant="ghost" className="w-full" onClick={() => setStoreSketch(null)}>
+                    Clear city sketch
+                  </Button>
+                ) : null}
+                <p className="text-xs text-zinc-500">
+                  {storeSketch
+                    ? "Sketch registered — the scene + /plan follow this field. Session-only."
+                    : "Registers this field as the city's street plan (#40)."}
+                </p>
+              </Section>
+
+              {field ? (
+                <Section title="stats">
+                  <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 font-mono text-xs text-zinc-400">
+                    <dt className="text-zinc-500">cells</dt>
+                    <dd className="text-right tabular-nums">
+                      {field.validCount}/{field.gw * field.gh}
+                    </dd>
+                    <dt className="text-zinc-500">coherence</dt>
+                    <dd className="text-right tabular-nums">{field.seedCoherence.toFixed(2)}</dd>
+                    <dt className="text-zinc-500">sign flips</dt>
+                    <dd className="text-right tabular-nums">{field.flips}</dd>
+                    {trace ? (
+                      <>
+                        <dt className="text-zinc-500">arterials</dt>
+                        <dd className="text-right tabular-nums">{trace.arterials.length}</dd>
+                        <dt className="text-zinc-500">streets</dt>
+                        <dd className="text-right tabular-nums">{trace.minorStreets.length}</dd>
+                        <dt className="text-zinc-500">network</dt>
+                        <dd className="text-right tabular-nums">{totalKm.toFixed(1)} km</dd>
+                      </>
+                    ) : null}
+                  </dl>
+                </Section>
+              ) : null}
+            </div>
+          </ScrollArea>
+        </aside>
+
+        {/* Drag handle — the sidebar border */}
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <div
+                role="separator"
+                aria-orientation="vertical"
+                className="w-1 shrink-0 cursor-col-resize touch-none bg-zinc-800 transition-colors hover:bg-sky-600 active:bg-sky-500"
+                onPointerDown={(e) => {
+                  sideDrag.current = true;
+                  e.currentTarget.setPointerCapture(e.pointerId);
+                }}
+                onPointerMove={(e) => {
+                  if (sideDrag.current) setSideW(Math.min(520, Math.max(220, e.clientX)));
+                }}
+                onPointerUp={(e) => {
+                  sideDrag.current = false;
+                  if (e.currentTarget.hasPointerCapture(e.pointerId))
+                    e.currentTarget.releasePointerCapture(e.pointerId);
+                }}
+                onPointerCancel={() => {
+                  sideDrag.current = false;
+                }}
+              />
+            }
+          />
+          <TooltipContent side="right">Drag to resize</TooltipContent>
+        </Tooltip>
+
+        {/* Canvas area */}
+        <section className="flex min-w-0 flex-1 flex-col p-4">
+          {img && field ? (
+            <div className="flex min-h-0 flex-1 items-center justify-center">
+              <canvas
+                ref={canvasRef}
+                className="max-h-full max-w-full rounded border border-zinc-800"
+              />
+            </div>
+          ) : (
+            <div className="flex flex-1 items-center justify-center">
+              <button
+                onClick={() => fileRef.current?.click()}
+                className="flex h-64 w-full max-w-2xl cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-zinc-700 text-zinc-400 transition-colors hover:border-sky-600 hover:text-zinc-200"
+              >
+                <span className="text-lg">Drop a hatched sketch photo</span>
+                <span className="text-sm text-zinc-500">
+                  click to browse · or paste from clipboard
+                </span>
+                {error ? <span className="text-sm text-red-400">{error}</span> : null}
+              </button>
+            </div>
+          )}
+        </section>
+      </main>
+    </TooltipProvider>
   );
 }

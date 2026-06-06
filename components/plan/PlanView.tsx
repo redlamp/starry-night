@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";
-import { generateTopology, CITY_CENTER, CITY_HALF_EXTENT } from "@/lib/seed/topology";
+import { generateTopology, CITY_CENTER, CITY_TIERS } from "@/lib/seed/topology";
 import {
   generateCity,
   generateStreetlights,
@@ -71,7 +71,9 @@ export function PlanView({ seed, size, layers }: Props) {
     const { topo, field, city, lights } = data;
     const cx = CITY_CENTER.x;
     const cz = CITY_CENTER.z;
-    const half = CITY_HALF_EXTENT;
+    // Frame the current tier's full gen extent (#58) — not the fixed default
+    // CITY_HALF_EXTENT, which would crop big tiers and shrink small ones.
+    const half = CITY_TIERS[citySize];
 
     // World → canvas pixel helper
     const toX = (x: number) => ((x - (cx - half)) / (2 * half)) * size;
@@ -202,9 +204,7 @@ export function PlanView({ seed, size, layers }: Props) {
     ctx.fillText(`${seed}`, 4, 13);
     ctx.fillText(`${topo.kind} · ${field.districts.length}d`, 4, 24);
     ctx.restore();
-  }, [seed, size, layers, data]);
+  }, [seed, size, layers, data, citySize]);
 
-  return (
-    <canvas ref={canvasRef} style={{ width: size, height: size, display: "block" }} title={seed} />
-  );
+  return <canvas ref={canvasRef} style={{ width: size, height: size, display: "block" }} />;
 }
