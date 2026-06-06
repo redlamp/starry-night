@@ -175,13 +175,21 @@ export const DEFAULT_WINDOW_PROFILES: Record<Archetype, { w: number; h: number }
 // emissive output (post-tonemap, so >1.0 blooms under ACES).
 export const DEFAULT_MOON_HALO = { radiusMul: 2.5, innerRadius: 0.05, intensity: 1.1 };
 
+// City-anchored fog (2026-06-06, replaces absolute metres): near/far are
+// positions on the live camera→city-centre axis — 0 = at the camera, 1 = at
+// the centre, >1 = beyond it. FogTicker multiplies them by the camera→centre
+// distance every frame, so the gradient follows the camera instead of being
+// swallowed by it. Defaults ≈ the old look at the default orbit radius
+// (near 4800 / far 7200 at d = 4800 ⇒ 0.9 / 1.5).
 export const DEFAULT_FOG = {
   enabled: true,
   mode: "linear" as const,
   color: "#0b0d14",
-  near: 2400 * CITY_SCALE, // 4800 at City
-  far: 3600 * CITY_SCALE, // 7200 at City
-  density: 0.0006,
+  near: 1.25,
+  far: 2,
+  // exp² mode: fog AMOUNT at the city centre (0..0.9) — FogTicker solves the
+  // actual three.js density from it per frame, so it's camera-independent.
+  density: 0.45,
 };
 
 export const DEFAULT_HAZE = {
@@ -498,6 +506,23 @@ function readSavedConfig(): SavedConfig | null {
     // disable a newer feature.
     if (parsed.lod) parsed.lod = { ...DEFAULT_LOD, ...parsed.lod };
     if (parsed.stars) parsed.stars = { ...DEFAULT_STARS, ...parsed.stars };
+    if (parsed.fog) {
+      // 2026-06-06 fog re-anchor: old saves carry absolute near/far metres —
+      // drop them and fill the new fractional brackets so a stale save can't
+      // produce NaN fog.
+      const legacy = { ...(parsed.fog as Record<string, unknown>) };
+      // near/far changed meaning (absolute metres → camera→centre fractions);
+      // metre-scale values would be absurd fractions — drop and refill.
+      if (typeof legacy.near === "number" && legacy.near > 10) delete legacy.near;
+      if (typeof legacy.far === "number" && legacy.far > 10) delete legacy.far;
+      // short-lived intermediate field names (2026-06-06 same-day iteration)
+      delete legacy.clearDepth;
+      delete legacy.hazeDepth;
+      // density changed meaning (raw three.js density → amount-at-centre);
+      // old-scale values (~0.0006) would read as zero fog — refill.
+      if (typeof legacy.density === "number" && legacy.density < 0.01) delete legacy.density;
+      parsed.fog = { ...DEFAULT_FOG, ...legacy };
+    }
     return parsed as SavedConfig;
   } catch {
     return null;
@@ -564,6 +589,10 @@ type SceneState = {
   cameraMode: CameraMode;
   cameraIntent: CameraIntent;
   cameraLive: CameraLive;
+  // Transient UI signal: true while the user drags the atmosphere near/far
+  // sliders — FogBoundsMarkers draws the in-world bracket rings while set.
+  fogAdjusting: boolean;
+  setFogAdjusting: (v: boolean) => void;
   cameraTweenRequest: TweenRequest | null;
   // Projection model. We keep a single perspective camera under the hood; ortho
   // is implemented by overriding camera.projectionMatrix each frame using an
@@ -583,9 +612,13 @@ type SceneState = {
     enabled: boolean;
     mode: "linear" | "exp2";
     color: string;
-    near: number;
-    far: number;
-    density: number;
+    // City-anchored model: positions on the camera→CITY_CENTER axis (0 = at
+    // the camera, 1 = at the centre, >1 = beyond). FogTicker scales them by
+    // the live camera→centre distance every frame, so the fog gradient stays
+    // pinned to the city while the camera orbits, flies, or zooms.
+    near: number; // where the fade begins (0..4)
+    far: number; // where the fade completes (0..6)
+    density: number; // exp² mode: fog amount at the city centre (0..0.9)
   };
   setFog: (
     patch: Partial<{
@@ -935,6 +968,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       },
     })),
   setCameraLive: (cameraLive) => set({ cameraLive }),
+  fogAdjusting: false,
+  setFogAdjusting: (fogAdjusting) => set({ fogAdjusting }),
   resetCamera: () => {
     // Derive reset patch from the registry: every entry goes back to its
     // hardcoded defaultValue. Runtime readouts (cityPlanning.topologyKind /

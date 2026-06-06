@@ -18,6 +18,8 @@ import { TimeTicker } from "./TimeTicker";
 import { ProjectionBlender } from "./ProjectionBlender";
 import { FocalIndicator } from "./FocalIndicator";
 import { IntroTicker } from "./IntroTicker";
+import { FogTicker } from "./FogTicker";
+import { FogBoundsMarkers } from "./FogBoundsMarkers";
 import { GroundHaze } from "./GroundHaze";
 import { Roads } from "./Roads";
 import { DistrictShells } from "./DistrictShells";
@@ -60,12 +62,17 @@ export function Scene() {
       <PerfMonitor />
       <TimeTicker />
       <IntroTicker />
+      <FogTicker />
+      <FogBoundsMarkers />
 
+      {/* near/far/density args are placeholders — FogTicker re-derives them
+          every frame around the camera→city-centre distance (city-anchored
+          fog), so only the colour matters here. */}
       {fog.enabled ? (
         fog.mode === "exp2" ? (
-          <fogExp2 attach="fog" args={[fog.color, fog.density]} />
+          <fogExp2 attach="fog" args={[fog.color, 0.0001]} />
         ) : (
-          <fog attach="fog" args={[fog.color, fog.near, fog.far]} />
+          <fog attach="fog" args={[fog.color, 1, 10]} />
         )
       ) : null}
       <ambientLight intensity={0.04} />
