@@ -153,21 +153,34 @@ export const DEFAULT_WINDOW_AA = {
   churn: 0.2,
 };
 
-// Per-archetype window glass-to-cell fraction (w = width, h = height of the lit
-// pane within its facade cell). Live-tunable via the Windows panel; the shader
-// reads these by archetype index. Grid pitch is baked separately in cityGen.
+// Per-archetype window glass-to-cell fraction. Width AND height are
+// per-building RANGES: each building rolls ONE seeded value per dimension
+// (independent rolls) inside [min, max], and every window on that building
+// shares the size. Live-tunable via the Buildings panel; the shader reads
+// these by archetype index. Grid pitch is baked separately in cityGen.
 // See wiki/notes/decision-window-proportion-by-archetype.md.
-// Simple mode: one window size shared by every building (the pre-archetype
-// system). Advanced mode uses DEFAULT_WINDOW_PROFILES per archetype.
-export const DEFAULT_WINDOW_SIMPLE = { w: 0.3, h: 0.5 };
-export const DEFAULT_WINDOW_PROFILES: Record<Archetype, { w: number; h: number }> = {
-  "low-rise": { w: 0.34, h: 0.42 },
-  warehouse: { w: 0.82, h: 0.34 },
-  "mid-rise": { w: 0.42, h: 0.5 },
-  "residential-tower": { w: 0.46, h: 0.56 },
-  "narrow-tower": { w: 0.7, h: 0.72 },
-  "office-block": { w: 0.78, h: 0.6 },
-  spire: { w: 0.82, h: 0.78 },
+// Simple mode: one width + one height range shared by every building (the
+// pre-archetype system). Advanced mode uses DEFAULT_WINDOW_PROFILES per
+// archetype. Range midpoints match the old point values, so the average city
+// reads the same.
+export type WindowRange = { wMin: number; wMax: number; hMin: number; hMax: number };
+export type WindowProfile = WindowRange;
+export const DEFAULT_WINDOW_SIMPLE: WindowRange = {
+  wMin: 0.22,
+  wMax: 0.38,
+  hMin: 0.42,
+  hMax: 0.58,
+};
+// Height ranges are the old per-archetype points ±0.08 (the spread the save
+// migration uses), replacing the shader's hard-coded ±15% height jitter.
+export const DEFAULT_WINDOW_PROFILES: Record<Archetype, WindowProfile> = {
+  "low-rise": { wMin: 0.26, wMax: 0.42, hMin: 0.34, hMax: 0.5 },
+  warehouse: { wMin: 0.74, wMax: 0.9, hMin: 0.26, hMax: 0.42 },
+  "mid-rise": { wMin: 0.34, wMax: 0.5, hMin: 0.42, hMax: 0.58 },
+  "residential-tower": { wMin: 0.38, wMax: 0.54, hMin: 0.48, hMax: 0.64 },
+  "narrow-tower": { wMin: 0.62, wMax: 0.78, hMin: 0.64, hMax: 0.8 },
+  "office-block": { wMin: 0.7, wMax: 0.86, hMin: 0.52, hMax: 0.68 },
+  spire: { wMin: 0.74, wMax: 0.9, hMin: 0.7, hMax: 0.86 },
 };
 // Moon halo: billboard glow around the moon disc. radiusMul scales the halo
 // plane relative to the moon radius; innerRadius is the 0..0.5 fraction of the
@@ -442,8 +455,8 @@ type SavedConfig = {
   orthoSize?: number;
   windowAA?: typeof DEFAULT_WINDOW_AA;
   windowMode?: "simple" | "advanced";
-  windowSimple?: { w: number; h: number };
-  windowProfiles?: Record<Archetype, { w: number; h: number }>;
+  windowSimple?: WindowRange;
+  windowProfiles?: Record<Archetype, WindowProfile>;
   moonHalo?: typeof DEFAULT_MOON_HALO;
   moonFollowCamera?: boolean;
   flySpeed?: number;
@@ -537,6 +550,72 @@ function readSavedConfig(): SavedConfig | null {
       if (typeof legacy.density === "number" && legacy.density < 0.01) delete legacy.density;
       parsed.fog = { ...DEFAULT_FOG, ...legacy };
     }
+    // 2026-06-06 Buildings panel: window sizes became per-building ranges
+    // (one seeded roll per building) — both dimensions, both modes. Old saves
+    // carry point values — expand ±0.08 around the saved value (the new
+    // defaults' spread) so the variance feature shows up without re-tuning.
+    {
+      const spread = (v: number): { lo: number; hi: number } => ({
+        lo: Math.max(0.1, v - 0.08),
+        hi: Math.min(0.95, v + 0.08),
+      });
+      const expandProfile = (p: unknown): WindowProfile | undefined => {
+        if (!p || typeof p !== "object") return undefined;
+        const o = p as {
+          w?: number;
+          wMin?: number;
+          wMax?: number;
+          h?: number;
+          hMin?: number;
+          hMax?: number;
+        };
+        const w =
+          typeof o.wMin === "number" && typeof o.wMax === "number"
+            ? { lo: o.wMin, hi: o.wMax }
+            : typeof o.w === "number"
+              ? spread(o.w)
+              : undefined;
+        const h =
+          typeof o.hMin === "number" && typeof o.hMax === "number"
+            ? { lo: o.hMin, hi: o.hMax }
+            : typeof o.h === "number"
+              ? spread(o.h)
+              : undefined;
+        if (!w || !h) return undefined;
+        return { wMin: w.lo, wMax: w.hi, hMin: h.lo, hMax: h.hi };
+      };
+      if (parsed.windowSimple) {
+        const o = parsed.windowSimple as {
+          w?: number;
+          wMin?: number;
+          wMax?: number;
+          h?: number;
+          hMin?: number;
+          hMax?: number;
+        };
+        const w =
+          typeof o.wMin === "number" && typeof o.wMax === "number"
+            ? { lo: o.wMin, hi: o.wMax }
+            : typeof o.w === "number"
+              ? spread(o.w)
+              : { lo: DEFAULT_WINDOW_SIMPLE.wMin, hi: DEFAULT_WINDOW_SIMPLE.wMax };
+        const h =
+          typeof o.hMin === "number" && typeof o.hMax === "number"
+            ? { lo: o.hMin, hi: o.hMax }
+            : typeof o.h === "number"
+              ? spread(o.h)
+              : { lo: DEFAULT_WINDOW_SIMPLE.hMin, hi: DEFAULT_WINDOW_SIMPLE.hMax };
+        parsed.windowSimple = { wMin: w.lo, wMax: w.hi, hMin: h.lo, hMax: h.hi };
+      }
+      if (parsed.windowProfiles) {
+        const saved = parsed.windowProfiles as Record<string, unknown>;
+        const out = {} as Record<Archetype, WindowProfile>;
+        for (const arch of Object.keys(DEFAULT_WINDOW_PROFILES) as Archetype[]) {
+          out[arch] = expandProfile(saved[arch]) ?? DEFAULT_WINDOW_PROFILES[arch];
+        }
+        parsed.windowProfiles = out;
+      }
+    }
     return parsed as SavedConfig;
   } catch {
     return null;
@@ -575,10 +654,10 @@ type SceneState = {
   setWindowAA: (patch: Partial<typeof DEFAULT_WINDOW_AA>) => void;
   windowMode: "simple" | "advanced";
   setWindowMode: (mode: "simple" | "advanced") => void;
-  windowSimple: { w: number; h: number };
-  setWindowSimple: (patch: Partial<{ w: number; h: number }>) => void;
-  windowProfiles: Record<Archetype, { w: number; h: number }>;
-  setWindowProfile: (arch: Archetype, patch: Partial<{ w: number; h: number }>) => void;
+  windowSimple: WindowRange;
+  setWindowSimple: (patch: Partial<WindowRange>) => void;
+  windowProfiles: Record<Archetype, WindowProfile>;
+  setWindowProfile: (arch: Archetype, patch: Partial<WindowProfile>) => void;
   moon: {
     // Celestial body modelled on a sky dome around the city axis.
     azimuthDeg: number; // compass yaw, 0 = +z (north), 90 = +x (east)

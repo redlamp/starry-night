@@ -78,11 +78,15 @@ export const cityFragmentShader = /* glsl */ `
 #include <fog_pars_fragment>
 
 uniform sampler2D uWindowAtlas;
-uniform float uWinFracW[7];     // per-archetype window width fraction (advanced mode)
-uniform float uWinFracH[7];     // per-archetype window height fraction (advanced mode)
+uniform float uWinFracWMin[7];  // per-archetype window ranges (advanced mode) —
+uniform float uWinFracWMax[7];  //   each building rolls ONE seeded width and ONE
+uniform float uWinFracHMin[7];  //   seeded height inside its archetype's
+uniform float uWinFracHMax[7];  //   [min, max] brackets (independent rolls)
 uniform float uWindowMode;      // 0 = simple (one shared size), 1 = advanced (per-archetype)
-uniform float uWinSimpleW;      // simple-mode shared window width fraction
-uniform float uWinSimpleH;      // simple-mode shared window height fraction
+uniform float uWinSimpleWMin;   // simple-mode window width range
+uniform float uWinSimpleWMax;
+uniform float uWinSimpleHMin;   // simple-mode window height range
+uniform float uWinSimpleHMax;
 uniform float uEmissiveBoost;
 uniform float uTime;
 
@@ -218,28 +222,39 @@ void main() {
 
   // Per-archetype window fraction, selected by archetype index. A constant-
   // bounded loop (not dynamic uniform indexing) keeps this GLSL ES 1.00 safe.
-  // Per-building jitter (deterministic) + Heritage age scale, then clamp.
+  // Width AND height each roll ONE seeded value per building inside the
+  // panel's [min, max] ranges — vBuildingHash is per-instance, so every window
+  // on a building shares the size while neighbours differ. Independent hashes
+  // decorrelate the two dimensions. Deterministic (seeded hash, no time input).
+  float wRoll = hash11(vBuildingHash * 2.3 + 13.0);
+  float hRoll = hash11(vBuildingHash * 3.7 + 29.0);
   float fracW;
   float fracH;
   if (uWindowMode < 0.5) {
-    // Simple mode: one shared window size — no per-archetype / age / jitter.
-    fracW = uWinSimpleW;
-    fracH = uWinSimpleH;
+    fracW = mix(uWinSimpleWMin, uWinSimpleWMax, wRoll);
+    fracH = mix(uWinSimpleHMin, uWinSimpleHMax, hRoll);
   } else {
     int archIdx = int(vGrid.z + 0.5);
-    fracW = uWinFracW[0];
-    fracH = uWinFracH[0];
+    float wMin = uWinFracWMin[0];
+    float wMax = uWinFracWMax[0];
+    float hMin = uWinFracHMin[0];
+    float hMax = uWinFracHMax[0];
     for (int k = 1; k < 7; k++) {
       if (k == archIdx) {
-        fracW = uWinFracW[k];
-        fracH = uWinFracH[k];
+        wMin = uWinFracWMin[k];
+        wMax = uWinFracWMax[k];
+        hMin = uWinFracHMin[k];
+        hMax = uWinFracHMax[k];
       }
     }
-    // Heritage (oldtown, district index 3) gets smaller windows + per-building jitter.
+    fracW = mix(wMin, wMax, wRoll);
+    fracH = mix(hMin, hMax, hRoll);
+    // Heritage (oldtown, district index 3) gets smaller windows. The old
+    // hard-coded per-building height jitter is gone — variance in both
+    // dimensions now comes from the range rolls.
     float ageScale = abs(vDistrictIdx - 3.0) < 0.5 ? 0.7 : 1.0;
-    float winJit = 1.0 + (hash11(vBuildingHash * 1.7 + 5.0) - 0.5) * 0.3;
-    fracW *= ageScale * winJit;
-    fracH *= ageScale * winJit;
+    fracW *= ageScale;
+    fracH *= ageScale;
   }
   fracW = clamp(fracW, 0.05, 0.95);
   fracH = clamp(fracH, 0.05, 0.95);

@@ -47,7 +47,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
-import { ValueSlider } from "@/components/ui/value-slider";
+import { RangeSlider, ValueSlider } from "@/components/ui/value-slider";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -218,8 +218,8 @@ const SETTINGS_SECTIONS: { value: string; label: string; keywords: string }[] = 
   { value: "windows", label: "Anti-Aliasing", keywords: "aa msaa samples smoothing jaggies moire" },
   {
     value: "window-profiles",
-    label: "Windows",
-    keywords: "lit ratio flicker brightness emissive profiles glow building",
+    label: "Buildings",
+    keywords: "windows lit ratio width range min max size flicker brightness emissive profiles glow building",
   },
   {
     value: "intro",
@@ -517,13 +517,29 @@ export function CameraPanel() {
             <Section
               value="window-profiles"
               icon={Building2}
-              label="Windows"
+              label="Buildings"
               hidden={!show("window-profiles")}
             >
               <WindowsSection />
             </Section>
 
-            <Section value="intro" icon={Sparkles} label="Intro" hidden={!show("intro")}>
+            <Section
+              value="intro"
+              icon={Sparkles}
+              label="Intro"
+              hidden={!show("intro")}
+              action={
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  title="Replay both wake-up sequences from progress = 0"
+                  className="h-6 bg-amber-300 px-2 text-xs text-black hover:bg-amber-300/90"
+                  onClick={() => useSceneStore.getState().playAllIntros()}
+                >
+                  ▶ play
+                </Button>
+              }
+            >
               <IntroSection />
             </Section>
 
@@ -611,12 +627,16 @@ function Section({
   label,
   children,
   hidden,
+  action,
 }: {
   value: string;
   icon: LucideIcon;
   label: string;
   children: ReactNode;
   hidden?: boolean;
+  // Rendered in the header row, left of the chevron — a sibling of the trigger
+  // (not nested inside it) so clicking it doesn't toggle the accordion.
+  action?: ReactNode;
 }) {
   if (hidden) return null;
   return (
@@ -624,12 +644,15 @@ function Section({
       value={value}
       className="border-foreground/10 bg-foreground/[0.04] rounded-lg border not-last:border-b"
     >
-      <AccordionTrigger className="text-foreground/85 px-3 py-2.5 text-sm font-medium tracking-wide hover:no-underline">
-        <span className="flex items-center gap-2.5">
-          <Icon aria-hidden="true" className="text-foreground/70 size-[18px]" />
-          <span>{label}</span>
-        </span>
-      </AccordionTrigger>
+      <div className="relative">
+        <AccordionTrigger className="text-foreground/85 px-3 py-2.5 text-sm font-medium tracking-wide hover:no-underline">
+          <span className="flex items-center gap-2.5">
+            <Icon aria-hidden="true" className="text-foreground/70 size-[18px]" />
+            <span>{label}</span>
+          </span>
+        </AccordionTrigger>
+        {action && <div className="absolute top-1/2 right-9 -translate-y-1/2">{action}</div>}
+      </div>
       <AccordionContent className="px-3 pt-0 pb-3">
         <div className="flex flex-col gap-2.5">{children}</div>
       </AccordionContent>
@@ -895,6 +918,7 @@ function WindowsSection() {
   const setWindowMode = useSceneStore((s) => s.setWindowMode);
   return (
     <>
+      <SubHeader label="Windows" />
       <div className="flex items-center gap-1">
         {(["simple", "advanced"] as const).map((m) => (
           <Button
@@ -929,23 +953,24 @@ function WindowsSimpleControls() {
   return (
     <>
       <div className="text-foreground/55 text-[10px] leading-snug">
-        All buildings share one window size.
+        Each building rolls one window width and height from the ranges (all its windows match);
+        the two rolls are independent.
       </div>
-      <ValueSlider
+      <RangeSlider
         label="width"
-        value={ws.w}
+        value={[ws.wMin, ws.wMax]}
         min={0.1}
         max={0.95}
         step={0.01}
-        onChange={(w) => setWindowSimple({ w })}
+        onChange={([wMin, wMax]) => setWindowSimple({ wMin, wMax })}
       />
-      <ValueSlider
+      <RangeSlider
         label="height"
-        value={ws.h}
+        value={[ws.hMin, ws.hMax]}
         min={0.1}
         max={0.95}
         step={0.01}
-        onChange={(h) => setWindowSimple({ h })}
+        onChange={([hMin, hMax]) => setWindowSimple({ hMin, hMax })}
       />
     </>
   );
@@ -967,28 +992,30 @@ function WindowProfilesSection() {
   return (
     <>
       <div className="text-foreground/55 text-[10px] leading-snug">
-        Glass-to-cell fraction per building style. Grid spacing is baked per archetype.
+        Glass-to-cell fraction per building style. Each building rolls one width and one height
+        from its archetype&apos;s ranges (all its windows match). Grid spacing is baked per
+        archetype.
       </div>
       {ARCHETYPE_ORDER.map((arch) => (
         <div key={arch} className="flex flex-col gap-1.5">
           <div className="text-foreground/55 pt-1 text-[10px] tracking-wide uppercase">
             {ARCHETYPE_LABELS[arch]}
           </div>
-          <ValueSlider
+          <RangeSlider
             label="width"
-            value={profiles[arch].w}
+            value={[profiles[arch].wMin, profiles[arch].wMax]}
             min={0.1}
             max={0.95}
             step={0.01}
-            onChange={(w) => setWindowProfile(arch, { w })}
+            onChange={([wMin, wMax]) => setWindowProfile(arch, { wMin, wMax })}
           />
-          <ValueSlider
+          <RangeSlider
             label="height"
-            value={profiles[arch].h}
+            value={[profiles[arch].hMin, profiles[arch].hMax]}
             min={0.1}
             max={0.95}
             step={0.01}
-            onChange={(h) => setWindowProfile(arch, { h })}
+            onChange={([hMin, hMax]) => setWindowProfile(arch, { hMin, hMax })}
           />
         </div>
       ))}
@@ -1246,7 +1273,6 @@ function IntroSection() {
   const setCycleJitter = useSceneStore((s) => s.setCycleJitter);
   const setStarIntroDuration = useSceneStore((s) => s.setStarIntroDuration);
   const setStarIntroMode = useSceneStore((s) => s.setStarIntroMode);
-  const playAllIntros = useSceneStore((s) => s.playAllIntros);
   const windowModes = ["random", "district", "outside-in", "inside-out", "far-to-near"] as const;
   const starModes = ["random", "bright-first", "horizon-first", "zenith-first"] as const;
   // Speed presets: Default = the slow ambient wake (windows 240s / stars 240s /
@@ -1275,18 +1301,6 @@ function IntroSection() {
   };
   return (
     <>
-      <div className="flex items-center justify-end">
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => playAllIntros()}
-          title="Replay both wake-up sequences from progress = 0"
-          className="bg-amber-300 text-black hover:bg-amber-300/90"
-        >
-          ▶ play
-        </Button>
-      </div>
-
       <div className="flex flex-col gap-1.5">
         <span className="text-foreground/40 text-xs tracking-wide uppercase">speed</span>
         <Tabs value={speedPreset} onValueChange={applyIntroSpeed}>

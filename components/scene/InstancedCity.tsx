@@ -30,7 +30,12 @@ import {
   sharedRetrigger,
   sharedCycleJitter,
 } from "@/lib/shaders/sharedIntro";
-import { useSceneStore, DEFAULT_WINDOW_PROFILES, DEBUG_WIRE_COLOR } from "@/lib/state/sceneStore";
+import {
+  useSceneStore,
+  DEFAULT_WINDOW_PROFILES,
+  DEFAULT_WINDOW_SIMPLE,
+  DEBUG_WIRE_COLOR,
+} from "@/lib/state/sceneStore";
 
 const DISTRICT_TO_IDX: Record<string, number> = {
   downtown: 0,
@@ -160,15 +165,21 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
       mat.uniforms.uLodNear.value = wa.lodNear;
       mat.uniforms.uLodRange.value = wa.lodRange;
       mat.uniforms.uWindowMode.value = s.windowMode === "advanced" ? 1 : 0;
-      mat.uniforms.uWinSimpleW.value = s.windowSimple.w;
-      mat.uniforms.uWinSimpleH.value = s.windowSimple.h;
+      mat.uniforms.uWinSimpleWMin.value = s.windowSimple.wMin;
+      mat.uniforms.uWinSimpleWMax.value = s.windowSimple.wMax;
+      mat.uniforms.uWinSimpleHMin.value = s.windowSimple.hMin;
+      mat.uniforms.uWinSimpleHMax.value = s.windowSimple.hMax;
       const profiles = s.windowProfiles;
-      const fw = mat.uniforms.uWinFracW.value as number[];
-      const fh = mat.uniforms.uWinFracH.value as number[];
+      const fwMin = mat.uniforms.uWinFracWMin.value as number[];
+      const fwMax = mat.uniforms.uWinFracWMax.value as number[];
+      const fhMin = mat.uniforms.uWinFracHMin.value as number[];
+      const fhMax = mat.uniforms.uWinFracHMax.value as number[];
       for (let k = 0; k < ARCHETYPE_ORDER.length; k++) {
         const p = profiles[ARCHETYPE_ORDER[k]];
-        fw[k] = p.w;
-        fh[k] = p.h;
+        fwMin[k] = p.wMin;
+        fwMax[k] = p.wMax;
+        fhMin[k] = p.hMin;
+        fhMax[k] = p.hMax;
       }
       // Debug view (Slice A tint + Slice B wireframe) — uniform / flag only.
       const tint = s.debug.buildingTint;
@@ -278,11 +289,15 @@ function buildMeshes(
         THREE.UniformsLib.fog,
         {
           uWindowAtlas: { value: null },
-          uWinFracW: { value: ARCHETYPE_ORDER.map((a) => DEFAULT_WINDOW_PROFILES[a].w) },
-          uWinFracH: { value: ARCHETYPE_ORDER.map((a) => DEFAULT_WINDOW_PROFILES[a].h) },
+          uWinFracWMin: { value: ARCHETYPE_ORDER.map((a) => DEFAULT_WINDOW_PROFILES[a].wMin) },
+          uWinFracWMax: { value: ARCHETYPE_ORDER.map((a) => DEFAULT_WINDOW_PROFILES[a].wMax) },
+          uWinFracHMin: { value: ARCHETYPE_ORDER.map((a) => DEFAULT_WINDOW_PROFILES[a].hMin) },
+          uWinFracHMax: { value: ARCHETYPE_ORDER.map((a) => DEFAULT_WINDOW_PROFILES[a].hMax) },
           uWindowMode: { value: 1 },
-          uWinSimpleW: { value: 0.3 },
-          uWinSimpleH: { value: 0.5 },
+          uWinSimpleWMin: { value: DEFAULT_WINDOW_SIMPLE.wMin },
+          uWinSimpleWMax: { value: DEFAULT_WINDOW_SIMPLE.wMax },
+          uWinSimpleHMin: { value: DEFAULT_WINDOW_SIMPLE.hMin },
+          uWinSimpleHMax: { value: DEFAULT_WINDOW_SIMPLE.hMax },
           uEmissiveBoost: { value: 1.4 },
           uTime: { value: 0 },
           uIntroMode: { value: 0 },
