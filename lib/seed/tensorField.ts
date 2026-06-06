@@ -26,8 +26,14 @@ type Basis = {
   cx: number;
   cz: number;
   size: number; // influence radius (m) — weight falls off as exp(−decay·(d/size)²)
+  size2: number; // size·size, precomputed (#63) — sample() divides by this
   decay: number;
   theta: number; // grid orientation (rad); ignored for radial
+  // #63: a grid basis's tensor [cos2θ, sin2θ] is position-independent, so it is
+  // precomputed here instead of re-derived per sample (~245M trig calls per
+  // metro gen). Radial bases derive theirs from (dx, dz) in the loop; 0 here.
+  ta: number;
+  tb: number;
 };
 
 export type TensorField = {
@@ -36,20 +42,6 @@ export type TensorField = {
   // field is degenerate there (magnitude ≈ 0).
   sample: (x: number, z: number, major: boolean) => Vec2 | null;
 };
-
-function basisTensor(b: Basis, x: number, z: number): [number, number] {
-  if (b.kind === "grid") return [Math.cos(2 * b.theta), Math.sin(2 * b.theta)];
-  const dx = x - b.cx;
-  const dz = z - b.cz;
-  return [dz * dz - dx * dx, -2 * dx * dz];
-}
-
-function basisWeight(b: Basis, x: number, z: number): number {
-  const dx = x - b.cx;
-  const dz = z - b.cz;
-  const d2 = (dx * dx + dz * dz) / (b.size * b.size);
-  return Math.exp(-b.decay * d2);
-}
 
 // Field morphology (#51) — each seed draws ONE family so cities don't all read
 // as the same near-uniform grid (dull) or sprout the same stark radial bullseye
@@ -129,7 +121,18 @@ export function buildTensorField(masterSeed: string, lattice: Lattice): TensorFi
         theta += warpAmp * Math.sin((2 * Math.PI * u) / waveLambda + wavePhase);
       }
       theta += (rng() - 0.5) * JITTER;
-      basis.push({ kind: "grid", cx: fx, cz: fz, size: span * 0.62, decay: 1.3, theta });
+      const size = span * 0.62;
+      basis.push({
+        kind: "grid",
+        cx: fx,
+        cz: fz,
+        size,
+        size2: size * size,
+        decay: 1.3,
+        theta,
+        ta: Math.cos(2 * theta),
+        tb: Math.sin(2 * theta),
+      });
     }
   }
 
@@ -137,24 +140,39 @@ export function buildTensorField(masterSeed: string, lattice: Lattice): TensorFi
   // off-centre with a tight decay so it reads as ONE plaza district, not a
   // city-spanning bullseye.
   if (morph === "radial") {
+    const size = half * 0.2;
     basis.push({
       kind: "radial",
       cx: cx + Math.cos(radialAng) * radialRad,
       cz: cz + Math.sin(radialAng) * radialRad,
-      size: half * 0.2,
+      size,
+      size2: size * size,
       decay: 3.4,
       theta: 0,
+      ta: 0,
+      tb: 0,
     });
   }
 
+  // #63 hot loop — field evaluation is 82–84% of road-planning time (~850k calls
+  // per metro gen, every basis summed each call). Inlined + allocation-free; the
+  // arithmetic matches the former basisTensor/basisWeight expressions term for
+  // term, so output stays byte-identical to the golden.
   const sample = (x: number, z: number, major: boolean): Vec2 | null => {
     let a = 0;
     let b = 0;
     for (const f of basis) {
-      const [ta, tb] = basisTensor(f, x, z);
-      const w = basisWeight(f, x, z);
-      a += ta * w;
-      b += tb * w;
+      const dx = x - f.cx;
+      const dz = z - f.cz;
+      const d2 = (dx * dx + dz * dz) / f.size2;
+      const w = Math.exp(-f.decay * d2);
+      if (f.kind === "grid") {
+        a += f.ta * w;
+        b += f.tb * w;
+      } else {
+        a += (dz * dz - dx * dx) * w;
+        b += -2 * dx * dz * w;
+      }
     }
     if (Math.hypot(a, b) < 1e-9) return null;
     let th = 0.5 * Math.atan2(b, a);

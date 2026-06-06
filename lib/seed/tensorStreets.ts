@@ -67,14 +67,21 @@ export function endStreetsProfile(): StreetsProfile | null {
   return p;
 }
 
+// #63: cells key on a packed integer, points stored as interleaved [x,z,...]
+// number arrays. isFree is a pure predicate over the stored point set, so the
+// storage layout is free to change — the old string keys + Vec2[] cost ~7M
+// string allocs/hashes per metro gen (was ~30% of roads time). Key packing is
+// exact for |cell index| < 2048, i.e. coordinates within ±131 km at the 64 m+
+// cell sizes used here — far beyond any tier extent.
 class GridStorage {
-  private cells = new Map<string, Vec2[]>();
+  private cells = new Map<number, number[]>();
   constructor(private size: number) {}
   add(p: Vec2) {
-    const k = `${Math.floor(p.x / this.size)},${Math.floor(p.z / this.size)}`;
+    const k =
+      (Math.floor(p.x / this.size) + 2048) * 4096 + (Math.floor(p.z / this.size) + 2048);
     const list = this.cells.get(k);
-    if (list) list.push(p);
-    else this.cells.set(k, [p]);
+    if (list) list.push(p.x, p.z);
+    else this.cells.set(k, [p.x, p.z]);
   }
   // true if no stored sample lies within `d` of p.
   isFree(p: Vec2, d: number): boolean {
@@ -83,12 +90,13 @@ class GridStorage {
     const r = Math.max(1, Math.ceil(d / this.size));
     const d2 = d * d;
     for (let i = ci - r; i <= ci + r; i++) {
+      const rowBase = (i + 2048) * 4096 + 2048;
       for (let j = cj - r; j <= cj + r; j++) {
-        const list = this.cells.get(`${i},${j}`);
+        const list = this.cells.get(rowBase + j);
         if (!list) continue;
-        for (const q of list) {
-          const dx = q.x - p.x;
-          const dz = q.z - p.z;
+        for (let n = 0; n < list.length; n += 2) {
+          const dx = list[n] - p.x;
+          const dz = list[n + 1] - p.z;
           if (dx * dx + dz * dz < d2) return false;
         }
       }
