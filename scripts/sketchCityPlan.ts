@@ -20,7 +20,7 @@ import { recoverSketchField, encodePngRGB } from "./sketchField";
 const IMAGE = process.argv[2] ?? "C:/Users/taylo/Downloads/IMG_20191205_082043.jpg";
 const SEED = process.argv[3] ?? "sketch";
 
-setCityTier("city");
+setCityTier(3); // 3 km notch (old "city")
 
 const PANEL = 760;
 const PAD = 8;

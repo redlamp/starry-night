@@ -18,9 +18,9 @@ import { generateCity, type Building } from "@/lib/seed/cityGen";
 import { CITY_CENTER, maxHalfExtent, setCityTier } from "@/lib/seed/topology";
 import { computeLattice } from "@/lib/seed/lattice";
 
-// The gate runs at the METRO tier (#58) so its assertions + the golden contract
-// are stable regardless of the app default.
-setCityTier("metro");
+// The gate runs at the 6 km notch (#58, the old "metro") so its assertions +
+// the golden contract are stable regardless of the app default.
+setCityTier(6);
 
 type Vec = { x: number; z: number };
 

@@ -12,7 +12,7 @@ import type { CityGenMessage, TracedLine } from "@/lib/workers/cityGen.worker";
 const SEED = "gate1-0";
 const SHAPE = "circle" as const;
 const SCALE = 1;
-const TIER: CityTier = "city"; // fast tier — identity holds for all (same code path)
+const TIER: CityTier = 3; // fast 3 km notch — identity holds for all (same code path)
 
 function fnv(s: string): string {
   let h = 0x811c9dc5;

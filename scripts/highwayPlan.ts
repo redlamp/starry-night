@@ -7,13 +7,21 @@
  */
 import { writeFileSync } from "node:fs";
 import { generateCity, generateStreetlights } from "@/lib/seed/cityGen";
-import { CITY_CENTER, maxHalfExtent, setCityTier } from "@/lib/seed/topology";
+import {
+  CITY_CENTER,
+  CITY_TIER_ORDER,
+  maxHalfExtent,
+  setCityTier,
+  type CityTier,
+} from "@/lib/seed/topology";
 import { encodePngRGB } from "./sketchField";
 
-// args: [tier] [seed...] — e.g. `bun run scripts/highwayPlan.ts city plan-3 plan-4`
+// args: [tierKm] [seed...] — e.g. `bun run scripts/highwayPlan.ts 3 plan-3 plan-4`
+// Tier is the notch's km-across (1–8); default 6 (the old "metro").
 const args = process.argv.slice(2);
-const TIER = args[0] === "town" || args[0] === "city" || args[0] === "metro" ? args[0] : "metro";
-const seedArgs = args[0] === TIER ? args.slice(1) : args;
+const argKm = Number(args[0]);
+const TIER = (CITY_TIER_ORDER as number[]).includes(argKm) ? (argKm as CityTier) : 6;
+const seedArgs = String(TIER) === args[0] ? args.slice(1) : args;
 setCityTier(TIER);
 
 const SEEDS = seedArgs.length
@@ -119,10 +127,10 @@ console.log(
 // Count survey at the smaller tiers — shows the per-seed roll (0 possible).
 // Skipped when explicit seeds were passed (single-case reproduction).
 if (!seedArgs.length) {
-  for (const tier of ["town", "city"] as const) {
+  for (const tier of [2, 3] as CityTier[]) {
     setCityTier(tier);
     const counts: number[] = [];
     for (let i = 0; i < 12; i++) counts.push(generateCity(`gate1-${i}`).topology.highways.length);
-    console.log(`${tier} highway counts (12 seeds): ${counts.join(" ")}`);
+    console.log(`${tier} km highway counts (12 seeds): ${counts.join(" ")}`);
   }
 }

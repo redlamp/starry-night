@@ -137,7 +137,7 @@ function run(sims: ArchSim[], drag: boolean): Result {
 const fmt = (n: number) => n.toFixed(3);
 const mb = (n: number) => (n / (1024 * 1024)).toFixed(2);
 
-for (const tier of ["city", "metro"] as CityTier[]) {
+for (const tier of [3, 6] as CityTier[]) {
   const { sims, buildings } = buildSims(tier);
   const tiles = sims.reduce((a, s) => a + s.partition.tiles.length, 0);
   console.log(

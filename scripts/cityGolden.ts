@@ -21,8 +21,9 @@ import { generateCity } from "@/lib/seed/cityGen";
 import { computeLattice } from "@/lib/seed/lattice";
 import { CITY_CENTER, setCityTier } from "@/lib/seed/topology";
 
-// Pin the METRO tier (#58): the golden baseline + cross-crop contract are tier-stable.
-setCityTier("metro");
+// Pin the 6 km notch (#58, the old "metro"): the golden baseline + cross-crop
+// contract are tier-stable.
+setCityTier(6);
 
 const GOLDEN_PATH = "scripts/__golden__/city.json";
 const SEEDS = Array.from({ length: 10 }, (_, i) => `gate1-${i}`);

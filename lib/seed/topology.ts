@@ -52,19 +52,28 @@ export const CITY_SCALE = CITY_HALF_EXTENT / BASE_HALF_EXTENT;
 // change. The TIER (#58) sets that gen extent at runtime: each tier is a
 // DIFFERENT city for the same seed (a bigger canvas changes the draw sequence —
 // switching tiers re-rolls, it does not grow the current city outward). Gen cost
-// ∝ extent², so the City default boots ~4× faster than Metro.
+// ∝ extent², so the 3 km default boots ~4× faster than the 6 km notch.
 //
-// Tier names are by DIAMETER (matches the crop slider's km): town 1.5 km,
-// city 3 km (default), metro 6 km. CITY_SCALE stays the *look* scale
+// Tiers are keyed by DIAMETER in km — 1 km notches, Truck Stop (1) through
+// Metropolis (8). Numeric keys so display names stay pure UI: renaming a notch
+// can never re-scale a saved session or a script baseline (the old town/city/
+// metro strings would have, the moment the names moved). Legacy mapping:
+// town 1.5 km → 2, city 3 km → 3, metro 6 km → 6. Display names live in the
+// debug panel (CameraPanel TIER_LABELS). CITY_SCALE stays the *look* scale
 // (fog/haze/stars/camera) — do not couple it to the tier.
 export const CITY_TIERS = {
-  town: 750, // 1.5 km across
-  city: 1500, // 3 km across (default)
-  metro: 3000, // 6 km across
+  1: 500, // Truck Stop
+  2: 1000, // Village
+  3: 1500, // Town (default — the old "city")
+  4: 2000, // Borough
+  5: 2500, // Small City
+  6: 3000, // City (the old "metro" — the #63 gen-perf baseline)
+  7: 3500, // Big City
+  8: 4000, // Metropolis
 } as const;
 export type CityTier = keyof typeof CITY_TIERS;
-export const DEFAULT_CITY_TIER: CityTier = "city";
-export const CITY_TIER_ORDER: CityTier[] = ["town", "city", "metro"];
+export const DEFAULT_CITY_TIER: CityTier = 3;
+export const CITY_TIER_ORDER: CityTier[] = [1, 2, 3, 4, 5, 6, 7, 8];
 
 let genHalfExtent: number = CITY_TIERS[DEFAULT_CITY_TIER];
 

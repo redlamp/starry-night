@@ -160,11 +160,17 @@ const DEG2RAD = Math.PI / 180;
 
 // City size tiers (#58) — diameter km per tier, shown on the notched size slider.
 // Each notch is a DIFFERENT city for the same seed (re-roll, not growth).
+// Names are display-only (tiers are keyed by km — see topology.ts CITY_TIERS).
 const tierKm = (t: CityTier) => (2 * CITY_TIERS[t]) / 1000;
 const TIER_LABELS: Record<CityTier, string> = {
-  town: "Town",
-  city: "City",
-  metro: "Metro",
+  1: "Truck Stop",
+  2: "Village",
+  3: "Town",
+  4: "Borough",
+  5: "Small City",
+  6: "City",
+  7: "Big City",
+  8: "Metropolis",
 };
 
 function fmt(n: number, p = 2) {
@@ -1434,7 +1440,7 @@ function DebugSection() {
           }}
           className="flex-1"
         />
-        <span className="text-foreground w-24 shrink-0 text-right font-mono tabular-nums">
+        <span className="text-foreground w-32 shrink-0 text-right font-mono tabular-nums">
           {TIER_LABELS[shownTier]} ({tierKm(shownTier)} km)
         </span>
       </div>

@@ -10,7 +10,7 @@ import { generateCity } from "@/lib/seed/cityGen";
 import { CITY_CENTER, setCityTier } from "@/lib/seed/topology";
 import { encodePngRGB } from "./sketchField";
 
-setCityTier("city");
+setCityTier(3); // 3 km notch (old "city")
 const SEED = process.argv[2] ?? "gate1-0";
 const CX = process.argv[3] ? parseFloat(process.argv[3]) : CITY_CENTER.x + 400;
 const CZ = process.argv[4] ? parseFloat(process.argv[4]) : CITY_CENTER.z + 300;

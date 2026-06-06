@@ -32,7 +32,7 @@ const SEED = process.argv[3] ?? "sketch";
 const WORLD_W = 3000; // metres the page spans — city-tier arterial spacing (210m) fits
 const W_MIN = 0.05; // min interpolated stroke weight — below = no ink = degenerate
 
-setCityTier("city"); // streamline point cap long enough to cross the page
+setCityTier(3); // 3 km notch (old "city") — streamline point cap long enough to cross the page
 
 async function main() {
   const f = await recoverSketchField(IMAGE);

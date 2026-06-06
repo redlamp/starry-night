@@ -297,10 +297,11 @@ export const DEFAULT_LOD = {
 // (byte-identical no-op mask). `auto` lets each seed pick its own shape; the
 // other values force one shape (the debug switcher). See lib/seed/cityShape.ts.
 export const DEFAULT_CITY_SHAPE: CityShapeSetting = "circle";
-// City size tier (#58) — the GEN extent. Each tier is a DIFFERENT city for the
-// same seed (a bigger canvas re-rolls the layout; it does not grow the current
-// city outward). Gen cost ∝ extent²: town ~0.6 s, city ~2.5 s, metro ~8–10 s —
-// the City default keeps boot mobile-viable; Metro is opt-in.
+// City size tier (#58) — the GEN extent, keyed by km across (1 km notches,
+// Truck Stop → Metropolis). Each notch is a DIFFERENT city for the same seed
+// (a bigger canvas re-rolls the layout; it does not grow the current city
+// outward). Gen cost ∝ extent²: 3 km ~2.5 s, 6 km ~8–10 s, 8 km worse still
+// (#63) — the 3 km default keeps boot mobile-viable; big notches are opt-in.
 export const DEFAULT_CITY_SIZE: CityTier = DEFAULT_CITY_TIER;
 // Crop follows the tier while locked (the default): crop = the tier's full disc.
 export const DEFAULT_CROP_LOCK = true;
@@ -310,7 +311,7 @@ export const DEFAULT_CROP_LOCK = true;
 export const DEFAULT_CITY_SHAPE_SCALE = 1.0;
 
 export const DEFAULT_FLY_SPEED = 14;
-// 360 at the City size (1500); base scales with the size knob via CITY_SCALE.
+// 360 at the 3 km default notch (half 1500); base scales with the size knob via CITY_SCALE.
 export const DEFAULT_ORTHO_SIZE = 180 * CITY_SCALE;
 export const DEFAULT_PROJECTION = "orthographic" as const;
 
@@ -500,6 +501,19 @@ function readSavedConfig(): SavedConfig | null {
     // base size in px, so clamp absurd old values back to the default.
     if (parsed.stars && parsed.stars.factor > 80) {
       parsed.stars.factor = DEFAULT_STARS.factor;
+    }
+    // 2026-06-06 city-size notches: tiers re-keyed from names to km (renames
+    // can no longer re-scale a save). Legacy strings map by physical size —
+    // town 1.5 km → 2, city 3 km → 3, metro 6 km → 6; anything else (or a
+    // number outside the ladder) falls back to the default notch.
+    {
+      const raw = (parsed as Record<string, unknown>).citySize;
+      if (typeof raw === "string") {
+        const legacy: Record<string, CityTier> = { town: 2, city: 3, metro: 6 };
+        parsed.citySize = legacy[raw] ?? DEFAULT_CITY_SIZE;
+      } else if (raw !== undefined && !(typeof raw === "number" && raw in CITY_TIERS)) {
+        parsed.citySize = DEFAULT_CITY_SIZE;
+      }
     }
     // Forward-fill new fields (e.g. #55 lod.tiles, #26 stars.shootingMin/Max)
     // into configs saved before they existed, so an old save can't silently

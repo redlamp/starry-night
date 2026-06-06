@@ -13,7 +13,7 @@ import { setCitySketch, citySketchTensor } from "@/lib/seed/citySketch";
 import { setCityTier } from "@/lib/seed/topology";
 import type { SketchTensorSource } from "@/lib/sketch/orientationField";
 
-setCityTier("city");
+setCityTier(3); // 3 km notch (old "city")
 const SEED = "gate1-0";
 
 const fnv = (s: string): string => {

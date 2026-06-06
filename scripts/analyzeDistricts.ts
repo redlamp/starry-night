@@ -9,7 +9,7 @@
 import { generateCity } from "@/lib/seed/cityGen";
 import { CITY_CENTER, setCityTier } from "@/lib/seed/topology";
 
-setCityTier("metro"); // measure at the Metro tier (#58) — the worst case for the gradient
+setCityTier(6); // measure at the 6 km notch (#58, old "metro") — the worst case for the gradient
 
 const SEEDS = Array.from({ length: 10 }, (_, i) => `gate1-${i}`);
 const RINGS = [0, 500, 1000, 1500, 2250, 3000]; // m from centre; 1500 = City-crop edge

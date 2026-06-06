@@ -13,7 +13,7 @@ import { generateCity } from "@/lib/seed/cityGen";
 import { CITY_CENTER, maxHalfExtent, setCityTier } from "@/lib/seed/topology";
 import { CHARACTER_COLOR } from "@/lib/seed/district";
 
-setCityTier("metro"); // render at the Metro tier (#58)
+setCityTier(6); // render at the 6 km notch (#58, old "metro")
 
 const SEEDS = ["gate1-0", "gate1-2", "gate1-5"];
 const PANEL = 560; // px per seed panel

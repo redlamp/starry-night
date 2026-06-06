@@ -12,7 +12,7 @@ import { computeLattice } from "@/lib/seed/lattice";
 import { buildTensorField } from "@/lib/seed/tensorField";
 import { CITY_CENTER, maxHalfExtent, setCityTier } from "@/lib/seed/topology";
 
-setCityTier("metro"); // render fields at the Metro tier (#58)
+setCityTier(6); // render fields at the 6 km notch (#58, old "metro")
 
 const PREFIX = process.argv[2] ?? "field";
 const COUNT = parseInt(process.argv[3] ?? "12", 10);

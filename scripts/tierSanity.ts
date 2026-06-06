@@ -31,7 +31,7 @@ for (const tier of CITY_TIER_ORDER) {
       maxR <= slack;
     if (!ok) failed++;
     console.log(
-      `${tier.padEnd(7)} ${seed.padEnd(8)} ${String(ms).padStart(5)} ${String(city.buildings.length).padStart(10)} ${String(city.districts.length).padStart(10)} ${String(Math.round(maxR)).padStart(8)}  ${ok ? "PASS" : "FAIL"}`,
+      `${`${tier} km`.padEnd(7)} ${seed.padEnd(8)} ${String(ms).padStart(5)} ${String(city.buildings.length).padStart(10)} ${String(city.districts.length).padStart(10)} ${String(Math.round(maxR)).padStart(8)}  ${ok ? "PASS" : "FAIL"}`,
     );
   }
 }
