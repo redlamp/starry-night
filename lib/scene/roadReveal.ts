@@ -13,12 +13,27 @@ export type RevealTier = 0 | 1 | 2; // 0 highways, 1 arterials, 2 streets
 
 // Abstract m/s — only ratios matter (the result is normalized). LAG is the
 // beat between a junction lighting up and its child starting to grow.
-// Streets (900) intentionally outpace arterials (700): streets are short spurs
-// that should snap in behind the wavefront, while arterials draw long and stately.
-const SPEED: Record<RevealTier, number> = { 0: 1200, 1: 700, 2: 900 };
-const RADIAL_SPEED = 900;
+// Streets intentionally outpace arterials: streets are short spurs that should
+// snap in behind the wavefront, while arterials draw long and stately.
+// SPEED is high relative to RADIAL_SPEED on purpose: RADIAL_SPEED spaces the
+// start times (the wave crossing the city), SPEED is how fast each line zips
+// once started — raising SPEED alone makes tips visibly faster without
+// changing the overall cascade duration (visual-gate feedback).
+// RADIAL_SPEED sets the stagger window (first-to-last line start): the raw
+// spread ≈ city radius / RADIAL_SPEED, renormalized into the duration slider.
+// 2000 ≈ half the stagger of the original 900 — the cascade reads as one
+// coordinated sweep instead of a long trickle (visual-gate feedback). SPEED
+// scaled up with it so per-line zip keeps its pace after renormalization.
+const SPEED: Record<RevealTier, number> = { 0: 3400, 1: 2000, 2: 2600 };
+const RADIAL_SPEED = 2000;
 const ATTACH_EPS = 60; // m — max junction distance for a parent attach
 const LAG = 0.15; // s
+// Concave remap (t^k, k < 1) bunches the schedule's tail: far-flung radial
+// orphans otherwise finish one by one — sparse bright-tipped lines streaking
+// across an already-woken city (read as ground-level shooting stars in the
+// visual gate). k < 1 compresses late times together so stragglers land as a
+// closing group; monotonic, keeps 0→0 and 1→1.
+const TAIL_EASE = 0.7;
 
 export type PolySched = {
   start: number; // seconds at which growth begins from attachArc
@@ -208,10 +223,15 @@ export function buildRevealSchedule(
   const inv = maxT > 0 ? 1 / maxT : 1;
 
   return {
-    revealAt: (tier, p, arc) => rawAt(tier, p, arc) * inv,
+    revealAt: (tier, p, arc) => Math.pow(rawAt(tier, p, arc) * inv, TAIL_EASE),
     polyInfo: (tier, p) => {
       const s = tiers[tier][p];
-      return { ...s, parentTime: s.parentTime === null ? null : s.parentTime * inv };
+      // parentTime gets the same normalize + remap as revealAt so consumers
+      // (and sanity check 4) compare in one timeline.
+      return {
+        ...s,
+        parentTime: s.parentTime === null ? null : Math.pow(s.parentTime * inv, TAIL_EASE),
+      };
     },
   };
 }
