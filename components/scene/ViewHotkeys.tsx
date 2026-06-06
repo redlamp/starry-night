@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { toggleTopDown, toggleProjection, toggleAllWireframe } from "@/lib/scene/cameraView";
 import { useSceneStore } from "@/lib/state/sceneStore";
+import { isTypingTarget } from "@/lib/utils";
 
 // Keyboard shortcuts, each routed through the same dispatch the Camera panel
 // uses so key + panel behave identically:
@@ -17,10 +18,7 @@ export function ViewHotkeys() {
       const k = e.key.toLowerCase();
       if (k !== "t" && k !== "p" && k !== "d") return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
-      const el = e.target as HTMLElement | null;
-      if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable)) {
-        return;
-      }
+      if (isTypingTarget(e)) return;
       if (k === "t") toggleTopDown();
       else if (k === "p") toggleProjection();
       else if (useSceneStore.getState().cameraMode === "orbit") toggleAllWireframe();
