@@ -9,6 +9,8 @@ import { CITY_SHAPES, type CityShapeSetting } from "@/lib/seed/cityShape";
  *
  *   ?seed=<masterSeed>   — sets master seed (used by capture script)
  *   ?capture=1           — hides UI, forces still mode (used by capture script)
+ *   ?intro=instant       — collapse the wake cascade to ~1s and hold windows ON
+ *                          (headless stills otherwise catch a dark, waking city)
  *   ?quality=low|med|high|ultra — sets initial quality tier (DPR cap + star count)
  *   ?shape=auto|square|circle|blob|coastline — forces the city footprint shape
  *   #seed=<masterSeed>   — shareable URL hash for the live app (preferred for users)
@@ -37,6 +39,14 @@ export function CaptureBoot() {
       // screenshot is static.
       state.resetCamera();
       state.setCameraMode("still");
+    }
+    if (params.get("intro") === "instant") {
+      // Wake everything within ~1s and park the on/off cycle so a still a few
+      // seconds in shows the fully-lit city. AFTER resetCamera (capture mode),
+      // which resets intro settings to their defaults.
+      state.setIntroDuration(1);
+      state.setStreetlightDuration(1);
+      state.setOffCycle(9999);
     }
     // AFTER resetCamera — it resets every persisted setting (incl. cityShape) to
     // its default, so applying the shape override here keeps it from being clobbered.

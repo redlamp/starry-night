@@ -10,6 +10,8 @@
  *   CAPTURE_H         default 1080
  *   CAPTURE_SETTLE_MS default 1500   — pause after canvas appears so scene stabilises
  *   CAPTURE_OUT       default ./samples
+ *   CAPTURE_QUERY     extra query params appended to the URL (e.g. "intro=instant"
+ *                     to skip the 240s wake cascade so stills show a lit city)
  *
  * Assumes the dev server (or any server hosting the app) is running at CAPTURE_URL.
  */
@@ -57,8 +59,10 @@ async function main() {
   let ok = 0;
   let fail = 0;
 
+  const extraQuery = process.env.CAPTURE_QUERY ? `&${process.env.CAPTURE_QUERY}` : "";
+
   for (const seed of seeds) {
-    const fullUrl = `${url}/?seed=${encodeURIComponent(seed)}&capture=1`;
+    const fullUrl = `${url}/?seed=${encodeURIComponent(seed)}&capture=1${extraQuery}`;
     const file = resolve(outDir, `${seed}.png`);
     process.stdout.write(`  ${seed} ... `);
     const page = await ctx.newPage();
