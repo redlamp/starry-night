@@ -145,12 +145,16 @@ export const DEFAULT_STARS = {
 //   litBias — occupancy threshold shift; higher leaves more windows lit
 //   churn   — fraction of windows that breathe over time; the rest hold a
 //             static lit/dark state. Lower = calmer city, less flicker.
+//   stagger — share of correlated floors (whole/fractional bands) that switch
+//             on in 2..4 column banks instead of all at once — banks of light
+//             switches flipped down the hall.
 export const DEFAULT_WINDOW_AA = {
   edge: 1.1,
   lodNear: 0.2,
   lodRange: 0.4,
   litBias: 0.7,
   churn: 0.2,
+  stagger: 0.5,
 };
 
 // Per-archetype window glass-to-cell fraction. Width AND height are
@@ -533,6 +537,7 @@ function readSavedConfig(): SavedConfig | null {
     // disable a newer feature.
     if (parsed.lod) parsed.lod = { ...DEFAULT_LOD, ...parsed.lod };
     if (parsed.stars) parsed.stars = { ...DEFAULT_STARS, ...parsed.stars };
+    if (parsed.windowAA) parsed.windowAA = { ...DEFAULT_WINDOW_AA, ...parsed.windowAA };
     if (parsed.fog) {
       // 2026-06-06 fog re-anchor: old saves carry absolute near/far metres —
       // drop them and fill the new fractional brackets so a stale save can't

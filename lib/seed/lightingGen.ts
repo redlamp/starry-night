@@ -248,6 +248,32 @@ export type WindowDataTexture = {
   rows: number;
 };
 
+// Archetypes that may use office-style correlated lighting (blocks, fractional
+// floors, whole floors). For these, we pick a per-building cohort; others are
+// always per-window.
+const OFFICE_ARCHETYPES = new Set<Archetype>(["office-block", "spire"]);
+
+// Lighting/breathing correlation mode for one building:
+//   0 = per-window, 1 = per-block, 2 = fractional-floor, 3 = whole-floor.
+// Office archetypes: 35% per-window, 25% per-block, 30% fractional-floor and
+// only 10% whole-floor — full lit slabs read as a gimmick when common; used
+// sparingly they read as trading floors / cleaning crews. Warehouses get a
+// fractional minority (aisle light banks). Consumed by the atlas painter
+// below (lit-state clustering) AND the fragment shader (band timing, per-face
+// segment masks, cross-face row coherence).
+export function correlationModeFor(b: Building): number {
+  const office = OFFICE_ARCHETYPES.has(b.archetype);
+  if (!office && b.archetype !== "warehouse") return 0;
+  // Cheap deterministic float from windowSeed.
+  const r = (Math.sin(b.windowSeed * 91.3) * 43758.5453) % 1;
+  const u = r < 0 ? r + 1 : r;
+  if (!office) return u < 0.6 ? 0 : 2; // warehouse: 40% fractional
+  if (u < 0.35) return 0;
+  if (u < 0.6) return 1;
+  if (u < 0.9) return 2;
+  return 3;
+}
+
 export function generateWindowTexture(masterSeed: string, building: Building): WindowDataTexture {
   const rng = seedrandom(`${masterSeed}::lighting::${building.id}::${building.windowSeed}`);
   const baseProfile = profileFor(building.archetype);
@@ -257,25 +283,75 @@ export function generateWindowTexture(masterSeed: string, building: Building): W
   const cols = building.colsPerFace;
   const rows = building.floors;
   const data = new Uint8Array(cols * rows * 4);
+  const mode = correlationModeFor(building);
 
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const idx = (r * cols + c) * 4;
-      const lit = rng() < profile.litRatio;
-      if (!lit) {
-        data[idx + 0] = 0;
-        data[idx + 1] = 0;
-        data[idx + 2] = 0;
-        data[idx + 3] = 0;
-        continue;
-      }
-      const { color, intensity, isTv } = pickKelvin(rng, profile);
-      data[idx + 0] = Math.min(255, Math.floor(color.r * intensity * SCENE_WB_GAIN.x * 255));
-      data[idx + 1] = Math.min(255, Math.floor(color.g * intensity * SCENE_WB_GAIN.y * 255));
-      data[idx + 2] = Math.min(255, Math.floor(color.b * intensity * SCENE_WB_GAIN.z * 255));
-      // alpha encodes TV flag: 128 = TV (flickers), 255 = steady lit, 0 = unlit
-      data[idx + 3] = isTv ? 128 : 255;
+  // Unlit cells stay at the Uint8Array's zero fill (alpha 0 = unlit).
+  // alpha encodes the cell kind: 128 = TV (flickers), 200 = correlated band
+  // (steady — the shader wakes/cycles band rows together and cuts per-face
+  // segments out of fractional ones), 255 = steady per-window lit. Band cells
+  // force TV steady: a whole floor strobing in sync reads as a glitch, not a
+  // television.
+  const writeRun = (r: number, c0: number, len: number, band: boolean) => {
+    const { color, intensity, isTv } = pickKelvin(rng, profile);
+    const px0 = Math.min(255, Math.floor(color.r * intensity * SCENE_WB_GAIN.x * 255));
+    const px1 = Math.min(255, Math.floor(color.g * intensity * SCENE_WB_GAIN.y * 255));
+    const px2 = Math.min(255, Math.floor(color.b * intensity * SCENE_WB_GAIN.z * 255));
+    const a = band ? 200 : isTv ? 128 : 255;
+    for (let k = 0; k < len; k++) {
+      const idx = (r * cols + c0 + k) * 4;
+      data[idx + 0] = px0;
+      data[idx + 1] = px1;
+      data[idx + 2] = px2;
+      data[idx + 3] = a;
     }
+  };
+
+  const perWindowRow = (r: number) => {
+    for (let c = 0; c < cols; c++) {
+      if (rng() < profile.litRatio) writeRun(r, c, 1, false);
+    }
+  };
+
+  if (mode === 3) {
+    // Whole-floor: ~40% of floors are bands — ONE lit roll + colour for the
+    // entire row, so a lit floor reads as a continuous slab (the shader keeps
+    // its timing and corner wrap coherent). The other floors stay per-window,
+    // so even a whole-floor tower reads mixed rather than zebra-striped.
+    for (let r = 0; r < rows; r++) {
+      if (rng() < 0.4) {
+        if (rng() < profile.litRatio) writeRun(r, 0, cols, true);
+      } else {
+        perWindowRow(r);
+      }
+    }
+  } else if (mode === 2) {
+    // Fractional-floor: ~60% of floors are bands painted edge-to-edge as a
+    // colour base; the SHADER cuts each face down to an uneven seeded segment
+    // (a quarter here, the full row there, nothing on the back). The boosted
+    // activation compensates for the cut, landing visible brightness back
+    // near litRatio.
+    for (let r = 0; r < rows; r++) {
+      if (rng() < 0.6) {
+        if (rng() < Math.min(0.9, profile.litRatio * 2)) writeRun(r, 0, cols, true);
+      } else {
+        perWindowRow(r);
+      }
+    }
+  } else if (mode === 1) {
+    // Per-block: each floor breaks into short runs (2..6 windows) sharing one
+    // lit roll + colour — reads as multi-window suites. A TV block is one
+    // bright living room spilling across its windows, so flicker stays.
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; ) {
+        const len = Math.min(cols - c, 2 + Math.floor(rng() * 5));
+        if (rng() < profile.litRatio) writeRun(r, c, len, false);
+        c += len;
+      }
+    }
+  } else {
+    // Per-window — rng call order matches the pre-correlation painter exactly,
+    // so every mode-0 building's atlas is byte-identical to before.
+    for (let r = 0; r < rows; r++) perWindowRow(r);
   }
 
   const texture = new THREE.DataTexture(data, cols, rows, THREE.RGBAFormat);

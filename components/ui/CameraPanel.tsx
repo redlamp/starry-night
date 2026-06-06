@@ -14,11 +14,13 @@ import {
 import { randomSeed } from "@/lib/seed/rng";
 import { ARCHETYPE_ORDER, type Archetype } from "@/lib/seed/cityGen";
 import { CITY_SHAPES, type CityShapeSetting } from "@/lib/seed/cityShape";
-import { CITY_TIERS, CITY_TIER_ORDER, type CityTier } from "@/lib/seed/topology";
+import { CITY_TIER_ORDER } from "@/lib/seed/topology";
+import { TIER_LABELS, tierKm } from "@/components/ui/cityTiers";
 import { cn, isTypingTarget } from "@/lib/utils";
 import {
   AppWindow,
   Bug,
+  Building,
   Building2,
   Camera,
   Check,
@@ -26,12 +28,16 @@ import {
   Contrast,
   Copy,
   Gauge,
+  Home,
+  Hotel,
   Info,
+  LayoutGrid,
   Map as MapIcon,
   Moon,
   MoonStar,
   Orbit as OrbitIcon,
   Radio,
+  RadioTower,
   RotateCcw,
   Route,
   Save,
@@ -41,13 +47,21 @@ import {
   Sprout,
   Stars,
   Sun,
+  TowerControl,
   Undo2,
+  Warehouse,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { RangeSlider, ValueSlider } from "@/components/ui/value-slider";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -158,20 +172,6 @@ function ThemeToggle() {
 const RAD2DEG = 180 / Math.PI;
 const DEG2RAD = Math.PI / 180;
 
-// City size tiers (#58) — diameter km per tier, shown on the notched size slider.
-// Each notch is a DIFFERENT city for the same seed (re-roll, not growth).
-// Names are display-only (tiers are keyed by km — see topology.ts CITY_TIERS).
-const tierKm = (t: CityTier) => (2 * CITY_TIERS[t]) / 1000;
-const TIER_LABELS: Record<CityTier, string> = {
-  1: "Truck Stop",
-  2: "Village",
-  3: "Town",
-  4: "Borough",
-  5: "Small City",
-  6: "City",
-  7: "Big City",
-  8: "Metropolis",
-};
 
 function fmt(n: number, p = 2) {
   return n.toFixed(p);
@@ -916,6 +916,8 @@ function AntiAliasingSection() {
 function WindowsSection() {
   const mode = useSceneStore((s) => s.windowMode);
   const setWindowMode = useSceneStore((s) => s.setWindowMode);
+  const stagger = useSceneStore((s) => s.windowAA.stagger);
+  const setWindowAA = useSceneStore((s) => s.setWindowAA);
   return (
     <>
       <SubHeader label="Windows" />
@@ -943,6 +945,18 @@ function WindowsSection() {
         ))}
       </div>
       {mode === "simple" ? <WindowsSimpleControls /> : <WindowProfilesSection />}
+      <ValueSlider
+        label="stagger"
+        value={stagger}
+        min={0}
+        max={1}
+        step={0.05}
+        onChange={(v) => setWindowAA({ stagger: v })}
+      />
+      <div className="text-foreground/55 text-[10px] leading-snug">
+        Share of correlated floors (whole / fractional bands) that switch on in 2–4 column banks
+        instead of all at once.
+      </div>
     </>
   );
 }
@@ -960,7 +974,7 @@ function WindowsSimpleControls() {
         label="width"
         value={[ws.wMin, ws.wMax]}
         min={0.1}
-        max={0.95}
+        max={1}
         step={0.01}
         onChange={([wMin, wMax]) => setWindowSimple({ wMin, wMax })}
       />
@@ -968,7 +982,7 @@ function WindowsSimpleControls() {
         label="height"
         value={[ws.hMin, ws.hMax]}
         min={0.1}
-        max={0.95}
+        max={1}
         step={0.01}
         onChange={([hMin, hMax]) => setWindowSimple({ hMin, hMax })}
       />
@@ -986,9 +1000,22 @@ const ARCHETYPE_LABELS: Record<Archetype, string> = {
   spire: "Spire",
 };
 
+const ARCHETYPE_ICONS: Record<Archetype | "all", LucideIcon> = {
+  all: LayoutGrid,
+  "low-rise": Home,
+  warehouse: Warehouse,
+  "mid-rise": Building,
+  "residential-tower": Hotel,
+  "narrow-tower": TowerControl,
+  "office-block": Building2,
+  spire: RadioTower,
+};
+
 function WindowProfilesSection() {
   const profiles = useSceneStore((s) => s.windowProfiles);
   const setWindowProfile = useSceneStore((s) => s.setWindowProfile);
+  const [filter, setFilter] = useState<Archetype | "all">("all");
+  const shown = filter === "all" ? ARCHETYPE_ORDER : [filter];
   return (
     <>
       <div className="text-foreground/55 text-[10px] leading-snug">
@@ -996,7 +1023,30 @@ function WindowProfilesSection() {
         from its archetype&apos;s ranges (all its windows match). Grid spacing is baked per
         archetype.
       </div>
-      {ARCHETYPE_ORDER.map((arch) => (
+      <TooltipProvider>
+        <div className="flex items-center gap-0.5">
+          {(["all", ...ARCHETYPE_ORDER] as (Archetype | "all")[]).map((id) => {
+            const Icon = ARCHETYPE_ICONS[id];
+            return (
+              <Tooltip key={id}>
+                <TooltipTrigger
+                  onClick={() => setFilter(id)}
+                  className={cn(
+                    "flex h-7 flex-1 items-center justify-center rounded-md transition-colors",
+                    filter === id
+                      ? "bg-foreground text-background"
+                      : "bg-foreground/10 text-foreground hover:bg-foreground/20",
+                  )}
+                >
+                  <Icon className="size-3.5" />
+                </TooltipTrigger>
+                <TooltipContent>{id === "all" ? "All types" : ARCHETYPE_LABELS[id]}</TooltipContent>
+              </Tooltip>
+            );
+          })}
+        </div>
+      </TooltipProvider>
+      {shown.map((arch) => (
         <div key={arch} className="flex flex-col gap-1.5">
           <div className="text-foreground/55 pt-1 text-[10px] tracking-wide uppercase">
             {ARCHETYPE_LABELS[arch]}
@@ -1005,7 +1055,7 @@ function WindowProfilesSection() {
             label="width"
             value={[profiles[arch].wMin, profiles[arch].wMax]}
             min={0.1}
-            max={0.95}
+            max={1}
             step={0.01}
             onChange={([wMin, wMax]) => setWindowProfile(arch, { wMin, wMax })}
           />
@@ -1013,7 +1063,7 @@ function WindowProfilesSection() {
             label="height"
             value={[profiles[arch].hMin, profiles[arch].hMax]}
             min={0.1}
-            max={0.95}
+            max={1}
             step={0.01}
             onChange={([hMin, hMax]) => setWindowProfile(arch, { hMin, hMax })}
           />

@@ -108,6 +108,7 @@ uniform float uIntroDuration;
 uniform float uOffCycle;
 uniform float uRetrigger;
 uniform float uCycleJitter; // 0..1 amplitude on per-window cycle randomness
+uniform float uStagger;     // share of correlated floors that switch on in banks
 uniform float uOrthoBlend;      // 0 = perspective, 1 = orthographic; LOD bypass scales by (1-this)
 uniform float uAaEdge;          // fwidth edge-AA multiplier (window-quality panel)
 uniform float uLodNear;         // cells-per-pixel where distance wash starts
@@ -214,7 +215,14 @@ void main() {
   // Physical cellLocal stays unshifted so window position within a cell is
   // correct on every face. Coprime offsets (7, 11) keep the 4 patterns
   // distinct across typical grid sizes (3..20).
-  vec2 cellId = floor(cell) + vec2(vFaceId * 7.0, vFaceId * 11.0);
+  // Correlated-floor buildings (mode 2 fractional / mode 3 whole-floor) skip
+  // the per-face Y shift so a floor samples the SAME atlas row on all four
+  // faces — a lit floor wraps the corners as one slab instead of breaking at
+  // every edge. X keeps its shift (band rows are uniform across the row, so
+  // it has nothing to desync there).
+  float rowCoherent = step(1.5, vCorrelationMode);
+  float fracFloor = rowCoherent * (1.0 - step(2.5, vCorrelationMode)); // mode 2 exactly
+  vec2 cellId = floor(cell) + vec2(vFaceId * 7.0, vFaceId * 11.0 * (1.0 - rowCoherent));
   vec2 atlasCell = mod(cellId, vGrid.xy);
   vec2 cellCentreUv = (atlasCell + 0.5) / vGrid.xy;
   vec2 atlasUv = vAtlasOffset + cellCentreUv * vAtlasSize;
@@ -256,8 +264,8 @@ void main() {
     fracW *= ageScale;
     fracH *= ageScale;
   }
-  fracW = clamp(fracW, 0.05, 0.95);
-  fracH = clamp(fracH, 0.05, 0.95);
+  fracW = clamp(fracW, 0.05, 1.0);
+  fracH = clamp(fracH, 0.05, 1.0);
   float halfW = fracW * 0.5;
   float halfH = fracH * 0.5;
   // Screen-space derivatives smooth the window/facade edge by ~1px regardless
@@ -279,6 +287,12 @@ void main() {
   float wMaskY =
     smoothstep(0.5 - halfH - aaY, 0.5 - halfH + aaY, cellLocal.y) *
     (1.0 - smoothstep(0.5 + halfH - aaY, 0.5 + halfH + aaY, cellLocal.y));
+  // Full-bleed panes: the smoothstep pair pins the window edge ON the cell
+  // boundary, so even at fraction 1.0 the mask dips to 0.5 there — a phantom
+  // mullion line. Fade the dip out over the last few % of fraction so 1.0
+  // reads as truly continuous glass (curtain-wall ribbons).
+  wMaskX = mix(wMaskX, 1.0, smoothstep(0.475, 0.4995, halfW));
+  wMaskY = mix(wMaskY, 1.0, smoothstep(0.475, 0.4995, halfH));
   float wMask = wMaskX * wMaskY;
   bool inWindow = wMask > 0.01;
 
@@ -289,7 +303,13 @@ void main() {
   // existing flicker / twinkle behaviour stays scoped to the atlas-lit subset
   // (alpha encoding 128 = TV-blue, 255 = steady).
   if (inWindow) {
-    float seed = hash11(cellId.x + cellId.y * 17.0 + vBuildingHash);
+    // Correlated band cells (atlas alpha ≈ 0.78) share their timing: a
+    // whole-floor band uses one clock for the row on EVERY face (jx = 0); a
+    // fractional band keys per face, so each side's segment wakes on its own.
+    // Per-window / per-block cells keep per-cell timing via the column term.
+    bool isBand = state.a > 0.7 && state.a < 0.9;
+    float jx = isBand ? vFaceId * 31.0 * fracFloor : cellId.x;
+    float seed = hash11(jx + cellId.y * 17.0 + vBuildingHash);
 
     bool isTv = state.a > 0.2 && state.a < 0.7;
     vec3 lit;
@@ -332,12 +352,23 @@ void main() {
       float r = clamp(length(d) / max(1.0, uIntroMaxRadius), 0.0, 1.0);
       baseline = r;
     }
-    float wakeJitter = hash11(cellId.x * 1.31 + cellId.y * 11.7 + vBuildingHash + 41.0);
-    float onJitter = hash11(cellId.x * 5.7 + cellId.y * 3.1 + vBuildingHash + 71.0);
-    float offJitter = hash11(cellId.x * 1.7 + cellId.y * 23.0 + vBuildingHash + 19.0);
+    float wakeJitter = hash11(jx * 1.31 + cellId.y * 11.7 + vBuildingHash + 41.0);
+    float onJitter = hash11(jx * 5.7 + cellId.y * 3.1 + vBuildingHash + 71.0);
+    float offJitter = hash11(jx * 1.7 + cellId.y * 23.0 + vBuildingHash + 19.0);
     float t0 = clamp(baseline, 0.0, 1.0) * uIntroDuration +
                wakeJitter * min(uIntroDuration * 0.04, 4.0);
     float wakeTime = uIntroStartTime + t0;
+
+    // Switch-bank stagger: a share (uStagger) of correlated floors light up
+    // in 2..4 column banks, 0.6–1.6 s apart, sweeping left or right — banks
+    // of light switches being flipped down the hall. Shifting wakeTime moves
+    // the whole schedule, so the sweep re-plays on every breathing re-on.
+    if (isBand && hash11(cellId.y * 23.0 + vBuildingHash + 211.0) < uStagger) {
+      float banks = 2.0 + floor(hash11(cellId.y * 3.3 + vBuildingHash + 61.0) * 2.999);
+      float bank = floor(floor(cell.x) / max(1.0, ceil(vGrid.x / banks)));
+      if (hash11(cellId.y * 7.7 + vBuildingHash + 97.0) < 0.5) bank = banks - 1.0 - bank;
+      wakeTime += bank * (0.6 + hash11(cellId.y * 5.1 + vBuildingHash + 23.0));
+    }
 
     float windowOn;
     if (uTime < wakeTime) {
@@ -353,6 +384,19 @@ void main() {
       float period = onSec + offSec;
       float phase = mod(elapsed, period);
       windowOn = phase < onSec ? 1.0 : 0.0;
+    }
+
+    // Fractional-floor band: only a per-(face, floor) SEGMENT of the row
+    // actually lights — length and position hashed independently per face, so
+    // the sides are deliberately uneven: a quarter here, the full row there,
+    // nothing on the back. pow() skews the length roll toward partial fills.
+    if (fracFloor > 0.5 && isBand) {
+      float col = floor(cell.x);
+      float u1 = hash11(vFaceId * 3.7 + cellId.y * 13.1 + vBuildingHash + 101.0);
+      float u2 = hash11(vFaceId * 9.3 + cellId.y * 5.7 + vBuildingHash + 137.0);
+      float litCount = floor(pow(u1, 1.6) * (vGrid.x + 0.999));
+      float start = floor(u2 * (vGrid.x - litCount + 1.0));
+      if (col < start || col > start + litCount - 1.0) windowOn = 0.0;
     }
 
     // Derivative-based LOD: when one fragment covers a sizeable chunk of an

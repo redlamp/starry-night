@@ -18,7 +18,12 @@ import {
   type Building,
 } from "@/lib/seed/cityGen";
 import type { CityShapeSetting } from "@/lib/seed/cityShape";
-import { facadeColorFor, facadeGlowFor, generateWindowTexture } from "@/lib/seed/lightingGen";
+import {
+  correlationModeFor,
+  facadeColorFor,
+  facadeGlowFor,
+  generateWindowTexture,
+} from "@/lib/seed/lightingGen";
 import { packWindowAtlas, type PackInput } from "@/lib/scene/atlasPacker";
 import { cityVertexShader, cityFragmentShader } from "@/lib/shaders/cityInstanced";
 import { sharedTime } from "@/lib/shaders/sharedTime";
@@ -32,6 +37,7 @@ import {
 } from "@/lib/shaders/sharedIntro";
 import {
   useSceneStore,
+  DEFAULT_WINDOW_AA,
   DEFAULT_WINDOW_PROFILES,
   DEFAULT_WINDOW_SIMPLE,
   DEBUG_WIRE_COLOR,
@@ -69,26 +75,6 @@ const TINT_ARCHETYPE = [
   "#90be6d",
 ].map((c) => new THREE.Color(c)); // ARCHETYPE_ORDER index
 const TINT_DEPTH = ["#ff5a5a", "#ffd24a", "#5a9bff"].map((c) => new THREE.Color(c)); // front / mid / back
-
-// Archetypes that may use office-style correlated lighting (per-block or
-// whole-floor). For these, we pick a per-building cohort: most stay per-window,
-// some break floors into blocks, some snap entire floors. Others are always
-// per-window.
-const OFFICE_ARCHETYPES = new Set<Archetype>(["office-block", "spire"]);
-
-// Returns the breathing correlation mode for one building:
-//   0 = per-window, 1 = per-block, 2 = whole-floor.
-// Office archetypes split 40 / 35 / 25 across the three modes so the city has
-// visible variety. Non-office archetypes are always per-window.
-function pickCorrelationMode(b: Building): number {
-  if (!OFFICE_ARCHETYPES.has(b.archetype)) return 0;
-  // Cheap deterministic float from windowSeed.
-  const r = (Math.sin(b.windowSeed * 91.3) * 43758.5453) % 1;
-  const u = r < 0 ? r + 1 : r;
-  if (u < 0.4) return 0;
-  if (u < 0.75) return 1;
-  return 2;
-}
 
 type TiledMesh = {
   mesh: THREE.InstancedMesh;
@@ -164,6 +150,7 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
       mat.uniforms.uAaEdge.value = wa.edge;
       mat.uniforms.uLodNear.value = wa.lodNear;
       mat.uniforms.uLodRange.value = wa.lodRange;
+      mat.uniforms.uStagger.value = wa.stagger;
       mat.uniforms.uWindowMode.value = s.windowMode === "advanced" ? 1 : 0;
       mat.uniforms.uWinSimpleWMin.value = s.windowSimple.wMin;
       mat.uniforms.uWinSimpleWMax.value = s.windowSimple.wMax;
@@ -299,6 +286,7 @@ function buildMeshes(
           uWinSimpleHMin: { value: DEFAULT_WINDOW_SIMPLE.hMin },
           uWinSimpleHMax: { value: DEFAULT_WINDOW_SIMPLE.hMax },
           uEmissiveBoost: { value: 1.4 },
+          uStagger: { value: DEFAULT_WINDOW_AA.stagger },
           uTime: { value: 0 },
           uIntroMode: { value: 0 },
           uIntroCamPos: { value: new THREE.Vector3() },
@@ -365,7 +353,7 @@ function buildMeshes(
       aFacadeGlow[i] = facadeGlowFor(b);
       aBuildingHash[i] = b.windowSeed * 1000;
       aMisc[i * 3 + 0] = DISTRICT_TO_IDX[b.district] ?? 0;
-      aMisc[i * 3 + 1] = pickCorrelationMode(b);
+      aMisc[i * 3 + 1] = correlationModeFor(b);
       aMisc[i * 3 + 2] = LAYER_TO_IDX[b.layer] ?? 1;
 
       color.set(parcelColor.get(b.districtId) ?? "#888888");
