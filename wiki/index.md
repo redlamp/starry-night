@@ -6,7 +6,7 @@ Top-level Map of Content. See `CLAUDE.md` for conventions.
 
 - [[decisions]] — architectural and product decisions
 - [[research]] — external references that shape direction
-- [[architecture]] — system shape and rendering strategy *(stub)*
+- [[architecture]] — system shape, rendering strategy, animation language
 
 ## Active
 
