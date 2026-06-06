@@ -39,6 +39,9 @@ export function CaptureBoot() {
       // screenshot is static.
       state.resetCamera();
       state.setCameraMode("still");
+      // Expose the store so verification scripts can drive settings at runtime
+      // (page.evaluate → __sceneStore.getState().setX). Capture mode only.
+      (window as unknown as Record<string, unknown>).__sceneStore = useSceneStore;
     }
     if (params.get("intro") === "instant") {
       // Wake everything within ~1s and park the on/off cycle so a still a few
