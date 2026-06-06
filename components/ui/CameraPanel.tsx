@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import {
   useSceneStore,
   type Vec3,
@@ -24,6 +31,7 @@ import {
   Building2,
   Camera,
   Check,
+  ChevronDown,
   CloudFog,
   Contrast,
   Copy,
@@ -219,7 +227,8 @@ const SETTINGS_SECTIONS: { value: string; label: string; keywords: string }[] = 
   {
     value: "window-profiles",
     label: "Buildings",
-    keywords: "windows lit ratio width range min max size flicker brightness emissive profiles glow building",
+    keywords:
+      "windows lit ratio width range min max size flicker brightness emissive profiles glow building facade wall color colour saturation lightness hue masonry glass",
   },
   {
     value: "intro",
@@ -520,7 +529,7 @@ export function CameraPanel() {
               label="Buildings"
               hidden={!show("window-profiles")}
             >
-              <WindowsSection />
+              <BuildingsSection />
             </Section>
 
             <Section
@@ -913,6 +922,97 @@ function AntiAliasingSection() {
   );
 }
 
+function BuildingsSection() {
+  const lights = useSceneStore((s) => s.windowLights);
+  const setWindowLights = useSceneStore((s) => s.setWindowLights);
+  return (
+    <>
+      <SubGroup
+        label="Windows"
+        action={
+          <Switch
+            checked={lights}
+            onCheckedChange={setWindowLights}
+            title="All window lights on / off (darken the city to debug facades)"
+          />
+        }
+      >
+        <WindowsSection />
+      </SubGroup>
+      <SubGroup label="Facade" defaultOpen>
+        <FacadeSection />
+      </SubGroup>
+    </>
+  );
+}
+
+// Hue-spectrum track for the facade hue range sliders. Explicit stops every
+// 60° (rather than `in hsl longer hue`) for broad browser support; lightness
+// 50% so the band reads even though facade lightness is far darker.
+const HUE_TRACK: CSSProperties = {
+  height: 6,
+  background:
+    "linear-gradient(to right, hsl(0,70%,50%), hsl(60,70%,50%), hsl(120,70%,50%), hsl(180,70%,50%), hsl(240,70%,50%), hsl(300,70%,50%), hsl(360,70%,50%))",
+};
+
+function FacadeSection() {
+  const facade = useSceneStore((s) => s.facade);
+  const setFacade = useSceneStore((s) => s.setFacade);
+  return (
+    <>
+      <div className="text-foreground/55 text-[10px] leading-snug">
+        Wall colour. Each building flips a weighted coin (warm %) for its hue family — warm
+        masonry vs cool glass — then rolls one hue, saturation + lightness from these ranges
+        (lightness skews dark, so pale towers stay rare). Live — no regen.
+      </div>
+      <ValueSlider
+        label="warm %"
+        value={facade.warmShare}
+        min={0}
+        max={1}
+        step={0.05}
+        onChange={(v) => setFacade({ warmShare: v })}
+      />
+      <RangeSlider
+        label="warm hue"
+        value={[facade.warmHueMin, facade.warmHueMax]}
+        min={0}
+        max={360}
+        step={1}
+        trackStyle={HUE_TRACK}
+        indicatorClassName="bg-transparent border-y-2 border-white/80"
+        onChange={([warmHueMin, warmHueMax]) => setFacade({ warmHueMin, warmHueMax })}
+      />
+      <RangeSlider
+        label="cool hue"
+        value={[facade.coolHueMin, facade.coolHueMax]}
+        min={0}
+        max={360}
+        step={1}
+        trackStyle={HUE_TRACK}
+        indicatorClassName="bg-transparent border-y-2 border-white/80"
+        onChange={([coolHueMin, coolHueMax]) => setFacade({ coolHueMin, coolHueMax })}
+      />
+      <RangeSlider
+        label="sat"
+        value={[facade.satMin, facade.satMax]}
+        min={0}
+        max={1}
+        step={0.01}
+        onChange={([satMin, satMax]) => setFacade({ satMin, satMax })}
+      />
+      <RangeSlider
+        label="light"
+        value={[facade.lightMin, facade.lightMax]}
+        min={0}
+        max={0.5}
+        step={0.01}
+        onChange={([lightMin, lightMax]) => setFacade({ lightMin, lightMax })}
+      />
+    </>
+  );
+}
+
 function WindowsSection() {
   const mode = useSceneStore((s) => s.windowMode);
   const setWindowMode = useSceneStore((s) => s.setWindowMode);
@@ -922,7 +1022,6 @@ function WindowsSection() {
   const setWindowAA = useSceneStore((s) => s.setWindowAA);
   return (
     <>
-      <SubHeader label="Windows" />
       <div className="flex items-center gap-1">
         {(["simple", "advanced"] as const).map((m) => (
           <Button
@@ -1461,6 +1560,50 @@ function SubHeader({ label }: { label: string }) {
     <div className="text-foreground/55 mt-1 border-t border-white/10 pt-2 text-[11px] font-medium tracking-wide uppercase">
       {label}
     </div>
+  );
+}
+
+// Collapsible variant of SubHeader: same look, plus a chevron toggle. Open
+// state is transient (like the archetype filter) — not part of saved configs.
+// `action` renders in the header row as a SIBLING of the toggle button (same
+// pattern as Section) so clicking it doesn't collapse the group.
+function SubGroup({
+  label,
+  defaultOpen = false,
+  action,
+  children,
+}: {
+  label: string;
+  defaultOpen?: boolean;
+  action?: ReactNode;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <>
+      <div className="mt-1 flex items-center gap-1.5 border-t border-white/10 pt-2">
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="text-foreground/55 hover:text-foreground/80 flex flex-1 items-center text-[11px] font-medium tracking-wide uppercase transition-colors"
+        >
+          {label}
+        </button>
+        {action}
+        {/* Chevron also toggles, but the label button is the accessible /
+            tabbable control — keep this one out of the tab order. */}
+        <button
+          type="button"
+          tabIndex={-1}
+          aria-hidden="true"
+          onClick={() => setOpen((o) => !o)}
+          className="text-foreground/55 hover:text-foreground/80 transition-colors"
+        >
+          <ChevronDown className={cn("size-3.5 transition-transform", !open && "-rotate-90")} />
+        </button>
+      </div>
+      {open && <div className="flex flex-col gap-2.5">{children}</div>}
+    </>
   );
 }
 

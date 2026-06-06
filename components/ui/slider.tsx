@@ -1,4 +1,5 @@
 import { Slider as SliderPrimitive } from "@base-ui/react/slider";
+import type { CSSProperties } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -8,8 +9,15 @@ function Slider({
   value,
   min = 0,
   max = 100,
+  trackStyle,
+  indicatorClassName,
   ...props
-}: SliderPrimitive.Root.Props) {
+}: SliderPrimitive.Root.Props & {
+  // Optional track paint (e.g. a hue-spectrum gradient) + indicator override
+  // (e.g. a translucent wash so the gradient stays visible inside the range).
+  trackStyle?: CSSProperties;
+  indicatorClassName?: string;
+}) {
   const _values = Array.isArray(value)
     ? value
     : Array.isArray(defaultValue)
@@ -30,11 +38,15 @@ function Slider({
       <SliderPrimitive.Control className="relative flex w-full touch-none items-center select-none data-disabled:opacity-50 data-vertical:h-full data-vertical:min-h-40 data-vertical:w-auto data-vertical:flex-col">
         <SliderPrimitive.Track
           data-slot="slider-track"
+          style={trackStyle}
           className="bg-muted relative grow overflow-hidden rounded-full select-none data-horizontal:h-1 data-horizontal:w-full data-vertical:h-full data-vertical:w-1"
         >
           <SliderPrimitive.Indicator
             data-slot="slider-range"
-            className="bg-primary select-none data-horizontal:h-full data-vertical:w-full"
+            className={cn(
+              "bg-primary select-none data-horizontal:h-full data-vertical:w-full",
+              indicatorClassName,
+            )}
           />
         </SliderPrimitive.Track>
         {Array.from({ length: _values.length }, (_, index) => (

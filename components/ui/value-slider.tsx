@@ -1,5 +1,6 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import { Slider } from "@/components/ui/slider";
 import {
   NumberField,
@@ -74,6 +75,8 @@ export function RangeSlider({
   step,
   onChange,
   labelClass,
+  trackStyle,
+  indicatorClassName,
 }: {
   label: string;
   value: [number, number];
@@ -82,6 +85,8 @@ export function RangeSlider({
   step: number;
   onChange: (v: [number, number]) => void;
   labelClass?: string;
+  trackStyle?: CSSProperties;
+  indicatorClassName?: string;
 }) {
   return (
     <div className="flex flex-row items-center gap-2 text-xs">
@@ -95,6 +100,8 @@ export function RangeSlider({
           if (Array.isArray(v)) onChange([v[0], v[1]]);
         }}
         className="flex-1"
+        trackStyle={trackStyle}
+        indicatorClassName={indicatorClassName}
       />
       <div className="flex w-[6.25rem] shrink-0 items-center gap-1">
         <NumberField
