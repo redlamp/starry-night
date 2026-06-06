@@ -6,13 +6,21 @@ tags:
 
 # Road Reveal Choreography — Phases and Language
 
+> **Feature parked 2026-06-06** — the implementation lives unmerged in draft
+> PR #64 (see [[decision-road-reveal-cascade]] for why). This note and the
+> editor below remain current: they document the animation language and are
+> the starting point if the system is revived here or ported elsewhere.
+
 The shared vocabulary for the city-load animation, so feedback like "the tips
 streak too long" maps to one knob. Decision history in
 [[decision-road-reveal-cascade]]; spec in
 `docs/specs/2026-06-05-road-reveal-cascade.md`. **Interactive companion:**
-`docs/prototypes/road-reveal-choreography.html` — open directly in a browser;
-animates every phase on a synthetic network with live sliders for all the
-knobs below, the phase bar, and glossary highlighting.
+`docs/prototypes/road-reveal-choreography.html` — open directly in a browser.
+It grew into a full choreography editor: GSAP timeline with GSDevTools
+transport, layered actor tracks with draggable/edge-resizable spans and a
+draggable intro-gate line, per-actor ease menus (in/out/inOut), shadcn-styled
+parameter cards with steppers, live canvas preview, and an active-actor cast
+readout. The harness is project-agnostic — candidate for extraction.
 
 Everything below is driven by **one clock**: *master progress* (0→1), the
 `sharedRoadRevealProgress` singleton, advanced by `RoadRevealTicker` over the

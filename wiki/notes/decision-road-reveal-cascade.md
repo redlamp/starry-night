@@ -2,12 +2,19 @@
 tags:
   - domain/city-gen
   - domain/performance
-  - status/adopted
+  - status/deferred
 ---
 
 # Decision: Road Reveal — Centre-Out Cascade
 
 **Date**: 2026-06-05
+**Parked**: 2026-06-06 — fully implemented and reviewed, then deliberately not
+merged: a choreographed multi-act reveal is too theatrical for an ambient
+screensaver homage. Wrong fit for this project, right system for another. The
+complete branch lives in draft **PR #64** (port-back checklist in the PR body);
+the timing model and the interactive choreography editor that grew out of it
+survive on dev (`docs/prototypes/road-reveal-choreography.html`,
+[[road-reveal-choreography]]).
 
 **Context**: Road network snaps in when generation completes. The #59 GenTrace
 blueprint pops segments in batches and hard-cuts to the final ribbons. Metro
