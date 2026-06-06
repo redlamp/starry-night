@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   useSceneStore,
   type Vec3,
@@ -47,6 +47,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
+import { ValueSlider } from "@/components/ui/value-slider";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -205,8 +206,8 @@ const SETTINGS_SECTIONS: { value: string; label: string; keywords: string }[] = 
   { value: "moon", label: "Moon", keywords: "phase distance halo glow" },
   {
     value: "fog",
-    label: "Fog",
-    keywords: "haze ground near far density color exp2 distance depth",
+    label: "Atmosphere",
+    keywords: "fog haze ground near far density amount color exp2 distance depth atmosphere",
   },
   { value: "windows", label: "Anti-Aliasing", keywords: "aa msaa samples smoothing jaggies moire" },
   {
@@ -237,6 +238,33 @@ function matchSection(query: string, s: (typeof SETTINGS_SECTIONS)[number]): boo
   return tokens.every((t) => hay.includes(t));
 }
 
+const PANEL_WIDTH_KEY = "starry-night.panelWidth";
+const DEFAULT_PANEL_WIDTH = 416; // px — the old fixed w-[26rem]
+
+function clampPanelWidth(w: number): number {
+  const viewportCap = typeof window !== "undefined" ? window.innerWidth - 64 : 720;
+  return Math.round(Math.min(Math.max(w, 300), Math.min(720, viewportCap)));
+}
+
+function readStoredPanelWidth(): number {
+  if (typeof window === "undefined") return DEFAULT_PANEL_WIDTH;
+  try {
+    const v = Number(window.localStorage.getItem(PANEL_WIDTH_KEY));
+    if (Number.isFinite(v) && v > 0) return clampPanelWidth(v);
+  } catch {
+    // localStorage may be unavailable
+  }
+  return DEFAULT_PANEL_WIDTH;
+}
+
+function persistPanelWidth(w: number) {
+  try {
+    window.localStorage.setItem(PANEL_WIDTH_KEY, String(w));
+  } catch {
+    // ignore
+  }
+}
+
 export function CameraPanel() {
   const {
     cameraMode,
@@ -255,6 +283,30 @@ export function CameraPanel() {
   const [query, setQuery] = useState("");
   const [openSections, setOpenSections] = useState<string[]>([]);
   const captureMode = useSceneStore((s) => s.captureMode);
+  // Panel never renders during SSR (starts hidden), so reading localStorage in
+  // the initializer can't cause a hydration mismatch.
+  const [panelWidth, setPanelWidth] = useState<number>(readStoredPanelWidth);
+
+  const onResizeDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+  const onResizeMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+    setPanelWidth(clampPanelWidth(window.innerWidth - e.clientX));
+  };
+  const onResizeEnd = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+    e.currentTarget.releasePointerCapture(e.pointerId);
+    setPanelWidth((w) => {
+      persistPanelWidth(w);
+      return w;
+    });
+  };
+  const onResizeReset = () => {
+    setPanelWidth(DEFAULT_PANEL_WIDTH);
+    persistPanelWidth(DEFAULT_PANEL_WIDTH);
+  };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -305,7 +357,23 @@ export function CameraPanel() {
   const show = (value: string) => !shownSections || shownSections.has(value);
 
   return (
-    <div className="border-foreground/10 bg-popover text-foreground grey:bg-popover/70 grey:backdrop-blur-md pointer-events-auto fixed top-0 right-0 bottom-0 z-20 flex h-dvh max-h-dvh w-[26rem] max-w-full flex-col border-l shadow-2xl">
+    <div
+      className="border-foreground/10 bg-popover text-foreground grey:bg-popover/70 grey:backdrop-blur-md pointer-events-auto fixed top-0 right-0 bottom-0 z-20 flex h-dvh max-h-dvh max-w-full flex-col border-l shadow-2xl"
+      style={{ width: panelWidth }}
+    >
+      {/* Grab the left edge to resize; double-click resets to the default width. */}
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize settings panel"
+        title="Drag to resize · double-click to reset"
+        onPointerDown={onResizeDown}
+        onPointerMove={onResizeMove}
+        onPointerUp={onResizeEnd}
+        onPointerCancel={onResizeEnd}
+        onDoubleClick={onResizeReset}
+        className="hover:bg-foreground/20 active:bg-primary/50 absolute inset-y-0 -left-1 z-30 w-2 cursor-ew-resize touch-none transition-colors"
+      />
       {/* Sticky header */}
       <div className="border-border flex shrink-0 flex-col gap-2.5 border-b px-4 pt-4 pb-3">
         <div className="flex items-center justify-between gap-2">
@@ -427,7 +495,7 @@ export function CameraPanel() {
               <MoonSection />
             </Section>
 
-            <Section value="fog" icon={CloudFog} label="Fog" hidden={!show("fog")}>
+            <Section value="fog" icon={CloudFog} label="Atmosphere" hidden={!show("fog")}>
               <FogSection />
             </Section>
 
@@ -1013,22 +1081,31 @@ function FogSection() {
   const setFog = useSceneStore((s) => s.setFog);
   const haze = useSceneStore((s) => s.haze);
   const setHaze = useSceneStore((s) => s.setHaze);
+  const setFogAdjusting = useSceneStore((s) => s.setFogAdjusting);
+  // Show the in-world bracket rings while dragging near/far; linger briefly
+  // after the last change so the rings don't blink out mid-adjust.
+  const adjustTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pingAdjusting = useCallback(() => {
+    setFogAdjusting(true);
+    if (adjustTimeout.current) clearTimeout(adjustTimeout.current);
+    adjustTimeout.current = setTimeout(() => setFogAdjusting(false), 1200);
+  }, [setFogAdjusting]);
+  useEffect(
+    () => () => {
+      if (adjustTimeout.current) clearTimeout(adjustTimeout.current);
+      setFogAdjusting(false);
+    },
+    [setFogAdjusting],
+  );
   return (
     <>
-      <div className="flex items-center justify-end">
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => setFog({ enabled: !fog.enabled })}
-          title="Toggle scene fog on/off"
-          className={cn(
-            fog.enabled
-              ? "bg-foreground text-background hover:bg-foreground"
-              : "bg-foreground/10 text-foreground hover:bg-foreground/20",
-          )}
-        >
-          {fog.enabled ? "on" : "off"}
-        </Button>
+      <div className="flex items-center justify-between">
+        <span className="text-foreground/55 text-[10px] tracking-wide uppercase">Fog</span>
+        <Switch
+          checked={fog.enabled}
+          onCheckedChange={(enabled) => setFog({ enabled })}
+          aria-label="Toggle scene fog"
+        />
       </div>
       <div className="flex items-center gap-2 text-xs">
         <span className="text-foreground/70 w-14 shrink-0">color</span>
@@ -1058,48 +1135,49 @@ function FogSection() {
       </div>
       {fog.mode === "linear" ? (
         <>
+          {/* Positions on the camera→centre axis: 0 = at the camera, 1 = at
+              the city centre, >1 = beyond it — not absolute metres. Dragging
+              shows the in-world boundary walls (FogBoundsMarkers). */}
           <ValueSlider
             label="near"
             value={fog.near}
             min={0}
-            max={6000}
-            step={10}
-            onChange={(near) => setFog({ near })}
+            max={4}
+            step={0.05}
+            onChange={(near) => {
+              setFog({ near });
+              pingAdjusting();
+            }}
           />
           <ValueSlider
             label="far"
             value={fog.far}
-            min={50}
-            max={12000}
-            step={10}
-            onChange={(far) => setFog({ far })}
+            min={0.1}
+            max={6}
+            step={0.05}
+            onChange={(far) => {
+              setFog({ far });
+              pingAdjusting();
+            }}
           />
         </>
       ) : (
         <ValueSlider
-          label="density"
+          label="amount"
           value={fog.density}
           min={0}
-          max={0.005}
-          step={0.0001}
+          max={0.9}
+          step={0.01}
           onChange={(density) => setFog({ density })}
         />
       )}
       <div className="flex items-center justify-between pt-2">
         <span className="text-foreground/55 text-[10px] tracking-wide uppercase">Ground haze</span>
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => setHaze({ enabled: !haze.enabled })}
-          title="Toggle ground-haze band on/off"
-          className={cn(
-            haze.enabled
-              ? "bg-foreground text-background hover:bg-foreground"
-              : "bg-foreground/10 text-foreground hover:bg-foreground/20",
-          )}
-        >
-          {haze.enabled ? "on" : "off"}
-        </Button>
+        <Switch
+          checked={haze.enabled}
+          onCheckedChange={(enabled) => setHaze({ enabled })}
+          aria-label="Toggle ground-haze band"
+        />
       </div>
       {haze.enabled ? (
         <>
@@ -1728,44 +1806,8 @@ function MoonReadout() {
   );
 }
 
-function ValueSlider({
-  label,
-  value,
-  min,
-  max,
-  step,
-  onChange,
-  labelClass,
-}: {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  step: number;
-  onChange: (v: number) => void;
-  labelClass?: string;
-}) {
-  return (
-    <div className="flex items-center gap-2 text-xs">
-      <span className={cn("text-foreground/70 w-14 shrink-0", labelClass)}>{label}</span>
-      <Slider
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onValueChange={(v) => onChange(typeof v === "number" ? v : v[0])}
-        className="flex-1"
-      />
-      <input
-        type="number"
-        step={step}
-        value={value}
-        onChange={(e) => onChange(parseFloat(e.target.value) || min)}
-        className="border-foreground/15 bg-background/60 text-foreground w-16 rounded border px-1.5 py-0.5 tabular-nums"
-      />
-    </div>
-  );
-}
+// ValueSlider moved to components/ui/value-slider.tsx (shared with RoadsPanel,
+// upgraded with a base-ui number-field stepper + label scrubbing).
 
 function Vec3Header() {
   return (
