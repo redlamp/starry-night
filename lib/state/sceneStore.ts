@@ -165,6 +165,26 @@ export const DEFAULT_WINDOW_AA = {
   curtainW: 0.99,
 };
 
+// Facade base-colour ranges (lightingGen.facadeColorFor): each building rolls
+// one hue + one saturation + one lightness. A weighted coin (warmShare) picks
+// the hue family — warm masonry vs cool blue-glass — then hue rolls inside
+// that family's [min, max] degree window. Lightness skews dark (pow 1.4).
+// Sat/light are DISPLAY space HSL: the city shader writes gl_FragColor raw
+// (no tonemapping / colorspace chunks), so what's stored is what reaches the
+// screen. Sat/light defaults tuned live 2026-06-07: whisper-subtle separation
+// — silhouettes barely lift off the sky, no readable wall colour.
+export const DEFAULT_FACADE = {
+  satMin: 0.02,
+  satMax: 0.08,
+  lightMin: 0.02,
+  lightMax: 0.06,
+  warmShare: 0.3,
+  warmHueMin: 18, // degrees
+  warmHueMax: 40,
+  coolHueMin: 198,
+  coolHueMax: 234,
+};
+
 // Per-archetype window glass-to-cell fraction. Width AND height are
 // per-building RANGES: each building rolls ONE seeded value per dimension
 // (independent rolls) inside [min, max], and every window on that building
@@ -381,6 +401,8 @@ type AnySettingEntry =
   | SettingEntry<"orthoSize">
   | SettingEntry<"projectionBlend">
   | SettingEntry<"windowAA">
+  | SettingEntry<"facade">
+  | SettingEntry<"windowLights">
   | SettingEntry<"windowMode">
   | SettingEntry<"windowSimple">
   | SettingEntry<"windowProfiles">
@@ -420,6 +442,10 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
     persist: false,
   },
   { key: "windowAA", defaultValue: DEFAULT_WINDOW_AA, persist: true },
+  { key: "facade", defaultValue: DEFAULT_FACADE, persist: true },
+  // Debug aid (Windows header switch) — deliberately not persisted, so a
+  // reload / Reset can't leave the city mysteriously dark.
+  { key: "windowLights", defaultValue: true, persist: false },
   { key: "windowMode", defaultValue: "advanced" as const, persist: true },
   { key: "windowSimple", defaultValue: DEFAULT_WINDOW_SIMPLE, persist: true },
   { key: "windowProfiles", defaultValue: DEFAULT_WINDOW_PROFILES, persist: true },
@@ -468,6 +494,7 @@ type SavedConfig = {
   projection?: Projection;
   orthoSize?: number;
   windowAA?: typeof DEFAULT_WINDOW_AA;
+  facade?: typeof DEFAULT_FACADE;
   windowMode?: "simple" | "advanced";
   windowSimple?: WindowRange;
   windowProfiles?: Record<Archetype, WindowProfile>;
@@ -548,6 +575,7 @@ function readSavedConfig(): SavedConfig | null {
     if (parsed.lod) parsed.lod = { ...DEFAULT_LOD, ...parsed.lod };
     if (parsed.stars) parsed.stars = { ...DEFAULT_STARS, ...parsed.stars };
     if (parsed.windowAA) parsed.windowAA = { ...DEFAULT_WINDOW_AA, ...parsed.windowAA };
+    if (parsed.facade) parsed.facade = { ...DEFAULT_FACADE, ...parsed.facade };
     if (parsed.fog) {
       // 2026-06-06 fog re-anchor: old saves carry absolute near/far metres —
       // drop them and fill the new fractional brackets so a stale save can't
@@ -667,6 +695,10 @@ type SceneState = {
   setStars: (patch: Partial<typeof DEFAULT_STARS>) => void;
   windowAA: typeof DEFAULT_WINDOW_AA;
   setWindowAA: (patch: Partial<typeof DEFAULT_WINDOW_AA>) => void;
+  facade: typeof DEFAULT_FACADE;
+  setFacade: (patch: Partial<typeof DEFAULT_FACADE>) => void;
+  windowLights: boolean;
+  setWindowLights: (v: boolean) => void;
   windowMode: "simple" | "advanced";
   setWindowMode: (mode: "simple" | "advanced") => void;
   windowSimple: WindowRange;
@@ -902,6 +934,10 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setStars: (patch) => set((s) => ({ stars: { ...s.stars, ...patch } })),
   windowAA: DEFAULT_WINDOW_AA,
   setWindowAA: (patch) => set((s) => ({ windowAA: { ...s.windowAA, ...patch } })),
+  facade: DEFAULT_FACADE,
+  setFacade: (patch) => set((s) => ({ facade: { ...s.facade, ...patch } })),
+  windowLights: true,
+  setWindowLights: (windowLights) => set({ windowLights }),
   windowMode: "advanced",
   setWindowMode: (windowMode) => set({ windowMode }),
   windowSimple: DEFAULT_WINDOW_SIMPLE,

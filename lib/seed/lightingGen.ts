@@ -371,25 +371,53 @@ export function generateWindowTexture(masterSeed: string, building: Building): W
 //
 // Pure per-building random, drawn from a night-material gamut: mostly cool
 // blue-blacks (glass/concrete in sodium-less dark), a warm-masonry minority,
-// with a WIDE lightness spread — at night + ACES the deep values compress
-// hard, so visible neighbour separation needs lightness range, not hue alone.
+// with a skewed lightness spread — dark-glass majority, pale-concrete tail.
 // Deterministic from the building's existing windowSeed — no new gen inputs,
 // city data (and the golden) untouched.
+//
+// Authored in DISPLAY space (setHSL with no colour-space conversion): the city
+// ShaderMaterial writes gl_FragColor raw — no tonemapping/colorspace chunks —
+// so whatever we put in the attribute is what reaches the screen. The earlier
+// SRGBColorSpace conversion stored linear values (l 0.045–0.12 → 0.004–0.014),
+// which the raw path displayed as 1–4/255: variance present, invisible.
 function hash01(x: number): number {
   const s = Math.sin(x * 127.1) * 43758.5453;
   return s - Math.floor(s);
 }
 
-export function facadeColorFor(building: Building, out: THREE.Color): THREE.Color {
+// Live-tunable ranges (Buildings panel → Facade); defaults in
+// sceneStore.DEFAULT_FACADE. Structural type to keep this seed-layer module
+// free of store imports. Hues are in DEGREES (UI-friendly); sat/light 0..1.
+export type FacadeRanges = {
+  satMin: number;
+  satMax: number;
+  lightMin: number;
+  lightMax: number;
+  warmShare: number; // probability a building rolls the warm family
+  warmHueMin: number;
+  warmHueMax: number;
+  coolHueMin: number;
+  coolHueMax: number;
+};
+
+export function facadeColorFor(
+  building: Building,
+  out: THREE.Color,
+  f: FacadeRanges,
+): THREE.Color {
   const r1 = hash01(building.windowSeed * 311.7);
   const r2 = hash01(building.windowSeed * 269.5);
   const r3 = hash01(building.windowSeed * 183.3);
   const r4 = hash01(building.windowSeed * 97.3);
-  // ~30% warm masonry hues, the rest cool blue-blacks.
-  const h = r1 < 0.3 ? 0.05 + r2 * 0.06 : 0.55 + r2 * 0.1;
-  const s = 0.08 + r3 * 0.22;
-  const l = 0.045 + r4 * 0.075; // 0.045..0.12 — wide enough to read at night
-  return out.setHSL(h, s, l, THREE.SRGBColorSpace);
+  // Weighted coin picks the hue family (warm masonry vs cool blue-glass),
+  // then the hue rolls inside that family's degree window.
+  const h =
+    (r1 < f.warmShare
+      ? f.warmHueMin + r2 * (f.warmHueMax - f.warmHueMin)
+      : f.coolHueMin + r2 * (f.coolHueMax - f.coolHueMin)) / 360;
+  const s = f.satMin + r3 * (f.satMax - f.satMin);
+  const l = f.lightMin + (f.lightMax - f.lightMin) * Math.pow(r4, 1.4); // skewed dark
+  return out.setHSL(h, s, l);
 }
 
 /** Facade glow: faint downtown ambience (street-light bounce on glass) that

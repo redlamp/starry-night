@@ -80,6 +80,10 @@ type TiledMesh = {
   mesh: THREE.InstancedMesh;
   partition: TilePartition;
   channels: CompactChannel[];
+  // Facade recolor (live sliders): tile-major building list + the facade
+  // channel whose src array is the stable copy compaction reads from.
+  list: Building[];
+  facadeChannel: CompactChannel;
 };
 
 export function InstancedCity({ masterSeed }: { masterSeed: string }) {
@@ -103,6 +107,26 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
   useEffect(() => {
     lastSigs.current = entries.map(() => "");
   }, [entries]);
+
+  // Facade recolor: sliders rewrite the per-instance colour SOURCE arrays
+  // (the tile-major copies compaction reads from), then blank the cull
+  // signatures so the next frame recompacts src → draw buffer. No atlas or
+  // geometry rebuild — ~N setHSL calls per change.
+  const facade = useSceneStore((s) => s.facade);
+  useEffect(() => {
+    const c = new THREE.Color();
+    for (let e = 0; e < entries.length; e++) {
+      const { list, facadeChannel } = entries[e];
+      const src = facadeChannel.src;
+      for (let i = 0; i < list.length; i++) {
+        facadeColorFor(list[i], c, facade);
+        src[i * 3 + 0] = c.r;
+        src[i * 3 + 1] = c.g;
+        src[i * 3 + 2] = c.b;
+      }
+      lastSigs.current[e] = "";
+    }
+  }, [entries, facade]);
 
   // Dispose old GPU resources when seed changes / unmounts.
   useEffect(() => {
@@ -153,6 +177,7 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
       mat.uniforms.uStagger.value = wa.stagger;
       mat.uniforms.uCurtainShare.value = wa.curtain;
       mat.uniforms.uCurtainWidth.value = wa.curtainW;
+      mat.uniforms.uLightsOn.value = s.windowLights ? 1 : 0;
       mat.uniforms.uWindowMode.value = s.windowMode === "advanced" ? 1 : 0;
       mat.uniforms.uWinSimpleWMin.value = s.windowSimple.wMin;
       mat.uniforms.uWinSimpleWMax.value = s.windowSimple.wMax;
@@ -196,6 +221,9 @@ function buildMeshes(
 ): { entries: TiledMesh[]; maxRadius: number } {
   const { buildings } = generateCity(masterSeed, shape, shapeScale);
   if (buildings.length === 0) return { entries: [], maxRadius: 1 };
+
+  // Build-time snapshot; the recolor effect re-applies live slider changes.
+  const facadeRanges = useSceneStore.getState().facade;
 
   let maxRadius = 1;
   let maxHeight = 1;
@@ -291,6 +319,7 @@ function buildMeshes(
           uStagger: { value: DEFAULT_WINDOW_AA.stagger },
           uCurtainShare: { value: DEFAULT_WINDOW_AA.curtain },
           uCurtainWidth: { value: DEFAULT_WINDOW_AA.curtainW },
+          uLightsOn: { value: 1 },
           uTime: { value: 0 },
           uIntroMode: { value: 0 },
           uIntroCamPos: { value: new THREE.Vector3() },
@@ -349,7 +378,7 @@ function buildMeshes(
       aGrid[i * 3 + 1] = b.floors;
       aGrid[i * 3 + 2] = ARCHETYPE_ORDER.indexOf(b.archetype);
 
-      facadeColorFor(b, color);
+      facadeColorFor(b, color, facadeRanges);
       aFacadeColor[i * 3 + 0] = color.r;
       aFacadeColor[i * 3 + 1] = color.g;
       aFacadeColor[i * 3 + 2] = color.b;
@@ -394,6 +423,11 @@ function buildMeshes(
 
     // #55 source records: stable tile-major copies the frame loop compacts from.
     // The attribute arrays themselves are the (mutated) draw buffers.
+    const facadeChannel: CompactChannel = {
+      src: aFacadeColor.slice(),
+      dst: geo.getAttribute("aFacadeColor") as THREE.InstancedBufferAttribute,
+      itemSize: 3,
+    };
     const channels: CompactChannel[] = [
       {
         src: (mesh.instanceMatrix.array as Float32Array).slice(),
@@ -415,11 +449,7 @@ function buildMeshes(
         dst: geo.getAttribute("aGrid") as THREE.InstancedBufferAttribute,
         itemSize: 3,
       },
-      {
-        src: aFacadeColor.slice(),
-        dst: geo.getAttribute("aFacadeColor") as THREE.InstancedBufferAttribute,
-        itemSize: 3,
-      },
+      facadeChannel,
       {
         src: aFacadeGlow.slice(),
         dst: geo.getAttribute("aFacadeGlow") as THREE.InstancedBufferAttribute,
@@ -441,7 +471,7 @@ function buildMeshes(
         itemSize: 3,
       },
     ];
-    entries.push({ mesh, partition, channels });
+    entries.push({ mesh, partition, channels, list, facadeChannel });
   }
 
   return { entries, maxRadius };

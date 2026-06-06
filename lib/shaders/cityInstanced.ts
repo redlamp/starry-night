@@ -111,6 +111,7 @@ uniform float uCycleJitter; // 0..1 amplitude on per-window cycle randomness
 uniform float uStagger;     // share of correlated floors that switch on in banks
 uniform float uCurtainShare; // share of correlated office towers with full-glass facades
 uniform float uCurtainWidth; // pane fill on curtain towers; 1.0 = seamless one-window floors
+uniform float uLightsOn;    // 1 = normal; 0 = every window dark (facade debug switch)
 uniform float uOrthoBlend;      // 0 = perspective, 1 = orthographic; LOD bypass scales by (1-this)
 uniform float uAaEdge;          // fwidth edge-AA multiplier (window-quality panel)
 uniform float uLodNear;         // cells-per-pixel where distance wash starts
@@ -486,6 +487,10 @@ void main() {
     vec3 distantGlow =
       facade +
       vec3(1.0, 0.78, 0.5) * uEmissiveBoost * 0.22 * (0.5 + vFacadeGlow);
+
+    // Lights kill switch (facade debug): zeroing windowOn here darkens both
+    // the per-cell path and the far glow (each is gated by windowOn below).
+    windowOn *= uLightsOn;
 
     // Up close (lod=0): per-cell render with binary on/off gating.
     // Far (lod=1): per-cell sampling drops out, distantGlow takes over,
