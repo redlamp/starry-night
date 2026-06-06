@@ -148,6 +148,9 @@ export const DEFAULT_STARS = {
 //   stagger — share of correlated floors (whole/fractional bands) that switch
 //             on in 2..4 column banks instead of all at once — banks of light
 //             switches flipped down the hall.
+//   curtain — share of correlated office towers (office-block / spire) whose
+//             facades pin to continuous glass: full-bleed width, slim spandrel
+//             between floors. Ribbon towers beside punched-window neighbours.
 export const DEFAULT_WINDOW_AA = {
   edge: 1.1,
   lodNear: 0.2,
@@ -155,6 +158,7 @@ export const DEFAULT_WINDOW_AA = {
   litBias: 0.7,
   churn: 0.2,
   stagger: 0.5,
+  curtain: 0.3,
 };
 
 // Per-archetype window glass-to-cell fraction. Width AND height are

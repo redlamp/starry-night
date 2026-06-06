@@ -917,6 +917,7 @@ function WindowsSection() {
   const mode = useSceneStore((s) => s.windowMode);
   const setWindowMode = useSceneStore((s) => s.setWindowMode);
   const stagger = useSceneStore((s) => s.windowAA.stagger);
+  const curtain = useSceneStore((s) => s.windowAA.curtain);
   const setWindowAA = useSceneStore((s) => s.setWindowAA);
   return (
     <>
@@ -956,6 +957,18 @@ function WindowsSection() {
       <div className="text-foreground/55 text-[10px] leading-snug">
         Share of correlated floors (whole / fractional bands) that switch on in 2–4 column banks
         instead of all at once.
+      </div>
+      <ValueSlider
+        label="curtain"
+        value={curtain}
+        min={0}
+        max={1}
+        step={0.05}
+        onChange={(v) => setWindowAA({ curtain: v })}
+      />
+      <div className="text-foreground/55 text-[10px] leading-snug">
+        Share of correlated office towers whose facades pin to continuous glass — full-bleed
+        ribbon floors beside punched-window neighbours.
       </div>
     </>
   );

@@ -151,6 +151,7 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
       mat.uniforms.uLodNear.value = wa.lodNear;
       mat.uniforms.uLodRange.value = wa.lodRange;
       mat.uniforms.uStagger.value = wa.stagger;
+      mat.uniforms.uCurtainShare.value = wa.curtain;
       mat.uniforms.uWindowMode.value = s.windowMode === "advanced" ? 1 : 0;
       mat.uniforms.uWinSimpleWMin.value = s.windowSimple.wMin;
       mat.uniforms.uWinSimpleWMax.value = s.windowSimple.wMax;
@@ -287,6 +288,7 @@ function buildMeshes(
           uWinSimpleHMax: { value: DEFAULT_WINDOW_SIMPLE.hMax },
           uEmissiveBoost: { value: 1.4 },
           uStagger: { value: DEFAULT_WINDOW_AA.stagger },
+          uCurtainShare: { value: DEFAULT_WINDOW_AA.curtain },
           uTime: { value: 0 },
           uIntroMode: { value: 0 },
           uIntroCamPos: { value: new THREE.Vector3() },

@@ -109,6 +109,7 @@ uniform float uOffCycle;
 uniform float uRetrigger;
 uniform float uCycleJitter; // 0..1 amplitude on per-window cycle randomness
 uniform float uStagger;     // share of correlated floors that switch on in banks
+uniform float uCurtainShare; // share of correlated office towers with full-glass facades
 uniform float uOrthoBlend;      // 0 = perspective, 1 = orthographic; LOD bypass scales by (1-this)
 uniform float uAaEdge;          // fwidth edge-AA multiplier (window-quality panel)
 uniform float uLodNear;         // cells-per-pixel where distance wash starts
@@ -266,6 +267,18 @@ void main() {
   }
   fracW = clamp(fracW, 0.05, 1.0);
   fracH = clamp(fracH, 0.05, 1.0);
+  // Curtain wall: a seeded share of correlated OFFICE buildings (archetype
+  // 5 office-block / 6 spire — never warehouses) reads as continuous glass:
+  // width pinned full-bleed (the phantom-mullion fade above takes the cell
+  // seams out) and height high with a slim spandrel band between floors.
+  // Pairs with the floor-banded atlas these buildings already carry — lit
+  // floors become mullion-free ribbons beside punched-window neighbours.
+  // Live uniform; overrides the panel ranges for the rolled buildings.
+  if (rowCoherent > 0.5 && vGrid.z > 4.5 &&
+      hash11(vBuildingHash * 4.1 + 67.0) < uCurtainShare) {
+    fracW = 1.0;
+    fracH = mix(0.72, 0.92, hash11(vBuildingHash * 6.7 + 31.0));
+  }
   float halfW = fracW * 0.5;
   float halfH = fracH * 0.5;
   // Screen-space derivatives smooth the window/facade edge by ~1px regardless
