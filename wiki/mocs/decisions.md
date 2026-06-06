@@ -19,6 +19,8 @@ Map of Content for architectural and product decisions. Each decision is an atom
 - [[decision-tile-cull-materialisation]] — **Per-tile culling via buffer compaction (#55):** items stored tile-major, visible tiles' slices copied to the buffer head on set-change, `mesh.count`/drawRange lowered; draw calls constant, lazy materialisation falls out of generate-at-max
 - [[decision-road-reveal-cascade]] — **Road reveal = centre-out cascade:** highways grow from centre, arterials sprout from highway junctions, streets from arterial junctions (pure function of geometry → deterministic, replays warm or cold); GenTrace blueprint softens and fades beneath it; roads lead, buildings follow
 - [[decision-window-proportion-by-archetype]] — Per-archetype window size + grid pitch (skyscraper glass / warehouse bays / heritage punched windows); admits archetype-level fenestration to v1
+- [[decision-correlated-window-lighting]] — **Correlated window lighting:** floor/segment/curtain-wall bands via atlas alpha tagging (200 = band), shader-owned timing, switch-bank stagger; curtain wall is a floor treatment, not a building skin
+- [[decision-facade-display-space-color]] — **Facade colour authored in display space:** the city shader writes gl_FragColor raw, so linear-converted colours collapse to black; per-building variance live-tunable (sat/light/hue families) through the #55 source arrays; lights kill switch for facade debugging
 - [[decision-moon-celestial-model]] — Moon parametrised as azimuth / elevation / distance, not cylinder coords
 - [[decision-orbit-spherical-controls]] — Spherical orbit + drag / pinch / wheel controls on the canvas
 - [[decision-github-pages-deploy]] — Static export to GitHub Pages on every push to main

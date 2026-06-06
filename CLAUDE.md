@@ -22,6 +22,7 @@ See `docs/PRD.md` §4 for the full list. Core: Next.js (App Router), Bun, Three.
 - Determinism is the contract. No `Math.random()`, `Date.now()`, or `performance.now()` as input to scene state. Flicker uses shader math on `(windowSeed, uTime)`. Non-deterministic calls in render paths are a bug — flag, do not write.
 - Two-tier state: derived-from-seed recomputes, never stored. Runtime (seed, mode, quality, paused) lives in Zustand only.
 - sRGB output, ACES tone mapping, emissive > 1.0 for HDR glow.
+- **Exception**: the city building shader (`cityInstanced`) writes `gl_FragColor` raw — no tone-mapping/colorspace chunks. Colours fed to it (facade attributes, palettes) are authored in **display space**; converting them to linear (`setHSL(…, SRGBColorSpace)`) collapses them to black. See `wiki/notes/decision-facade-display-space-color.md`.
 - Aspect-bucket camera (landscape / square / portrait). Canvas is fullbleed and resizable.
 
 If a request conflicts with the PRD or a `decision-*.md` note, surface the conflict before coding.
