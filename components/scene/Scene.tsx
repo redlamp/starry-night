@@ -25,7 +25,6 @@ import { Roads } from "./Roads";
 import { DistrictShells } from "./DistrictShells";
 import { TensorFieldOverlay } from "./TensorFieldOverlay";
 import { Traffic } from "./Traffic";
-import { GenTrace } from "./GenTrace";
 import { ShootingStars } from "./ShootingStars";
 import { useGeneratedCity } from "@/lib/hooks/useGeneratedCity";
 
@@ -99,7 +98,12 @@ export function Scene() {
           (#44) so the first mount frame paints the sky/ground without the ~200ms
           generation stall. Once cityReady flips, every generator below hits the
           warm cache and runs synchronously. */}
-      {cityReady ? (
+      {/* While the worker generates, the scene stays dark (ground + stars) and
+          the city pops in whole when the bundle lands. The old GenTrace overlay
+          (#59 streamed "city sketches itself" lines) read as stray bright
+          scribbles over the intro — removed; the worker stream + cityGenClient
+          subscribe API stay for the road-reveal choreography to consume. */}
+      {cityReady && (
         <>
           <Roads masterSeed={masterSeed} />
           <InstancedCity masterSeed={masterSeed} />
@@ -111,11 +115,6 @@ export function Scene() {
           <DistrictShells masterSeed={masterSeed} />
           <TensorFieldOverlay masterSeed={masterSeed} />
         </>
-      ) : (
-        /* #59: while the worker generates, the streamed road trace draws the
-           network in — the city literally sketches itself, then the real
-           layers swap in the moment the bundle lands. */
-        <GenTrace masterSeed={masterSeed} />
       )}
       <FocalIndicator />
     </Canvas>
