@@ -230,6 +230,7 @@ const CRT_EMISSIVE_FRAGMENT = /* glsl */ `
  * Hovering shows a soft highlight (doubles as the alignment debug visual).
  */
 const BADGE_DEBUG = false; // true: badge zone always visible
+const FACADE_TILT = -0.12; // rad — the front face leans back slightly
 
 function AppleBadge() {
   const { scene } = useGLTF(DAZ_URL);
@@ -250,13 +251,14 @@ function AppleBadge() {
     const body = new THREE.Box3().setFromObject(bodyMesh);
     // x/y verified against the painted logo via debug render; z hugs the
     // body's front plane so the zone tracks the logo at any camera angle
-    return new THREE.Vector3(glass.min.x + 0.4, glass.min.y - 9.8, body.max.z + 0.05);
+    return new THREE.Vector3(glass.min.x - 0.6, glass.min.y - 7.3, body.max.z + 0.05);
   }, [scene]);
 
   if (!position) return null;
   return (
     <mesh
       position={position.toArray()}
+      rotation={[FACADE_TILT, 0, 0]}
       onClick={(e) => {
         e.stopPropagation();
         setSeed(randomSeed());
@@ -515,7 +517,7 @@ export function MacDaz({
   bwLevels = DEFAULT_BW_LEVELS,
   glow = 0.8,
   halation = 0.1,
-  scanline = 0.25,
+  scanline = 0.6,
   showPeripherals = false,
   screenInteractive = false,
   onScreenHoverChange,

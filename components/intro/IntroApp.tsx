@@ -36,7 +36,7 @@ const SCREEN_DEFAULTS = {
   softness: 0.22,
   glow: 0.8,
   halation: 0.1,
-  scanline: 0.25,
+  scanline: 0.6,
   bloom: 0.15,
 };
 
@@ -198,7 +198,7 @@ export function IntroApp() {
                   />
                 </>
               )}
-              <SliderRow label="Glow" value={glow} min={0} max={2} step={0.05} onChange={setGlow} />
+              {/* pipeline order: levels → halation → scanlines → glow → bloom */}
               <SliderRow
                 label="Halation"
                 value={halation}
@@ -215,6 +215,7 @@ export function IntroApp() {
                 step={0.01}
                 onChange={setScanline}
               />
+              <SliderRow label="Glow" value={glow} min={0} max={2} step={0.05} onChange={setGlow} />
               <SliderRow
                 label="Bloom"
                 value={bloom}
