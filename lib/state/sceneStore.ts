@@ -290,20 +290,24 @@ export const DEFAULT_CITY_PLANNING_VIS = {
 // Building tint washes the 3D massing by a chosen category (plan-view-style),
 // driven by a shader uniform mix — no mesh rebuild. Render modes flip each
 // scene group between Rendered / Wireframe / Hidden. All runtime UI state.
+// 2026-06-08: "off" retired from the mode list — a header on/off switch
+// (buildingTint.enabled) gates the wash instead, so the dropdown only carries
+// real modes (alphabetised in the UI) and remembers the last one while off.
 export type BuildingTintMode =
-  | "off"
-  | "district"
-  | "landuse"
   | "archetype"
   | "depth"
+  | "district"
   | "height"
+  | "landuse"
   | "population";
 export type RenderGroup = "buildings" | "roads" | "ground" | "sky" | "moon";
 export type RenderMode = "rendered" | "wireframe" | "hidden";
 export const RENDER_GROUPS: RenderGroup[] = ["buildings", "roads", "ground", "sky", "moon"];
 
 export const DEFAULT_DEBUG = {
-  buildingTint: { mode: "off" as BuildingTintMode, intensity: 0.85 },
+  // enabled:false so the city boots untinted; the dropdown still shows the
+  // remembered mode (population) ready to flip on from the Buildings header.
+  buildingTint: { mode: "population" as BuildingTintMode, intensity: 0.85, enabled: false },
   renderModes: {
     buildings: "rendered" as RenderMode,
     roads: "rendered" as RenderMode,
@@ -375,7 +379,8 @@ export const DEFAULT_CITY_SHAPE: CityShapeSetting = "circle";
 // Truck Stop → Metropolis). Each notch is a DIFFERENT city for the same seed
 // (a bigger canvas re-rolls the layout; it does not grow the current city
 // outward). Gen cost ∝ extent²: 3 km ~2.5 s, 6 km ~8–10 s, 8 km worse still
-// (#63) — the 3 km default keeps boot mobile-viable; big notches are opt-in.
+// (#63). Default is the 6 km "City" notch (user 2026-06-08) — boot pays the
+// ~8–10 s gen; revisit if mobile boot complains.
 export const DEFAULT_CITY_SIZE: CityTier = DEFAULT_CITY_TIER;
 // Crop follows the tier while locked (the default): crop = the tier's full disc.
 export const DEFAULT_CROP_LOCK = true;
@@ -400,9 +405,14 @@ export const DEFAULT_PROJECTION = "orthographic" as const;
 // POLICY: any setting a user adjusts that affects the scene's look or behaviour
 // MUST be persist:true so Copy / Save / Revert include it. persist:false is
 // reserved for TRANSIENT runtime state only — currently: projectionBlend (the
-// derived perspective↔ortho tween), orbitPaused, cameraMode, orbitRestore, and
-// debug (inspection view modes). When adding a setting, default to persist:true
+// derived perspective↔ortho tween), orbitRestore, topDownTip, and debug
+// (inspection view modes). When adding a setting, default to persist:true
 // and add it to the SavedConfig type.
+//
+// cameraMode + orbitPaused became persist:true on 2026-06-08: with boot
+// hydration, "Save" promises the camera comes back EXACTLY as saved — a still
+// pose must not boot into a revolving orbit (user: "saved with default camera
+// but that doesn't seem to stick").
 //
 // NOTE: cityPlanning is handled specially — only the three visibility toggles
 // participate (showHighways/showDistrictShells/showArterials), not the runtime
@@ -480,9 +490,9 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "fog", defaultValue: DEFAULT_FOG, persist: true },
   { key: "haze", defaultValue: DEFAULT_HAZE, persist: true },
   { key: "flySpeed", defaultValue: DEFAULT_FLY_SPEED, persist: true },
-  { key: "orbitPaused", defaultValue: false as const, persist: false },
+  { key: "orbitPaused", defaultValue: false as const, persist: true },
   { key: "showFocalIndicator", defaultValue: false as const, persist: true },
-  { key: "cameraMode", defaultValue: "orbit" as const, persist: false },
+  { key: "cameraMode", defaultValue: "orbit" as const, persist: true },
   { key: "orbitRestore", defaultValue: null as SceneState["orbitRestore"], persist: false },
   { key: "topDownTip", defaultValue: 0, persist: false },
   { key: "intro", defaultValue: DEFAULT_INTRO, persist: true },
@@ -501,7 +511,7 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   // On-screen FPS badge — persisted so a perf pass survives reloads.
   { key: "fpsHud", defaultValue: false as const, persist: true },
   // Tensor-field deviation scale (#51) — gen input, persisted.
-  { key: "fieldDeviation", defaultValue: 1, persist: true },
+  { key: "fieldDeviation", defaultValue: 1.5, persist: true },
   // Population profile (#49) — gen input, persisted.
   { key: "densityProfile", defaultValue: DEFAULT_DENSITY_PROFILE, persist: true },
 ];
@@ -532,6 +542,9 @@ type SavedConfig = {
   moonFollowCamera?: boolean;
   flySpeed?: number;
   showFocalIndicator?: boolean;
+  // 2026-06-08: the camera comes back EXACTLY as saved (mode + paused state).
+  cameraMode?: CameraMode;
+  orbitPaused?: boolean;
   intro?: SceneState["intro"];
   starIntro?: SceneState["starIntro"];
   traffic?: SceneState["traffic"];
@@ -907,7 +920,9 @@ type SceneState = {
   setStreetCount: (n: number) => void;
   // Debug view modes — building tint + per-group render mode (Slices A/B).
   debug: typeof DEFAULT_DEBUG;
-  setBuildingTint: (patch: Partial<{ mode: BuildingTintMode; intensity: number }>) => void;
+  setBuildingTint: (
+    patch: Partial<{ mode: BuildingTintMode; intensity: number; enabled: boolean }>,
+  ) => void;
   setRenderMode: (group: RenderGroup, mode: RenderMode) => void;
   setAllRenderModes: (mode: RenderMode) => void;
   setRenderModes: (modes: Record<RenderGroup, RenderMode>) => void;
@@ -1141,7 +1156,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setCitySketch: (citySketch) => set({ citySketch }),
   fpsHud: false,
   setFpsHud: (fpsHud) => set({ fpsHud }),
-  fieldDeviation: 1,
+  fieldDeviation: 1.5,
   setFieldDeviation: (fieldDeviation) => set({ fieldDeviation }),
   densityProfile: DEFAULT_DENSITY_PROFILE,
   setDensityProfile: (patch) =>
@@ -1194,6 +1209,33 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       if (entry.persist) {
         (snap as Record<string, unknown>)[entry.key] = s[entry.key];
       }
+    }
+    // WYSIWYG camera (2026-06-08). While the orbit auto-revolves, the store's
+    // azimuthDeg is STALE (it only settles on pause/drag) — saving it would
+    // boot a different bearing than the one on screen. Derive the live azimuth
+    // from the camera's actual position. Same idea for fly mode: the intent
+    // may lag the flight, so rebuild it from cameraLive (snapIntentToLive
+    // math) inside the snapshot only.
+    if (s.cameraMode === "orbit") {
+      const [px, , pz] = s.cameraLive.position;
+      const az = (Math.atan2(px - s.orbit.centerX, pz - s.orbit.centerZ) * 180) / Math.PI;
+      snap.orbit = { ...s.orbit, azimuthDeg: ((az % 360) + 360) % 360 };
+    } else if (s.cameraMode === "fly") {
+      const live = s.cameraLive;
+      const [yaw, pitch] = [live.rotation[1], live.rotation[0]];
+      const dist = 10;
+      snap.cameraIntent = {
+        ...s.cameraIntent,
+        position: live.position,
+        lookAt: [
+          live.position[0] - Math.sin(yaw) * Math.cos(pitch) * dist,
+          live.position[1] + Math.sin(pitch) * dist,
+          live.position[2] - Math.cos(yaw) * Math.cos(pitch) * dist,
+        ],
+        rotation: live.rotation,
+        fov: live.fov,
+        orient: "lookAt",
+      };
     }
     // cityPlanning visibility toggles — persisted, but only the three toggles.
     if (CITY_PLANNING_VIS_PERSIST) {

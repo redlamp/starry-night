@@ -211,9 +211,11 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
         fhMax[k] = p.hMax;
       }
       // Debug view (Slice A tint + Slice B wireframe) — uniform / flag only.
+      // enabled gates the wash (the retired "off" mode, 2026-06-08); a disabled
+      // tint forces mode 0 so the shader takes its plain branch.
       const tint = s.debug.buildingTint;
-      mat.uniforms.uDebugMode.value = TINT_MODE_IDX[tint.mode] ?? 0;
-      mat.uniforms.uDebugTint.value = tint.mode === "off" ? 0 : tint.intensity;
+      mat.uniforms.uDebugMode.value = tint.enabled ? (TINT_MODE_IDX[tint.mode] ?? 0) : 0;
+      mat.uniforms.uDebugTint.value = tint.enabled ? tint.intensity : 0;
       const wire = s.debug.renderModes.buildings === "wireframe";
       mat.wireframe = wire;
       mat.uniforms.uWireframe.value = wire ? 1 : 0;
