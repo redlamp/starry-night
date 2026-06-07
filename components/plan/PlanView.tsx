@@ -65,11 +65,13 @@ export function PlanView({ seed, size, layers }: Props) {
   const citySize = useSceneStore((s) => s.citySize);
   const citySketch = useSceneStore((s) => s.citySketch);
   const fieldDeviation = useSceneStore((s) => s.fieldDeviation);
+  const densityProfile = useSceneStore((s) => s.densityProfile);
   const data = useMemo(() => {
     if (!ready) return null;
     void citySize; // tier drives the module-level gen extent (#58) — a switch must redraw
     void citySketch; // a registered sketch is a different city (#40) — likewise
     void fieldDeviation; // deviation scale (#51) — likewise
+    void densityProfile; // population profile (#49) — likewise
     // Tensor is the only city model. Districts follow the arterial network
     // (built inside generateCity); read that exact field + roads so the overlay
     // matches where the buildings were placed. The cache is warm here, so these
@@ -88,7 +90,7 @@ export function PlanView({ seed, size, layers }: Props) {
       makeShapeMask(resolveCityShape(cityShape, seed), cityShapeScale),
     );
     return { topo, field, city, lights, density, nodes };
-  }, [ready, seed, cityShape, cityShapeScale, citySize, citySketch, fieldDeviation]);
+  }, [ready, seed, cityShape, cityShapeScale, citySize, citySketch, fieldDeviation, densityProfile]);
 
   useEffect(() => {
     if (!data) return;

@@ -4,6 +4,8 @@ import { useMemo, useEffect } from "react";
 import * as THREE from "three";
 import { useSceneStore } from "@/lib/state/sceneStore";
 import { buildPopulationField } from "@/lib/seed/population";
+import { buildRadialDensity, CORE_T, SUBURB_T, RURAL_T } from "@/lib/seed/density";
+import { CITY_CENTER, CITY_TIERS } from "@/lib/seed/topology";
 
 // Population-density heat map (Population panel). One plane over the city,
 // textured straight from the population grid through an inferno-style ramp —
@@ -47,11 +49,36 @@ export function PopulationHeatmap({ masterSeed }: { masterSeed: string }) {
   const cityShape = useSceneStore((s) => s.cityShape);
   const cityShapeScale = useSceneStore((s) => s.cityShapeScale);
   const citySize = useSceneStore((s) => s.citySize);
+  // Density-panel draft (user 2026-06-08): while a draft profile is being
+  // edited, this overlay PREVIEWS the draft's radial field live (pure math —
+  // no regeneration) with band-contour lines, instead of the built census.
+  const draft = useSceneStore((s) => s.densityProfileDraft);
 
   const mesh = useMemo(() => {
     void citySize; // tier drives the module-level gen extent (#58) — a switch must rebuild
-    const field = buildPopulationField(masterSeed, cityShape, cityShapeScale);
-    const { n } = field;
+
+    let n: number;
+    let cell: number;
+    let minX: number;
+    let minZ: number;
+    let valueAt: (i: number, j: number) => number;
+    if (draft) {
+      // Preview: sample the draft radial field over the tier extent.
+      const radial = buildRadialDensity(masterSeed, draft);
+      const half = CITY_TIERS[citySize];
+      n = 96;
+      cell = (2 * half) / n;
+      minX = CITY_CENTER.x - half;
+      minZ = CITY_CENTER.z - half;
+      valueAt = (i, j) => radial.at(minX + (i + 0.5) * cell, minZ + (j + 0.5) * cell);
+    } else {
+      const field = buildPopulationField(masterSeed, cityShape, cityShapeScale);
+      n = field.n;
+      cell = field.cell;
+      minX = field.minX;
+      minZ = field.minZ;
+      valueAt = (i, j) => field.grid[j * n + i];
+    }
 
     const canvas = document.createElement("canvas");
     canvas.width = n;
@@ -60,7 +87,21 @@ export function PopulationHeatmap({ masterSeed }: { masterSeed: string }) {
     const img = ctx.createImageData(n, n);
     for (let j = 0; j < n; j++) {
       for (let i = 0; i < n; i++) {
-        const [r, g, b, a] = rampAt(field.grid[j * n + i]);
+        const v = valueAt(i, j);
+        let [r, g, b, a] = rampAt(v);
+        // Preview only: etch the band edges so spread/shoulder read as moving
+        // contour rings, not just a brightness change.
+        if (draft) {
+          for (const t of [CORE_T, SUBURB_T, RURAL_T]) {
+            if (Math.abs(v - t) < 0.012) {
+              r = 255;
+              g = 255;
+              b = 255;
+              a = Math.max(a, 0.85);
+              break;
+            }
+          }
+        }
         const o = (j * n + i) * 4;
         img.data[o] = r;
         img.data[o + 1] = g;
@@ -75,7 +116,7 @@ export function PopulationHeatmap({ masterSeed }: { masterSeed: string }) {
     tex.minFilter = THREE.LinearFilter;
     tex.magFilter = THREE.LinearFilter;
 
-    const extent = n * field.cell;
+    const extent = n * cell;
     const geo = new THREE.PlaneGeometry(extent, extent);
     const mat = new THREE.MeshBasicMaterial({
       map: tex,
@@ -88,11 +129,11 @@ export function PopulationHeatmap({ masterSeed }: { masterSeed: string }) {
     });
     const m = new THREE.Mesh(geo, mat);
     m.rotation.x = -Math.PI / 2; // lay flat; plane +Y maps to grid row order (+Z)
-    m.position.set(field.minX + extent / 2, HEAT_Y, field.minZ + extent / 2);
+    m.position.set(minX + extent / 2, HEAT_Y, minZ + extent / 2);
     m.frustumCulled = false;
     m.renderOrder = 1001; // above the district fill + borders when both are on
     return m;
-  }, [masterSeed, cityShape, cityShapeScale, citySize]);
+  }, [masterSeed, cityShape, cityShapeScale, citySize, draft]);
 
   useEffect(() => {
     return () => {
@@ -103,6 +144,8 @@ export function PopulationHeatmap({ masterSeed }: { masterSeed: string }) {
     };
   }, [mesh]);
 
-  if (!show) return null;
+  // A live draft always previews — that's the point of editing it; the toggle
+  // governs the census overlay outside preview.
+  if (!show && !draft) return null;
   return <primitive object={mesh} />;
 }

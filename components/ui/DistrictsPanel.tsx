@@ -3,6 +3,7 @@
 import { useEffect, useMemo } from "react";
 import { useSceneStore } from "@/lib/state/sceneStore";
 import { Switch } from "@/components/ui/switch";
+import { Button } from "@/components/ui/button";
 import { ValueSlider } from "@/components/ui/value-slider";
 import { tensorDistrictField } from "@/lib/seed/cityGen";
 import { buildPopulationField } from "@/lib/seed/population";
@@ -76,18 +77,33 @@ export function DensitySection() {
   const popCoupling = useSceneStore((s) => s.traffic.popCoupling ?? 1);
   const setTraffic = useSceneStore((s) => s.setTraffic);
 
+  const committed = useSceneStore((s) => s.densityProfile);
+  const setDensityProfile = useSceneStore((s) => s.setDensityProfile);
+  // Draft/preview flow (user 2026-06-08): sliders edit a DRAFT; the heat-map
+  // overlay previews its field live (no regeneration). Confirm commits the
+  // draft (one rebuild); reset discards it.
+  const draft = useSceneStore((s) => s.densityProfileDraft);
+  const setDraft = useSceneStore((s) => s.setDensityProfileDraft);
+  const dp = draft ?? committed;
+  const edit = (patch: Partial<typeof committed>) => setDraft({ ...dp, ...patch });
+  // Collapsing the group mid-edit must not strand the preview overlay.
+  useEffect(() => () => setDraft(null), [setDraft]);
+
   const cityShape = useSceneStore((s) => s.cityShape);
   const cityShapeScale = useSceneStore((s) => s.cityShapeScale);
   const citySize = useSceneStore((s) => s.citySize);
   const citySketch = useSceneStore((s) => s.citySketch);
   const fieldDeviation = useSceneStore((s) => s.fieldDeviation);
   // Cached field (warm once the scene has materialised) — readout is free.
+  // Keyed on the COMMITTED profile: the estimate describes the built city,
+  // not the draft being previewed.
   const total = useMemo(() => {
     void citySize;
     void citySketch;
     void fieldDeviation;
+    void committed; // population profile (#49) — a different profile is a different city
     return buildPopulationField(masterSeed, cityShape, cityShapeScale).total;
-  }, [masterSeed, cityShape, cityShapeScale, citySize, citySketch, fieldDeviation]);
+  }, [masterSeed, cityShape, cityShapeScale, citySize, citySketch, fieldDeviation, committed]);
 
   return (
     <>
@@ -108,6 +124,70 @@ export function DensitySection() {
         <span className="text-foreground/70">est. population</span>
         <span className="text-foreground/80 font-mono tabular-nums">{fmtPeople(total)}</span>
       </div>
+      {/* Population profile (#49, user 2026-06-08): author the gradient —
+          centres radiate, spread/shoulder shape the falloff curve, overlapping
+          gradients overflow into each other. Sliders PREVIEW on the heat-map
+          overlay (live field + band contours, no rebuild); Confirm commits
+          and regenerates, Reset discards. */}
+      <div className="text-foreground/55 pt-1 text-[11px]">
+        profile · previews live, confirm to rebuild
+      </div>
+      <ValueSlider
+        label="centres"
+        value={dp.centres}
+        min={1}
+        max={3}
+        step={1}
+        onChange={(centres) => edit({ centres })}
+      />
+      <ValueSlider
+        label="spread"
+        value={dp.spread}
+        min={0.6}
+        max={1.6}
+        step={0.05}
+        onChange={(spread) => edit({ spread })}
+      />
+      <ValueSlider
+        label="shoulder"
+        value={dp.shoulder}
+        min={0.7}
+        max={1.5}
+        step={0.05}
+        onChange={(shoulder) => edit({ shoulder })}
+      />
+      <ValueSlider
+        label="satellites"
+        value={dp.satellite}
+        min={0.2}
+        max={1}
+        step={0.05}
+        onChange={(satellite) => edit({ satellite })}
+      />
+      {draft && (
+        <div className="flex items-center justify-end gap-1.5 pt-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 px-2 text-xs"
+            title="Discard the previewed profile"
+            onClick={() => setDraft(null)}
+          >
+            reset
+          </Button>
+          <Button
+            size="sm"
+            className="h-6 bg-emerald-400 px-2 text-xs text-black hover:bg-emerald-400/90"
+            title="Commit the previewed profile and rebuild the city"
+            onClick={() => {
+              setDensityProfile(draft);
+              setDraft(null);
+            }}
+          >
+            confirm
+          </Button>
+        </div>
+      )}
     </>
   );
 }

@@ -93,7 +93,9 @@ export function useGeneratedCity(
   // sketchKey()/fieldDeviation() are current by the time this render runs.
   const citySketch = useSceneStore((s) => s.citySketch);
   const deviation = useSceneStore((s) => s.fieldDeviation);
-  const key = `${cityKey(seed, shape, scale, citySize)}::${sketchKey()}::${deviation}`;
+  // Population profile (#49) — a different profile is a different city.
+  const densityProfile = useSceneStore((s) => s.densityProfile);
+  const key = `${cityKey(seed, shape, scale, citySize)}::${sketchKey()}::${deviation}::${densityProfile.centres}:${densityProfile.spread}:${densityProfile.shoulder}:${densityProfile.satellite}`;
   void citySketch; // the key reads the module registry; this subscription triggers the re-render
 
   // Track which key the current `ready` value belongs to, so a key change is

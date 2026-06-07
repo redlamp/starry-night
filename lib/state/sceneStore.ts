@@ -12,6 +12,11 @@ import type { CityShapeSetting } from "@/lib/seed/cityShape";
 import type { Archetype } from "@/lib/seed/cityGen";
 import { setCitySketch } from "@/lib/seed/citySketch";
 import { setFieldDeviation as setFieldDeviationModule } from "@/lib/seed/tensorField";
+import {
+  setDensityProfile as setDensityProfileModule,
+  DEFAULT_DENSITY_PROFILE,
+  type DensityProfile,
+} from "@/lib/seed/density";
 import type { SketchTensorSource } from "@/lib/sketch/orientationField";
 
 export type LightingMode = "classic" | "modern";
@@ -285,7 +290,14 @@ export const DEFAULT_CITY_PLANNING_VIS = {
 // Building tint washes the 3D massing by a chosen category (plan-view-style),
 // driven by a shader uniform mix — no mesh rebuild. Render modes flip each
 // scene group between Rendered / Wireframe / Hidden. All runtime UI state.
-export type BuildingTintMode = "off" | "district" | "landuse" | "archetype" | "depth" | "height";
+export type BuildingTintMode =
+  | "off"
+  | "district"
+  | "landuse"
+  | "archetype"
+  | "depth"
+  | "height"
+  | "population";
 export type RenderGroup = "buildings" | "roads" | "ground" | "sky" | "moon";
 export type RenderMode = "rendered" | "wireframe" | "hidden";
 export const RENDER_GROUPS: RenderGroup[] = ["buildings", "roads", "ground", "sky", "moon"];
@@ -440,7 +452,8 @@ type AnySettingEntry =
   | SettingEntry<"citySize">
   | SettingEntry<"cropLock">
   | SettingEntry<"fpsHud">
-  | SettingEntry<"fieldDeviation">;
+  | SettingEntry<"fieldDeviation">
+  | SettingEntry<"densityProfile">;
 
 export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "cameraIntent", defaultValue: DEFAULT_INTENT, persist: true },
@@ -489,6 +502,8 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "fpsHud", defaultValue: false as const, persist: true },
   // Tensor-field deviation scale (#51) — gen input, persisted.
   { key: "fieldDeviation", defaultValue: 1, persist: true },
+  // Population profile (#49) — gen input, persisted.
+  { key: "densityProfile", defaultValue: DEFAULT_DENSITY_PROFILE, persist: true },
 ];
 
 // cityPlanning visibility toggles — persisted separately because `cityPlanning`
@@ -528,6 +543,7 @@ type SavedConfig = {
   cropLock?: boolean;
   fpsHud?: boolean;
   fieldDeviation?: number;
+  densityProfile?: DensityProfile;
   // Only the layer-visibility toggles persist — topologyKind / arterialCount
   // are per-seed runtime readouts, not settings.
   cityPlanning?: {
@@ -919,6 +935,14 @@ type SceneState = {
   // <1 calms every city, >1 deforms harder. Changing it regenerates.
   fieldDeviation: number;
   setFieldDeviation: (fieldDeviation: number) => void;
+  // Population profile (#49) — centres / spread / shoulder / satellite.
+  densityProfile: DensityProfile;
+  setDensityProfile: (patch: Partial<DensityProfile>) => void;
+  // Draft profile being PREVIEWED in the Density panel (heat-map overlay shows
+  // the draft field live; nothing regenerates until Confirm commits it into
+  // densityProfile). Transient — never persisted.
+  densityProfileDraft: DensityProfile | null;
+  setDensityProfileDraft: (draft: DensityProfile | null) => void;
   // Ambient traffic (research D) — opt-in car head/tail-lights.
   traffic: typeof DEFAULT_TRAFFIC;
   setTraffic: (patch: Partial<typeof DEFAULT_TRAFFIC>) => void;
@@ -1119,6 +1143,11 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setFpsHud: (fpsHud) => set({ fpsHud }),
   fieldDeviation: 1,
   setFieldDeviation: (fieldDeviation) => set({ fieldDeviation }),
+  densityProfile: DEFAULT_DENSITY_PROFILE,
+  setDensityProfile: (patch) =>
+    set((s) => ({ densityProfile: { ...s.densityProfile, ...patch } })),
+  densityProfileDraft: null,
+  setDensityProfileDraft: (densityProfileDraft) => set({ densityProfileDraft }),
   traffic: DEFAULT_TRAFFIC,
   setTraffic: (patch) => set((s) => ({ traffic: { ...s.traffic, ...patch } })),
   streetlights: DEFAULT_STREETLIGHTS,
@@ -1275,4 +1304,10 @@ useSceneStore.subscribe((s, prev) => {
 setFieldDeviationModule(useSceneStore.getState().fieldDeviation);
 useSceneStore.subscribe((s, prev) => {
   if (s.fieldDeviation !== prev.fieldDeviation) setFieldDeviationModule(s.fieldDeviation);
+});
+
+// ...and the population profile (#49) — gen caches key on densityProfileKey().
+setDensityProfileModule(useSceneStore.getState().densityProfile);
+useSceneStore.subscribe((s, prev) => {
+  if (s.densityProfile !== prev.densityProfile) setDensityProfileModule(s.densityProfile);
 });

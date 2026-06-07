@@ -19,7 +19,12 @@ import {
 } from "./cityShape";
 import { citySketchTensor, sketchKey } from "./citySketch";
 import { fieldDeviation } from "./tensorField";
-import { buildDensityField, buildDevelopmentMask, suburbAmount } from "./density";
+import {
+  buildDensityField,
+  buildDevelopmentMask,
+  suburbAmount,
+  densityProfileKey,
+} from "./density";
 
 // Any road tier, for the building-skip corridor test.
 type RoadLike = { vertices: Array<{ x: number; z: number }>; width: number; closed: boolean };
@@ -535,7 +540,7 @@ function buildTensorRoadsImpl(masterSeed: string, onLine?: StreetTraceHook) {
 // a different city for the same seed, so a stale entry must never be served.
 const tensorRoadsCache = new Map<string, ReturnType<typeof buildTensorRoadsImpl>>();
 function buildTensorRoads(masterSeed: string, onLine?: StreetTraceHook) {
-  const key = `${masterSeed}::${maxHalfExtent()}::${sketchKey()}::${fieldDeviation()}`;
+  const key = `${masterSeed}::${maxHalfExtent()}::${sketchKey()}::${fieldDeviation()}::${densityProfileKey()}`;
   const hit = tensorRoadsCache.get(key);
   if (hit) return hit; // warm cache → nothing streams (the result lands at once anyway)
   const result = buildTensorRoadsImpl(masterSeed, onLine);
@@ -607,7 +612,7 @@ export function primeCityCaches(
 ): void {
   const { roads, city, lights } = bundle;
   const field = districtFieldFromRaster(roads.districts, roads.bounds, roads.raster);
-  const roadsKey = `${rawSeed}::${maxHalfExtent()}::${sketchKey()}::${fieldDeviation()}`;
+  const roadsKey = `${rawSeed}::${maxHalfExtent()}::${sketchKey()}::${fieldDeviation()}::${densityProfileKey()}`;
   if (tensorRoadsCache.size > 64) tensorRoadsCache.clear();
   tensorRoadsCache.set(roadsKey, {
     topology: roads.topology,
@@ -615,7 +620,7 @@ export function primeCityCaches(
     arterials: roads.arterials,
     minorStreets: roads.minorStreets,
   });
-  const key = `${rawSeed}::${shape}::${shapeScale}::${maxHalfExtent()}::${sketchKey()}::${fieldDeviation()}`;
+  const key = `${rawSeed}::${shape}::${shapeScale}::${maxHalfExtent()}::${sketchKey()}::${fieldDeviation()}::${densityProfileKey()}`;
   if (cityCache.size > 64) cityCache.clear();
   cityCache.set(key, city);
   if (lightsCache.size > 64) lightsCache.clear();
@@ -1076,7 +1081,7 @@ export function generateCity(
   shape: CityShapeSetting = "square",
   shapeScale = 1,
 ): CityData {
-  const key = `${rawSeed}::${shape}::${shapeScale}::${maxHalfExtent()}::${sketchKey()}::${fieldDeviation()}`;
+  const key = `${rawSeed}::${shape}::${shapeScale}::${maxHalfExtent()}::${sketchKey()}::${fieldDeviation()}::${densityProfileKey()}`;
   const hit = cityCache.get(key);
   if (hit) return hit;
   const result = generateCityTensor(rawSeed, shape, shapeScale);
@@ -1474,7 +1479,7 @@ export function generateStreetlights(
   shape: CityShapeSetting = "square",
   shapeScale = 1,
 ): Streetlight[] {
-  const key = `${rawSeed}::${shape}::${shapeScale}::${maxHalfExtent()}::${sketchKey()}::${fieldDeviation()}`;
+  const key = `${rawSeed}::${shape}::${shapeScale}::${maxHalfExtent()}::${sketchKey()}::${fieldDeviation()}::${densityProfileKey()}`;
   const hit = lightsCache.get(key);
   if (hit) return hit;
   const result = generateStreetlightsTensor(rawSeed, shape, shapeScale);

@@ -1,5 +1,5 @@
 import seedrandom from "seedrandom";
-import { CITY_CENTER } from "./topology";
+import { CITY_CENTER, maxHalfExtent } from "./topology";
 import type { DistrictCharacter, DistrictField } from "./district";
 
 // Development-density field (#49: suburbs + density gradient).
@@ -36,6 +36,42 @@ import type { DistrictCharacter, DistrictField } from "./district";
 // building layout are byte-identical until a consumer opts in.
 
 export type DensityBand = "core" | "suburban" | "rural" | "fringe";
+
+// --- Population profile (user 2026-06-08: "tools to help influence the
+// population gradient and density… mark population centers and radiate out
+// from there, gradient curves and overflows") ---------------------------------
+// Runtime authoring knobs over the radial field. Same module-mirror pattern as
+// setCityTier / setFieldDeviation: the store is the source of truth, gen reads
+// this at call time, every gen cache keys on densityProfileKey().
+//   centres   — 1 = the classic single CBD; 2–3 add SEEDED satellite centres
+//               in the mid/suburban ring (each radiates its own gradient).
+//   spread    — × on the falloff radius R0 (how far the city reaches).
+//   shoulder  — × on the exponent P (flat mid-city plateau vs sharp peak).
+//   satellite — strength of the satellite centres (0..1 of the primary).
+// Centres combine as a soft-OR (1 − Π(1 − dᵢ)) — overlapping gradients
+// OVERFLOW into each other and merge into conurbations instead of clipping.
+export type DensityProfile = {
+  centres: number;
+  spread: number;
+  shoulder: number;
+  satellite: number;
+};
+export const DEFAULT_DENSITY_PROFILE: DensityProfile = {
+  centres: 1,
+  spread: 1,
+  shoulder: 1,
+  satellite: 0.7,
+};
+let profile: DensityProfile = { ...DEFAULT_DENSITY_PROFILE };
+export function setDensityProfile(p: DensityProfile): void {
+  profile = p;
+}
+export function densityProfile(): DensityProfile {
+  return profile;
+}
+export function densityProfileKey(): string {
+  return `${profile.centres}:${profile.spread}:${profile.shoulder}:${profile.satellite}`;
+}
 
 // Band thresholds on the density scalar.
 export const CORE_T = 0.62;
@@ -82,7 +118,15 @@ export type RadialDensity = {
   radiusAt: (threshold: number, theta: number) => number;
 };
 
-export function buildRadialDensity(masterSeed: string): RadialDensity {
+export function buildRadialDensity(
+  masterSeed: string,
+  // Preview override (Density panel draft): evaluate the field under a profile
+  // WITHOUT touching the module mirror — gen caches never see draft values.
+  profileOverride?: DensityProfile,
+): RadialDensity {
+  const { centres, spread, shoulder, satellite } = profileOverride ?? profile;
+  const R0e = R0 * spread;
+  const Pe = P * shoulder;
   const rng = seedrandom(`${masterSeed}::density::radial`);
   // Fixed draw order: amp then phase per harmonic.
   const harm = HARMONICS.map(({ k, baseAmp }) => ({
@@ -92,6 +136,19 @@ export function buildRadialDensity(masterSeed: string): RadialDensity {
   }));
   const cx = CITY_CENTER.x;
   const cz = CITY_CENTER.z;
+
+  // Satellite population centres — ALWAYS draw both slots (3 draws each) after
+  // the harmonics, so the stream never shifts when `centres` is tuned. Seeded
+  // placement in the mid/suburban ring, clamped inside the tier's land.
+  const sats: Array<{ x: number; z: number; r0: number }> = [];
+  for (let i = 0; i < 2; i++) {
+    const ang = rng() * Math.PI * 2;
+    const dist = Math.min(1500 + rng() * 1100, maxHalfExtent() * 0.8);
+    const scale = 0.32 + rng() * 0.16;
+    if (i < centres - 1) {
+      sats.push({ x: cx + Math.cos(ang) * dist, z: cz + Math.sin(ang) * dist, r0: R0e * scale });
+    }
+  }
 
   const warpAt = (theta: number): number => {
     let w = 1;
@@ -105,12 +162,20 @@ export function buildRadialDensity(masterSeed: string): RadialDensity {
     const r = Math.hypot(dx, dz);
     if (r < 1) return 1;
     const rEff = r * warpAt(Math.atan2(dz, dx));
-    return DENSITY_FLOOR + (1 - DENSITY_FLOOR) * Math.exp(-Math.pow(rEff / R0, P));
+    // Soft-OR over centres: overlapping gradients overflow into each other.
+    let inv = 1 - Math.exp(-Math.pow(rEff / R0e, Pe));
+    for (const s of sats) {
+      const d = Math.hypot(x - s.x, z - s.z);
+      inv *= 1 - satellite * Math.exp(-Math.pow(d / s.r0, Pe));
+    }
+    return DENSITY_FLOOR + (1 - DENSITY_FLOOR) * (1 - inv);
   };
 
+  // Primary-centre inverse — the /plan contour rings. With satellites the true
+  // iso-lines bulge toward them; this stays the primary's approximation.
   const radiusAt = (threshold: number, theta: number): number => {
     const t = Math.min(1 - 1e-6, Math.max(DENSITY_FLOOR + 1e-6, threshold));
-    const base = R0 * Math.pow(-Math.log((t - DENSITY_FLOOR) / (1 - DENSITY_FLOOR)), 1 / P);
+    const base = R0e * Math.pow(-Math.log((t - DENSITY_FLOOR) / (1 - DENSITY_FLOOR)), 1 / Pe);
     return base / warpAt(theta);
   };
 

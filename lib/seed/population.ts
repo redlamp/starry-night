@@ -2,6 +2,7 @@ import { generateCity, type Archetype, type BuildingLightingClass } from "./city
 import { CITY_CENTER, maxHalfExtent } from "./topology";
 import { sketchKey } from "./citySketch";
 import { fieldDeviation } from "./tensorField";
+import { densityProfileKey } from "./density";
 import type { CityShapeSetting } from "./cityShape";
 
 // Population density field — a people-equivalent estimate derived ENTIRELY from
@@ -35,6 +36,18 @@ const CLASS_USE: Record<BuildingLightingClass, number> = {
 
 const CELL = 80; // metres per grid cell — blocks resolve, individual lots don't
 const BLUR_RADIUS = 2; // box-blur radius in cells; 2 passes ≈ 160 m Gaussian
+
+// One building's people-equivalent contribution — shared by the field build
+// and the Debug View "population" building tint.
+export function buildingPopulation(b: {
+  width: number;
+  depth: number;
+  floors: number;
+  archetype: Archetype;
+  district: BuildingLightingClass;
+}): number {
+  return b.width * b.depth * b.floors * ARCHETYPE_OCCUPANCY[b.archetype] * CLASS_USE[b.district];
+}
 
 export type PopulationField = {
   n: number; // grid is n×n
@@ -90,8 +103,7 @@ function buildPopulationFieldImpl(
   let raw: Float32Array = new Float32Array(n * n);
   let total = 0;
   for (const b of city.buildings) {
-    const pop =
-      b.width * b.depth * b.floors * ARCHETYPE_OCCUPANCY[b.archetype] * CLASS_USE[b.district];
+    const pop = buildingPopulation(b);
     total += pop;
     const i = Math.min(n - 1, Math.max(0, Math.floor((b.x - minX) / CELL)));
     const j = Math.min(n - 1, Math.max(0, Math.floor((b.z - minZ) / CELL)));
@@ -137,7 +149,7 @@ export function buildPopulationField(
 ): PopulationField {
   // Mirror generateCity's cache key exactly — anything that changes the city
   // (tier extent, sketch, deviation) must miss here too.
-  const key = `${masterSeed}::${shape}::${shapeScale}::${maxHalfExtent()}::${sketchKey()}::${fieldDeviation()}`;
+  const key = `${masterSeed}::${shape}::${shapeScale}::${maxHalfExtent()}::${sketchKey()}::${fieldDeviation()}::${densityProfileKey()}`;
   const hit = popCache.get(key);
   if (hit) return hit;
   const result = buildPopulationFieldImpl(masterSeed, shape, shapeScale);
