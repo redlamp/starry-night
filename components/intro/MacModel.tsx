@@ -251,7 +251,7 @@ function AppleBadge() {
     const body = new THREE.Box3().setFromObject(bodyMesh);
     // x/y verified against the painted logo via debug render; z hugs the
     // body's front plane so the zone tracks the logo at any camera angle
-    return new THREE.Vector3(glass.min.x + 0.05, glass.min.y - 7.8, body.max.z + 0.05);
+    return new THREE.Vector3(glass.min.x + 0.05, glass.min.y - 7.55, body.max.z + 0.05);
   }, [scene]);
 
   if (!position) return null;
@@ -274,7 +274,7 @@ function AppleBadge() {
         setHovered(false);
       }}
     >
-      <planeGeometry args={[2.6, 3.2]} />
+      <planeGeometry args={[2.6, 2.2]} />
       <meshBasicMaterial
         transparent
         opacity={BADGE_DEBUG ? 0.35 : hovered ? 0.15 : 0}
