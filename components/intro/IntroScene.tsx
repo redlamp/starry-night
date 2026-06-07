@@ -105,6 +105,7 @@ export function IntroScene({
   scanline,
   bloom,
   autoOrbit,
+  onToggleAutoOrbit,
   onBrightnessChange,
   onScreenSettingsReset,
 }: {
@@ -117,6 +118,7 @@ export function IntroScene({
   scanline: number;
   bloom: number;
   autoOrbit: boolean;
+  onToggleAutoOrbit: () => void;
   onBrightnessChange: (v: number) => void;
   onScreenSettingsReset?: () => void;
 }) {
@@ -129,6 +131,26 @@ export function IntroScene({
   const [knobEngaged, setKnobEngaged] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [selectedMac, setSelectedMac] = useState<MacId>("daz");
+
+  // Spacebar toggles the city's orbit (the record player) — but only while
+  // the pointer is over the screen. A ref (not state) so the keydown listener
+  // reads the live value without re-binding.
+  const screenHoverRef = useRef(false);
+  const handleScreenHoverChange = useCallback((h: boolean) => {
+    screenHoverRef.current = h;
+    setScreenHover(h);
+  }, []);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code !== "Space" || e.repeat || !screenHoverRef.current) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+      e.preventDefault(); // Space would scroll the page
+      onToggleAutoOrbit();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onToggleAutoOrbit]);
 
   // One input event at a time: the first gesture to press claims the drag
   // and keeps it until release. Hover states keep tracking RAW underneath
@@ -259,7 +281,7 @@ export function IntroScene({
           screenInteractive={screenActive}
           screenAutoOrbit={autoOrbit}
           knobLocked={dragOwner !== null && dragOwner !== "knob"}
-          onScreenHoverChange={setScreenHover}
+          onScreenHoverChange={handleScreenHoverChange}
           onScreenDragChange={(d) => (d ? claimDrag("screen") : releaseDrag("screen"))}
           onBrightnessChange={onBrightnessChange}
           onKnobEngageChange={setKnobEngaged}

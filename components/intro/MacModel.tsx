@@ -236,10 +236,15 @@ const CRT_EMISSIVE_FRAGMENT = /* glsl */ `
 const BADGE_DEBUG = false; // true: badge zone always visible
 const FACADE_TILT = -0.12; // rad — the front face leans back slightly
 
+// A press that moves more than this (CSS px) before release is a drag (orbit
+// the Mac), not a badge click — so it doesn't reroll.
+const BADGE_DRAG_SLOP = 5;
+
 function AppleBadge() {
   const { scene } = useGLTF(DAZ_URL);
   const setSeed = useSceneStore((s) => s.setSeed);
   const playAllIntros = useSceneStore((s) => s.playAllIntros);
+  const downPos = useRef<{ x: number; y: number } | null>(null);
   const position = useMemo(() => {
     let glassMesh: THREE.Mesh | undefined;
     let bodyMesh: THREE.Mesh | undefined;
@@ -263,8 +268,17 @@ function AppleBadge() {
     <mesh
       position={position.toArray()}
       rotation={[FACADE_TILT, 0, 0]}
+      onPointerDown={(e) => {
+        // record where the press began — don't stopPropagation, so a drag
+        // still reaches the studio OrbitControls to orbit the Mac
+        downPos.current = { x: e.clientX, y: e.clientY };
+      }}
       onClick={(e) => {
         e.stopPropagation();
+        // press-moved-then-released is a drag (the Mac orbited) — not a reroll
+        const d = downPos.current;
+        downPos.current = null;
+        if (d && Math.hypot(e.clientX - d.x, e.clientY - d.y) > BADGE_DRAG_SLOP) return;
         // a fresh city deserves a fresh boot: reroll the seed AND replay the
         // wake sequence (windows + stars), like the screensaver restarting
         setSeed(randomSeed());

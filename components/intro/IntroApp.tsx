@@ -38,7 +38,7 @@ const INTRO_CITY_TIER: CityTier = 3;
 
 // Screen-settings defaults (the Reset button's target).
 const SCREEN_DEFAULTS = {
-  brightness: 1,
+  brightness: 0.8,
   threshold: 0.27,
   softness: 0.22,
   glow: 0.8,
@@ -112,20 +112,12 @@ export function IntroApp() {
   const [scanline, setScanline] = useState(SCREEN_DEFAULTS.scanline);
   // over-the-bezel bloom (post-processing, step 2 of the glow plan)
   const [bloom, setBloom] = useState(SCREEN_DEFAULTS.bloom);
-  // spacebar turntable — revolve the city inside the screen, hands-free
-  // (snow-globe coupling still composes on top); main-app parity (orbit mode)
+  // spacebar turntable — the record player in the snow globe. Persistent once
+  // started (keeps spinning when you look away); the toggle only registers
+  // while the pointer is over the screen (IntroScene owns that gate, since
+  // hover state lives there). Snow-globe coupling composes on top.
   const [autoOrbit, setAutoOrbit] = useState(false);
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.code !== "Space" || e.repeat) return;
-      const t = e.target as HTMLElement | null;
-      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
-      e.preventDefault(); // Space would scroll the page
-      setAutoOrbit((v) => !v);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  const toggleAutoOrbit = () => setAutoOrbit((v) => !v);
 
   const resetScreenSettings = () => {
     setBrightness(SCREEN_DEFAULTS.brightness);
@@ -146,7 +138,7 @@ export function IntroApp() {
 
   const chip = (active: boolean) =>
     cn(
-      "flex h-7 items-center justify-center rounded-md transition-colors",
+      "flex h-7 cursor-pointer items-center justify-center rounded-md transition-colors",
       active
         ? "bg-foreground text-background"
         : "bg-foreground/10 text-foreground hover:bg-foreground/20",
@@ -164,6 +156,7 @@ export function IntroApp() {
         scanline={scanline}
         bloom={bloom}
         autoOrbit={autoOrbit}
+        onToggleAutoOrbit={toggleAutoOrbit}
         onBrightnessChange={setBrightness}
         onScreenSettingsReset={resetScreenSettings}
       />
