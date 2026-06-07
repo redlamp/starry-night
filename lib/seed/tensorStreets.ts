@@ -4,6 +4,7 @@ import { buildTensorField, alignDir, type TensorField, type Vec2 } from "./tenso
 import type { RoadPoly, RoadTier } from "./streets";
 import { genScale } from "./topology";
 import type { ShapeMask } from "./cityShape";
+import { buildRadialDensity, CORE_T, SUBURB_T, RURAL_T } from "./density";
 
 // Tensor-field streets. Roads are streamlines of the tensor field. Both the
 // MAJOR and MINOR eigenvector families are traced at TWO separation scales:
@@ -28,6 +29,59 @@ const ART_DSEP = 210;
 const ART_DTEST = 185;
 const ST_DSEP = 64; // denser local streets → smaller blocks, more street frontage
 const ST_DTEST = 54;
+
+// --- #49 density-graded road network -----------------------------------------
+// The night-view gradient is decided HERE, not just by lamps/buildings: an
+// arterial grid traced uniformly to the rim keeps the whole map lit at 28 m
+// spacing (measured: main-road lamps/km² were FLAT core→suburb). Both knobs
+// read the RADIAL density field — districts derive from the arterials below,
+// so the per-district field would be circular.
+//
+// 1. Arterial seed gate — arterials are the URBAN backbone (the plan's rural
+//    rule): new arterials stop being BORN as density falls; streamlines seeded
+//    in the core still run outward to the rim, and those through-lines ARE the
+//    radial connector spokes the suburbs keep (~1 per district, toward centre).
+// 2. Street separation ramp — local streets stay tight through the suburbs
+//    (subdivision must read — the Stage-0 spike over-coarsened here) and open
+//    up to sparse country lanes through rural/fringe.
+const ART_KEEP_ANCHORS: ReadonlyArray<readonly [number, number]> = [
+  [0, 0.02],
+  [RURAL_T, 0.05],
+  [SUBURB_T, 0.3],
+  [0.45, 1],
+  [CORE_T, 1],
+];
+// Arterial separation ramp — the seed gate alone is not enough: core-seeded
+// through-lines run to the rim at the full 210 m grid density (measured: rural
+// main-road lamps barely moved under the gate). Widening the separation TEST
+// with falling density makes converging through-lines TERMINATE at the band
+// edge (trace stops where the widened test meets a neighbour) while the
+// earliest-traced line survives to the rim — arterials taper to a few radial
+// spokes, exactly the plan's rural rule.
+const ART_SEP_ANCHORS: ReadonlyArray<readonly [number, number]> = [
+  [0, 3.0],
+  [RURAL_T, 2.4],
+  [SUBURB_T, 1.5],
+  [0.45, 1.15],
+  [CORE_T, 1],
+];
+const ST_SEP_ANCHORS: ReadonlyArray<readonly [number, number]> = [
+  [0, 3.2],
+  [RURAL_T, 2.6],
+  [SUBURB_T, 1.25],
+  [CORE_T, 1],
+];
+function anchorLerp(anchors: ReadonlyArray<readonly [number, number]>, d: number): number {
+  if (d <= anchors[0][0]) return anchors[0][1];
+  for (let i = 1; i < anchors.length; i++) {
+    const [d1, v1] = anchors[i];
+    if (d <= d1) {
+      const [d0, v0] = anchors[i - 1];
+      return v0 + ((d - d0) / (d1 - d0)) * (v1 - v0);
+    }
+  }
+  return anchors[anchors.length - 1][1];
+}
 
 type BBox = { minX: number; maxX: number; minZ: number; maxZ: number };
 
@@ -107,13 +161,15 @@ class GridStorage {
 
 type Sep = { s: GridStorage; d: number };
 
-function blocked(sep: Sep[], p: Vec2): boolean {
+// `mul` (≥1) scales every separation test at p — the #49 street-sep ramp
+// (wider spacing → fewer, bigger blocks in the low-density periphery). 1 = core.
+function blocked(sep: Sep[], p: Vec2, mul = 1): boolean {
   if (prof) {
     const t0 = performance.now();
     let hit = false;
     for (const { s, d } of sep) {
       prof.isFreeCalls++;
-      if (!s.isFree(p, d)) {
+      if (!s.isFree(p, d * mul)) {
         hit = true;
         break; // same short-circuit as the clean path
       }
@@ -121,7 +177,7 @@ function blocked(sep: Sep[], p: Vec2): boolean {
     prof.blockedMs += performance.now() - t0;
     return hit;
   }
-  for (const { s, d } of sep) if (!s.isFree(p, d)) return true;
+  for (const { s, d } of sep) if (!s.isFree(p, d * mul)) return true;
   return false;
 }
 
@@ -154,6 +210,7 @@ function trace(
   sep: Sep[],
   b: BBox,
   mask: ShapeMask,
+  sepMul: (x: number, z: number) => number,
 ): Vec2[] {
   const grow = (sign: number): Vec2[] => {
     const pts: Vec2[] = [];
@@ -168,7 +225,7 @@ function trace(
       const next = { x: p.x + dir.x * DSTEP, z: p.z + dir.z * DSTEP };
       if (!inBounds(next, b)) break;
       if (mask(next.x, next.z) < 0.5) break; // left the organic city footprint
-      if (blocked(sep, next)) break;
+      if (blocked(sep, next, sepMul(next.x, next.z))) break;
       pts.push(next);
       prev = dir;
       p = next;
@@ -189,14 +246,18 @@ function traceTier(
   sep: Sep[],
   mask: ShapeMask,
   onLine?: (pts: Vec2[]) => void,
+  // #49: position-dependent separation multiplier (street-sep ramp) and seed
+  // keep-probability (arterial density gate). Defaults = pre-#49 behaviour.
+  sepMul: (x: number, z: number) => number = () => 1,
+  seedKeep?: (x: number, z: number) => number,
 ): Vec2[][] {
   const lines: Vec2[][] = [];
   const accept = (seed: Vec2): boolean => {
     if (mask(seed.x, seed.z) < 0.5) return false; // seed outside the footprint
     if (prof) prof.isFreeCalls++;
-    if (!own.isFree(seed, dsep)) return false;
+    if (!own.isFree(seed, dsep * sepMul(seed.x, seed.z))) return false;
     const t0 = prof ? performance.now() : 0;
-    const line = trace(field, seed, major, sep, b, mask);
+    const line = trace(field, seed, major, sep, b, mask, sepMul);
     if (prof) {
       const dt = performance.now() - t0;
       if (line.length < MIN_PTS) {
@@ -218,6 +279,13 @@ function traceTier(
   let fails = 0;
   while (fails < SEED_TRIES) {
     const seed = { x: b.minX + rng() * (b.maxX - b.minX), z: b.minZ + rng() * (b.maxZ - b.minZ) };
+    // #49 density gate: a candidate seed survives with probability seedKeep —
+    // arterials stop being born as density falls. One rng draw per candidate
+    // whatever the outcome, so the stream stays aligned.
+    if (seedKeep && rng() >= seedKeep(seed.x, seed.z)) {
+      fails++;
+      continue;
+    }
     if (accept(seed)) fails = 0;
     else fails++;
   }
@@ -292,6 +360,20 @@ export function generateTensorStreets(
   };
   const b: BBox = bounds;
 
+  // #49 density-graded network. The radial field (no district dependency)
+  // drives the arterial seed gate + the street-sep ramp. A sketched city (#40)
+  // bypasses both — its ink is the author's intent, ungated.
+  const radial = buildRadialDensity(masterSeed);
+  const artKeep = fieldOverride
+    ? undefined
+    : (x: number, z: number) => anchorLerp(ART_KEEP_ANCHORS, radial.at(x, z));
+  const artSepMul = fieldOverride
+    ? undefined
+    : (x: number, z: number) => anchorLerp(ART_SEP_ANCHORS, radial.at(x, z));
+  const stSepMul = fieldOverride
+    ? undefined
+    : (x: number, z: number) => anchorLerp(ST_SEP_ANCHORS, radial.at(x, z));
+
   // Per-family, per-tier separation storages (cell ≥ finest dsep).
   const SmajA = new GridStorage(80);
   const SminA = new GridStorage(80);
@@ -301,7 +383,9 @@ export function generateTensorStreets(
   const artRng = seedrandom(`${masterSeed}::tensor::seeds::art`);
   const stRng = seedrandom(`${masterSeed}::tensor::seeds::st`);
 
-  // Arterials — both families, wide separation → a coarse criss-cross grid.
+  // Arterials — both families, wide separation → a coarse criss-cross grid in
+  // the core; the #49 seed gate stops new ones being born as density falls,
+  // while core-seeded through-lines still run to the rim (the radial spokes).
   const majA = timed("majA", () =>
     traceTier(
       tf,
@@ -314,6 +398,8 @@ export function generateTensorStreets(
       [{ s: SmajA, d: ART_DTEST }],
       mask,
       onLine ? (l) => onLine(l, "arterial") : undefined,
+      artSepMul,
+      artKeep,
     ),
   );
   const minA = timed("minA", () =>
@@ -328,6 +414,8 @@ export function generateTensorStreets(
       [{ s: SminA, d: ART_DTEST }],
       mask,
       onLine ? (l) => onLine(l, "arterial") : undefined,
+      artSepMul,
+      artKeep,
     ),
   );
 
@@ -351,6 +439,7 @@ export function generateTensorStreets(
       ],
       mask,
       onLine ? (l) => onLine(l, "minor") : undefined,
+      stSepMul,
     ),
   );
   const minS = timed("minS", () =>
@@ -368,6 +457,7 @@ export function generateTensorStreets(
       ],
       mask,
       onLine ? (l) => onLine(l, "minor") : undefined,
+      stSepMul,
     ),
   );
 

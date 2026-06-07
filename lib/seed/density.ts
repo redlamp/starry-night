@@ -1,0 +1,238 @@
+import seedrandom from "seedrandom";
+import { CITY_CENTER } from "./topology";
+import type { DistrictCharacter, DistrictField } from "./district";
+
+// Development-density field (#49: suburbs + density gradient).
+// See wiki/notes/plan-metro-suburbs-highways.md.
+//
+// A metro fades from a bright dense core through curvilinear suburbs and rural
+// land to undeveloped fringe. Density is a scalar in [0,1]; bands quantize it:
+//
+//   core ≥ 0.62 · suburban ≥ 0.30 · rural ≥ 0.12 · fringe < 0.12
+//
+// Two layers, two consumers:
+//
+//   1. RADIAL field — pure spatial: Clark's-law exponential falloff on ABSOLUTE
+//      distance from the city centre (Clark 1951: density declines ~exp(-r/r0)
+//      from the CBD; same rationale as district.ts's absolute character bands).
+//      Absolute metres, NOT normalised by the tier extent — growing the tier
+//      ADDS outer bands (rural, then fringe) instead of stretching the same
+//      gradient over a bigger canvas. Seeded angular harmonics wobble the band
+//      edges so the city is an organic blob, not a bullseye. No district
+//      dependency, so ROAD generation (arterial gating, street spacing, suburb
+//      winding) can consume it BEFORE districts exist — districts derive from
+//      arterials, so a per-district field would be circular there.
+//
+//   2. PER-DISTRICT field — the radial base sampled at each district centroid,
+//      jittered per district, with hard per-character floors (downtown is never
+//      thinned by an unlucky centroid). Follows the irregular district layout,
+//      which is what BUILDING / LAMP / WINDOW consumers want: a whole district
+//      reads as one development era, and the core→fringe fade lands on real
+//      district seams instead of cutting through blocks.
+//
+// Determinism: two dedicated sub-streams (`::density::radial`, drawn a fixed
+// number of times; `::density::districts`, drawn once per district in stable
+// index order). No existing stream gains or loses a draw — the road network and
+// building layout are byte-identical until a consumer opts in.
+
+export type DensityBand = "core" | "suburban" | "rural" | "fringe";
+
+// Band thresholds on the density scalar.
+export const CORE_T = 0.62;
+export const SUBURB_T = 0.3;
+export const RURAL_T = 0.12;
+
+export function bandOf(density: number): DensityBand {
+  if (density >= CORE_T) return "core";
+  if (density >= SUBURB_T) return "suburban";
+  if (density >= RURAL_T) return "rural";
+  return "fringe";
+}
+
+// e-folding radius (m) of the exponential falloff. Sets the unwarped band edges:
+// core→suburban at ~800 m, suburban→rural at ~2.0 km, rural→fringe at ~3.5 km —
+// so the Town default (1.5 km half) is core + suburbs with rural just clipping
+// the corners, and rural/fringe only open up at the bigger tiers (the review's
+// "rural needs the scale spike" gate, now satisfied by the 8-tier system).
+const R0 = 1675;
+// Faint base so the far fringe never hits exact zero (consumers add their own
+// floors — e.g. lamps keep a "never zero" spacing floor).
+const DENSITY_FLOOR = 0.02;
+
+// Angular harmonics: rEff = r · (1 + Σ aᵢ·sin(kᵢθ + φᵢ)). Low orders so the
+// blob stays coherent; total amplitude ≤ ~0.2 so a band edge breathes by ±20%
+// of its radius across bearings.
+const HARMONICS: ReadonlyArray<{ k: number; baseAmp: number }> = [
+  { k: 2, baseAmp: 0.07 },
+  { k: 3, baseAmp: 0.055 },
+  { k: 5, baseAmp: 0.035 },
+];
+
+export type RadialDensity = {
+  at: (x: number, z: number) => number;
+  // Radius (m) where the warped profile crosses `threshold` along bearing
+  // theta (radians from the city centre). Used by the /plan contour overlay.
+  radiusAt: (threshold: number, theta: number) => number;
+};
+
+export function buildRadialDensity(masterSeed: string): RadialDensity {
+  const rng = seedrandom(`${masterSeed}::density::radial`);
+  // Fixed draw order: amp then phase per harmonic.
+  const harm = HARMONICS.map(({ k, baseAmp }) => ({
+    k,
+    amp: baseAmp * (0.5 + rng()),
+    phase: rng() * Math.PI * 2,
+  }));
+  const cx = CITY_CENTER.x;
+  const cz = CITY_CENTER.z;
+
+  const warpAt = (theta: number): number => {
+    let w = 1;
+    for (const h of harm) w += h.amp * Math.sin(h.k * theta + h.phase);
+    return Math.max(0.5, w); // harmonics can't collapse a bearing entirely
+  };
+
+  const at = (x: number, z: number): number => {
+    const dx = x - cx;
+    const dz = z - cz;
+    const r = Math.hypot(dx, dz);
+    if (r < 1) return 1;
+    const rEff = r * warpAt(Math.atan2(dz, dx));
+    return DENSITY_FLOOR + (1 - DENSITY_FLOOR) * Math.exp(-rEff / R0);
+  };
+
+  const radiusAt = (threshold: number, theta: number): number => {
+    const t = Math.min(1 - 1e-6, Math.max(DENSITY_FLOOR + 1e-6, threshold));
+    const base = -R0 * Math.log((t - DENSITY_FLOOR) / (1 - DENSITY_FLOOR));
+    return base / warpAt(theta);
+  };
+
+  return { at, radiusAt };
+}
+
+// Hard per-character density FLOOR. The character pass (district.ts) already
+// encodes the radial plan — downtown is the CBD, subcentres the secondary
+// clusters — so density may never undercut what the character demands: the
+// planned core stays the bright core regardless of centroid luck or jitter.
+// Subcentre ≥ CORE_T pins it to the core band ("subcentre stays lit like core",
+// Stage-0 review). Residential/industrial floors are near-zero so the outer
+// bands are free to fade through rural to fringe.
+const CHARACTER_FLOOR: Record<DistrictCharacter, number> = {
+  downtown: 0.82, // always core
+  subcentre: 0.66, // always core (≥ CORE_T)
+  heritage: 0.5, // dense old fabric → upper suburban at worst
+  "mixed-use": 0.38, // transition belt → suburban
+  residential: 0.08, // free to fade out
+  industrial: 0, // edge yards may read as fringe
+};
+
+// ± per-district wobble so equal-radius neighbours can land in different bands
+// and the transition follows district seams, not a clean circle.
+const JITTER = 0.12;
+
+// 0 at the core threshold → 1 at the rural threshold: "how far into the
+// low-density regime" a point is. The shared easing for consumers (archetype
+// mix, building size, lamp spacing) so they all thin in lockstep.
+export function suburbAmount(density: number): number {
+  const t = (CORE_T - density) / (CORE_T - RURAL_T);
+  return Math.max(0, Math.min(1, t));
+}
+
+// Density → probability that a development CELL is built at all. Piecewise on
+// band anchors (explicit + tunable): the core is never thinned; suburbs read as
+// FILLED with occasional whole-block gaps (parks, vacant parcels); rural keeps
+// scattered clusters; the fringe a stray structure. The Stage-0 review's
+// "whole-block dropout, keep developed blocks filled" — the in-cell fabric
+// stays dense, the cell either exists or doesn't.
+const KEEP_ANCHORS: ReadonlyArray<readonly [number, number]> = [
+  [0, 0.02],
+  [RURAL_T, 0.08],
+  [SUBURB_T, 0.45],
+  [0.45, 0.85],
+  [CORE_T, 1],
+];
+export function keepProbForDensity(density: number): number {
+  if (density >= CORE_T) return 1;
+  if (density <= 0) return KEEP_ANCHORS[0][1];
+  for (let i = 1; i < KEEP_ANCHORS.length; i++) {
+    const [d1, p1] = KEEP_ANCHORS[i];
+    if (density <= d1) {
+      const [d0, p0] = KEEP_ANCHORS[i - 1];
+      return p0 + ((density - d0) / (d1 - d0)) * (p1 - p0);
+    }
+  }
+  return 1;
+}
+
+// Block-coherent development dropout (#49). Buildings are kept or dropped by
+// ~150 m development CELL, not per lot — the Stage-0 spike's per-lot skip read
+// as sparse lone "warehouse" boxes (random missing teeth); real low-density
+// areas develop or skip whole parcels. Each cell's roll is hash-seeded from its
+// coordinates (order-independent → stable under crop, walk order, and code
+// reshuffles within a seed), drawn lazily and memoised. The keep PROBABILITY is
+// the caller's local district density, so one cell straddling a density seam is
+// kept on the denser side and dropped on the sparser — dropout edges follow
+// district seams, not the cell grid.
+export const DEV_CELL = 150;
+
+export type DevelopmentMask = {
+  keepAt: (x: number, z: number, density: number) => boolean;
+};
+
+export function buildDevelopmentMask(masterSeed: string): DevelopmentMask {
+  // Seeded grid origin so cell boundaries never sit at the same world lines
+  // across seeds.
+  const offRng = seedrandom(`${masterSeed}::devcell::origin`);
+  const ox = offRng() * DEV_CELL;
+  const oz = offRng() * DEV_CELL;
+  const rolls = new Map<string, number>();
+  const keepAt = (x: number, z: number, density: number): boolean => {
+    const p = keepProbForDensity(density);
+    if (p >= 1) return true;
+    const key = `${Math.floor((x + ox) / DEV_CELL)},${Math.floor((z + oz) / DEV_CELL)}`;
+    let r = rolls.get(key);
+    if (r === undefined) {
+      r = seedrandom(`${masterSeed}::devcell::${key}`)();
+      rolls.set(key, r);
+    }
+    return r < p;
+  };
+  return { keepAt };
+}
+
+export type DensityField = {
+  // Per district index (matches DistrictField.classify / District.index).
+  byIndex: number[];
+  bandByIndex: DensityBand[];
+  radial: RadialDensity;
+  // World point → owning district's density; falls back to the raw radial field
+  // off-district (classify === -1, i.e. outside the gen bounds).
+  densityAt: (x: number, z: number) => number;
+  bandAt: (x: number, z: number) => DensityBand;
+};
+
+export function buildDensityField(masterSeed: string, field: DistrictField): DensityField {
+  const radial = buildRadialDensity(masterSeed);
+  const rng = seedrandom(`${masterSeed}::density::districts`);
+
+  const byIndex: number[] = [];
+  const bandByIndex: DensityBand[] = [];
+  for (const d of field.districts) {
+    // Draw for EVERY district in index order so the stream stays aligned.
+    const jitter = (rng() - 0.5) * 2 * JITTER;
+    const base = radial.at(d.centroidX, d.centroidZ) + jitter;
+    // Jitter applies to the radial base only — floors are hard minimums.
+    const density = Math.min(1, Math.max(base, CHARACTER_FLOOR[d.character], 0));
+    byIndex[d.index] = density;
+    bandByIndex[d.index] = bandOf(density);
+  }
+
+  const densityAt = (x: number, z: number): number => {
+    const idx = field.classify(x, z);
+    if (idx < 0) return radial.at(x, z);
+    return byIndex[idx] ?? radial.at(x, z);
+  };
+  const bandAt = (x: number, z: number): DensityBand => bandOf(densityAt(x, z));
+
+  return { byIndex, bandByIndex, radial, densityAt, bandAt };
+}
