@@ -136,6 +136,61 @@ export function buildTensorField(masterSeed: string, lattice: Lattice): TensorFi
     }
   }
 
+  // Odd-angle grid PATCHES (#49 round 4 — user refs: San Diego's Barrio Logan
+  // runs ~45° against downtown; SF's Market St seams two grids). District-sized
+  // regions whose grid OVERRIDES the ambient field: hard interior, narrow
+  // smoothstep seam band where the two grids meet (an amplitude-boosted basis
+  // was tried first — tensor summing AVERAGES angles, so it bent the grid into
+  // a warp instead of seaming two grids). ABSOLUTE scale (a district is a
+  // district at every tier), placed in the core/mid-city annulus. Draws are
+  // fixed-count (3 patches' worth, always) and appended AFTER all existing
+  // draws, so the base layout is byte-identical to the pre-patch field.
+  // Round-4b (user: "push the tensor field shift a bit further, potentially
+  // radiating out from a district or defined by the bounds of an arterial"):
+  //   - ELONGATED regions, squashed ALONG the patch's own grid angle — the
+  //     long flat boundary parallels the patch streets, so the seam reads as
+  //     one bounding street (SF: SoMa against Market) instead of a circle.
+  //   - rare RADIAL patch (~7%, compact): a circus / roundabout block, NOT a
+  //     ringed district — full-size ring patches read as a Death Star
+  //     (user 2026-06-08), so they stay small and infrequent.
+  const patches: Array<{
+    cx: number;
+    cz: number;
+    size: number;
+    squash: number;
+    rca: number;
+    rsa: number;
+    radial: boolean;
+    ta: number;
+    tb: number;
+  }> = [];
+  const patchCount = 1 + (rng() < 0.6 ? 1 : 0) + (rng() < 0.3 ? 1 : 0);
+  for (let i = 0; i < 3; i++) {
+    // Fixed 7 draws per slot whether used or not — tuning never shifts later draws.
+    const pAng = rng() * Math.PI * 2;
+    const pDist = Math.min(250 + rng() * 1000, half * 0.75);
+    const pSize = 280 + rng() * 270;
+    const pOffset = (Math.PI / 6 + (rng() * Math.PI) / 6) * (rng() < 0.5 ? -1 : 1); // ±30–60°
+    const kindRoll = rng();
+    const squash = 0.55 + rng() * 0.45;
+    if (i >= patchCount) continue;
+    const pcx = cx + Math.cos(pAng) * pDist;
+    const pcz = cz + Math.sin(pAng) * pDist;
+    const radial = kindRoll < 0.07;
+    const theta = lattice.orientationAt(pcx, pcz) + pOffset;
+    patches.push({
+      cx: pcx,
+      cz: pcz,
+      size: radial ? pSize * 0.45 : pSize, // a circus is a block, not a district
+      squash: radial ? 1 : squash,
+      rca: Math.cos(theta),
+      rsa: Math.sin(theta),
+      radial,
+      ta: Math.cos(2 * theta),
+      tb: Math.sin(2 * theta),
+    });
+  }
+
   // Radial roundabout — only on the radial morphology (~14% of seeds). Compact +
   // off-centre with a tight decay so it reads as ONE plaza district, not a
   // city-spanning bullseye.
@@ -173,6 +228,33 @@ export function buildTensorField(masterSeed: string, lattice: Lattice): TensorFi
         a += (dz * dz - dx * dx) * w;
         b += -2 * dx * dz * w;
       }
+    }
+    // #49 odd-angle patches: override, don't vote. Inside 0.7×size the patch
+    // field IS the field; 0.7→1.15 is the seam band. Both tensors normalised
+    // at the blend, or the multi-basis ambient (|T| ~3-5) would always win.
+    // Region distance measured in the patch's squashed/rotated frame — the
+    // long side parallels the patch grid. Hot-loop cost (#63): ≤3 patches,
+    // one early-out distance check each.
+    for (const p of patches) {
+      const dx = x - p.cx;
+      const dz = z - p.cz;
+      const lx = p.rca * dx + p.rsa * dz;
+      const lz = (-p.rsa * dx + p.rca * dz) / p.squash;
+      const r = Math.hypot(lx, lz) / p.size;
+      if (r >= 1.15) continue;
+      const t = Math.min(1, (1.15 - r) / 0.45);
+      const wp = t * t * (3 - 2 * t);
+      let ta = p.ta;
+      let tb = p.tb;
+      if (p.radial) {
+        const d2 = dx * dx + dz * dz;
+        if (d2 < 1) continue; // degenerate at the plaza centre
+        ta = (dz * dz - dx * dx) / d2;
+        tb = (-2 * dx * dz) / d2;
+      }
+      const m = Math.hypot(a, b) || 1;
+      a = (a / m) * (1 - wp) + ta * wp;
+      b = (b / m) * (1 - wp) + tb * wp;
     }
     if (Math.hypot(a, b) < 1e-9) return null;
     let th = 0.5 * Math.atan2(b, a);
