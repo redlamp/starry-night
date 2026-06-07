@@ -274,7 +274,7 @@ function AppleBadge() {
         setHovered(false);
       }}
     >
-      <planeGeometry args={[2.6, 2.2]} />
+      <planeGeometry args={[2.1, 2.2]} />
       <meshBasicMaterial
         transparent
         opacity={BADGE_DEBUG ? 0.35 : hovered ? 0.15 : 0}
