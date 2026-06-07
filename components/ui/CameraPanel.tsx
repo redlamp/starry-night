@@ -567,7 +567,13 @@ export function CameraPanel() {
               <SeedRow />
             </Section>
 
-            <Section value="perf" icon={Gauge} label="Performance" hidden={!show("perf")}>
+            <Section
+              value="perf"
+              icon={Gauge}
+              label="Performance"
+              hidden={!show("perf")}
+              action={<FpsBadgeToggle />}
+            >
               <PerfReadout />
             </Section>
 
@@ -2210,13 +2216,22 @@ function SeedRow() {
   );
 }
 
+function FpsBadgeToggle() {
+  const fpsHud = useSceneStore((s) => s.fpsHud);
+  const setFpsHud = useSceneStore((s) => s.setFpsHud);
+  return (
+    <label className="flex cursor-pointer items-center gap-2 text-xs">
+      <span className="text-foreground/70">badge</span>
+      <Switch checked={fpsHud} onCheckedChange={setFpsHud} title="Show the floating FPS badge" />
+    </label>
+  );
+}
+
 function PerfReadout() {
   const perf = useSceneStore((s) => s.perf);
   const qualityTier = useSceneStore((s) => s.qualityTier);
   const setQualityTier = useSceneStore((s) => s.setQualityTier);
   const setStars = useSceneStore((s) => s.setStars);
-  const fpsHud = useSceneStore((s) => s.fpsHud);
-  const setFpsHud = useSceneStore((s) => s.setFpsHud);
   const tierCfg = QUALITY_TIERS[qualityTier];
   const fpsColor =
     perf.fps >= 55 ? "text-emerald-300" : perf.fps >= 35 ? "text-amber-300" : "text-rose-400";
@@ -2246,10 +2261,6 @@ function PerfReadout() {
             ))}
           </SelectContent>
         </Select>
-      </div>
-      <div className="flex items-center gap-2 text-xs">
-        <span className="text-foreground/70 w-14 shrink-0">fps badge</span>
-        <Switch checked={fpsHud} onCheckedChange={setFpsHud} />
       </div>
       <div className="text-foreground/70 grid grid-cols-[5rem_1fr] gap-1 font-mono text-xs">
         <div>dpr cap</div>
