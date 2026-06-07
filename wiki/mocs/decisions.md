@@ -27,3 +27,7 @@ Map of Content for architectural and product decisions. Each decision is an atom
 - [[decision-merge-styles]] — **Merge styles:** feature → dev `--no-ff` (bubble per feature), dev → main `--ff-only` + tag (main = bookmark on dev, zero graph lanes); direct-to-main = CI/hotfix only, back-merged same session
 - [[decision-debug-panel-architecture]] — IA + master toggle + save / reset / copy values *(superseded)*
 - [[decision-settings-sidebar-shadcn]] — shadcn rewire: full-height sidebar, multi-open accordion, light/grey/dark theme tokens
+
+## Intro exploration
+
+- [[decision-intro-mac-viewport]] — **/intro Mac stage + screen pipeline:** Daz 128K model (CC BY-NC, screen mesh separable), native-512×342 multi-pass chain (process-then-filter kills dither moiré), screen-blend over the model's glass, halation in-chain / bloom quality-gated, orientation-derived snow-globe coupling, dblclick gesture map
