@@ -14,7 +14,8 @@ attribute float aBuildingHash;
 //   y = breathing correlation (0=per-window, 1=per-block, 2=whole-floor; office
 //       archetypes pick {0,1,2} per building so the city has a mix)
 //   z = depth band          (0=front, 1=mid, 2=back) — drives the depth tint mode
-attribute vec3 aMisc;
+//   w = population          (people-equivalent, p95-normalised 0..1 — pop tint)
+attribute vec4 aMisc;
 // Debug-view tint (Slice A): the parcel's plan colour (matches DistrictShells).
 attribute vec3 aDebugDistrictColor;
 
@@ -33,6 +34,7 @@ varying vec3 vBuildingCenter;  // world-space centre of this instance
 varying vec3 vDebugDistrictColor;
 varying float vLayerIdx;
 varying float vBuildingHeight;  // world height (instance scale.y), for the height tint ramp
+varying float vPopulation;      // people-equivalent 0..1, for the population tint ramp
 // #25: vertical face id (0=+X, 1=-X, 2=+Z, 3=-Z), constant per face thanks to
 // BoxGeometry's per-face normal duplication. Drives a per-face shift of which
 // atlas pixels each vertical face samples so the 4 sides aren't identical.
@@ -63,6 +65,7 @@ void main() {
   vDistrictIdx = aMisc.x;
   vCorrelationMode = aMisc.y;
   vLayerIdx = aMisc.z;
+  vPopulation = aMisc.w;
   vBuildingCenter = (modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
   vDebugDistrictColor = aDebugDistrictColor;
   vBuildingHeight = scaleVec.y; // instance Y scale == building height
@@ -118,8 +121,9 @@ uniform float uLodNear;         // cells-per-pixel where distance wash starts
 uniform float uLodRange;        // ramp width from uLodNear to full wash
 
 // Debug building tint (Slice A). uDebugMode: 0 off, 1 district(parcel),
-// 2 land-use, 3 archetype, 4 depth band, 5 height. uDebugTint = mix amount
-// (0 → scene byte-identical to off). Palettes are flat distinct debug colours.
+// 2 land-use, 3 archetype, 4 depth band, 5 height, 6 population. uDebugTint =
+// mix amount (0 → scene byte-identical to off). Palettes are flat distinct
+// debug colours.
 uniform float uDebugMode;
 uniform float uDebugTint;
 uniform float uMaxHeight;
@@ -147,6 +151,7 @@ varying float vFaceId;
 varying vec3 vDebugDistrictColor;
 varying float vLayerIdx;
 varying float vBuildingHeight;
+varying float vPopulation;
 float hash11(float p) {
   p = fract(p * 0.1031);
   p *= p + 33.33;
@@ -175,12 +180,20 @@ vec3 debugTintColor() {
     vec3 c = uDepthPalette[0];
     for (int k = 1; k < 3; k++) { if (k == idx) c = uDepthPalette[k]; }
     return c;
+  } else if (uDebugMode < 5.5) {
+    // 5: height — blue (low) → green → amber → red (tall)
+    float t = clamp(vBuildingHeight / max(uMaxHeight, 1.0), 0.0, 1.0);
+    vec3 c = mix(vec3(0.15, 0.30, 0.90), vec3(0.20, 0.95, 0.60), smoothstep(0.0, 0.4, t));
+    c = mix(c, vec3(1.0, 0.85, 0.20), smoothstep(0.35, 0.75, t));
+    c = mix(c, vec3(1.0, 0.25, 0.20), smoothstep(0.70, 1.0, t));
+    return c;
   }
-  // 5: height — blue (low) → green → amber → red (tall)
-  float t = clamp(vBuildingHeight / max(uMaxHeight, 1.0), 0.0, 1.0);
-  vec3 c = mix(vec3(0.15, 0.30, 0.90), vec3(0.20, 0.95, 0.60), smoothstep(0.0, 0.4, t));
-  c = mix(c, vec3(1.0, 0.85, 0.20), smoothstep(0.35, 0.75, t));
-  c = mix(c, vec3(1.0, 0.25, 0.20), smoothstep(0.70, 1.0, t));
+  // 6: population — the heat-map's inferno ramp (indigo → magenta → orange →
+  // pale yellow) so the building tint and the ground overlay read as one scale.
+  float t = clamp(vPopulation, 0.0, 1.0);
+  vec3 c = mix(vec3(0.13, 0.07, 0.29), vec3(0.47, 0.11, 0.43), smoothstep(0.0, 0.35, t));
+  c = mix(c, vec3(0.93, 0.41, 0.15), smoothstep(0.30, 0.70, t));
+  c = mix(c, vec3(0.99, 0.91, 0.64), smoothstep(0.65, 1.0, t));
   return c;
 }
 

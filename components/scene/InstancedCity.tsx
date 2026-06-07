@@ -26,6 +26,7 @@ import {
   generateWindowTexture,
 } from "@/lib/seed/lightingGen";
 import { packWindowAtlas, type PackInput } from "@/lib/scene/atlasPacker";
+import { buildingPopulation } from "@/lib/seed/population";
 import { cityVertexShader, cityFragmentShader } from "@/lib/shaders/cityInstanced";
 import { sharedTime } from "@/lib/shaders/sharedTime";
 import {
@@ -61,6 +62,7 @@ const TINT_MODE_IDX: Record<string, number> = {
   archetype: 3,
   depth: 4,
   height: 5,
+  population: 6,
 };
 
 // Flat, distinct debug palettes (THREE.Color → linear, matching the facade
@@ -246,6 +248,12 @@ function buildMeshes(
     if (b.height > maxHeight) maxHeight = b.height;
   }
 
+  // Population tint (Debug View): per-building people-equivalent, normalised
+  // against the WHOLE city's p95 (not per-archetype mesh, and not the max — one
+  // supertall would crush the ramp). Same estimator as the population field.
+  const pops = buildings.map((b) => buildingPopulation(b)).sort((a, b) => a - b);
+  const popP95 = pops[Math.min(pops.length - 1, Math.floor(pops.length * 0.95))] || 1;
+
   // Parcel id → plan colour (the DistrictShells palette) for the district tint
   // debug mode. tensorDistrictField is cached, so this is a cheap shared read.
   const parcelColor = new Map<string, string>();
@@ -309,7 +317,10 @@ function buildMeshes(
     const aFacadeColor = new Float32Array(N * 3);
     const aFacadeGlow = new Float32Array(N);
     const aBuildingHash = new Float32Array(N);
-    const aMisc = new Float32Array(N * 3); // x=districtIdx, y=correlationMode, z=layerIdx
+    // x=districtIdx, y=correlationMode, z=layerIdx, w=population (p95-norm 0..1)
+    // — packed into one vec4 rather than a new attribute: instanceMatrix (4) +
+    // built-ins (3) + the 8 customs already sit at 15 of the ~16-slot cap.
+    const aMisc = new Float32Array(N * 4);
     const aDebugDistrictColor = new Float32Array(N * 3);
 
     const material = new THREE.ShaderMaterial({
@@ -398,9 +409,10 @@ function buildMeshes(
 
       aFacadeGlow[i] = facadeGlowFor(b);
       aBuildingHash[i] = b.windowSeed * 1000;
-      aMisc[i * 3 + 0] = DISTRICT_TO_IDX[b.district] ?? 0;
-      aMisc[i * 3 + 1] = correlationModeFor(b);
-      aMisc[i * 3 + 2] = LAYER_TO_IDX[b.layer] ?? 1;
+      aMisc[i * 4 + 0] = DISTRICT_TO_IDX[b.district] ?? 0;
+      aMisc[i * 4 + 1] = correlationModeFor(b);
+      aMisc[i * 4 + 2] = LAYER_TO_IDX[b.layer] ?? 1;
+      aMisc[i * 4 + 3] = Math.min(1, buildingPopulation(b) / popP95);
 
       color.set(parcelColor.get(b.districtId) ?? "#888888");
       aDebugDistrictColor[i * 3 + 0] = color.r;
@@ -425,7 +437,7 @@ function buildMeshes(
     geo.setAttribute("aFacadeColor", new THREE.InstancedBufferAttribute(aFacadeColor, 3));
     geo.setAttribute("aFacadeGlow", new THREE.InstancedBufferAttribute(aFacadeGlow, 1));
     geo.setAttribute("aBuildingHash", new THREE.InstancedBufferAttribute(aBuildingHash, 1));
-    geo.setAttribute("aMisc", new THREE.InstancedBufferAttribute(aMisc, 3));
+    geo.setAttribute("aMisc", new THREE.InstancedBufferAttribute(aMisc, 4));
     geo.setAttribute(
       "aDebugDistrictColor",
       new THREE.InstancedBufferAttribute(aDebugDistrictColor, 3),
@@ -476,7 +488,7 @@ function buildMeshes(
       {
         src: aMisc.slice(),
         dst: geo.getAttribute("aMisc") as THREE.InstancedBufferAttribute,
-        itemSize: 3,
+        itemSize: 4,
       },
       {
         src: aDebugDistrictColor.slice(),
