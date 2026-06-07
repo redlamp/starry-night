@@ -32,39 +32,50 @@ const STAR_MODE_TO_IDX: Record<string, number> = {
   "zenith-first": 3,
 };
 
-// Starts the star intro on first mount; the CITY cascade (windows +
+// On mount, stars wake immediately (autoPlay, default true — the / boot) so the
+// sky isn't dead during the ~8-10 s worker gen. The CITY cascade (windows +
 // streetlights) waits for cityReady and restarts on every false→true edge —
-// boot AND each regeneration (user 2026-06-08: the timer used to start while
-// the worker was still generating, so the city popped in mid-cascade with a
-// band of lights already up). Each frame: mirrors mode + cycle settings into
-// the shared singletons; on each replay stamps sharedIntroStartTime =
-// sharedTime so the city shader can compute per-cell wake = startTime +
-// baseline * duration.
-export function IntroTicker({ cityReady }: { cityReady: boolean }) {
+// boot AND each regeneration (the timer used to start while the worker was
+// still generating, so the city popped in mid-cascade with a band of lights
+// already up). The first ready edge skips the star replay (stars already woke
+// at mount); later edges (regen) retrigger stars too, so a re-rolled city and
+// its sky wake together. Hosts that boot the city already-awake (the /intro Mac
+// screen) pass autoPlay={false} and drive replays themselves. Each frame:
+// mirrors mode + cycle settings into the shared singletons; on each replay
+// stamps sharedIntroStartTime = sharedTime so the city shader can compute
+// per-cell wake = startTime + baseline * duration.
+export function IntroTicker({
+  cityReady,
+  autoPlay = true,
+}: {
+  cityReady: boolean;
+  autoPlay?: boolean;
+}) {
   const armed = useRef(false);
   const firstReady = useRef(true);
   const lastPlaying = useRef(false);
   const lastProgress = useRef(0);
 
   useEffect(() => {
-    if (armed.current) return;
+    if (armed.current || !autoPlay) return;
     armed.current = true;
     // Stars wake immediately so the sky isn't dead during the (now ~8-10 s at
     // the 6 km default) worker gen.
     useSceneStore.getState().playStarIntro();
-  }, []);
+  }, [autoPlay]);
 
   // City cascade restarts whenever the buildings (re)materialise — boot AND
-  // every regen. The FIRST ready edge skips the star replay (stars already
-  // woke at mount); later edges (regen) retrigger stars too (user 2026-06-08),
-  // so a re-rolled city and its sky wake together.
+  // every regen. Gated by autoPlay so the /intro screen (autoPlay=false, which
+  // snaps itself awake) doesn't cascade. The FIRST ready edge skips the star
+  // replay (stars already woke at mount); later edges (regen) retrigger stars
+  // too, so a re-rolled city and its sky wake together.
   useEffect(() => {
-    if (!cityReady) return;
+    if (!cityReady || !autoPlay) return;
     const s = useSceneStore.getState();
     s.playIntro();
     if (firstReady.current) firstReady.current = false;
     else s.playStarIntro();
-  }, [cityReady]);
+  }, [cityReady, autoPlay]);
 
   useFrame((_, dt) => {
     const s = useSceneStore.getState();
