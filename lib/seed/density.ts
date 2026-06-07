@@ -49,12 +49,19 @@ export function bandOf(density: number): DensityBand {
   return "fringe";
 }
 
-// e-folding radius (m) of the exponential falloff. Sets the unwarped band edges:
-// core→suburban at ~800 m, suburban→rural at ~2.0 km, rural→fringe at ~3.5 km —
-// so the Town default (1.5 km half) is core + suburbs with rural just clipping
-// the corners, and rural/fringe only open up at the bigger tiers (the review's
-// "rural needs the scale spike" gate, now satisfied by the 8-tier system).
-const R0 = 1675;
+// Generalized-exponential falloff: exp(−(r/R0)^P). P > 1 flattens the shoulder
+// — a wide mid-city of full-density, mid-rise fabric wraps the CBD before the
+// roll-off — and pushes the suburban band toward the map periphery (user
+// 2026-06-08: "downtown should be surrounded by much more midsized non-spire
+// blocks… the suburbs should really be at the periphery"; the pure exponential
+// made the hand-off sudden at ~800 m). Unwarped band edges: core→suburban
+// ~1.1 km, suburban→rural ~2.05 km, rural→fringe ~3.06 km — Town/City tiers
+// read core + peripheral suburbs; rural opens at tier 5+, fringe at 7+ (the
+// absolute-distance contract holds: bigger tiers ADD bands). R0 1929 → 1768:
+// the first cut left the 4 km tier's suburb band mostly past the map edge —
+// the subdivisions had no land to build on.
+const R0 = 1768;
+const P = 1.5;
 // Faint base so the far fringe never hits exact zero (consumers add their own
 // floors — e.g. lamps keep a "never zero" spacing floor).
 const DENSITY_FLOOR = 0.02;
@@ -98,12 +105,12 @@ export function buildRadialDensity(masterSeed: string): RadialDensity {
     const r = Math.hypot(dx, dz);
     if (r < 1) return 1;
     const rEff = r * warpAt(Math.atan2(dz, dx));
-    return DENSITY_FLOOR + (1 - DENSITY_FLOOR) * Math.exp(-rEff / R0);
+    return DENSITY_FLOOR + (1 - DENSITY_FLOOR) * Math.exp(-Math.pow(rEff / R0, P));
   };
 
   const radiusAt = (threshold: number, theta: number): number => {
     const t = Math.min(1 - 1e-6, Math.max(DENSITY_FLOOR + 1e-6, threshold));
-    const base = -R0 * Math.log((t - DENSITY_FLOOR) / (1 - DENSITY_FLOOR));
+    const base = R0 * Math.pow(-Math.log((t - DENSITY_FLOOR) / (1 - DENSITY_FLOOR)), 1 / P);
     return base / warpAt(theta);
   };
 
