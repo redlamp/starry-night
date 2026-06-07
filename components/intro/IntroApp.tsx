@@ -198,15 +198,6 @@ export function IntroApp() {
                   />
                 </>
               )}
-              {/* pipeline order: levels → halation → scanlines → glow → bloom */}
-              <SliderRow
-                label="Halation"
-                value={halation}
-                min={0}
-                max={2}
-                step={0.05}
-                onChange={setHalation}
-              />
               <SliderRow
                 label="Scanlines"
                 value={scanline}
@@ -215,15 +206,34 @@ export function IntroApp() {
                 step={0.01}
                 onChange={setScanline}
               />
-              <SliderRow label="Glow" value={glow} min={0} max={2} step={0.05} onChange={setGlow} />
-              <SliderRow
-                label="Bloom"
-                value={bloom}
-                min={0}
-                max={3}
-                step={0.05}
-                onChange={setBloom}
-              />
+              {/* light-emission group, ordered by spatial reach: the pixel
+                  itself → scatter inside the tube → past the bezel */}
+              <div className="border-foreground/15 flex flex-col gap-2.5 border-t pt-2.5">
+                <SliderRow
+                  label="Glow"
+                  value={glow}
+                  min={0}
+                  max={2}
+                  step={0.05}
+                  onChange={setGlow}
+                />
+                <SliderRow
+                  label="Halation"
+                  value={halation}
+                  min={0}
+                  max={2}
+                  step={0.05}
+                  onChange={setHalation}
+                />
+                <SliderRow
+                  label="Bloom"
+                  value={bloom}
+                  min={0}
+                  max={3}
+                  step={0.05}
+                  onChange={setBloom}
+                />
+              </div>
               <Button
                 size="xs"
                 variant="outline"
