@@ -32,20 +32,23 @@ const STAR_MODE_TO_IDX: Record<string, number> = {
   "zenith-first": 3,
 };
 
-// Auto-fires playAllIntros on first mount; thereafter the panel button drives
-// replays. Each frame: mirrors mode + cycle settings into the shared
-// singletons; on each replay stamps sharedIntroStartTime = sharedTime so the
-// city shader can compute per-cell wake = startTime + baseline * duration.
-export function IntroTicker() {
+// Auto-fires playAllIntros on first mount (autoPlay, default true — the /
+// boot wake); thereafter the panel button drives replays. Hosts that want
+// the city already awake on load (the /intro Mac screen) pass
+// autoPlay={false} and call playAllIntros themselves. Each frame: mirrors
+// mode + cycle settings into the shared singletons; on each replay stamps
+// sharedIntroStartTime = sharedTime so the city shader can compute per-cell
+// wake = startTime + baseline * duration.
+export function IntroTicker({ autoPlay = true }: { autoPlay?: boolean }) {
   const armed = useRef(false);
   const lastPlaying = useRef(false);
   const lastProgress = useRef(0);
 
   useEffect(() => {
-    if (armed.current) return;
+    if (armed.current || !autoPlay) return;
     armed.current = true;
     useSceneStore.getState().playAllIntros();
-  }, []);
+  }, [autoPlay]);
 
   useFrame((_, dt) => {
     const s = useSceneStore.getState();
