@@ -57,7 +57,10 @@ halation pass (7×7 gaussian gather at raster res) for in-tube light scatter —
 cost is **content-resolution-bound**, identical on mobile. Full-frame bloom
 (`@react-three/postprocessing`, HDR threshold) exists behind a slider for the
 over-the-bezel glow but scales with display pixels — gate it behind quality
-tiers before mobile ship. Scanline/pixel-grid mask deferred to
+tiers before mobile ship. Scanlines run at **display sampling time** (the row
+gaps are sub-texel, so they can't bake into the 342-row FBO) with an
+`fwidth`-based fade that dissolves them before they can moiré when
+undersampled; tuning vs reference photos tracked in
 [#71](https://github.com/redlamp/starry-night/issues/71).
 
 ### Snow-globe coupling: orientation-derived orbit angles
