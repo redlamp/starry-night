@@ -128,8 +128,10 @@ export function StarField({ masterSeed, count, radius, depth, size = 1.5 }: Prop
       // Twinkle amplitude (#26): scintillation is ELEVATION-driven — strong
       // through the thick air near the horizon, near-steady at zenith —
       // scaled by brightness so it reads on the stars you can actually see.
-      const elevation = 0.35 + 0.65 * Math.pow(1 - heightNorm, 1.3);
-      twinkles[i] = (0.15 + s * 0.85) * elevation;
+      // Floors raised (elevation 0.35→0.55, base 0.15→0.35) so even faint /
+      // high-altitude stars visibly shimmer, not just the bright horizon few.
+      const elevation = 0.55 + 0.45 * Math.pow(1 - heightNorm, 1.3);
+      twinkles[i] = (0.35 + s * 0.65) * elevation;
       sparkleSeeds[i] = rng();
 
       const [cr, cg, cb] = pickStarColor(rng(), s);

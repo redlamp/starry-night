@@ -41,10 +41,12 @@ export const starFieldVertexShader = /* glsl */ `
     float d = -mv.z;
     gl_PointSize = aSize * uPixelRatio * (300.0 / max(d, 1.0));
 
-    // Twinkle = sine wave 0.5..1.0 swing, amplitude per-star (aTwinkle).
-    // Bright stars (aTwinkle near 1) modulate strongly; dim stars stay near 1.
+    // Twinkle = sine wave 0.3..1.0 swing, amplitude per-star (aTwinkle).
+    // Deeper than the original 0.5 floor so the scintillation actually reads
+    // (it was technically present but near-invisible). Bright stars modulate
+    // strongly; dim stars stay nearer steady.
     float t = sin(uTime * aFreq + aPhase * 6.2831853);
-    float baseTwinkle = mix(1.0, 0.5 + 0.5 * (0.5 + 0.5 * t), aTwinkle);
+    float baseTwinkle = mix(1.0, 0.3 + 0.7 * (0.5 + 0.5 * t), aTwinkle);
 
     // Occasional sparkle: every ~2.5s bucket, roll a per-star hash. If it
     // crosses the threshold the star briefly spikes; exp-decay across the
