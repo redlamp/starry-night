@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { ValueSlider } from "@/components/ui/value-slider";
 import { tensorDistrictField } from "@/lib/seed/cityGen";
 import { buildPopulationField } from "@/lib/seed/population";
+import { MAX_CENTRES } from "@/lib/seed/density";
 
 // Population panel sections (user 2026-06-07): Density (population heat map +
 // traffic coupling) + Districts (the original panel, now a sub-group).
@@ -20,13 +21,28 @@ export function DistrictShellsAction() {
     <Switch
       checked={showShells}
       onCheckedChange={(v) => setCityPlanning({ showDistrictShells: v })}
-      title="Toggle the colour-coded district overlay"
+      title="Toggle the color-coded district overlay"
       aria-label="Toggle district shells"
     />
   );
 }
 
-// District list with planning character + colour swatch. Hovering a row
+// Density sub-group header action: the population heat-map switch (user
+// 2026-06-08 — moved from a body row, mirrors the Districts shell switch).
+export function PopulationHeatAction() {
+  const showHeat = useSceneStore((s) => s.cityPlanning.showPopulationHeat);
+  const setCityPlanning = useSceneStore((s) => s.setCityPlanning);
+  return (
+    <Switch
+      checked={showHeat}
+      onCheckedChange={(v) => setCityPlanning({ showPopulationHeat: v })}
+      title="Toggle the population heat-map overlay"
+      aria-label="Toggle population heat map"
+    />
+  );
+}
+
+// District list with planning character + color swatch. Hovering a row
 // highlights that district in the scene (works with the shells off too).
 export function DistrictsSection() {
   const masterSeed = useSceneStore((s) => s.masterSeed);
@@ -66,13 +82,12 @@ export function DistrictsSection() {
   );
 }
 
-// Population density: heat-map overlay toggle, the traffic coupling strength
-// (how strongly local population scales each road's car count — highways
-// exempt), and a whole-city people-equivalent readout from the same field.
+// Population density: traffic coupling strength (how strongly local population
+// scales each road's car count — highways exempt), a whole-city
+// people-equivalent readout, and the profile authoring sliders. The heat-map
+// switch lives on the sub-group HEADER (PopulationHeatAction).
 export function DensitySection() {
   const masterSeed = useSceneStore((s) => s.masterSeed);
-  const showHeat = useSceneStore((s) => s.cityPlanning.showPopulationHeat);
-  const setCityPlanning = useSceneStore((s) => s.setCityPlanning);
   // `?? 1` — configs saved before population coupling landed lack the key.
   const popCoupling = useSceneStore((s) => s.traffic.popCoupling ?? 1);
   const setTraffic = useSceneStore((s) => s.setTraffic);
@@ -107,11 +122,6 @@ export function DensitySection() {
 
   return (
     <>
-      <ToggleRow
-        label="Heat map"
-        on={showHeat}
-        onClick={() => setCityPlanning({ showPopulationHeat: !showHeat })}
-      />
       <ValueSlider
         label="traffic coupling"
         value={popCoupling}
@@ -125,7 +135,7 @@ export function DensitySection() {
         <span className="text-foreground/80 font-mono tabular-nums">{fmtPeople(total)}</span>
       </div>
       {/* Population profile (#49, user 2026-06-08): author the gradient —
-          centres radiate, spread/shoulder shape the falloff curve, overlapping
+          centers radiate, spread/shoulder shape the falloff curve, overlapping
           gradients overflow into each other. Sliders PREVIEW on the heat-map
           overlay (live field + band contours, no rebuild); Confirm commits
           and regenerates, Reset discards. */}
@@ -133,10 +143,10 @@ export function DensitySection() {
         profile · previews live, confirm to rebuild
       </div>
       <ValueSlider
-        label="centres"
+        label="centers"
         value={dp.centres}
         min={1}
-        max={3}
+        max={MAX_CENTRES}
         step={1}
         onChange={(centres) => edit({ centres })}
       />
@@ -196,13 +206,4 @@ function fmtPeople(n: number): string {
   if (n >= 1e6) return `≈ ${(n / 1e6).toFixed(2)} M`;
   if (n >= 1e3) return `≈ ${Math.round(n / 1e3)} k`;
   return `≈ ${Math.round(n)}`;
-}
-
-function ToggleRow({ label, on, onClick }: { label: string; on: boolean; onClick: () => void }) {
-  return (
-    <div className="flex items-center justify-between gap-2 text-xs">
-      <span className="text-foreground/70">{label}</span>
-      <Switch checked={on} onCheckedChange={onClick} aria-label={`Toggle ${label}`} />
-    </div>
-  );
 }
