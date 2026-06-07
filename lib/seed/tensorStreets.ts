@@ -4,7 +4,7 @@ import { buildTensorField, alignDir, type TensorField, type Vec2 } from "./tenso
 import type { RoadPoly, RoadTier } from "./streets";
 import { genScale } from "./topology";
 import type { ShapeMask } from "./cityShape";
-import { buildRadialDensity, CORE_T, SUBURB_T, RURAL_T } from "./density";
+import { buildRadialDensity, suburbAmount, CORE_T, SUBURB_T, RURAL_T } from "./density";
 
 // Tensor-field streets. Roads are streamlines of the tensor field. Both the
 // MAJOR and MINOR eigenvector families are traced at TWO separation scales:
@@ -65,10 +65,17 @@ const ART_SEP_ANCHORS: ReadonlyArray<readonly [number, number]> = [
   [0.45, 1.15],
   [CORE_T, 1],
 ];
+// Past the core edge the GLOBAL street grid degrades to a sparse COLLECTOR
+// grid (user review: through-traced streets gave the suburbs a rigid
+// rectangular block lattice no warp could hide). Large blocks (~150–350 m
+// between collectors) are then filled by the self-contained crescent +
+// cul-de-sac networks below — subdivision lives INSIDE the block, not on the
+// global field.
 const ST_SEP_ANCHORS: ReadonlyArray<readonly [number, number]> = [
-  [0, 3.2],
-  [RURAL_T, 2.6],
-  [SUBURB_T, 1.25],
+  [0, 7],
+  [RURAL_T, 5],
+  [SUBURB_T, 3.6],
+  [0.5, 1.5],
   [CORE_T, 1],
 ];
 function anchorLerp(anchors: ReadonlyArray<readonly [number, number]>, d: number): number {
@@ -81,6 +88,216 @@ function anchorLerp(anchors: ReadonlyArray<readonly [number, number]>, d: number
     }
   }
   return anchors[anchors.length - 1][1];
+}
+
+// --- #49 suburban street character: winding + cul-de-sacs ---------------------
+// The Stage-0 review: periphery field-waviness did NOT read as winding (field
+// curvature is slow relative to block size, and arterial spokes share the field
+// — cranking it would bend the mainlines too), and through-streamlines can
+// never end in a cul-de-sac. Two post-trace mechanisms instead:
+//
+//   1. DOMAIN WARP — a smooth seeded world-space displacement applied to MINOR
+//      street vertices, scaled by suburbAmount and tapered at line endpoints.
+//      Neighbouring streets sample the same warp, so parallels stay parallel
+//      (spacing ≈ preserved) while straight runs become serpentine at the block
+//      scale. Arterials are untouched: straight mainlines, deliberate curves.
+//   2. CUL-DE-SAC STUBS — short separation-checked dead-end branches grown off
+//      suburban minor streets into block interiors: real terminals + the
+//      subdivision texture the sep ramp alone can't give.
+//
+// Both run AFTER tracing on their own seeded streams — trace streams untouched.
+
+// Sum of n seeded plane waves, normalised to ±1 — cheap smooth quasi-noise.
+function planeNoise(
+  rng: () => number,
+  n: number,
+  lambdaMin: number,
+  lambdaMax: number,
+): (x: number, z: number) => number {
+  const waves = Array.from({ length: n }, () => {
+    const dir = rng() * Math.PI * 2;
+    const k = (Math.PI * 2) / (lambdaMin + rng() * (lambdaMax - lambdaMin));
+    const phase = rng() * Math.PI * 2;
+    return { ux: Math.cos(dir), uz: Math.sin(dir), k, phase };
+  });
+  return (x, z) => {
+    let v = 0;
+    for (const w of waves) v += Math.sin((x * w.ux + z * w.uz) * w.k + w.phase);
+    return v / n;
+  };
+}
+
+const WARP_TAPER_M = 60; // endpoints stay anchored (junctions with arterials/streets)
+const STUB_STEP = 8;
+
+function warpStreets(
+  masterSeed: string,
+  lines: Vec2[][],
+  subAt: (x: number, z: number) => number,
+): Vec2[][] {
+  const rng = seedrandom(`${masterSeed}::tensor::warp`);
+  // Two scales (user review: the first single-scale pass read as wiggle, not
+  // kidney-bean). The SWEEP (λ 320–560 m, the dominant share) bends whole
+  // streets and the blocks between them into crescents/beans; the LOCAL
+  // component (λ 140–240 m) adds the small serpentine texture on top. Peak
+  // combined strain ≈ 0.5 — occasional pinches read as organic; buildings and
+  // lamps place against the warped geometry, so nothing overlaps.
+  const sweepAmp = 14 + rng() * 8; // metres at full suburbAmount
+  const localAmp = 5 + rng() * 3;
+  const sx = planeNoise(rng, 3, 320, 560);
+  const sz = planeNoise(rng, 3, 320, 560);
+  const nx = planeNoise(rng, 3, 140, 240);
+  const nz = planeNoise(rng, 3, 140, 240);
+  return lines.map((pts) => {
+    // Cumulative arc length for the endpoint taper.
+    const cum: number[] = [0];
+    for (let i = 1; i < pts.length; i++) {
+      cum[i] = cum[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z);
+    }
+    const total = cum[pts.length - 1] ?? 0;
+    return pts.map((p, i) => {
+      const sub = subAt(p.x, p.z);
+      if (sub <= 0) return p;
+      const taper = Math.min(1, cum[i] / WARP_TAPER_M, (total - cum[i]) / WARP_TAPER_M);
+      if (taper <= 0) return p;
+      const a = sub * taper;
+      return {
+        x: p.x + (sx(p.x, p.z) * sweepAmp + nx(p.x, p.z) * localAmp) * a,
+        z: p.z + (sz(p.x, p.z) * sweepAmp + nz(p.x, p.z) * localAmp) * a,
+      };
+    });
+  });
+}
+
+// Two-generation suburban branch networks (user review of the warp pass: the
+// global grid — through-streamlines crossing the whole map — kept suburb
+// blocks rigidly rectangular; subdivision must instead live INSIDE the large
+// collector blocks). Generation 1 grows CRESCENTS: long, constantly-curving
+// branches off the collector streets that arc through a block interior and
+// RECONNECT to whatever road they meet (a relaxed final approach lets the end
+// visually join it). Generation 2 grows CUL-DE-SACS off collectors AND
+// crescents: short dead-end stubs. Together: collector → crescent → cul, the
+// classic kidney-bean hierarchy.
+type BranchParams = {
+  stream: string; // rng stream suffix — generations stay independent
+  stationMin: number; // arc-length between candidate stations along a host (m)
+  stationMax: number;
+  lenMin: number; // branch target length (m)
+  lenMax: number;
+  curveMax: number; // |rad| per 8 m step — persistent per branch → arcs
+  chance: number; // peak fire probability at full suburb ramp
+  rampLo: number; // suburbAmount smoothstep edges for the chance
+  rampHi: number;
+  ruralFactor: number; // chance multiplier deep-rural (sub > 0.85)
+  minKeepLen: number; // shorter grows are discarded (m)
+  sep: number; // clearance to every other road point while growing (m)
+  reconnect: boolean; // relax the final approach so the end joins a road
+};
+
+const CRESCENTS: BranchParams = {
+  stream: "crescents",
+  stationMin: 140,
+  stationMax: 240,
+  lenMin: 120,
+  lenMax: 420,
+  curveMax: 0.085,
+  chance: 0.55,
+  rampLo: 0.18,
+  rampHi: 0.5,
+  ruralFactor: 0.35,
+  minKeepLen: 90,
+  sep: 26,
+  reconnect: true,
+};
+const CULDESACS: BranchParams = {
+  stream: "culdesacs",
+  stationMin: 90,
+  stationMax: 180,
+  lenMin: 40,
+  lenMax: 90,
+  curveMax: 0.07,
+  chance: 0.45,
+  rampLo: 0.15,
+  rampHi: 0.5,
+  ruralFactor: 0.5,
+  minKeepLen: 32,
+  sep: 26,
+  reconnect: false,
+};
+
+// `all` holds every already-final road point; accepted branch points join it,
+// so branches separate from each other and later generations respect earlier
+// ones. Deterministic: hosts walked in array order, fixed draw pattern per
+// station (interval/side/roll, +4 when it fires).
+function growBranches(
+  masterSeed: string,
+  hosts: Vec2[][],
+  all: GridStorage,
+  b: BBox,
+  mask: ShapeMask,
+  subAt: (x: number, z: number) => number,
+  p: BranchParams,
+): Vec2[][] {
+  const rng = seedrandom(`${masterSeed}::tensor::${p.stream}`);
+  const branches: Vec2[][] = [];
+  for (const pts of hosts) {
+    if (pts.length < 2) continue;
+    let nextAt = p.stationMin * 0.4 + rng() * p.stationMax; // first station offset
+    let acc = 0;
+    for (let i = 1; i < pts.length; i++) {
+      const a = pts[i - 1];
+      const q = pts[i];
+      const segLen = Math.hypot(q.x - a.x, q.z - a.z);
+      if (segLen === 0) continue;
+      acc += segLen;
+      if (acc < nextAt) continue;
+      nextAt = acc + p.stationMin + rng() * (p.stationMax - p.stationMin);
+      const side = rng() < 0.5 ? -1 : 1;
+      const roll = rng();
+      const sub = subAt(q.x, q.z);
+      const t = Math.max(0, Math.min(1, (sub - p.rampLo) / (p.rampHi - p.rampLo)));
+      const chance = p.chance * t * t * (3 - 2 * t) * (sub > 0.85 ? p.ruralFactor : 1);
+      if (roll >= chance) continue;
+      const len = p.lenMin + rng() * (p.lenMax - p.lenMin);
+      const angJitter = (rng() - 0.5) * (Math.PI / 6);
+      const curve = (rng() < 0.5 ? -1 : 1) * (0.35 + rng() * 0.65) * p.curveMax;
+      const ux = (q.x - a.x) / segLen;
+      const uz = (q.z - a.z) / segLen;
+      let theta = Math.atan2(uz, ux) + (side * Math.PI) / 2 + angJitter;
+      // First step clears the host's own points before the sep test bites.
+      let cx = q.x + Math.cos(theta) * (p.sep + 2);
+      let cz = q.z + Math.sin(theta) * (p.sep + 2);
+      const branch: Vec2[] = [{ x: q.x, z: q.z }];
+      let grown = 0;
+      let relaxed = 0; // reconnect mode: bounded close-approach after sep fails
+      for (;;) {
+        if (!inBounds({ x: cx, z: cz }, b)) break;
+        if (mask(cx, cz) < 0.5) break;
+        if (relaxed > 0) {
+          // Final approach: at most 3 steps inside the sep band so the end
+          // lands visually ON the road it met — a T-junction, not a gap.
+          if (relaxed >= 3 || !all.isFree({ x: cx, z: cz }, 11)) break;
+          relaxed++;
+        } else {
+          if (grown >= len) break;
+          if (!all.isFree({ x: cx, z: cz }, p.sep)) {
+            if (!p.reconnect || grown < p.minKeepLen) break;
+            relaxed = 1;
+            continue; // re-test this same point under the relaxed band
+          }
+        }
+        branch.push({ x: cx, z: cz });
+        theta += curve;
+        cx += Math.cos(theta) * STUB_STEP;
+        cz += Math.sin(theta) * STUB_STEP;
+        grown += STUB_STEP;
+      }
+      if ((branch.length - 1) * STUB_STEP < p.minKeepLen) continue;
+      for (const v of branch) all.add(v);
+      branches.push(branch);
+    }
+  }
+  return branches;
 }
 
 type BBox = { minX: number; maxX: number; minZ: number; maxZ: number };
@@ -364,15 +581,24 @@ export function generateTensorStreets(
   // drives the arterial seed gate + the street-sep ramp. A sketched city (#40)
   // bypasses both — its ink is the author's intent, ungated.
   const radial = buildRadialDensity(masterSeed);
+  const subAt = (x: number, z: number) => suburbAmount(radial.at(x, z));
   const artKeep = fieldOverride
     ? undefined
     : (x: number, z: number) => anchorLerp(ART_KEEP_ANCHORS, radial.at(x, z));
   const artSepMul = fieldOverride
     ? undefined
     : (x: number, z: number) => anchorLerp(ART_SEP_ANCHORS, radial.at(x, z));
+  // Street separation = density ramp × per-area block-size jitter (#49 review:
+  // the spike coarsened uniformly). Low-frequency noise, suburbs only — the
+  // core grid stays exactly on ST_DSEP.
+  const blockJitter = planeNoise(seedrandom(`${masterSeed}::tensor::blockjitter`), 3, 380, 700);
   const stSepMul = fieldOverride
     ? undefined
-    : (x: number, z: number) => anchorLerp(ST_SEP_ANCHORS, radial.at(x, z));
+    : (x: number, z: number) => {
+        const sub = subAt(x, z);
+        const jitter = 1 + 0.25 * blockJitter(x, z) * Math.min(1, sub * 2);
+        return anchorLerp(ST_SEP_ANCHORS, radial.at(x, z)) * jitter;
+      };
 
   // Per-family, per-tier separation storages (cell ≥ finest dsep).
   const SmajA = new GridStorage(80);
@@ -461,13 +687,38 @@ export function generateTensorStreets(
     ),
   );
 
+  // #49 suburban street character (skipped for sketch cities — author's intent).
+  // Warp the (now sparse, collector-grade) minor streets into winding runs,
+  // then grow the in-block networks: crescents off the collectors, cul-de-sacs
+  // off collectors AND crescents. The separation index is built over the FINAL
+  // (warped) geometry + the unwarped arterials, so branches respect what
+  // actually renders.
+  let wMajS = majS;
+  let wMinS = minS;
+  let crescents: Vec2[][] = [];
+  let culs: Vec2[][] = [];
+  if (!fieldOverride) {
+    wMajS = warpStreets(masterSeed, majS, subAt);
+    wMinS = warpStreets(masterSeed, minS, subAt);
+    const all = new GridStorage(40);
+    for (const lines of [majA, minA, wMajS, wMinS]) {
+      for (const l of lines) for (const p of l) all.add(p);
+    }
+    const collectors = [...wMajS, ...wMinS];
+    crescents = growBranches(masterSeed, collectors, all, b, mask, subAt, CRESCENTS);
+    culs = growBranches(masterSeed, [...collectors, ...crescents], all, b, mask, subAt, CULDESACS);
+    if (onLine) for (const s of [...crescents, ...culs]) onLine(s, "minor"); // EMIT-ONLY (#59)
+  }
+
   const arterials = [
     ...toPolys(majA, 16, "arterial", "art-maj"),
     ...toPolys(minA, 16, "arterial", "art-min"),
   ];
   const minorStreets = [
-    ...toPolys(majS, 9, "minor", "st-maj"),
-    ...toPolys(minS, 9, "minor", "st-min"),
+    ...toPolys(wMajS, 9, "minor", "st-maj"),
+    ...toPolys(wMinS, 9, "minor", "st-min"),
+    ...toPolys(crescents, 8, "minor", "crescent"),
+    ...toPolys(culs, 7, "minor", "cul"),
   ];
 
   return { arterials, minorStreets };

@@ -218,11 +218,12 @@ function pickArchetype(
   if (character === "residential" || character === "mixed-use") {
     // Suburban tilt (#49): thresholds slide from the urban mix toward
     // low-rise-dominated (the Stage-0 review: density picks SMALLER archetypes
-    // toward the edge — homes and corner shops, the odd strip mall; towers
-    // vanish). At suburb=0 the numbers are exactly the pre-#49 mix.
-    const a = 0.1 - 0.08 * suburb; // residential-tower
-    const b = 0.45 - 0.27 * suburb; // mid-rise
-    const c = 0.8 + 0.1 * suburb; // low-rise (rest: warehouse/strip-mall)
+    // toward the edge — homes and corner shops, the odd strip mall; towers and
+    // apartment slabs vanish). At suburb=0 the numbers are exactly the
+    // pre-#49 mix; at suburb=1 a residential street is ~81% low-rise homes.
+    const a = 0.1 - 0.1 * suburb; // residential-tower → 0
+    const b = 0.45 - 0.31 * suburb; // mid-rise → 0.14
+    const c = 0.8 + 0.15 * suburb; // low-rise → the bulk (rest: strip-mall)
     if (r < a) return "residential-tower";
     if (r < b) return "mid-rise";
     if (r < c) return "low-rise";
@@ -746,8 +747,10 @@ function fillTensorBuildings(
   const devMask = buildDevelopmentMask(masterSeed);
   // Suburban buildings shrink as density falls — the Stage-0 review's "smaller
   // archetypes toward the edge". Footprint AND height scale, so window grids
-  // (cols/floors derive from dims) follow automatically.
-  const SUBURB_SHRINK = 0.28;
+  // (cols/floors derive from dims) follow automatically. 0.4 puts a full-
+  // suburb low-rise at 6–12 m wide / 2.5–6 m tall — house scale, not the
+  // apartment-block read the periphery had at 0.28.
+  const SUBURB_SHRINK = 0.4;
   const silhouetteByIndex = new Map<number, SilhouetteField>();
   for (const d of field.districts) {
     if (isHighRise(d.character)) silhouetteByIndex.set(d.index, buildSilhouette(masterSeed, d));
