@@ -93,9 +93,12 @@ function LodControls() {
   return (
     <>
       {/* #55 per-tile culling — offscreen tiles of buildings/lights/traffic are
-          not materialised at all (render-only; off = whole-city draws). */}
+          not materialised at all (render-only; off = whole-city draws).
+          Inspection tools (grid overlay, freeze, counts): Debug View → Tile culling. */}
       <div className="flex items-center justify-between gap-2 text-xs">
-        <span className="text-foreground/70">tile culling</span>
+        <span className="text-foreground/70" title="Visualize: Debug View → Tile culling">
+          tile culling
+        </span>
         <Switch checked={tiles} onCheckedChange={(v) => setLod({ tiles: v })} />
       </div>
       <ValueSlider

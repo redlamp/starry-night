@@ -89,6 +89,19 @@ export function reorderToTiles(
 
 const _projScreen = new THREE.Matrix4();
 
+// Debug freeze (#55 panel): when set, every visibleTiles call tests against
+// this captured projection matrix instead of the live camera, so the camera
+// can fly OUT of the cull frustum and inspect the evicted set from outside.
+// Render-only inspection state — never an input to generation.
+let _frozen: THREE.Matrix4 | null = null;
+
+/** Pin (or with `null` release) the cull frustum to `camera`'s current pose. */
+export function freezeCullCamera(camera: THREE.Camera | null): void {
+  _frozen = camera
+    ? new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)
+    : null;
+}
+
 /** Visible tile indices for `camera`, plus a cheap signature for change detection. */
 export function visibleTiles(
   part: TilePartition,
@@ -96,7 +109,8 @@ export function visibleTiles(
   frustum: THREE.Frustum,
   out: number[],
 ): string {
-  _projScreen.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+  if (_frozen) _projScreen.copy(_frozen);
+  else _projScreen.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
   frustum.setFromProjectionMatrix(_projScreen);
   out.length = 0;
   let sig = "";

@@ -16,6 +16,7 @@ import {
   compactVisible,
   type CompactChannel,
 } from "@/lib/scene/tileCull";
+import { reportTileCull } from "@/lib/scene/tileCullDebug";
 
 function applyWb(c: THREE.Color): THREE.Color {
   return new THREE.Color(
@@ -232,7 +233,8 @@ export function Streetlights({ masterSeed }: { masterSeed: string }) {
     // #55 per-tile culling: materialise only frustum-visible tiles. Copies fire
     // only when the visible tile SET changes (camera crossing tile boundaries);
     // a still camera costs ~tile-count AABB tests and nothing else.
-    if (lod.tiles && partition.tiles.length > 1) {
+    const culling = lod.tiles && partition.tiles.length > 1;
+    if (culling) {
       const sig = visibleTiles(partition, state.camera, frustum.current, visible.current);
       if (sig !== lastSig.current) {
         lastSig.current = sig;
@@ -242,6 +244,16 @@ export function Streetlights({ masterSeed }: { masterSeed: string }) {
       lastSig.current = "ALL";
       geometry.setDrawRange(0, compactVisible(partition, null, channels));
     }
+    // #55 debug readout (Debug View → Tile culling) — cheap counter writes.
+    const drawnCount = Math.min(geometry.drawRange.count, partition.total);
+    reportTileCull(
+      "streetlights",
+      culling ? visible.current.length : partition.tiles.length,
+      partition.tiles.length,
+      s.streetlights.enabled ? drawnCount : 0,
+      partition.total,
+      lod.tiles,
+    );
   });
 
   if (!enabled) return null;

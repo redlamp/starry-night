@@ -300,6 +300,11 @@ export const DEFAULT_DEBUG = {
   } as Record<RenderGroup, RenderMode>,
   // Tensor Field view (#40 Phase 1): overlay the road-shaping direction field.
   showTensorField: false,
+  // Tile-culling view (#55): translucent AABB overlay of the cull tiles
+  // (green = in the cull frustum, red = evicted) + a freeze that pins the cull
+  // frustum to the current pose so the camera can inspect eviction from outside.
+  tileOverlay: false,
+  tileFreeze: false,
 };
 
 // Default wireframe stroke colour — a bright blue used where a group has no
@@ -874,6 +879,8 @@ type SceneState = {
   setAllRenderModes: (mode: RenderMode) => void;
   setRenderModes: (modes: Record<RenderGroup, RenderMode>) => void;
   setShowTensorField: (v: boolean) => void;
+  setTileOverlay: (v: boolean) => void;
+  setTileFreeze: (v: boolean) => void;
   // Organic city footprint (#14) — gen input; changing it regenerates the city.
   cityShape: CityShapeSetting;
   setCityShape: (cityShape: CityShapeSetting) => void;
@@ -1066,6 +1073,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     })),
   setRenderModes: (renderModes) => set((s) => ({ debug: { ...s.debug, renderModes } })),
   setShowTensorField: (v) => set((s) => ({ debug: { ...s.debug, showTensorField: v } })),
+  setTileOverlay: (v) => set((s) => ({ debug: { ...s.debug, tileOverlay: v } })),
+  setTileFreeze: (v) => set((s) => ({ debug: { ...s.debug, tileFreeze: v } })),
   cityShape: DEFAULT_CITY_SHAPE,
   setCityShape: (cityShape) => set({ cityShape }),
   cityShapeScale: DEFAULT_CITY_SHAPE_SCALE,

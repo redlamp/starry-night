@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useSceneStore, QUALITY_TIERS, type QualityTier } from "@/lib/state/sceneStore";
 import { CITY_SHAPES, type CityShapeSetting } from "@/lib/seed/cityShape";
+import { readTileCull } from "@/lib/scene/tileCullDebug";
 
 /**
  * Reads URL params and hash on mount + keeps URL hash in sync with the seed.
@@ -42,6 +43,8 @@ export function CaptureBoot() {
       // Expose the store so verification scripts can drive settings at runtime
       // (page.evaluate → __sceneStore.getState().setX). Capture mode only.
       (window as unknown as Record<string, unknown>).__sceneStore = useSceneStore;
+      // #55: live tile-cull counters for verification scripts (same caveat).
+      (window as unknown as Record<string, unknown>).__tileCullDebug = { readTileCull };
     }
     if (params.get("intro") === "instant") {
       // Wake everything within ~1s and park the on/off cycle so a still a few

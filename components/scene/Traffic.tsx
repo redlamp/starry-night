@@ -16,6 +16,7 @@ import {
   type CompactChannel,
   type TilePartition,
 } from "@/lib/scene/tileCull";
+import { reportTileCull } from "@/lib/scene/tileCullDebug";
 
 // Ambient car head/tail-lights flowing along the road network (research D).
 // Deterministic per seed; GPU-animated off the shared clock (no per-frame CPU).
@@ -157,7 +158,11 @@ export function Traffic({ masterSeed }: { masterSeed: string }) {
   // Feed the camera forward direction so the shader can decide which cars face
   // the viewer (white headlights) vs drive away (red tails).
   useFrame((state) => {
-    if (!enabled) return;
+    if (!enabled) {
+      // Keep the #55 debug readout honest while the layer is off.
+      reportTileCull("traffic", 0, partition.tiles.length, 0, partition.total, false);
+      return;
+    }
     const s = useSceneStore.getState();
     const u = (points.material as THREE.ShaderMaterial).uniforms;
     state.camera.getWorldDirection(_viewDir);
@@ -174,7 +179,8 @@ export function Traffic({ masterSeed }: { masterSeed: string }) {
 
     // #55 per-tile culling: copy only the visible tiles' cars into the draw
     // buffers when the visible tile set changes.
-    if (lod.tiles && partition.tiles.length > 1) {
+    const culling = lod.tiles && partition.tiles.length > 1;
+    if (culling) {
       const sig = visibleTiles(partition, state.camera, frustum.current, visible.current);
       if (sig !== lastSig.current) {
         lastSig.current = sig;
@@ -184,6 +190,15 @@ export function Traffic({ masterSeed }: { masterSeed: string }) {
       lastSig.current = "ALL";
       points.geometry.setDrawRange(0, compactVisible(partition, null, channels));
     }
+    // #55 debug readout (Debug View → Tile culling) — cheap counter writes.
+    reportTileCull(
+      "traffic",
+      culling ? visible.current.length : partition.tiles.length,
+      partition.tiles.length,
+      Math.min(points.geometry.drawRange.count, partition.total),
+      partition.total,
+      lod.tiles,
+    );
   });
 
   if (!enabled) return null;

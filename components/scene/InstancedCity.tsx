@@ -10,6 +10,7 @@ import {
   type CompactChannel,
   type TilePartition,
 } from "@/lib/scene/tileCull";
+import { reportTileCull } from "@/lib/scene/tileCullDebug";
 import {
   generateCity,
   ARCHETYPE_ORDER,
@@ -150,19 +151,31 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
     // #55 per-tile culling: lower each archetype mesh's instance count to the
     // frustum-visible tiles. Instance copies fire only when a mesh's visible
     // tile set changes; a still camera costs only the AABB tests.
+    let tilesVis = 0;
+    let tilesTot = 0;
+    let drawn = 0;
     for (let e = 0; e < entries.length; e++) {
       const { mesh, partition, channels } = entries[e];
+      tilesTot += partition.tiles.length;
       if (s.lod.tiles && partition.tiles.length > 1) {
         const sig = visibleTiles(partition, state.camera, frustum.current, visible.current);
         if (sig !== lastSigs.current[e]) {
           lastSigs.current[e] = sig;
           mesh.count = compactVisible(partition, visible.current, channels);
         }
-      } else if (lastSigs.current[e] !== "ALL") {
-        lastSigs.current[e] = "ALL";
-        mesh.count = compactVisible(partition, null, channels);
+        tilesVis += visible.current.length;
+      } else {
+        if (lastSigs.current[e] !== "ALL") {
+          lastSigs.current[e] = "ALL";
+          mesh.count = compactVisible(partition, null, channels);
+        }
+        tilesVis += partition.tiles.length;
       }
+      drawn += mesh.count;
     }
+    // #55 debug readout (Debug View → Tile culling) — cheap counter writes.
+    const total = entries.reduce((n, e) => n + e.partition.total, 0);
+    reportTileCull("buildings", tilesVis, tilesTot, hidden ? 0 : drawn, total, s.lod.tiles);
     for (const m of meshes) {
       const mat = m.material as THREE.ShaderMaterial;
       mat.uniforms.uIntroCityCenter.value.set(s.orbit.centerX, 0, s.orbit.centerZ);

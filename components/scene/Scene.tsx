@@ -24,6 +24,7 @@ import { GroundHaze } from "./GroundHaze";
 import { Roads } from "./Roads";
 import { DistrictShells } from "./DistrictShells";
 import { TensorFieldOverlay } from "./TensorFieldOverlay";
+import { TileCullOverlay } from "./TileCullOverlay";
 import { Traffic } from "./Traffic";
 import { ShootingStars } from "./ShootingStars";
 import { useGeneratedCity } from "@/lib/hooks/useGeneratedCity";
@@ -114,6 +115,7 @@ export function Scene() {
               off). Highway/arterial/street tier tinting now lives in <Roads/>. */}
           <DistrictShells masterSeed={masterSeed} />
           <TensorFieldOverlay masterSeed={masterSeed} />
+          <TileCullOverlay masterSeed={masterSeed} />
         </>
       )}
       <FocalIndicator />
