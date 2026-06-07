@@ -222,26 +222,35 @@ const CRT_EMISSIVE_FRAGMENT = /* glsl */ `
 `;
 
 /**
- * Invisible hotspot over the rainbow Apple badge (lower-left front face).
- * Clicking it rerolls the master seed — a fresh city on every press of the
- * apple. Rendered in GLB space inside NormalizedModel, so it works on both
- * the working and stock Macs.
+ * Hotspot over the rainbow Apple badge (lower-left front face). Clicking it
+ * rerolls the master seed — a fresh city on every press of the apple.
+ * Rendered in GLB space inside NormalizedModel, so it works on both the
+ * working and stock Macs. Coplanar with the body's front face — a floating
+ * plane parallax-shifts off the painted logo as the camera orbits.
+ * Hovering shows a soft highlight (doubles as the alignment debug visual).
  */
+const BADGE_DEBUG = false; // true: badge zone always visible
+
 function AppleBadge() {
   const { scene } = useGLTF(DAZ_URL);
   const setSeed = useSceneStore((s) => s.setSeed);
+  const [hovered, setHovered] = useState(false);
   const position = useMemo(() => {
-    let src: THREE.Mesh | undefined;
+    let glassMesh: THREE.Mesh | undefined;
+    let bodyMesh: THREE.Mesh | undefined;
     scene.traverse((obj: THREE.Object3D) => {
       const mesh = obj as THREE.Mesh;
-      if (mesh.isMesh && mesh.name === SCREEN_MESH) src = mesh;
+      if (!mesh.isMesh) return;
+      if (mesh.name === SCREEN_MESH) glassMesh = mesh;
+      if (mesh.name === "Computer_Computer_0") bodyMesh = mesh;
     });
-    if (!src) return null;
+    if (!glassMesh || !bodyMesh) return null;
     scene.updateMatrixWorld(true);
-    const bb = new THREE.Box3().setFromObject(src);
-    // badge sits below the glass's lower-left corner (position verified
-    // against the model via debug render)
-    return new THREE.Vector3(bb.min.x + 0.8, bb.min.y - 9.0, bb.max.z + 3.0);
+    const glass = new THREE.Box3().setFromObject(glassMesh);
+    const body = new THREE.Box3().setFromObject(bodyMesh);
+    // x/y verified against the painted logo via debug render; z hugs the
+    // body's front plane so the zone tracks the logo at any camera angle
+    return new THREE.Vector3(glass.min.x + 0.4, glass.min.y - 9.8, body.max.z + 0.05);
   }, [scene]);
 
   if (!position) return null;
@@ -256,11 +265,20 @@ function AppleBadge() {
       onPointerOver={(e) => {
         e.stopPropagation();
         setCursorZone("badge", true);
+        setHovered(true);
       }}
-      onPointerOut={() => setCursorZone("badge", false)}
+      onPointerOut={() => {
+        setCursorZone("badge", false);
+        setHovered(false);
+      }}
     >
       <planeGeometry args={[2.6, 3.2]} />
-      <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+      <meshBasicMaterial
+        transparent
+        opacity={BADGE_DEBUG ? 0.35 : hovered ? 0.15 : 0}
+        color="#ffffff"
+        depthWrite={false}
+      />
     </mesh>
   );
 }
