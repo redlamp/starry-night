@@ -276,6 +276,7 @@ export const DEFAULT_CITY_PLANNING_VIS = {
   showDistrictShells: false,
   showArterials: false,
   showStreets: false,
+  showPopulationHeat: false,
 };
 
 // ---------------------------------------------------------------------------
@@ -317,7 +318,16 @@ export const DEBUG_WIRE_COLOR = "#4d9fff";
 // On by default. `density` is the global car-count multiplier; highway/arterial/
 // minor are per-tier multipliers layered on each tier's base usage rate (base
 // rates already encode the usage hierarchy: highways busiest, side streets least).
-export const DEFAULT_TRAFFIC = { enabled: true, density: 1, highway: 4, arterial: 2, minor: 1 };
+// `popCoupling` scales each segment's car count by the local population density
+// (0 = the old uniform look, 1 = fully population-driven; highways exempt).
+export const DEFAULT_TRAFFIC = {
+  enabled: true,
+  density: 1,
+  highway: 4,
+  arterial: 2,
+  minor: 1,
+  popCoupling: 1,
+};
 
 // Streetlights along the road network. On by default; toggled from the Roads panel.
 // `size` scales the point sprite (×base 6 px); `brightness` scales emissive gain.
@@ -525,6 +535,8 @@ type SavedConfig = {
     showDistrictShells: boolean;
     showArterials: boolean;
     showStreets: boolean;
+    // Optional so configs saved before the Population panel still load.
+    showPopulationHeat?: boolean;
   };
 };
 
@@ -862,12 +874,17 @@ type SceneState = {
     showDistrictShells: boolean;
     showArterials: boolean;
     showStreets: boolean;
+    showPopulationHeat: boolean;
     topologyKind: TopologyKind | null;
     highwayCount: number;
     arterialCount: number;
     streetCount: number;
   };
   setCityPlanning: (patch: Partial<SceneState["cityPlanning"]>) => void;
+  // Transient hover highlight (Population → Districts list): the hovered
+  // district draws emphasised in the scene. Never persisted.
+  highlightDistrictId: string | null;
+  setHighlightDistrictId: (id: string | null) => void;
   setTopologyKind: (kind: TopologyKind) => void;
   setHighwayCount: (n: number) => void;
   setArterialCount: (n: number) => void;
@@ -1029,12 +1046,15 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     showDistrictShells: false,
     showArterials: false,
     showStreets: false,
+    showPopulationHeat: false,
     topologyKind: null,
     highwayCount: 0,
     arterialCount: 0,
     streetCount: 0,
   },
   setCityPlanning: (patch) => set((s) => ({ cityPlanning: { ...s.cityPlanning, ...patch } })),
+  highlightDistrictId: null,
+  setHighlightDistrictId: (highlightDistrictId) => set({ highlightDistrictId }),
   setTopologyKind: (topologyKind) =>
     set((s) =>
       s.cityPlanning.topologyKind === topologyKind
@@ -1153,6 +1173,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         showDistrictShells: s.cityPlanning.showDistrictShells,
         showArterials: s.cityPlanning.showArterials,
         showStreets: s.cityPlanning.showStreets,
+        showPopulationHeat: s.cityPlanning.showPopulationHeat,
       };
     }
     writeSavedConfig(snap as SavedConfig);
@@ -1195,6 +1216,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         showDistrictShells: s.cityPlanning.showDistrictShells,
         showArterials: s.cityPlanning.showArterials,
         showStreets: s.cityPlanning.showStreets,
+        showPopulationHeat: s.cityPlanning.showPopulationHeat,
       };
     }
     return out;
