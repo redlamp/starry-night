@@ -193,10 +193,14 @@ export function ScreenCity({
   mode,
   interactive = false,
   resetSignal = 0,
+  onDragChange,
 }: {
   mode: IntroViewMode;
   interactive?: boolean;
   resetSignal?: number;
+  /** city-orbit drag lifecycle — lets the stage's drag-owner lock keep the
+   * gesture alive when the pointer leaves the CRT mid-drag */
+  onDragChange?: (dragging: boolean) => void;
 }) {
   const masterSeed = useSceneStore((s) => s.masterSeed);
   const cityShape = useSceneStore((s) => s.cityShape);
@@ -215,6 +219,7 @@ export function ScreenCity({
   useEffect(() => {
     if (resetSignal > 0) {
       base.current = makeDefaultBase();
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- resetSignal is an imperative event counter from the screen dblclick; this effect is its subscriber
       setResetting(true);
     }
   }, [resetSignal]);
@@ -234,7 +239,10 @@ export function ScreenCity({
       {interactive && !resetting && (
         <OrbitControls
           ref={cityControls}
+          // eslint-disable-next-line react-hooks/refs -- base is the ref-owned orbit foundation (mutations must NOT re-render); the prop only seeds the pivot at controls (re)mount
           target={base.current.tgt.toArray()}
+          onStart={() => onDragChange?.(true)}
+          onEnd={() => onDragChange?.(false)}
           screenSpacePanning
           enableDamping
           zoomSpeed={0.8}

@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import gsap from "gsap";
 import { Canvas } from "@react-three/fiber";
@@ -9,7 +9,12 @@ import { Bloom, EffectComposer, ToneMapping } from "@react-three/postprocessing"
 import { ToneMappingMode } from "postprocessing";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { MacDaz, MacDazStock } from "./MacModel";
-import { setCursorZone } from "./stageCursor";
+import {
+  setCursorZone,
+  setDragCursorLock,
+  stagePointerHot,
+  type StageDragOwner,
+} from "./stageCursor";
 import { PerfMonitor } from "@/components/scene/PerfMonitor";
 import { STUDIO_CAM_POS, STUDIO_TARGET } from "./studioCamera";
 import type { BwLevels, IntroViewMode, ScreenColorMode } from "./viewMode";
@@ -18,6 +23,12 @@ import type { BwLevels, IntroViewMode, ScreenColorMode } from "./viewMode";
 // to its right. Double-clicking a Mac pans the orbit rig over to it.
 const MAC_X: Record<"daz" | "stock", number> = { daz: 0, stock: 0.5 };
 type MacId = keyof typeof MAC_X;
+
+// Orbit-down limit: the eye may dip below the Mac's chin to peek under the
+// front overhang, but must stay above the sweep at any orbit radius — so the
+// polar cap is derived from the current radius on every change, not fixed.
+const CAM_MIN_Y = 0.04;
+const MAX_POLAR = Math.PI / 2 + 0.45;
 
 /**
  * Orbit the camera to a Mac's default frontal pose (the studio home pose
@@ -31,6 +42,15 @@ function tweenStudioOrbitTo(
   macX: number,
   onDone: () => void,
 ): gsap.core.Tween {
+  // flush damping inertia BEFORE reading the start pose — a big sweep's
+  // leftover sphericalDelta would otherwise keep draining after the tween
+  // ends and drift the camera off the home pose. update() without damping
+  // applies the residual fully and zeroes it.
+  const damping = controls.enableDamping;
+  controls.enableDamping = false;
+  controls.update();
+  controls.enableDamping = damping;
+
   const cam = controls.object;
   const endTarget = new THREE.Vector3(STUDIO_TARGET[0] + macX, STUDIO_TARGET[1], STUDIO_TARGET[2]);
   const endSph = new THREE.Spherical().setFromVector3(
@@ -73,26 +93,70 @@ export function IntroScene({
   mode,
   colorMode,
   bwLevels,
+  brightness,
   glow,
   halation,
   scanline,
   bloom,
+  onBrightnessChange,
+  onScreenSettingsReset,
 }: {
   mode: IntroViewMode;
   colorMode: ScreenColorMode;
   bwLevels: BwLevels;
+  brightness: number;
   glow: number;
   halation: number;
   scanline: number;
   bloom: number;
+  onBrightnessChange: (v: number) => void;
+  onScreenSettingsReset?: () => void;
 }) {
   const controlsRef = useRef<OrbitControlsImpl>(null);
   const camTween = useRef<gsap.core.Tween | null>(null);
   // Pointer over the CRT routes input to the city camera; studio controls
-  // stand down for the duration. Same while a tween owns the camera.
+  // stand down for the duration. Same while a tween owns the camera, or
+  // while the pointer engages the brightness knob (its drag owns the input).
   const [screenHover, setScreenHover] = useState(false);
+  const [knobEngaged, setKnobEngaged] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [selectedMac, setSelectedMac] = useState<MacId>("daz");
+
+  // One input event at a time: the first gesture to press claims the drag
+  // and keeps it until release. Hover states keep tracking RAW underneath
+  // (so the right mode resumes the moment the drag ends) but their effects
+  // — rerouting input, disabling controls, cursor changes — are suppressed
+  // while someone else owns the drag. Fixes the studio orbit stalling when
+  // the cursor crosses the CRT mid-drag.
+  const [dragOwner, setDragOwner] = useState<StageDragOwner | null>(null);
+  const claimDrag = useCallback(
+    (owner: StageDragOwner) => setDragOwner((cur) => (cur === null ? owner : cur)),
+    [],
+  );
+  const releaseDrag = useCallback(
+    (owner: StageDragOwner) => setDragOwner((cur) => (cur === owner ? null : cur)),
+    [],
+  );
+  useEffect(() => {
+    setDragCursorLock(dragOwner);
+  }, [dragOwner]);
+  // safety net: a drag whose owner unmounts mid-gesture (so its end event
+  // never fires) must not wedge the lock
+  useEffect(() => {
+    const clear = () => setDragOwner(null);
+    window.addEventListener("pointerup", clear);
+    window.addEventListener("pointercancel", clear);
+    return () => {
+      window.removeEventListener("pointerup", clear);
+      window.removeEventListener("pointercancel", clear);
+    };
+  }, []);
+
+  // hover takes effect only while unowned; an owning drag holds its mode
+  // even when the pointer strays (city drag keeps the city, studio drag
+  // never reroutes to the city)
+  const screenActive = dragOwner === "screen" || (dragOwner === null && screenHover);
+  const knobActive = dragOwner === "knob" || (dragOwner === null && knobEngaged);
 
   // dblclick a Mac: focus it AND reset the camera to its frontal pose;
   // dblclick the stage: reset to the currently focused Mac's pose.
@@ -110,6 +174,17 @@ export function IntroScene({
     [orbitToMac, selectedMac],
   );
 
+  // Re-derive the polar cap from the current orbit radius: close in, the
+  // camera can drop well below the chin; zoomed out, the same floor height
+  // yields a shallower angle. Fires on every controls change (incl. damping).
+  const clampPolarToFloor = useCallback(() => {
+    const c = controlsRef.current;
+    if (!c) return;
+    const r = c.object.position.distanceTo(c.target);
+    const cosFloor = (CAM_MIN_Y - c.target.y) / r;
+    c.maxPolarAngle = Math.min(MAX_POLAR, Math.acos(THREE.MathUtils.clamp(cosFloor, -1, 1)));
+  }, []);
+
   return (
     <Canvas
       shadows="soft"
@@ -121,6 +196,12 @@ export function IntroScene({
       }}
       dpr={[1, 2]}
       style={{ touchAction: "none" }}
+      // with azimuth unclamped the camera can face past the cyc where a
+      // dblclick hits nothing — treat a double-click on the void as a stage
+      // reset too (detail 2 = second click of a double-click)
+      onPointerMissed={(e) => {
+        if (e.detail === 2) handleStageDoubleClick();
+      }}
     >
       <color attach="background" args={["#c8c8c8"]} />
       <PerfMonitor />
@@ -163,11 +244,18 @@ export function IntroScene({
           mode={mode}
           colorMode={colorMode}
           bwLevels={bwLevels}
+          brightness={brightness}
           glow={glow}
           halation={halation}
           scanline={scanline}
-          screenInteractive={screenHover}
+          screenInteractive={screenActive}
+          knobLocked={dragOwner !== null && dragOwner !== "knob"}
           onScreenHoverChange={setScreenHover}
+          onScreenDragChange={(d) => (d ? claimDrag("screen") : releaseDrag("screen"))}
+          onBrightnessChange={onBrightnessChange}
+          onKnobEngageChange={setKnobEngaged}
+          onKnobDragChange={(d) => (d ? claimDrag("knob") : releaseDrag("knob"))}
+          onKnobReset={onScreenSettingsReset}
           position={[MAC_X.daz, 0, 0]}
           onDoubleClick={(e) => {
             // R3F rays pass through to the backdrop unless stopped — without
@@ -203,14 +291,27 @@ export function IntroScene({
       )}
 
       {/* azimuth unclamped: full orbit around the focused Mac — behind the
-          cyc the page background carries (close enough in tone) */}
+          cyc the page background carries (close enough in tone). Polar cap
+          is dynamic (floor-aware) via clampPolarToFloor. */}
       <OrbitControls
         ref={controlsRef}
-        enabled={!screenHover && !resetting}
+        enabled={!screenActive && !knobActive && !resetting}
         target={STUDIO_TARGET}
         minDistance={0.3}
         maxDistance={3}
-        maxPolarAngle={Math.PI / 2 - 0.04}
+        maxPolarAngle={MAX_POLAR}
+        onChange={clampPolarToFloor}
+        onStart={() => {
+          // enabled-prop race: a press right after hovering the CRT/knob can
+          // start before React commits enabled=false — veto synchronously
+          // (the prop re-asserts the right value on the next commit)
+          if (stagePointerHot()) {
+            if (controlsRef.current) controlsRef.current.enabled = false;
+            return;
+          }
+          claimDrag("studio");
+        }}
+        onEnd={() => releaseDrag("studio")}
         enableDamping
       />
     </Canvas>

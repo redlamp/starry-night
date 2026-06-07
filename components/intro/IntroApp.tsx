@@ -32,6 +32,7 @@ const SHOW_DEPTH_CHIPS = false;
 
 // Screen-settings defaults (the Reset button's target).
 const SCREEN_DEFAULTS = {
+  brightness: 1,
   threshold: 0.27,
   softness: 0.22,
   glow: 0.8,
@@ -78,6 +79,9 @@ export function IntroApp() {
   const [mode, setMode] = useState<IntroViewMode>("screen");
   const [colorMode, setColorMode] = useState<ScreenColorMode>("bw");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // beam gain ahead of all processing — two-way bound to the Mac's physical
+  // front-panel knob (drag/scroll the wheel, or this slider)
+  const [brightness, setBrightness] = useState(SCREEN_DEFAULTS.brightness);
   // 1-bit levels: threshold = cut midpoint, softness = dither knee width
   const [threshold, setThreshold] = useState(SCREEN_DEFAULTS.threshold);
   const [softness, setSoftness] = useState(SCREEN_DEFAULTS.softness);
@@ -91,6 +95,7 @@ export function IntroApp() {
   const [bloom, setBloom] = useState(SCREEN_DEFAULTS.bloom);
 
   const resetScreenSettings = () => {
+    setBrightness(SCREEN_DEFAULTS.brightness);
     setThreshold(SCREEN_DEFAULTS.threshold);
     setSoftness(SCREEN_DEFAULTS.softness);
     setGlow(SCREEN_DEFAULTS.glow);
@@ -120,10 +125,13 @@ export function IntroApp() {
         mode={mode}
         colorMode={colorMode}
         bwLevels={bwLevels}
+        brightness={brightness}
         glow={glow}
         halation={halation}
         scanline={scanline}
         bloom={bloom}
+        onBrightnessChange={setBrightness}
+        onScreenSettingsReset={resetScreenSettings}
       />
       <IntroFpsBadge />
       <div className="absolute top-3 right-3 z-50 flex flex-col items-end gap-1">
@@ -178,6 +186,15 @@ export function IntroApp() {
                   ))}
                 </div>
               )}
+              {/* mirrors the Mac's front-panel knob — each drives the other */}
+              <SliderRow
+                label="Brightness"
+                value={brightness}
+                min={0}
+                max={2}
+                step={0.01}
+                onChange={setBrightness}
+              />
               {colorMode === "bw" && (
                 <>
                   <SliderRow

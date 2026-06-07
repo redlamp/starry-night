@@ -62,6 +62,9 @@ function NormalizedModel({
       if (!mesh.isMesh) return;
       mesh.visible = (show ? show.test(mesh.name) : true) && mesh.name !== hide;
       mesh.castShadow = mesh.visible;
+      // self-shadowing: without this the recessed brightness knob renders as
+      // bright as open surfaces — the case never occludes it
+      mesh.receiveShadow = mesh.visible;
     });
     // bbox of the visible meshes only, in the GLB's own (post-transform) space
     root.updateMatrixWorld(true);
@@ -115,13 +118,14 @@ const PROCESS_FRAG = /* glsl */ `
   uniform float uColorMode; // 0 = 1-bit b/w, 1 = greyscale, 2 = mac 256, 3 = full
   uniform float uBwLo;      // levels black point (below ⇒ solid black)
   uniform float uBwHi;      // levels white point (above ⇒ solid white)
+  uniform float uBrightness; // the front-panel knob: beam gain ahead of everything
   varying vec2 vUv;
 
   float crtBayer2(vec2 a) { a = floor(a); return fract(a.x / 2.0 + a.y * a.y * 0.75); }
   float crtBayer4(vec2 a) { return crtBayer2(0.5 * a) * 0.25 + crtBayer2(a); }
 
   void main() {
-    vec3 c = texture2D(uTex, vUv).rgb;
+    vec3 c = texture2D(uTex, vUv).rgb * uBrightness;
     float l = dot(c, vec3(0.299, 0.587, 0.114));
     float d = crtBayer4(gl_FragCoord.xy);
     vec3 outc;
@@ -281,6 +285,146 @@ function AppleBadge() {
 }
 
 /**
+ * The front-panel brightness thumbwheel, wired two-way to the Screen
+ * settings: scrub over the wheel (or scroll) to set brightness, and the
+ * wheel rolls to match wherever the value comes from (knob, slider, Reset).
+ * The GLB authors the wheel as its own node with the pivot dead-centre, but
+ * the disc is baked TILTED with the facade lean (bbox math: circular disc
+ * d=2.24 tilted ~0.12 rad explains the y-extent and a 2.5mm thickness;
+ * an untilted disc would be a 4% oval, 1cm thick) — so the spin axis is
+ * the facade normal, not pure z, or the wheel wobbles like a coin. While
+ * the pointer engages the knob the studio OrbitControls stand down —
+ * pointer capture owns the drag. Working Mac only; the stock Mac keeps
+ * its static source wheel.
+ */
+const KNOB_MESH = "Brightness_Computer_0";
+const KNOB_MAX = 2; // value domain [0, 2], 1 = neutral beam gain
+const KNOB_ROT_PER_UNIT = Math.PI * 0.6; // wheel roll per unit of brightness
+const KNOB_DRAG_PER_PX = 0.008;
+// the wheel's axle: perpendicular to the leaned-back facade (same tilt the
+// AppleBadge plane uses)
+const KNOB_AXIS = new THREE.Vector3(0, -Math.sin(FACADE_TILT), Math.cos(FACADE_TILT));
+
+function BrightnessKnob({
+  value,
+  locked = false,
+  onChange,
+  onEngageChange,
+  onDragChange,
+  onReset,
+}: {
+  value: number;
+  /** another gesture owns the input — don't start a drag or eat the wheel */
+  locked?: boolean;
+  onChange: (v: number) => void;
+  onEngageChange?: (engaged: boolean) => void;
+  onDragChange?: (dragging: boolean) => void;
+  /** double-click: restore the screen settings to their defaults */
+  onReset?: () => void;
+}) {
+  const { scene } = useGLTF(DAZ_URL);
+  const drag = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    startValue: number;
+  } | null>(null);
+  const engaged = useRef({ hover: false, drag: false });
+
+  const knob = useMemo(() => {
+    const mesh = scene.getObjectByName(KNOB_MESH) as THREE.Mesh | undefined;
+    if (!mesh) return null;
+    scene.updateMatrixWorld(true);
+    const box = new THREE.Box3().setFromObject(mesh);
+    return {
+      mesh,
+      center: box.getCenter(new THREE.Vector3()),
+      size: box.getSize(new THREE.Vector3()),
+    };
+  }, [scene]);
+
+  // the wheel angle tracks the value, whatever set it (drag, slider, Reset).
+  // Sign: the hand pushes the EXPOSED BOTTOM of the wheel, so value-up
+  // (drag right) rolls the bottom rim rightward = CCW seen from the front.
+  useEffect(() => {
+    if (knob) knob.mesh.quaternion.setFromAxisAngle(KNOB_AXIS, (value - 1) * KNOB_ROT_PER_UNIT);
+  }, [knob, value]);
+  // leave the shared scene as found — the stock Mac clones from it
+  useEffect(() => {
+    return () => {
+      if (knob) knob.mesh.quaternion.identity();
+    };
+  }, [knob]);
+
+  const setEngaged = (patch: Partial<typeof engaged.current>) => {
+    Object.assign(engaged.current, patch);
+    onEngageChange?.(engaged.current.hover || engaged.current.drag);
+  };
+
+  if (!knob) return null;
+  return (
+    // invisible hotspot over the wheel, padded for grabbability and poking
+    // through the bezel slot (the wheel itself is mostly recessed)
+    <mesh
+      position={knob.center.toArray()}
+      onPointerOver={(e) => {
+        e.stopPropagation();
+        setEngaged({ hover: true });
+        setCursorZone("knob", true);
+      }}
+      onPointerOut={() => {
+        setEngaged({ hover: false });
+        setCursorZone("knob", false);
+      }}
+      onPointerDown={(e) => {
+        if (locked) return;
+        e.stopPropagation();
+        drag.current = {
+          pointerId: e.pointerId,
+          startX: e.clientX,
+          startY: e.clientY,
+          startValue: value,
+        };
+        (e.target as Element).setPointerCapture?.(e.pointerId);
+        setEngaged({ drag: true });
+        onDragChange?.(true);
+      }}
+      onPointerMove={(e) => {
+        const d = drag.current;
+        if (!d || e.pointerId !== d.pointerId) return;
+        e.stopPropagation();
+        // dual-axis scrub: right or up brightens, left or down dims —
+        // whichever way the hand naturally rolls the wheel
+        const delta = e.clientX - d.startX + (d.startY - e.clientY);
+        onChange(THREE.MathUtils.clamp(d.startValue + delta * KNOB_DRAG_PER_PX, 0, KNOB_MAX));
+      }}
+      onPointerUp={(e) => {
+        if (!drag.current) return;
+        (e.target as Element).releasePointerCapture?.(e.pointerId);
+        drag.current = null;
+        setEngaged({ drag: false });
+        onDragChange?.(false);
+      }}
+      onWheel={(e) => {
+        if (locked) return;
+        e.stopPropagation();
+        onChange(THREE.MathUtils.clamp(value - e.deltaY * 0.0008, 0, KNOB_MAX));
+      }}
+      onClick={(e) => e.stopPropagation()}
+      onDoubleClick={(e) => {
+        // dblclick the knob = factory reset for the whole Screen card
+        // (don't bubble into the Mac-focus dblclick)
+        e.stopPropagation();
+        if (!locked) onReset?.();
+      }}
+    >
+      <boxGeometry args={[knob.size.x * 1.5, knob.size.y * 1.5, knob.size.z * 3.5]} />
+      <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+    </mesh>
+  );
+}
+
+/**
  * The Mac's CRT: the model's own curved screen surface carrying the live
  * city render as its base colour — studio lighting/roughness act on the
  * content. UVs are planar-projected across the glass; the curvature buys
@@ -295,29 +439,28 @@ function DazScreenViewport({
   interactive,
   colorMode,
   bwLevels,
+  brightness,
   glow,
   halation,
   scanline,
   onHoverChange,
+  onDragChange,
 }: {
   mode: IntroViewMode;
   interactive: boolean;
   colorMode: ScreenColorMode;
   bwLevels: BwLevels;
+  brightness: number;
   glow: number;
   halation: number;
   scanline: number;
   onHoverChange?: (hovering: boolean) => void;
+  onDragChange?: (dragging: boolean) => void;
 }) {
   const { scene } = useGLTF(DAZ_URL);
   const dpr = useThree((s) => s.viewport.dpr);
   const processRef = useRef<THREE.ShaderMaterial>(null);
   const halationRef = useRef<THREE.ShaderMaterial>(null);
-  const glassShaderRef = useRef<{ uniforms: Record<string, THREE.IUniform> } | null>(null);
-  const glowRef = useRef(glow);
-  glowRef.current = glow;
-  const scanlineRef = useRef(scanline);
-  scanlineRef.current = scanline;
   const [resetSignal, setResetSignal] = useState(0);
 
   const parts = useMemo(() => {
@@ -363,15 +506,19 @@ function DazScreenViewport({
       roughness: 0.22,
       metalness: srcMat.metalness ?? 0,
     });
-    // custom-uniform-texture pattern: the uniform object lives in userData so
-    // the RenderTexture can attach into it before/after compile alike
+    // custom-uniform pattern: uniform objects live in userData so they can
+    // be mutated before/after compile alike — crtTex additionally so the
+    // RenderTexture can attach into it (onBeforeCompile reuses the SAME
+    // objects, so writes keep landing after the shader exists)
     material.userData.crtTex = { value: null };
+    material.userData.uGlow = { value: glow };
+    material.userData.uScanline = { value: scanline };
     material.customProgramCacheKey = () => "intro-crt-raster";
     material.onBeforeCompile = (shader) => {
       shader.uniforms.uCrt = material.userData.crtTex;
       shader.uniforms.uActive = { value: new THREE.Vector2(activeW, activeH) };
-      shader.uniforms.uGlow = { value: glowRef.current };
-      shader.uniforms.uScanline = { value: scanlineRef.current };
+      shader.uniforms.uGlow = material.userData.uGlow;
+      shader.uniforms.uScanline = material.userData.uScanline;
       shader.vertexShader = shader.vertexShader
         .replace("#include <common>", `#include <common>\n${CRT_VERT_HEADER}`)
         .replace("#include <uv_vertex>", CRT_UV_VERTEX);
@@ -379,18 +526,16 @@ function DazScreenViewport({
         .replace("#include <common>", `#include <common>\n${CRT_HEADER}`)
         .replace("#include <map_fragment>", CRT_MAP_FRAGMENT)
         .replace("#include <emissivemap_fragment>", CRT_EMISSIVE_FRAGMENT);
-      glassShaderRef.current = shader;
     };
     return { geometry, material };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- glowRef is a ref
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- glow/scanline seed initial uniform values only; updates flow through the userData uniforms below
   }, [scene]);
 
   useEffect(() => {
-    const u = glassShaderRef.current?.uniforms;
-    if (!u) return;
-    u.uGlow.value = glow;
-    u.uScanline.value = scanline;
-  }, [glow, scanline]);
+    if (!parts) return;
+    parts.material.userData.uGlow.value = glow;
+    parts.material.userData.uScanline.value = scanline;
+  }, [parts, glow, scanline]);
 
   const processUniforms = useMemo(
     () => ({
@@ -398,6 +543,7 @@ function DazScreenViewport({
       uColorMode: { value: SCREEN_COLOR_MODE_INDEX[colorMode] },
       uBwLo: { value: bwLevels.lo },
       uBwHi: { value: bwLevels.hi },
+      uBrightness: { value: brightness },
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- template for material construction only
     [],
@@ -418,7 +564,8 @@ function DazScreenViewport({
     u.uColorMode.value = SCREEN_COLOR_MODE_INDEX[colorMode];
     u.uBwLo.value = bwLevels.lo;
     u.uBwHi.value = bwLevels.hi;
-  }, [colorMode, bwLevels]);
+    u.uBrightness.value = brightness;
+  }, [colorMode, bwLevels, brightness]);
   useEffect(() => {
     const u = halationRef.current?.uniforms;
     if (u) u.uHalation.value = halation;
@@ -491,6 +638,7 @@ function DazScreenViewport({
                         mode={mode}
                         interactive={interactive}
                         resetSignal={resetSignal}
+                        onDragChange={onDragChange}
                       />
                     </RenderTexture>
                   </shaderMaterial>
@@ -510,23 +658,37 @@ export function MacDaz({
   mode = "screen",
   colorMode = "full",
   bwLevels = DEFAULT_BW_LEVELS,
+  brightness = 1,
   glow = 0.8,
   halation = 0.1,
   scanline = 0.6,
   showPeripherals = false,
   screenInteractive = false,
+  knobLocked = false,
   onScreenHoverChange,
+  onScreenDragChange,
+  onBrightnessChange,
+  onKnobEngageChange,
+  onKnobDragChange,
+  onKnobReset,
   ...props
 }: {
   mode?: IntroViewMode;
   colorMode?: ScreenColorMode;
   bwLevels?: BwLevels;
+  brightness?: number;
   glow?: number;
   halation?: number;
   scanline?: number;
   showPeripherals?: boolean;
   screenInteractive?: boolean;
+  knobLocked?: boolean;
   onScreenHoverChange?: (hovering: boolean) => void;
+  onScreenDragChange?: (dragging: boolean) => void;
+  onBrightnessChange?: (v: number) => void;
+  onKnobEngageChange?: (engaged: boolean) => void;
+  onKnobDragChange?: (dragging: boolean) => void;
+  onKnobReset?: () => void;
 } & GroupProps) {
   return (
     <NormalizedModel
@@ -540,13 +702,25 @@ export function MacDaz({
         mode={mode}
         colorMode={colorMode}
         bwLevels={bwLevels}
+        brightness={brightness}
         glow={glow}
         halation={halation}
         scanline={scanline}
         interactive={screenInteractive}
         onHoverChange={onScreenHoverChange}
+        onDragChange={onScreenDragChange}
       />
       <AppleBadge />
+      {onBrightnessChange && (
+        <BrightnessKnob
+          value={brightness}
+          locked={knobLocked}
+          onChange={onBrightnessChange}
+          onEngageChange={onKnobEngageChange}
+          onDragChange={onKnobDragChange}
+          onReset={onKnobReset}
+        />
+      )}
     </NormalizedModel>
   );
 }
