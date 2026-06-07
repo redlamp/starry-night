@@ -289,7 +289,30 @@ export type DevelopmentMask = {
   keepAt: (x: number, z: number, density: number) => boolean;
 };
 
-export function buildDevelopmentMask(masterSeed: string): DevelopmentMask {
+// #49 Stage 4 — node-proximity coupling (plan-suburb-node-fields.md). In the
+// suburban+ bands the keep probability is scaled by proximity to a pod centre
+// so development CLUSTERS on the nodes and inter-pod land goes dark — the band
+// stops reading as a uniform 50%-grey thinning. The coupling RAMPS in across
+// the seam (suburbAmount NODE_COUPLE_LO→HI), so the dense inner belt — where no
+// nodes exist — is untouched, and the core (p≥1, sub=0) is byte-identical.
+// `keep = keepProbForDensity × lerp(NODE_GAP_KEEP, 1, nodeProx)` blended by the
+// seam weight. The cell HASH is unchanged (no new draws) — only the threshold
+// the roll is compared against moves, so a no-node mask is bit-for-bit as before.
+const NODE_COUPLE_LO = 0.15; // suburbAmount: below this, flat (dense belt)
+const NODE_COUPLE_HI = 0.32; // at/above this, full node coupling
+const NODE_GAP_KEEP = 0.05; // inter-pod floor: 5% of the band's keep survives
+
+function smoothstep(e0: number, e1: number, x: number): number {
+  const t = Math.max(0, Math.min(1, (x - e0) / (e1 - e0)));
+  return t * t * (3 - 2 * t);
+}
+
+export function buildDevelopmentMask(
+  masterSeed: string,
+  // When supplied (the building fill), development clusters on the pods; when
+  // omitted, the original flat band dropout (every other caller is unchanged).
+  nodeProx?: (x: number, z: number) => number,
+): DevelopmentMask {
   // Seeded grid origin so cell boundaries never sit at the same world lines
   // across seeds.
   const offRng = seedrandom(`${masterSeed}::devcell::origin`);
@@ -297,7 +320,14 @@ export function buildDevelopmentMask(masterSeed: string): DevelopmentMask {
   const oz = offRng() * DEV_CELL;
   const rolls = new Map<string, number>();
   const keepAt = (x: number, z: number, density: number): boolean => {
-    const p = keepProbForDensity(density);
+    let p = keepProbForDensity(density);
+    if (nodeProx) {
+      const w = smoothstep(NODE_COUPLE_LO, NODE_COUPLE_HI, suburbAmount(density));
+      if (w > 0) {
+        const np = nodeProx(x, z);
+        p *= 1 - w + w * (NODE_GAP_KEEP + (1 - NODE_GAP_KEEP) * np);
+      }
+    }
     if (p >= 1) return true;
     const key = `${Math.floor((x + ox) / DEV_CELL)},${Math.floor((z + oz) / DEV_CELL)}`;
     let r = rolls.get(key);

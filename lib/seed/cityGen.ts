@@ -10,6 +10,7 @@ import {
 } from "./district";
 import { buildSilhouette, isHighRise, type SilhouetteField } from "./silhouette";
 import { generateTensorStreets, type StreetTraceHook } from "./tensorStreets";
+import { sampleSuburbNodes, nodeProximity } from "./suburbField";
 import { type RoadPoly } from "./streets";
 import {
   resolveCityShape,
@@ -774,7 +775,15 @@ function fillTensorBuildings(
   // dropout mask. Both are pure functions of (seed, field) — rebuilt here, never
   // cached, so the worker path (#59) needs no new transfer.
   const density = buildDensityField(masterSeed, field);
-  const devMask = buildDevelopmentMask(masterSeed);
+  // #49 Stage 4: cluster development on the suburban PODS. Re-sample the exact
+  // node set the streets were built around (same seed/radial/mask as
+  // generateTensorStreets → byte-identical list), and feed its proximity field
+  // into the dev mask so buildings hug the pods and inter-pod / inter-hamlet
+  // land goes dark. Re-sampling (vs threading the list from buildTensorRoads) is
+  // cheap and keeps the worker path transfer-free.
+  const sketch = citySketchTensor();
+  const suburbNodes = sampleSuburbNodes(masterSeed, density.radial, sketch ? sketch.mask : undefined);
+  const devMask = buildDevelopmentMask(masterSeed, nodeProximity(suburbNodes));
   // Suburban buildings shrink as density falls — the Stage-0 review's "smaller
   // archetypes toward the edge". Footprint AND height scale, so window grids
   // (cols/floors derive from dims) follow automatically. 0.4 puts a full-
