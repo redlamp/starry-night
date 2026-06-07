@@ -46,9 +46,9 @@ const SCAN_CELL = 300;
 const SPACING_ANCHORS: ReadonlyArray<readonly [number, number]> = [
   [0, 1250],
   [RURAL_T, 1000],
-  [SUBURB_T, 520],
-  [0.5, 430],
-  [CORE_T, 400],
+  [SUBURB_T, 470],
+  [0.5, 410],
+  [CORE_T, 380],
 ];
 
 function spacingFor(density: number): number {
@@ -106,7 +106,7 @@ export function sampleSuburbNodes(
       // seed outside the city footprint.
       if (sub < NODE_MIN_SUB || d <= 0.1) continue;
       if (mask(x, z) < 0.5) continue;
-      if (roll >= 0.92) continue; // a little seeded raggedness in coverage
+      if (roll >= 0.97) continue; // a little seeded raggedness in coverage
       const spacing = spacingFor(d);
       // Poisson-disc test against accepted nodes.
       const ci = Math.floor(x / occCell);

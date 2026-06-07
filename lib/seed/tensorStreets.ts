@@ -140,7 +140,7 @@ function planeNoise(
 // function of (seed, extent).
 
 const SUB_STEP = 8; // spline sample spacing (m)
-const SUB_SEP_OWN = 38; // subdivision street to subdivision street (m)
+const SUB_SEP_OWN = 32; // subdivision street to subdivision street (m)
 const SUB_SEP_ST = 38; // to the global street grid at the seam
 const SUB_SEP_ART = 46; // to arterials — pods are sealed by the section lines
 // Arc near a curve's anchored end(s) exempt from sep tests. MUST exceed the
@@ -384,9 +384,14 @@ function buildSubdivisions(
     // construction, and a branch whose tip comes close to another road SNAPS
     // onto it (a through-connection), so the interior reads as a web, not a
     // stick with fruit.
-    const pBranch = 0.28;
+    const pBranch = 0.34;
     const pLoop = n.density >= 0.28 ? 0.42 : 0.3;
-    let budget = Math.round(12 + 30 * Math.min(1, n.density * 2.2));
+    // Curve budget scales with pod AREA (the block-fill metric drives this —
+    // samples/verify49/blockFill.ts): saturation is the goal, the budget is a
+    // runaway backstop. Hamlets stay small.
+    let budget = Math.round((14 + (u * u) / 2000) * (n.density >= SUBURB_T ? 1 : 0.6));
+    // This pod's accepted curves — the gap filler below rasters against them.
+    const podCurves: Vec2[][] = [spine];
     const hosts: Array<{ pts: Vec2[]; gen: number }> = [{ pts: spine, gen: 0 }];
     for (let qi = 0; qi < hosts.length && budget > 0; qi++) {
       const w = arcWalker(hosts[qi].pts);
@@ -401,9 +406,9 @@ function buildSubdivisions(
         const nz = t.x * side;
         const P = w.at(arcPos);
         const what = rng();
-        let advance = 62 + rng() * 36;
+        let advance = 36 + rng() * 24; // stations every ~36-60 m
 
-        if (what < pBranch && gen < 2) {
+        if (what < pBranch && gen < 3) {
           // BRANCH collector: heads into the block; if its far end lands near
           // another road, snap to it — an interconnection, not a dead end.
           const len = 130 + rng() * 170;
@@ -427,6 +432,7 @@ function buildSubdivisions(
             const branch = catmullRom([P, cm, end], SUB_STEP);
             if (!curveOk(branch, end !== tip)) continue;
             accept(branch, spines);
+            podCurves.push(branch);
             hosts.push({ pts: branch, gen: gen + 1 });
             budget--;
             break;
@@ -453,9 +459,10 @@ function buildSubdivisions(
             const loop = catmullRom([P, q1, mid, q2, P2], SUB_STEP);
             if (!curveOk(loop, true)) continue;
             accept(loop, loops);
+            podCurves.push(loop);
             hosts.push({ pts: loop, gen: gen + 1 }); // culs/branches sprout off it
             budget--;
-            advance = delta * 0.45 + 40 + rng() * 30;
+            advance = delta * 0.4 + 26 + rng() * 22;
             break;
           }
         } else {
@@ -474,11 +481,64 @@ function buildSubdivisions(
             const cul = catmullRom([P, cm, tip], SUB_STEP);
             if (!curveOk(cul, false)) continue;
             accept(cul, culs);
+            podCurves.push(cul);
             budget--;
             break;
           }
         }
         arcPos += advance;
+      }
+    }
+
+    // --- Gap filler: the block-fill metric applied at GEN time ---
+    // Raster the pod disc (fixed row-major order); any spot still more than
+    // FILL_REACH from this pod's own streets gets a connector grown toward it
+    // from the nearest pod street point — packs the interstices the station
+    // walk can't reach (user: "this can still be filled more"; measured by
+    // samples/verify49/blockFill.ts).
+    const FILL_REACH = 70;
+    const FILL_STEP = 52;
+    // Scan PAST the pod radius — the stubborn holes are the interstices
+    // between tangent pods, claimed by whichever pod rasters them first
+    // ("served" checks the GLOBAL subdivision index, so neighbours never
+    // double-fill the same hole).
+    const scan = u * 1.3;
+    for (let gz = -scan; gz <= scan; gz += FILL_STEP) {
+      for (let gx = -scan; gx <= scan; gx += FILL_STEP) {
+        if (gx * gx + gz * gz > scan * scan) continue;
+        const X = n.x + gx;
+        const Z = n.z + gz;
+        if (mask(X, Z) < 0.5) continue;
+        if (!ownSub.isFree({ x: X, z: Z }, FILL_REACH)) continue; // already served
+        let bd = Infinity;
+        let bx = 0;
+        let bz = 0;
+        for (const c of podCurves) {
+          for (let i = 0; i < c.length; i += 2) {
+            const ddx = c[i].x - X;
+            const ddz = c[i].z - Z;
+            const d2 = ddx * ddx + ddz * ddz;
+            if (d2 < bd) {
+              bd = d2;
+              bx = c[i].x;
+              bz = c[i].z;
+            }
+          }
+        }
+        if (bd < FILL_REACH * FILL_REACH) continue; // hugging our own street
+        if (bd > u * u * 2.56) continue; // can't reach from this pod
+        const jit = (rng() - 0.5) * 36; // one draw per gap candidate, fixed order
+        const dist = Math.sqrt(bd);
+        const len = Math.min(dist + 26, 220); // interstice lanes run longer
+        const dx = (X - bx) / dist;
+        const dz = (Z - bz) / dist;
+        const cm = { x: bx + dx * len * 0.5 - dz * jit, z: bz + dz * len * 0.5 + dx * jit };
+        const tip = { x: bx + dx * len, z: bz + dz * len };
+        const cul = catmullRom([{ x: bx, z: bz }, cm, tip], SUB_STEP);
+        if (curveOk(cul, false)) {
+          accept(cul, culs);
+          podCurves.push(cul);
+        }
       }
     }
   }
