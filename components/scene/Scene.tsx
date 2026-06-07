@@ -62,7 +62,8 @@ export function Scene() {
       <ProjectionBlender />
       <PerfMonitor />
       <TimeTicker />
-      <IntroTicker />
+      {/* City cascade waits for cityReady (user 2026-06-08) — see IntroTicker. */}
+      <IntroTicker cityReady={cityReady} />
       <FogTicker />
       <FogBoundsMarkers />
 
