@@ -1,7 +1,7 @@
 ---
 tags:
   - domain/city-gen
-  - status/open
+  - status/adopted
   - scope/m3-plus
 ---
 
@@ -77,12 +77,27 @@ with `startStreetsProfile` at tiers 3/6/8; merge gates on no regression.
    sub 0.28, not the planned cross-fade: pods sep-test against the thinning
    grid at the seam, no tensor blending needed. Buildings thinned in-band
    until Stage 4 redistributes them onto pods.)*
-3. **Connectors** (node→arterial/node/core; check arterial-seam kinks).
-4. **Density coupling** (node-proximity in `buildDevelopmentMask`; per-band
-   count comparison vs `samples/verify49` baselines; default tier-3 orbit
-   unregressed).
-5. **Rural ring + per-tier node spacing + per-seed variety** (fixes the
-   "samey rerolls" Stage-0 note).
+3. ⏭️ **Connectors** — SUPERSEDED by Stage 2's connectivity-by-construction:
+   `buildSubdivisions` anchors each pod spine to existing roads (AnchorIndex,
+   2nd mouth, branch-tip snap within 80 m) + the gap filler routes unserved
+   pod land to the nearest pod street. Pods already reach the arterial frame;
+   gate1's corridor/connectivity asserts pass. No separate desire-line router
+   needed. *(2026-06-08)*
+4. ✅ **Density coupling** — node-proximity in `buildDevelopmentMask`
+   (`keep = keepProbForDensity × lerp(0.05,1,nodeProx)`, ramped in across the
+   seam by `suburbAmount` so the dense belt + core are untouched; cell hash
+   unchanged → core byte-stable). Building fill re-samples the SAME node set
+   the streets used (byte-identical list). Buildings ~19-21k → ~15-17k as
+   inter-pod / inter-hamlet stragglers go dark; pods + rural hamlets read as
+   distinct clusters (`samples/verify49/podClusterPng.ts`). gate1 + determinism
+   PASS. *(2026-06-08)*
+5. ⏭️ **Rural ring + per-tier spacing + per-seed variety** — DEFERRED (optional
+   polish, not blocking). Node spacing is already density-tied
+   (`SPACING_ANCHORS`, scales with the radial field across tiers); per-seed
+   variety comes from pod placement/squash/angle + multi-centre profiles +
+   odd-angle tensor patches. A dedicated rural ring-collector traced along a
+   density isocontour (`radiusAt`) is a nice-to-have if the rural edge later
+   reads too sparse — file as a follow-up rather than hold #49 open.
 
 Files: new `lib/seed/suburbField.ts`; `tensorStreets.ts` (replace suburban
 pass, connector router); `density.ts` (nodeProx in dev mask);
