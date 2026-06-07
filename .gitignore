@@ -57,3 +57,6 @@ coverage/
 # Misc
 *.tsbuildinfo
 .superpowers/
+
+# Raw model downloads (converted copies live in public/models/)
+assets-src/
