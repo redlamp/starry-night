@@ -1246,6 +1246,15 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   },
 }));
 
+// Boot hydration (user 2026-06-08: "when I press save the city size and all
+// other settings should be… present after refreshing the page"). The Save
+// button writes the SavedConfig, but nothing applied it on load — Revert was
+// the only reader, so every refresh booted the defaults. Apply it here, at
+// module init BEFORE the first generation, so a saved tier doesn't trigger a
+// boot-then-regenerate double gen. Server-side this is a no-op (readSavedConfig
+// requires window.localStorage).
+useSceneStore.getState().revertToSaved();
+
 // Keep lib/seed's module-level gen extent in lockstep with the store's tier
 // (#58). A subscription (not just the setter) so EVERY path that writes
 // `citySize` — setCitySize, Reset, Revert, saved-config load — syncs the
