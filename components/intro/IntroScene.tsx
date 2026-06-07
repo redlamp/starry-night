@@ -202,14 +202,14 @@ export function IntroScene({
         </EffectComposer>
       )}
 
+      {/* azimuth unclamped: full orbit around the focused Mac — behind the
+          cyc the page background carries (close enough in tone) */}
       <OrbitControls
         ref={controlsRef}
         enabled={!screenHover && !resetting}
         target={STUDIO_TARGET}
         minDistance={0.3}
         maxDistance={3}
-        minAzimuthAngle={-1.2}
-        maxAzimuthAngle={1.2}
         maxPolarAngle={Math.PI / 2 - 0.04}
         enableDamping
       />
