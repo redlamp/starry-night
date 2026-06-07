@@ -15,6 +15,33 @@ const TOPOLOGY_LABELS: Record<string, string> = {
 // Roads layer controls. "Highlight" tints a tier's ground ribbon in the scene
 // (highways gold, arterials blue, streets teal); Streetlights + Traffic toggle
 // the light layers. Traffic's own controls render right after this (CameraPanel).
+// Master highlight tri-switch — lives in the Roads SECTION HEADER (user
+// 2026-06-07: "highlight switch moves up"), so it's reachable without opening
+// the section. The per-tier rows below remain the fine-grained controls.
+export function RoadHighlightAction() {
+  const showHighways = useSceneStore((s) => s.cityPlanning.showHighways);
+  const showArterials = useSceneStore((s) => s.cityPlanning.showArterials);
+  const showStreets = useSceneStore((s) => s.cityPlanning.showStreets);
+  const setCityPlanning = useSceneStore((s) => s.setCityPlanning);
+  const allOn = showHighways && showArterials && showStreets;
+  const anyOn = showHighways || showArterials || showStreets;
+  const highlightState: TriState = allOn ? "on" : anyOn ? "mixed" : "off";
+  return (
+    <div className="flex items-center gap-2 text-xs">
+      <span className="text-foreground/70">highlight</span>
+      <TriSwitch
+        state={highlightState}
+        // Turn all three on, unless all are already on → all off.
+        onClick={() => {
+          const next = !allOn;
+          setCityPlanning({ showHighways: next, showArterials: next, showStreets: next });
+        }}
+        label="Toggle all road highlights"
+      />
+    </div>
+  );
+}
+
 export function RoadsSection() {
   const showHighways = useSceneStore((s) => s.cityPlanning.showHighways);
   const showArterials = useSceneStore((s) => s.cityPlanning.showArterials);
@@ -23,25 +50,9 @@ export function RoadsSection() {
   const showStreetlights = useSceneStore((s) => s.streetlights.enabled);
   const setStreetlights = useSceneStore((s) => s.setStreetlights);
 
-  const allOn = showHighways && showArterials && showStreets;
-  const anyOn = showHighways || showArterials || showStreets;
-  const highlightState: TriState = allOn ? "on" : anyOn ? "mixed" : "off";
-  // Parent click: turn all three on, unless all are already on → all off.
-  const toggleAllHighlights = () => {
-    const next = !allOn;
-    setCityPlanning({ showHighways: next, showArterials: next, showStreets: next });
-  };
-
   return (
     <>
-      <div className="flex items-center justify-between gap-2">
-        <Subhead>Highlight</Subhead>
-        <TriSwitch
-          state={highlightState}
-          onClick={toggleAllHighlights}
-          label="Toggle all road highlights"
-        />
-      </div>
+      <Subhead>Highlight</Subhead>
       <ToggleRow
         label="Highways"
         on={showHighways}

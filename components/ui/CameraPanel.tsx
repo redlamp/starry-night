@@ -26,7 +26,6 @@ import { CITY_TIER_ORDER } from "@/lib/seed/topology";
 import { TIER_LABELS, tierKm } from "@/components/ui/cityTiers";
 import { cn, isTypingTarget } from "@/lib/utils";
 import {
-  AppWindow,
   Bug,
   Building,
   Building2,
@@ -45,7 +44,6 @@ import {
   Moon,
   MoonStar,
   Orbit as OrbitIcon,
-  Radio,
   RadioTower,
   RotateCcw,
   Route,
@@ -53,7 +51,6 @@ import {
   Search,
   Settings,
   Sparkles,
-  Sprout,
   Stars,
   Sun,
   TowerControl,
@@ -82,13 +79,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { DistrictsSection } from "@/components/ui/DistrictsPanel";
-import { RoadsSection, LodSection, CityDetailsSection } from "@/components/ui/RoadsPanel";
+import {
+  DistrictsSection,
+  DensitySection,
+  DistrictShellsAction,
+} from "@/components/ui/DistrictsPanel";
+import {
+  RoadsSection,
+  LodSection,
+  CityDetailsSection,
+  RoadHighlightAction,
+} from "@/components/ui/RoadsPanel";
 import { readTileCull, TILE_LAYERS } from "@/lib/scene/tileCullDebug";
 import {
   setCameraTab,
   currentCameraTab,
   tweenOrbitToDefault,
+  tweenOrbitTowards,
   tweenProjectionTo,
   type CameraTab,
 } from "@/lib/scene/cameraView";
@@ -175,7 +182,6 @@ function ThemeToggle() {
 }
 
 const RAD2DEG = 180 / Math.PI;
-const DEG2RAD = Math.PI / 180;
 
 function fmt(n: number, p = 2) {
   return n.toFixed(p);
@@ -185,28 +191,47 @@ function fmt(n: number, p = 2) {
 // surface a control filed under a non-obvious section label — e.g. the tensor
 // field toggle lives under "Debug View", not "Roads". Matching is AND-over-tokens
 // against label + value + keywords; matching sections auto-expand while searching.
+// Order mirrors the accordion's render order (user 2026-06-07).
 const SETTINGS_SECTIONS: { value: string; label: string; keywords: string }[] = [
+  {
+    value: "intro",
+    label: "Intro",
+    keywords: "wake reveal duration streetlight stars speed animation startup",
+  },
   {
     value: "pose",
     label: "Camera",
-    keywords: "position rotation fov projection orthographic perspective look at orient pose lens",
+    keywords:
+      "position rotation fov projection orthographic perspective look at orient pose lens live readout telemetry default free",
   },
   {
     value: "orbit",
     label: "Orbit",
     keywords: "elevation azimuth radius spin speed pause center focal auto rotate",
   },
-  { value: "districts", label: "Districts", keywords: "shells borders outline color region zones" },
   {
     value: "roads",
     label: "Roads",
     keywords:
-      "highways arterials streets traffic cars headlights taillights planning tier ribbons network",
+      "highways arterials streets traffic cars headlights taillights planning tier ribbons network highlight",
+  },
+  {
+    value: "window-profiles",
+    label: "Buildings",
+    keywords:
+      "windows lit ratio width range min max size flicker brightness emissive profiles glow building facade wall color colour saturation lightness hue masonry glass",
+  },
+  {
+    value: "population",
+    label: "Population",
+    keywords:
+      "districts shells borders outline color region zones density heat map heatmap people residents traffic coupling estimate",
   },
   {
     value: "city-details",
     label: "City Details",
-    keywords: "shape circle square scale size buildings count footprint",
+    keywords:
+      "shape circle square scale size buildings count footprint seed reroll random refresh regenerate",
   },
   {
     value: "stars",
@@ -219,26 +244,17 @@ const SETTINGS_SECTIONS: { value: string; label: string; keywords: string }[] = 
     label: "Atmosphere",
     keywords: "fog haze ground near far density amount color exp2 distance depth atmosphere",
   },
-  { value: "windows", label: "Anti-Aliasing", keywords: "aa msaa samples smoothing jaggies moire" },
-  {
-    value: "window-profiles",
-    label: "Buildings",
-    keywords:
-      "windows lit ratio width range min max size flicker brightness emissive profiles glow building facade wall color colour saturation lightness hue masonry glass",
-  },
-  {
-    value: "intro",
-    label: "Intro",
-    keywords: "wake reveal duration streetlight stars speed animation startup",
-  },
-  { value: "live", label: "Live readout", keywords: "position rotation fov debug telemetry" },
-  { value: "seed", label: "Seed", keywords: "reroll random refresh regenerate city" },
-  { value: "perf", label: "Performance", keywords: "fps frame rate draw calls monitor gpu" },
   {
     value: "debug",
     label: "Debug View",
     keywords:
       "render modes wireframe hidden tensor field flow visualization overlay building tint ground tile culling cull frustum freeze grid materialise",
+  },
+  {
+    value: "perf",
+    label: "Performance",
+    keywords:
+      "fps frame rate draw calls monitor gpu aa msaa samples smoothing jaggies moire anti-aliasing",
   },
 ];
 
@@ -277,16 +293,8 @@ function persistPanelWidth(w: number) {
 }
 
 export function CameraPanel() {
-  const {
-    cameraMode,
-    cameraIntent,
-    cameraLive,
-    setCameraIntent,
-    resetCamera,
-    saveCurrentAsDefault,
-    revertToSaved,
-    hasSavedConfig,
-  } = useSceneStore();
+  const { cameraMode, cameraLive, resetCamera, saveCurrentAsDefault, revertToSaved, hasSavedConfig } =
+    useSceneStore();
   const orbitRestoreSet = useSceneStore((s) => s.orbitRestore !== null);
 
   const [hidden, setHidden] = useState(true);
@@ -346,19 +354,12 @@ export function CameraPanel() {
   }
 
   const flying = cameraMode === "fly";
-  const orbiting = cameraMode === "orbit";
-  const locked = flying || orbiting;
   const modeTab = currentCameraTab(cameraMode, orbitRestoreSet);
   const livePos = cameraLive.position;
   const liveRotDeg: Vec3 = [
     cameraLive.rotation[0] * RAD2DEG,
     cameraLive.rotation[1] * RAD2DEG,
     cameraLive.rotation[2] * RAD2DEG,
-  ];
-  const intentRotDeg: Vec3 = [
-    cameraIntent.rotation[0] * RAD2DEG,
-    cameraIntent.rotation[1] * RAD2DEG,
-    cameraIntent.rotation[2] * RAD2DEG,
   ];
 
   const searching = query.trim().length > 0;
@@ -466,68 +467,10 @@ export function CameraPanel() {
             }}
             className="flex flex-col gap-1.5"
           >
-            <Section value="pose" icon={Camera} label="Camera" hidden={!show("pose")}>
-              <PoseSection
-                locked={locked}
-                flying={flying}
-                cameraIntent={cameraIntent}
-                intentRotDeg={intentRotDeg}
-                setCameraIntent={setCameraIntent}
-              />
-            </Section>
-
-            <Section value="orbit" icon={OrbitIcon} label="Orbit" hidden={!show("orbit")}>
-              <OrbitSection />
-            </Section>
-
-            <Section value="districts" icon={MapIcon} label="Districts" hidden={!show("districts")}>
-              <DistrictsSection />
-            </Section>
-            <Section value="roads" icon={Route} label="Roads" hidden={!show("roads")}>
-              <RoadsSection />
-              <TrafficSection />
-              <LodSection />
-            </Section>
-
-            <Section
-              value="city-details"
-              icon={Info}
-              label="City Details"
-              hidden={!show("city-details")}
-            >
-              <CityDetailsSection />
-            </Section>
-
-            <Section value="stars" icon={Stars} label="Stars" hidden={!show("stars")}>
-              <StarsSection />
-            </Section>
-
-            <Section value="moon" icon={Moon} label="Moon" hidden={!show("moon")}>
-              <MoonSection />
-            </Section>
-
-            <Section value="fog" icon={CloudFog} label="Atmosphere" hidden={!show("fog")}>
-              <FogSection />
-            </Section>
-
-            <Section
-              value="windows"
-              icon={AppWindow}
-              label="Anti-Aliasing"
-              hidden={!show("windows")}
-            >
-              <AntiAliasingSection />
-            </Section>
-
-            <Section
-              value="window-profiles"
-              icon={Building2}
-              label="Buildings"
-              hidden={!show("window-profiles")}
-            >
-              <BuildingsSection />
-            </Section>
-
+            {/* Section order is the user's reading order (2026-06-07): Intro,
+                Camera, Orbit, Roads, Buildings, Population, City Details*,
+                Stars, Moon, Atmosphere, Debug, Performance. (*unlisted — kept
+                with the city group.) */}
             <Section
               value="intro"
               icon={Sparkles}
@@ -548,23 +491,103 @@ export function CameraPanel() {
               <IntroSection />
             </Section>
 
-            <Section value="live" icon={Radio} label="Live readout" hidden={!show("live")}>
-              <div className="text-foreground/70 grid grid-cols-[5rem_1fr] gap-1 font-mono text-xs">
-                <div>position</div>
-                <div className="tabular-nums">
-                  {fmt(livePos[0])} {fmt(livePos[1])} {fmt(livePos[2])}
+            <Section
+              value="pose"
+              icon={Camera}
+              label="Camera"
+              hidden={!show("pose")}
+              action={<CameraPoseToggle />}
+            >
+              <PoseSection flying={flying} />
+              {/* Live readout — lives with the camera controls (user 2026-06-07). */}
+              <div className="border-foreground/10 border-t pt-2">
+                <div className="text-foreground/70 grid grid-cols-[5rem_1fr] gap-1 font-mono text-xs">
+                  <div>position</div>
+                  <div className="tabular-nums">
+                    {fmt(livePos[0])} {fmt(livePos[1])} {fmt(livePos[2])}
+                  </div>
+                  <div>rotation°</div>
+                  <div className="tabular-nums">
+                    {fmt(liveRotDeg[0], 1)} {fmt(liveRotDeg[1], 1)} {fmt(liveRotDeg[2], 1)}
+                  </div>
+                  <div>fov</div>
+                  <div className="tabular-nums">{fmt(cameraLive.fov)}</div>
                 </div>
-                <div>rotation°</div>
-                <div className="tabular-nums">
-                  {fmt(liveRotDeg[0], 1)} {fmt(liveRotDeg[1], 1)} {fmt(liveRotDeg[2], 1)}
-                </div>
-                <div>fov</div>
-                <div className="tabular-nums">{fmt(cameraLive.fov)}</div>
               </div>
             </Section>
 
-            <Section value="seed" icon={Sprout} label="Seed" hidden={!show("seed")}>
+            <Section value="orbit" icon={OrbitIcon} label="Orbit" hidden={!show("orbit")}>
+              <OrbitSection />
+            </Section>
+
+            <Section
+              value="roads"
+              icon={Route}
+              label="Roads"
+              hidden={!show("roads")}
+              action={<RoadHighlightAction />}
+            >
+              <RoadsSection />
+              <TrafficSection />
+              <LodSection />
+            </Section>
+
+            <Section
+              value="window-profiles"
+              icon={Building2}
+              label="Buildings"
+              hidden={!show("window-profiles")}
+            >
+              <BuildingsSection />
+            </Section>
+
+            {/* Population (user 2026-06-07): the old Districts panel, expanded —
+                density layer (heat map + traffic coupling) above districts as
+                collapsible sub-groups; shells switch on the Districts header. */}
+            <Section
+              value="population"
+              icon={MapIcon}
+              label="Population"
+              hidden={!show("population")}
+            >
+              <SubGroup label="Density" defaultOpen>
+                <DensitySection />
+              </SubGroup>
+              <SubGroup label="Districts" action={<DistrictShellsAction />}>
+                <DistrictsSection />
+              </SubGroup>
+            </Section>
+
+            <Section
+              value="city-details"
+              icon={Info}
+              label="City Details"
+              hidden={!show("city-details")}
+            >
               <SeedRow />
+              <CityDetailsSection />
+            </Section>
+
+            <Section value="stars" icon={Stars} label="Stars" hidden={!show("stars")}>
+              <StarsSection />
+            </Section>
+
+            <Section value="moon" icon={Moon} label="Moon" hidden={!show("moon")}>
+              <MoonSection />
+            </Section>
+
+            <Section
+              value="fog"
+              icon={CloudFog}
+              label="Atmosphere"
+              hidden={!show("fog")}
+              action={<AtmosphereToggle />}
+            >
+              <FogSection />
+            </Section>
+
+            <Section value="debug" icon={Bug} label="Debug View" hidden={!show("debug")}>
+              <DebugSection />
             </Section>
 
             <Section
@@ -575,10 +598,10 @@ export function CameraPanel() {
               action={<FpsBadgeToggle />}
             >
               <PerfReadout />
-            </Section>
-
-            <Section value="debug" icon={Bug} label="Debug View" hidden={!show("debug")}>
-              <DebugSection />
+              {/* Anti-aliasing is a perf/quality trade — lives here (user 2026-06-07). */}
+              <div className="border-foreground/10 border-t pt-2">
+                <AntiAliasingSection />
+              </div>
             </Section>
           </Accordion>
           {searching && matchedValues.length === 0 && (
@@ -671,75 +694,16 @@ function Section({
   );
 }
 
-function PoseSection({
-  locked,
-  flying,
-  cameraIntent,
-  intentRotDeg,
-  setCameraIntent,
-}: {
-  locked: boolean;
-  flying: boolean;
-  cameraIntent: ReturnType<typeof useSceneStore.getState>["cameraIntent"];
-  intentRotDeg: Vec3;
-  setCameraIntent: ReturnType<typeof useSceneStore.getState>["setCameraIntent"];
-}) {
+// The manual position / orient-by / lookAt / rotation intent inputs were
+// removed 2026-06-07 (user): `locked = flying || orbiting` is true in every
+// camera mode that exists, so they were permanently disabled — pre-orbit-rig
+// plumbing. The live readout below the section covers the read side; the
+// store API (setCameraIntent) is unchanged for scripts + camera internals.
+function PoseSection({ flying }: { flying: boolean }) {
   return (
     <>
       <ProjectionRow />
       <FovOrSizeSlider />
-
-      <Vec3Header />
-      <Vec3Input
-        label="position"
-        value={cameraIntent.position}
-        disabled={locked}
-        onChange={(position) => setCameraIntent({ position })}
-      />
-
-      <div className="flex items-center justify-between">
-        <span className="text-foreground/40 text-xs tracking-wide uppercase">orient by</span>
-        <div className="flex gap-1">
-          {(["lookAt", "rotation"] as const).map((o) => (
-            <Button
-              key={o}
-              variant="secondary"
-              size="sm"
-              disabled={locked}
-              onClick={() => setCameraIntent({ orient: o })}
-              className={cn(
-                cameraIntent.orient === o
-                  ? "bg-foreground/25 text-foreground hover:bg-foreground/25"
-                  : "bg-foreground/5 text-foreground/60 hover:bg-foreground/15",
-              )}
-            >
-              {o}
-            </Button>
-          ))}
-        </div>
-      </div>
-
-      <Vec3Input
-        label="lookAt"
-        value={cameraIntent.lookAt}
-        disabled={locked || cameraIntent.orient !== "lookAt"}
-        onChange={(lookAt) => setCameraIntent({ lookAt, orient: "lookAt" })}
-      />
-
-      <Vec3Input
-        label="rotation"
-        hint="degrees"
-        step={1}
-        value={intentRotDeg}
-        disabled={locked || cameraIntent.orient !== "rotation"}
-        onChange={(rotDeg) =>
-          setCameraIntent({
-            rotation: [rotDeg[0] * DEG2RAD, rotDeg[1] * DEG2RAD, rotDeg[2] * DEG2RAD],
-            orient: "rotation",
-          })
-        }
-      />
-
       {flying ? <FlySpeedSlider /> : null}
     </>
   );
@@ -941,7 +905,7 @@ function BuildingsSection() {
       >
         <WindowsSection />
       </SubGroup>
-      <SubGroup label="Facade" defaultOpen>
+      <SubGroup label="Facade">
         <FacadeSection />
       </SubGroup>
     </>
@@ -2116,62 +2080,7 @@ function MoonReadout() {
 
 // ValueSlider moved to components/ui/value-slider.tsx (shared with RoadsPanel,
 // upgraded with a base-ui number-field stepper + label scrubbing).
-
-function Vec3Header() {
-  return (
-    <div className="flex items-center gap-2 text-xs">
-      <div className="w-16 shrink-0" />
-      {(["X", "Y", "Z"] as const).map((axis) => (
-        <span
-          key={axis}
-          className="text-foreground/40 flex-1 text-center text-[11px] font-medium tracking-wider uppercase"
-        >
-          {axis}
-        </span>
-      ))}
-    </div>
-  );
-}
-
-function Vec3Input({
-  label,
-  value,
-  disabled,
-  hint,
-  step = 0.5,
-  onChange,
-}: {
-  label: string;
-  value: Vec3;
-  disabled: boolean;
-  hint?: string;
-  step?: number;
-  onChange: (v: Vec3) => void;
-}) {
-  return (
-    <div className="flex items-center gap-2 text-xs">
-      <div className="text-foreground/60 flex w-16 shrink-0 flex-col">
-        <span>{label}</span>
-        {hint ? <span className="text-foreground/35 text-[10px]">{hint}</span> : null}
-      </div>
-      {(["x", "y", "z"] as const).map((axis, i) => (
-        <input
-          key={axis}
-          type="number"
-          step={step}
-          disabled={disabled}
-          value={value[i]}
-          onChange={(e) => {
-            const v = [...value] as Vec3;
-            v[i] = parseFloat(e.target.value) || 0;
-            onChange(v);
-          }}
-          className="border-foreground/15 bg-background/60 text-foreground w-0 min-w-0 flex-1 rounded border px-1.5 py-1 tabular-nums disabled:opacity-50"
-        />
-      ))}
-    </div>
-  );
-}
+// Vec3Header/Vec3Input removed with the manual camera-intent inputs (2026-06-07).
 
 function SeedRow() {
   const seed = useSceneStore((s) => s.masterSeed);
@@ -2224,6 +2133,73 @@ function FpsBadgeToggle() {
       <span className="text-foreground/70">badge</span>
       <Switch checked={fpsHud} onCheckedChange={setFpsHud} title="Show the floating FPS badge" />
     </label>
+  );
+}
+
+// Camera header action (user 2026-06-07): one-press toggle between the DEFAULT
+// orbit framing and the user's own ("free") pose. Pressing "default" snapshots
+// the current orbit (elevation / radius / orthoSize — azimuth is deliberately
+// left alone, same as Default Orbit, so nothing spins) and tweens to the
+// default framing; pressing "free" tweens back to the snapshot. Transient —
+// the snapshot is component state, never persisted.
+function CameraPoseToggle() {
+  const [freePose, setFreePose] = useState<{
+    elevationDeg: number;
+    radius: number;
+    orthoSize: number;
+  } | null>(null);
+  const atDefault = freePose !== null;
+  return (
+    <Button
+      variant="secondary"
+      size="sm"
+      className="bg-foreground/10 text-foreground/80 hover:bg-foreground/20 h-6 px-2 text-xs"
+      title={
+        atDefault
+          ? "Return to the pose you were at before snapping to default"
+          : "Snap to the default orbit framing (remembers your current pose)"
+      }
+      onClick={() => {
+        const s = useSceneStore.getState();
+        if (atDefault && freePose) {
+          if (s.cameraMode !== "orbit") s.setCameraMode("orbit");
+          tweenOrbitTowards(freePose.elevationDeg, freePose.radius, freePose.orthoSize);
+          setFreePose(null);
+        } else {
+          setFreePose({
+            elevationDeg: s.orbit.elevationDeg,
+            radius: s.orbit.radius,
+            orthoSize: s.orthoSize,
+          });
+          tweenOrbitToDefault();
+        }
+      }}
+    >
+      {/* Label = the CURRENT mode (user 2026-06-07), not the action — the
+          title text explains what clicking does. */}
+      {atDefault ? "default" : "free"}
+    </Button>
+  );
+}
+
+// Atmosphere header action (user 2026-06-07): master on/off for the whole
+// section — fog AND ground haze together. Checked while either is on; the
+// individual switches inside the section still control each independently.
+function AtmosphereToggle() {
+  const fogOn = useSceneStore((s) => s.fog.enabled);
+  const hazeOn = useSceneStore((s) => s.haze.enabled);
+  const setFog = useSceneStore((s) => s.setFog);
+  const setHaze = useSceneStore((s) => s.setHaze);
+  return (
+    <Switch
+      checked={fogOn || hazeOn}
+      onCheckedChange={(v) => {
+        setFog({ enabled: v });
+        setHaze({ enabled: v });
+      }}
+      title="Toggle fog + ground haze together"
+      aria-label="Toggle atmosphere"
+    />
   );
 }
 
