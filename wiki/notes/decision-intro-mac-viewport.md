@@ -30,6 +30,23 @@ sharing the global store/seed/generation cache with the main app.
   BY-NC is fine while the project stays non-commercial.
 - A second, source-faithful instance ("stock") stands stage right via deep
   scene clone (shared geometry/materials — an Object3D can't have two parents).
+- **Parked 2026-06-07** (`SHOW_REFERENCE_MAC = false`): the stock Mac is
+  hidden for now, returning as the before/after yardstick when the
+  material + compression work resumes. Restore is a one-line flip; the
+  focus/dblclick machinery is kept intact. The molding-finish material pass
+  ([#74](https://github.com/redlamp/starry-night/issues/74)) and GLB
+  compression ([#73](https://github.com/redlamp/starry-night/issues/73))
+  should land together so the optimized asset reflects the final look.
+
+### Mac case finish: textured matte molding (#74, research)
+
+The real 128K/Plus case had a fine pebble/orange-peel molding texture that
+made the beige read matte and "dry" — absent on the Daz model (and not
+wanted on the mouse/keyboard). Plan: a procedural `onBeforeCompile` patch on
+the case meshes (`Computer_Computer_0`, `Computer_Blackplastic_0`) —
+noise-driven roughness micro-variation + subtle normal grain + a soft
+grazing-angle sheen — rather than authored maps. Needs reference-photo
+research on the actual finish. Tracked in #74.
 
 ### Screen render chain: native-res multi-pass, process-then-filter
 
