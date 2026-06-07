@@ -1,6 +1,7 @@
 import seedrandom from "seedrandom";
 import { CITY_CENTER, maxHalfExtent } from "./topology";
 import { suburbAmount, CORE_T, SUBURB_T, RURAL_T, type RadialDensity } from "./density";
+import type { ShapeMask } from "./cityShape";
 
 // Population nodes for the suburban band (#49 rebuild — see
 // wiki/notes/plan-suburb-node-fields.md). The diagnosis of three rejected
@@ -10,10 +11,11 @@ import { suburbAmount, CORE_T, SUBURB_T, RURAL_T, type RadialDensity } from "./d
 // tangential connectors, with the grid suppressed except arterial spokes.
 //
 // This module is the foundation layer (Stage 1): deterministic node sampling
-// + the node-proximity field. Stage 2 gives each node a local radial tensor
-// basis (rings = crescents, spokes = entries) and traces pod streets against
-// it; Stage 3 adds node-graph connectors; Stage 4 clusters building/lamp
-// density by proximity (development hugs the nodes, inter-pod land goes dark).
+// + the node-proximity field. Stage 2 builds a loops-and-lollipops SUBDIVISION
+// at each node (collector spine + loop streets + culs — see
+// wiki/research/suburban-street-patterns.md; the earlier radial-tensor rings
+// read as bullseyes and were retired). Stage 4 clusters building/lamp density
+// by proximity (development hugs the nodes, inter-pod land goes dark).
 //
 // Determinism: one dedicated stream (`::suburb::nodes`), drawn in a fixed
 // row-major cell-scan order — 3 draws per cell always, +3 more only for
@@ -44,9 +46,9 @@ const SCAN_CELL = 300;
 const SPACING_ANCHORS: ReadonlyArray<readonly [number, number]> = [
   [0, 1250],
   [RURAL_T, 1000],
-  [SUBURB_T, 620],
-  [0.5, 480],
-  [CORE_T, 440],
+  [SUBURB_T, 520],
+  [0.5, 430],
+  [CORE_T, 400],
 ];
 
 function spacingFor(density: number): number {
@@ -61,7 +63,20 @@ function spacingFor(density: number): number {
   return SPACING_ANCHORS[SPACING_ANCHORS.length - 1][1];
 }
 
-export function sampleSuburbNodes(masterSeed: string, radial: RadialDensity): SuburbNode[] {
+// Band edge for node eligibility. Pods seed from just inside the global grid's
+// band stop (tensorStreets ST_BAND_STOP = 0.28) — the ~0.1-sub overlap is the
+// seam, where pod rings separation-test against the thinning grid and the two
+// fabrics interleave. Starting pods deeper into the grid wastes them (rings
+// get separation-blocked); starting at the stop leaves a bald seam.
+const NODE_MIN_SUB = 0.18;
+
+export function sampleSuburbNodes(
+  masterSeed: string,
+  radial: RadialDensity,
+  // City footprint (#14) — without it, corner nodes seed outside a circle
+  // crop and trace pods into the void. Default = the square no-op mask.
+  mask: ShapeMask = () => 1,
+): SuburbNode[] {
   const rng = seedrandom(`${masterSeed}::suburb::nodes`);
   const half = maxHalfExtent();
   const cx = CITY_CENTER.x;
@@ -86,9 +101,11 @@ export function sampleSuburbNodes(masterSeed: string, radial: RadialDensity): Su
       const z = cz - half + (j + jz) * SCAN_CELL;
       const d = radial.at(x, z);
       const sub = suburbAmount(d);
-      // Band: past the core edge (sub ≥ 0.12) but not deep fringe (d > 0.10) —
-      // rural keeps sparse hamlet nodes, true fringe none.
-      if (sub < 0.12 || d <= 0.1) continue;
+      // Band: past the grid edge (NODE_MIN_SUB) but not deep fringe (d > 0.10)
+      // — rural keeps sparse hamlet nodes, true fringe none. Mask: pods never
+      // seed outside the city footprint.
+      if (sub < NODE_MIN_SUB || d <= 0.1) continue;
+      if (mask(x, z) < 0.5) continue;
       if (roll >= 0.92) continue; // a little seeded raggedness in coverage
       const spacing = spacingFor(d);
       // Poisson-disc test against accepted nodes.

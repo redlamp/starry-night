@@ -70,10 +70,13 @@ with `startStreetsProfile` at tiers 3/6/8; merge gates on no regression.
 
 ## Staged plan (each stage: gate1 + /plan tier 4 + 6 + scene capture)
 
-1. **Node field, off by default** (`suburbField.ts` + basis index, w=0 —
-   byte-identical output; profile baseline).
-2. **Pod tracing in the band** (replace suburban minor-street pass; retire
-   warp + branch grower + suburb collector ramp).
+1. ✅ **Node field, off by default** (`suburbField.ts` + basis index, w=0 —
+   byte-identical output; profile baseline). *(2026-06-07)*
+2. ✅ **Pod tracing in the band** (replace suburban minor-street pass; retire
+   warp + branch grower + suburb collector ramp). *(2026-06-07 — band stop at
+   sub 0.28, not the planned cross-fade: pods sep-test against the thinning
+   grid at the seam, no tensor blending needed. Buildings thinned in-band
+   until Stage 4 redistributes them onto pods.)*
 3. **Connectors** (node→arterial/node/core; check arterial-seam kinks).
 4. **Density coupling** (node-proximity in `buildDevelopmentMask`; per-band
    count comparison vs `samples/verify49` baselines; default tier-3 orbit

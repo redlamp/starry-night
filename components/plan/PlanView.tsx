@@ -16,6 +16,7 @@ import {
   type DensityBand,
 } from "@/lib/seed/density";
 import { sampleSuburbNodes } from "@/lib/seed/suburbField";
+import { makeShapeMask, resolveCityShape } from "@/lib/seed/cityShape";
 import { useSceneStore } from "@/lib/state/sceneStore";
 import { useGeneratedCity } from "@/lib/hooks/useGeneratedCity";
 
@@ -80,7 +81,12 @@ export function PlanView({ seed, size, layers }: Props) {
     // Cheap (one rng draw per district) — rebuilt per redraw, never cached.
     const density = buildDensityField(seed, field);
     // #49 node-field rebuild Stage 1: suburb population nodes (cheap grid scan).
-    const nodes = sampleSuburbNodes(seed, density.radial);
+    // Same mask as the street generator so the overlay shows the real pod set.
+    const nodes = sampleSuburbNodes(
+      seed,
+      density.radial,
+      makeShapeMask(resolveCityShape(cityShape, seed), cityShapeScale),
+    );
     return { topo, field, city, lights, density, nodes };
   }, [ready, seed, cityShape, cityShapeScale, citySize, citySketch, fieldDeviation]);
 
