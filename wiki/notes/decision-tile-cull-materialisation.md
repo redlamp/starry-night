@@ -55,10 +55,13 @@ exactly once), zero false negatives vs per-point frustum containment, 49/144
 tiles for an in-city pose. Gen untouched — golden/gate1 unaffected by
 construction. 3080 Ti fps confirmed fine; Pixel 6 pass pending.
 
-## Remaining (#55 stays open)
+## Remaining (carved to #70 — #55 closed 2026-06-07)
 
-Center-out reveal ordering + "materialise dark, wake by light" (from #59) —
-the tile machinery is the natural carrier for both.
+#55 closed at v2026.06.07.1 (culling + debug tooling shipped; 3080 Ti and
+Pixel 6 passes confirmed). The lazy-materialisation refinements moved to #70:
+crop-as-tile-op without buffer rebuild, center-out reveal ordering, and
+"materialise dark, wake by light" (from #59) — the tile machinery is the
+natural carrier for all three.
 
 Relates: [[decision-additive-growth-citygen]] (materialisation vs generation),
 [[plan-city-scale-migration]].
