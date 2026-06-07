@@ -36,6 +36,7 @@ const SCREEN_DEFAULTS = {
   softness: 0.22,
   glow: 0.8,
   halation: 0.1,
+  scanline: 0.25,
   bloom: 0.15,
 };
 
@@ -84,6 +85,8 @@ export function IntroApp() {
   const [glow, setGlow] = useState(SCREEN_DEFAULTS.glow);
   // phosphor light scatter into neighbouring texels (all depth modes)
   const [halation, setHalation] = useState(SCREEN_DEFAULTS.halation);
+  // raster-row mask, display-time with derivative fade (#71)
+  const [scanline, setScanline] = useState(SCREEN_DEFAULTS.scanline);
   // over-the-bezel bloom (post-processing, step 2 of the glow plan)
   const [bloom, setBloom] = useState(SCREEN_DEFAULTS.bloom);
 
@@ -92,6 +95,7 @@ export function IntroApp() {
     setSoftness(SCREEN_DEFAULTS.softness);
     setGlow(SCREEN_DEFAULTS.glow);
     setHalation(SCREEN_DEFAULTS.halation);
+    setScanline(SCREEN_DEFAULTS.scanline);
     setBloom(SCREEN_DEFAULTS.bloom);
   };
   const bwLevels = useMemo<BwLevels>(
@@ -118,6 +122,7 @@ export function IntroApp() {
         bwLevels={bwLevels}
         glow={glow}
         halation={halation}
+        scanline={scanline}
         bloom={bloom}
       />
       <IntroFpsBadge />
@@ -201,6 +206,14 @@ export function IntroApp() {
                 max={2}
                 step={0.05}
                 onChange={setHalation}
+              />
+              <SliderRow
+                label="Scanlines"
+                value={scanline}
+                min={0}
+                max={1}
+                step={0.01}
+                onChange={setScanline}
               />
               <SliderRow
                 label="Bloom"

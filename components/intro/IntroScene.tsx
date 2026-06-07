@@ -75,6 +75,7 @@ export function IntroScene({
   bwLevels,
   glow,
   halation,
+  scanline,
   bloom,
 }: {
   mode: IntroViewMode;
@@ -82,6 +83,7 @@ export function IntroScene({
   bwLevels: BwLevels;
   glow: number;
   halation: number;
+  scanline: number;
   bloom: number;
 }) {
   const controlsRef = useRef<OrbitControlsImpl>(null);
@@ -163,6 +165,7 @@ export function IntroScene({
           bwLevels={bwLevels}
           glow={glow}
           halation={halation}
+          scanline={scanline}
           screenInteractive={screenHover}
           onScreenHoverChange={setScreenHover}
           position={[MAC_X.daz, 0, 0]}

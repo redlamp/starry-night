@@ -7,6 +7,8 @@ import { useThree } from "@react-three/fiber";
 import type { ThreeElements } from "@react-three/fiber";
 import { ScreenCity } from "./ScreenCity";
 import { setCursorZone } from "./stageCursor";
+import { useSceneStore } from "@/lib/state/sceneStore";
+import { randomSeed } from "@/lib/seed/rng";
 import {
   SCREEN_COLOR_MODE_INDEX,
   type BwLevels,
@@ -189,9 +191,10 @@ const CRT_UV_VERTEX = /* glsl */ `
 `;
 
 const CRT_HEADER = /* glsl */ `
-  uniform sampler2D uCrt; // processed raster (city → colour-depth pass)
-  uniform vec2 uActive;   // active raster fraction of the glass
-  uniform float uGlow;    // phosphor self-emission strength
+  uniform sampler2D uCrt;   // processed raster (city → colour-depth pass)
+  uniform vec2 uActive;     // active raster fraction of the glass
+  uniform float uGlow;      // phosphor self-emission strength
+  uniform float uScanline;  // raster-row mask strength (#71)
   varying vec2 vCrtUv;
 `;
 
@@ -201,6 +204,13 @@ const CRT_MAP_FRAGMENT = /* glsl */ `
   vec3 crtCol = vec3(0.0); // outside the active raster: glass only
   if (!(any(lessThan(crtUv, vec2(0.0))) || any(greaterThan(crtUv, vec2(1.0))))) {
     crtCol = texture2D(uCrt, crtUv).rgb;
+    // Scanlines (#71): the gaps between raster rows are sub-texel, so the
+    // mask runs at display sampling time — faded out by fwidth when a row
+    // covers < ~1 screen px, otherwise it would moiré exactly like the
+    // pre-mipmap dither did.
+    float rowY = crtUv.y * ${RASTER_H.toFixed(1)};
+    float scanVis = clamp((1.0 - fwidth(rowY)) * 2.0, 0.0, 1.0);
+    crtCol *= 1.0 - uScanline * scanVis * (0.5 + 0.5 * cos(6.2831853 * fract(rowY)));
   }
   // screen blend over the model's glass
   diffuseColor.rgb = 1.0 - (1.0 - diffuseColor.rgb) * (1.0 - crtCol);
@@ -210,6 +220,50 @@ const CRT_MAP_FRAGMENT = /* glsl */ `
 const CRT_EMISSIVE_FRAGMENT = /* glsl */ `
   totalEmissiveRadiance += crtCol * uGlow;
 `;
+
+/**
+ * Invisible hotspot over the rainbow Apple badge (lower-left front face).
+ * Clicking it rerolls the master seed — a fresh city on every press of the
+ * apple. Rendered in GLB space inside NormalizedModel, so it works on both
+ * the working and stock Macs.
+ */
+function AppleBadge() {
+  const { scene } = useGLTF(DAZ_URL);
+  const setSeed = useSceneStore((s) => s.setSeed);
+  const position = useMemo(() => {
+    let src: THREE.Mesh | undefined;
+    scene.traverse((obj: THREE.Object3D) => {
+      const mesh = obj as THREE.Mesh;
+      if (mesh.isMesh && mesh.name === SCREEN_MESH) src = mesh;
+    });
+    if (!src) return null;
+    scene.updateMatrixWorld(true);
+    const bb = new THREE.Box3().setFromObject(src);
+    // badge sits below the glass's lower-left corner (position verified
+    // against the model via debug render)
+    return new THREE.Vector3(bb.min.x + 0.8, bb.min.y - 9.0, bb.max.z + 3.0);
+  }, [scene]);
+
+  if (!position) return null;
+  return (
+    <mesh
+      position={position.toArray()}
+      onClick={(e) => {
+        e.stopPropagation();
+        setSeed(randomSeed());
+      }}
+      onDoubleClick={(e) => e.stopPropagation()}
+      onPointerOver={(e) => {
+        e.stopPropagation();
+        setCursorZone("badge", true);
+      }}
+      onPointerOut={() => setCursorZone("badge", false)}
+    >
+      <planeGeometry args={[2.6, 3.2]} />
+      <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+    </mesh>
+  );
+}
 
 /**
  * The Mac's CRT: the model's own curved screen surface carrying the live
@@ -228,6 +282,7 @@ function DazScreenViewport({
   bwLevels,
   glow,
   halation,
+  scanline,
   onHoverChange,
 }: {
   mode: IntroViewMode;
@@ -236,6 +291,7 @@ function DazScreenViewport({
   bwLevels: BwLevels;
   glow: number;
   halation: number;
+  scanline: number;
   onHoverChange?: (hovering: boolean) => void;
 }) {
   const { scene } = useGLTF(DAZ_URL);
@@ -245,6 +301,8 @@ function DazScreenViewport({
   const glassShaderRef = useRef<{ uniforms: Record<string, THREE.IUniform> } | null>(null);
   const glowRef = useRef(glow);
   glowRef.current = glow;
+  const scanlineRef = useRef(scanline);
+  scanlineRef.current = scanline;
   const [resetSignal, setResetSignal] = useState(0);
 
   const parts = useMemo(() => {
@@ -298,6 +356,7 @@ function DazScreenViewport({
       shader.uniforms.uCrt = material.userData.crtTex;
       shader.uniforms.uActive = { value: new THREE.Vector2(activeW, activeH) };
       shader.uniforms.uGlow = { value: glowRef.current };
+      shader.uniforms.uScanline = { value: scanlineRef.current };
       shader.vertexShader = shader.vertexShader
         .replace("#include <common>", `#include <common>\n${CRT_VERT_HEADER}`)
         .replace("#include <uv_vertex>", CRT_UV_VERTEX);
@@ -307,16 +366,16 @@ function DazScreenViewport({
         .replace("#include <emissivemap_fragment>", CRT_EMISSIVE_FRAGMENT);
       glassShaderRef.current = shader;
     };
-    // Apple badge hotspot (lower-left of the front face, below the glass) —
-    // invisible raycast target for the pointer cursor / future easter egg.
-    const badge = new THREE.Vector3(bb.min.x + 0.8, bb.min.y - 9.0, bb.max.z + 3.0);
-    return { geometry, material, badge };
+    return { geometry, material };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- glowRef is a ref
   }, [scene]);
 
   useEffect(() => {
-    if (glassShaderRef.current) glassShaderRef.current.uniforms.uGlow.value = glow;
-  }, [glow]);
+    const u = glassShaderRef.current?.uniforms;
+    if (!u) return;
+    u.uGlow.value = glow;
+    u.uScanline.value = scanline;
+  }, [glow, scanline]);
 
   const processUniforms = useMemo(
     () => ({
@@ -352,21 +411,8 @@ function DazScreenViewport({
 
   if (!parts) return null;
   return (
-    <>
-      {/* Apple badge hotspot — invisible, pointer-cursor zone */}
-      <mesh
-        position={parts.badge.toArray()}
-        onPointerOver={(e) => {
-          e.stopPropagation();
-          setCursorZone("badge", true);
-        }}
-        onPointerOut={() => setCursorZone("badge", false)}
-      >
-        <planeGeometry args={[2.6, 3.2]} />
-        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
-      </mesh>
-      <mesh
-        geometry={parts.geometry}
+    <mesh
+      geometry={parts.geometry}
       onPointerOver={() => {
         onHoverChange?.(true);
         setCursorZone("screen", true);
@@ -439,8 +485,7 @@ function DazScreenViewport({
           </mesh>
         </RenderTexture>
       </primitive>
-      </mesh>
-    </>
+    </mesh>
   );
 }
 
@@ -452,6 +497,7 @@ export function MacDaz({
   bwLevels = DEFAULT_BW_LEVELS,
   glow = 0.8,
   halation = 0.1,
+  scanline = 0.25,
   showPeripherals = false,
   screenInteractive = false,
   onScreenHoverChange,
@@ -462,6 +508,7 @@ export function MacDaz({
   bwLevels?: BwLevels;
   glow?: number;
   halation?: number;
+  scanline?: number;
   showPeripherals?: boolean;
   screenInteractive?: boolean;
   onScreenHoverChange?: (hovering: boolean) => void;
@@ -480,9 +527,11 @@ export function MacDaz({
         bwLevels={bwLevels}
         glow={glow}
         halation={halation}
+        scanline={scanline}
         interactive={screenInteractive}
         onHoverChange={onScreenHoverChange}
       />
+      <AppleBadge />
     </NormalizedModel>
   );
 }
@@ -492,7 +541,11 @@ export function MacDaz({
  * viewport, peripherals included. Stage reference next to the working Mac.
  */
 export function MacDazStock(props: GroupProps) {
-  return <NormalizedModel url={DAZ_URL} unitScale={0.01} cloneScene {...props} />;
+  return (
+    <NormalizedModel url={DAZ_URL} unitScale={0.01} cloneScene {...props}>
+      <AppleBadge />
+    </NormalizedModel>
+  );
 }
 
 useGLTF.preload(DAZ_URL);

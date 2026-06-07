@@ -27,6 +27,20 @@ async function main() {
   await page.screenshot({ path: out });
   console.log("captured", out);
 
+  // close-up: dolly the studio camera in over the stage — screen-detail
+  // shots (scanlines resolve only when raster rows span >1 screen px)
+  await page.mouse.move(300, 700);
+  for (let i = 0; i < 14; i++) {
+    await page.mouse.wheel(0, -240);
+    await page.waitForTimeout(120);
+  }
+  await page.waitForTimeout(900);
+  const outClose = resolve(outDir, "intro-closeup.png");
+  await page.screenshot({ path: outClose });
+  console.log("captured", outClose);
+  await page.mouse.dblclick(300, 750); // tween home
+  await page.waitForTimeout(2_000);
+
   // colour-depth chips are hidden for now (locked to B/W); when restored,
   // re-add the mac256/full capture loop here.
 
