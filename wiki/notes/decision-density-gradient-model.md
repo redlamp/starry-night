@@ -53,11 +53,22 @@ density by the extent and thinned per LOT — both rejected.
    (tight through suburbs so subdivision reads, opening to country lanes in
    rural). Sketch cities (#40) bypass all gates.
 
+4. **Suburban street character** (increment 5) — the review's "different
+   mechanism, not more waviness": post-trace **domain warp** on minor streets
+   (seeded plane-wave displacement scaled by suburbAmount, endpoint-tapered so
+   junctions stay anchored; parallels sample the same warp → spacing holds;
+   arterials stay straight) + **cul-de-sac stubs** grown off suburban minors
+   into block interiors (separation-checked against the final warped geometry,
+   real dead-end terminals) + **block-size jitter** (low-freq noise on the
+   street-sep ramp). Both passes run on their own seeded streams after
+   tracing; the boot blueprint streams unwarped lines (≤14 m transient
+   mismatch under the road reveal — accepted).
+
 ## Remaining (#49)
 
-Visibly winding residential streets + real subdivision + cul-de-sacs (needs a
-new mechanism, not more waviness); residential warm-sparse window signature;
-block-size jitter; per-seed suburb variety; rural cluster bias toward spokes.
+Residential warm-sparse window signature; per-seed suburb variety (warp
+amplitude + stub chance are seeded but the spread is narrow); rural cluster
+bias toward the spokes (development cells are uniform-random).
 
 Relates: [[plan-metro-suburbs-highways]], [[decision-additive-growth-citygen]],
 [[decision-tensor-field-roads]].
