@@ -6,6 +6,7 @@ import { RenderTexture, useGLTF } from "@react-three/drei";
 import { useThree } from "@react-three/fiber";
 import type { ThreeElements } from "@react-three/fiber";
 import { ScreenCity } from "./ScreenCity";
+import { setCursorZone } from "./stageCursor";
 import {
   SCREEN_COLOR_MODE_INDEX,
   type BwLevels,
@@ -306,7 +307,10 @@ function DazScreenViewport({
         .replace("#include <emissivemap_fragment>", CRT_EMISSIVE_FRAGMENT);
       glassShaderRef.current = shader;
     };
-    return { geometry, material };
+    // Apple badge hotspot (lower-left of the front face, below the glass) —
+    // invisible raycast target for the pointer cursor / future easter egg.
+    const badge = new THREE.Vector3(bb.min.x + 0.8, bb.min.y - 9.0, bb.max.z + 3.0);
+    return { geometry, material, badge };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- glowRef is a ref
   }, [scene]);
 
@@ -348,10 +352,29 @@ function DazScreenViewport({
 
   if (!parts) return null;
   return (
-    <mesh
-      geometry={parts.geometry}
-      onPointerOver={() => onHoverChange?.(true)}
-      onPointerOut={() => onHoverChange?.(false)}
+    <>
+      {/* Apple badge hotspot — invisible, pointer-cursor zone */}
+      <mesh
+        position={parts.badge.toArray()}
+        onPointerOver={(e) => {
+          e.stopPropagation();
+          setCursorZone("badge", true);
+        }}
+        onPointerOut={() => setCursorZone("badge", false)}
+      >
+        <planeGeometry args={[2.6, 3.2]} />
+        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+      </mesh>
+      <mesh
+        geometry={parts.geometry}
+      onPointerOver={() => {
+        onHoverChange?.(true);
+        setCursorZone("screen", true);
+      }}
+      onPointerOut={() => {
+        onHoverChange?.(false);
+        setCursorZone("screen", false);
+      }}
       onDoubleClick={(e) => {
         // screen dblclick = city-orbit reset only; don't bubble into the
         // Mac-focus dblclick on the body group
@@ -416,7 +439,8 @@ function DazScreenViewport({
           </mesh>
         </RenderTexture>
       </primitive>
-    </mesh>
+      </mesh>
+    </>
   );
 }
 

@@ -9,6 +9,7 @@ import { Bloom, EffectComposer, ToneMapping } from "@react-three/postprocessing"
 import { ToneMappingMode } from "postprocessing";
 import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { MacDaz, MacDazStock } from "./MacModel";
+import { setCursorZone } from "./stageCursor";
 import { PerfMonitor } from "@/components/scene/PerfMonitor";
 import { STUDIO_CAM_POS, STUDIO_TARGET } from "./studioCamera";
 import type { BwLevels, IntroViewMode, ScreenColorMode } from "./viewMode";
@@ -149,6 +150,8 @@ export function IntroScene({
         scale={[16, 6, 6]}
         position={[0, -0.012, -2.1]}
         onDoubleClick={handleStageDoubleClick}
+        onPointerOver={() => setCursorZone("stage", true)}
+        onPointerOut={() => setCursorZone("stage", false)}
       >
         <meshStandardMaterial color="#d4d4d4" roughness={0.95} metalness={0} />
       </Backdrop>
@@ -169,6 +172,8 @@ export function IntroScene({
             e.stopPropagation();
             orbitToMac("daz");
           }}
+          onPointerOver={() => setCursorZone("mac", true)}
+          onPointerOut={() => setCursorZone("mac", false)}
         />
       </Suspense>
       {/* the Daz model unchanged from source, stage right */}
@@ -179,6 +184,8 @@ export function IntroScene({
             e.stopPropagation();
             orbitToMac("stock");
           }}
+          onPointerOver={() => setCursorZone("mac", true)}
+          onPointerOut={() => setCursorZone("mac", false)}
         />
       </Suspense>
 
