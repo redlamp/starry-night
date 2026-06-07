@@ -225,7 +225,7 @@ const SETTINGS_SECTIONS: { value: string; label: string; keywords: string }[] = 
     value: "population",
     label: "Population",
     keywords:
-      "districts shells borders outline color region zones density heat map heatmap people residents traffic coupling estimate",
+      "districts shells borders outline color region zones density heat map heatmap people residents traffic coupling estimate profile centres centers spread shoulder satellites gradient",
   },
   {
     value: "city-details",
@@ -248,7 +248,7 @@ const SETTINGS_SECTIONS: { value: string; label: string; keywords: string }[] = 
     value: "debug",
     label: "Debug View",
     keywords:
-      "render modes wireframe hidden tensor field flow visualization overlay building tint ground tile culling cull frustum freeze grid materialise",
+      "render modes wireframe hidden tensor field flow visualization overlay building tint population ground tile culling cull frustum freeze grid materialise",
   },
   {
     value: "perf",
@@ -394,7 +394,6 @@ export function CameraPanel() {
             Settings
           </span>
           <div className="flex items-center gap-1.5">
-            <HeaderPauseButton tab={modeTab} />
             <ThemeToggle />
             <Button
               variant="ghost"
@@ -484,7 +483,7 @@ export function CameraPanel() {
                   className="h-6 bg-amber-300 px-2 text-xs text-black hover:bg-amber-300/90"
                   onClick={() => useSceneStore.getState().playAllIntros()}
                 >
-                  ▶ play
+                  replay
                 </Button>
               }
             >
@@ -516,7 +515,13 @@ export function CameraPanel() {
               </div>
             </Section>
 
-            <Section value="orbit" icon={OrbitIcon} label="Orbit" hidden={!show("orbit")}>
+            <Section
+              value="orbit"
+              icon={OrbitIcon}
+              label="Orbit"
+              hidden={!show("orbit")}
+              action={<OrbitStillToggle />}
+            >
               <OrbitSection />
             </Section>
 
@@ -1572,7 +1577,15 @@ function SubGroup({
   );
 }
 
-const TINT_MODES = ["off", "district", "landuse", "archetype", "depth", "height"] as const;
+const TINT_MODES = [
+  "off",
+  "district",
+  "landuse",
+  "archetype",
+  "depth",
+  "height",
+  "population",
+] as const;
 const CITY_SHAPE_MODES = ["auto", ...CITY_SHAPES] as const;
 const RENDER_GROUP_LABELS: Record<RenderGroup, string> = {
   buildings: "Buildings",
@@ -1910,38 +1923,23 @@ function ProgressRow({ label, value }: { label: string; value: number }) {
   );
 }
 
-// Pause/resume in the panel header. Contextual: in Orbit it pauses the camera
-// auto-revolution (orbitPaused); in Top-down — a static pose — it freezes the
-// scene animation clock (paused) so traffic / twinkle / flicker hold. Hidden in
-// Fly (you're driving manually). Replaces the old per-mode detail box.
-function HeaderPauseButton({ tab }: { tab: CameraTab }) {
+// Orbit section header action (user 2026-06-08): pause/resume the camera
+// auto-revolution, moved from the panel header. Label = the CURRENT state
+// ("orbit" revolving / "still" paused), same sizing as the other header
+// actions (CameraPoseToggle). Space still toggles it.
+function OrbitStillToggle() {
   const orbitPaused = useSceneStore((s) => s.orbitPaused);
   const setOrbitPaused = useSceneStore((s) => s.setOrbitPaused);
-  const paused = useSceneStore((s) => s.paused);
-  const setPaused = useSceneStore((s) => s.setPaused);
-  if (tab === "fly") return null;
-  const isOrbit = tab === "orbit";
-  const active = isOrbit ? orbitPaused : paused;
-  const toggle = () => (isOrbit ? setOrbitPaused(!orbitPaused) : setPaused(!paused));
-  const what = isOrbit ? "orbit revolution" : "scene animation";
   return (
     <Button
+      variant="secondary"
       size="sm"
-      onClick={toggle}
-      title={
-        active
-          ? `Resume ${what}${isOrbit ? " (Space)" : ""}`
-          : `Pause ${what}${isOrbit ? " (Space)" : ""}`
-      }
-      aria-label={active ? `Resume ${what}` : `Pause ${what}`}
-      className={cn(
-        "min-w-[5.5rem] gap-1.5 font-medium",
-        active
-          ? "bg-emerald-400 text-black hover:bg-emerald-400/90"
-          : "bg-sky-400 text-black hover:bg-sky-400/90",
-      )}
+      className="bg-foreground/10 text-foreground/80 hover:bg-foreground/20 h-6 px-2 text-xs"
+      title={orbitPaused ? "Resume the orbit revolution (Space)" : "Pause the orbit revolution (Space)"}
+      aria-label={orbitPaused ? "Resume orbit revolution" : "Pause orbit revolution"}
+      onClick={() => setOrbitPaused(!orbitPaused)}
     >
-      {active ? "▶ Resume" : "⏸ Pause"}
+      {orbitPaused ? "still" : "orbit"}
     </Button>
   );
 }
