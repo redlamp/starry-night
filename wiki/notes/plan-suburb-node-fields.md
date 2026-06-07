@@ -8,7 +8,11 @@ tags:
 # Plan: Population-Node Fields for Suburban Roads (#49)
 
 **Date:** 2026-06-07 · design-agent deep-think after three rejected suburban
-mechanisms. Drives the #49 suburbs rebuild, next work block.
+mechanisms. Drives the #49 suburbs rebuild.
+
+**Status: COMPLETE — #49 shipped 2026-06-08.** All five stages closed (3 by
+construction, 5's rural-ring deliberately dropped — see below). Verified by
+seed sweep + pod-cluster renders (`samples/verify49/`), gate1, and prod build.
 
 ## Diagnosis — why all three attempts read as wrong
 
@@ -77,12 +81,15 @@ with `startStreetsProfile` at tiers 3/6/8; merge gates on no regression.
    sub 0.28, not the planned cross-fade: pods sep-test against the thinning
    grid at the seam, no tensor blending needed. Buildings thinned in-band
    until Stage 4 redistributes them onto pods.)*
-3. ⏭️ **Connectors** — SUPERSEDED by Stage 2's connectivity-by-construction:
-   `buildSubdivisions` anchors each pod spine to existing roads (AnchorIndex,
-   2nd mouth, branch-tip snap within 80 m) + the gap filler routes unserved
-   pod land to the nearest pod street. Pods already reach the arterial frame;
-   gate1's corridor/connectivity asserts pass. No separate desire-line router
-   needed. *(2026-06-08)*
+3. ✅ **Connectors** — DONE BY CONSTRUCTION (Stage 2): `buildSubdivisions`
+   anchors each pod spine to existing roads (AnchorIndex, 2nd mouth,
+   branch-tip snap within 80 m) + the gap filler routes unserved pod land to
+   the nearest pod street. Pods reach the arterial frame; gate1's
+   corridor/connectivity asserts pass; the seed-sweep render shows pods tied
+   into the grid edge. A separate tangential desire-line router was
+   deliberately NOT built — it reintroduces the planar-graph fragility
+   [[decision-tensor-field-roads]] warns against, for a payoff the anchoring
+   already delivers. Closed. *(2026-06-08)*
 4. ✅ **Density coupling** — node-proximity in `buildDevelopmentMask`
    (`keep = keepProbForDensity × lerp(0.05,1,nodeProx)`, ramped in across the
    seam by `suburbAmount` so the dense belt + core are untouched; cell hash
@@ -91,13 +98,28 @@ with `startStreetsProfile` at tiers 3/6/8; merge gates on no regression.
    inter-pod / inter-hamlet stragglers go dark; pods + rural hamlets read as
    distinct clusters (`samples/verify49/podClusterPng.ts`). gate1 + determinism
    PASS. *(2026-06-08)*
-5. ⏭️ **Rural ring + per-tier spacing + per-seed variety** — DEFERRED (optional
-   polish, not blocking). Node spacing is already density-tied
-   (`SPACING_ANCHORS`, scales with the radial field across tiers); per-seed
-   variety comes from pod placement/squash/angle + multi-centre profiles +
-   odd-angle tensor patches. A dedicated rural ring-collector traced along a
-   density isocontour (`radiusAt`) is a nice-to-have if the rural edge later
-   reads too sparse — file as a follow-up rather than hold #49 open.
+5. ✅ **Per-tier spacing + per-seed variety** — DONE & VERIFIED. Node spacing is
+   density-tied (`SPACING_ANCHORS`, scales with the radial field across tiers —
+   tight inner, sparse rural on every seed). Per-seed variety confirmed by the
+   4-seed sweep: grid orientation (axis-aligned vs ~45°), arterial topology
+   (curved sweeps, kinked detours), and the central feature all differ — not
+   samey rerolls. The **rural ring-collector was deliberately DROPPED** (not
+   deferred): a road traced along a density isocontour is by construction a
+   concentric ring — the exact "Star Wars death star / lots of circles" read
+   the user rejected twice. Closed. *(2026-06-08)*
+
+## Follow-ups (out of #49 scope — file as new issues if pursued)
+
+- **Rural hamlet collector** — if the rural rim ever reads disconnected
+  in-scene, a BROKEN/organic collector linking a few rim hamlets (NOT a ring,
+  NOT a clean isocontour) could tie them in. Subtle to get right; only chase if
+  the live scene shows stranded hamlets.
+- **`ST_BAND_STOP` tuning** — the seed sweep shows the orthogonal grid still
+  owns most of the disc; pods are a rim garnish. The grid yields to pods at
+  sub 0.28 (≈ density 0.42 ≈ r ≈ 1.6 km). Lowering it hands more of the
+  mid-band to pod fabric — the highest-leverage knob for *more suburban
+  character*, but it shifts the grid↔pod hand-off, so it needs a gate1 + render
+  pass. Higher payoff than a rural ring if pushing suburban feel further.
 
 Files: new `lib/seed/suburbField.ts`; `tensorStreets.ts` (replace suburban
 pass, connector router); `density.ts` (nodeProx in dev mask);

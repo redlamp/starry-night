@@ -64,11 +64,27 @@ density by the extent and thinned per LOT — both rejected.
    tracing; the boot blueprint streams unwarped lines (≤14 m transient
    mismatch under the road reveal — accepted).
 
-## Remaining (#49)
+## Update — #49 shipped (2026-06-08)
 
-Residential warm-sparse window signature; per-seed suburb variety (warp
-amplitude + stub chance are seeded but the spread is narrow); rural cluster
-bias toward the spokes (development cells are uniform-random).
+Evolved past the original four-band model; #49 closed on these additions:
 
-Relates: [[plan-metro-suburbs-highways]], [[decision-additive-growth-citygen]],
-[[decision-tensor-field-roads]].
+- **Five bands now**: an `exurban` tier (EXURB_T = 0.20) sits between suburban
+  and rural — the residential belt densified (`suburbAmount` re-anchored
+  piecewise, KEEP_ANCHORS bumped) and the exurb band inherits the belt's OLD
+  looser look, so the fade gains a step.
+- **Mixed-use blend**: own archetype branch — no spires, but office/slab forms
+  bias toward the high-density-facing side via a positional `urban` gradient.
+- **Polycentric population field**: 1–6 centres, satellites fanned evenly;
+  profile authoring (centres/spread/shoulder/satellite) with preview-confirm.
+- **Development clusters on the pods** (node-proximity coupling in
+  `buildDevelopmentMask`) — inter-pod / inter-hamlet land goes dark; core +
+  dense belt byte-identical. See [[plan-suburb-node-fields]] Stage 4.
+
+The "remaining" items below were resolved or reframed: per-seed variety is
+verified adequate (seed sweep); rural cluster bias is now handled by the
+node-proximity coupling (development hugs hamlets, not spokes). Residential
+warm-sparse window signature is the one open thread → fold into window work,
+not #49.
+
+Relates: [[plan-metro-suburbs-highways]], [[plan-suburb-node-fields]],
+[[decision-additive-growth-citygen]], [[decision-tensor-field-roads]].
