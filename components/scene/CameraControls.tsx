@@ -156,6 +156,20 @@ export function CameraControls() {
     camera.updateProjectionMatrix();
   }, [mode, intent, camera]);
 
+  // Boot directly into fly mode (cameraMode persists since 2026-06-08): spawn
+  // at the saved intent pose — only the "still" effect above applies intent,
+  // so without this a fly boot would sit at the R3F default camera. Mount-once
+  // by design: intent edits mid-flight must not teleport the camera.
+  useEffect(() => {
+    if (useSceneStore.getState().cameraMode !== "fly") return;
+    const it = useSceneStore.getState().cameraIntent;
+    camera.position.set(it.position[0], it.position[1], it.position[2]);
+    camera.rotation.set(it.rotation[0], it.rotation[1], it.rotation[2]);
+    camera.fov = it.fov;
+    camera.updateProjectionMatrix();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     if (!tweenRequest) return;
     const fwd = new THREE.Vector3();

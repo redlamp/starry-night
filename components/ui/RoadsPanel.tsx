@@ -15,33 +15,42 @@ const TOPOLOGY_LABELS: Record<string, string> = {
 // Roads layer controls. "Highlight" tints a tier's ground ribbon in the scene
 // (highways gold, arterials blue, streets teal); Streetlights + Traffic toggle
 // the light layers. Traffic's own controls render right after this (CameraPanel).
-export function RoadsSection() {
+// Master highlight tri-switch — lives in the Roads SECTION HEADER (user
+// 2026-06-07: "highlight switch moves up"), so it's reachable without opening
+// the section. The per-tier rows below remain the fine-grained controls.
+export function RoadHighlightAction() {
   const showHighways = useSceneStore((s) => s.cityPlanning.showHighways);
   const showArterials = useSceneStore((s) => s.cityPlanning.showArterials);
   const showStreets = useSceneStore((s) => s.cityPlanning.showStreets);
   const setCityPlanning = useSceneStore((s) => s.setCityPlanning);
-  const showStreetlights = useSceneStore((s) => s.streetlights.enabled);
-  const setStreetlights = useSceneStore((s) => s.setStreetlights);
-
   const allOn = showHighways && showArterials && showStreets;
   const anyOn = showHighways || showArterials || showStreets;
   const highlightState: TriState = allOn ? "on" : anyOn ? "mixed" : "off";
-  // Parent click: turn all three on, unless all are already on → all off.
-  const toggleAllHighlights = () => {
-    const next = !allOn;
-    setCityPlanning({ showHighways: next, showArterials: next, showStreets: next });
-  };
+  return (
+    // No text label (user 2026-06-08) — the bare switch, like the other header
+    // actions; the aria-label below still names it.
+    <TriSwitch
+      state={highlightState}
+      // Turn all three on, unless all are already on → all off.
+      onClick={() => {
+        const next = !allOn;
+        setCityPlanning({ showHighways: next, showArterials: next, showStreets: next });
+      }}
+      label="Toggle all road highlights"
+    />
+  );
+}
 
+// The three highlight-tier toggle rows. Rendered inside the Highlight
+// sub-group (CameraPanel); the group HEADER carries the master tri-switch
+// (RoadHighlightAction).
+export function RoadHighlightTiers() {
+  const showHighways = useSceneStore((s) => s.cityPlanning.showHighways);
+  const showArterials = useSceneStore((s) => s.cityPlanning.showArterials);
+  const showStreets = useSceneStore((s) => s.cityPlanning.showStreets);
+  const setCityPlanning = useSceneStore((s) => s.setCityPlanning);
   return (
     <>
-      <div className="flex items-center justify-between gap-2">
-        <Subhead>Highlight</Subhead>
-        <TriSwitch
-          state={highlightState}
-          onClick={toggleAllHighlights}
-          label="Toggle all road highlights"
-        />
-      </div>
       <ToggleRow
         label="Highways"
         on={showHighways}
@@ -57,34 +66,14 @@ export function RoadsSection() {
         on={showStreets}
         onChange={(v) => setCityPlanning({ showStreets: v })}
       />
-      <hr className="border-foreground/10" />
-      <HeaderRow
-        label="Streetlights"
-        on={showStreetlights}
-        onChange={(v) => setStreetlights({ enabled: v })}
-      />
-      {showStreetlights ? <StreetlightControls /> : null}
     </>
   );
 }
 
 // Distance LOD (#52) — render-only attenuation/culling shared by streetlights +
-// traffic, so it renders BELOW both in the Roads panel (after TrafficSection).
-// `near`/`far` are the camera-distance ramp (m); past `cull` lights are dropped
-// (size 0). `cull` must be ≥ `far`; lower it on weaker GPUs (Pixel 6) for fps.
-export function LodSection() {
-  const lodEnabled = useSceneStore((s) => s.lod.enabled);
-  const setLod = useSceneStore((s) => s.setLod);
-  return (
-    <>
-      <hr className="border-foreground/10" />
-      <HeaderRow label="Distance LOD" on={lodEnabled} onChange={(v) => setLod({ enabled: v })} />
-      {lodEnabled ? <LodControls /> : null}
-    </>
-  );
-}
-
-function LodControls() {
+// traffic. `near`/`far` are the camera-distance ramp (m); past `cull` lights
+// are dropped (size 0). `cull` must be ≥ `far`; lower it on weaker GPUs for fps.
+export function LodControls() {
   const near = useSceneStore((s) => s.lod.near);
   const far = useSceneStore((s) => s.lod.far);
   const cull = useSceneStore((s) => s.lod.cull);
@@ -129,7 +118,7 @@ function LodControls() {
   );
 }
 
-function StreetlightControls() {
+export function StreetlightControls() {
   const size = useSceneStore((s) => s.streetlights.size);
   const brightness = useSceneStore((s) => s.streetlights.brightness);
   const setStreetlights = useSceneStore((s) => s.setStreetlights);
@@ -217,35 +206,6 @@ function TriSwitch({
         )}
       />
     </button>
-  );
-}
-
-function Subhead({ children }: { children: string }) {
-  return (
-    <div className="text-foreground/60 text-[11px] font-medium tracking-wide uppercase">
-      {children}
-    </div>
-  );
-}
-
-// A switch-on-the-header row (matches the Traffic header so both read as
-// same-level toggles).
-function HeaderRow({
-  label,
-  on,
-  onChange,
-}: {
-  label: string;
-  on: boolean;
-  onChange: (v: boolean) => void;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-2 pt-1">
-      <span className="text-foreground/60 text-[11px] font-medium tracking-wide uppercase">
-        {label}
-      </span>
-      <Switch checked={on} onCheckedChange={onChange} />
-    </div>
   );
 }
 

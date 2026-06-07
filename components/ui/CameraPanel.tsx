@@ -26,7 +26,6 @@ import { CITY_TIER_ORDER } from "@/lib/seed/topology";
 import { TIER_LABELS, tierKm } from "@/components/ui/cityTiers";
 import { cn, isTypingTarget } from "@/lib/utils";
 import {
-  AppWindow,
   Bug,
   Building,
   Building2,
@@ -45,7 +44,6 @@ import {
   Moon,
   MoonStar,
   Orbit as OrbitIcon,
-  Radio,
   RadioTower,
   RotateCcw,
   Route,
@@ -53,7 +51,6 @@ import {
   Search,
   Settings,
   Sparkles,
-  Sprout,
   Stars,
   Sun,
   TowerControl,
@@ -82,13 +79,25 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { DistrictsSection } from "@/components/ui/DistrictsPanel";
-import { RoadsSection, LodSection, CityDetailsSection } from "@/components/ui/RoadsPanel";
+import {
+  DistrictsSection,
+  DensitySection,
+  DistrictShellsAction,
+  PopulationHeatAction,
+} from "@/components/ui/DistrictsPanel";
+import {
+  RoadHighlightTiers,
+  StreetlightControls,
+  LodControls,
+  CityDetailsSection,
+  RoadHighlightAction,
+} from "@/components/ui/RoadsPanel";
 import { readTileCull, TILE_LAYERS } from "@/lib/scene/tileCullDebug";
 import {
   setCameraTab,
   currentCameraTab,
   tweenOrbitToDefault,
+  tweenOrbitTowards,
   tweenProjectionTo,
   type CameraTab,
 } from "@/lib/scene/cameraView";
@@ -135,7 +144,9 @@ function useTheme(): [Theme, (t: Theme) => void] {
 
 const THEME_OPTIONS: Array<{ value: Theme; icon: LucideIcon; label: string }> = [
   { value: "light", icon: Sun, label: "Light" },
-  { value: "grey", icon: Contrast, label: "Grey" },
+  // Internal value stays "grey" (html class + CSS variants key on it); only
+  // the visible label is American English.
+  { value: "grey", icon: Contrast, label: "Gray" },
   { value: "dark", icon: MoonStar, label: "Dark" },
 ];
 
@@ -175,7 +186,6 @@ function ThemeToggle() {
 }
 
 const RAD2DEG = 180 / Math.PI;
-const DEG2RAD = Math.PI / 180;
 
 function fmt(n: number, p = 2) {
   return n.toFixed(p);
@@ -185,28 +195,47 @@ function fmt(n: number, p = 2) {
 // surface a control filed under a non-obvious section label — e.g. the tensor
 // field toggle lives under "Debug View", not "Roads". Matching is AND-over-tokens
 // against label + value + keywords; matching sections auto-expand while searching.
+// Order mirrors the accordion's render order (user 2026-06-07).
 const SETTINGS_SECTIONS: { value: string; label: string; keywords: string }[] = [
+  {
+    value: "intro",
+    label: "Intro",
+    keywords: "wake reveal duration streetlight stars speed animation startup",
+  },
   {
     value: "pose",
     label: "Camera",
-    keywords: "position rotation fov projection orthographic perspective look at orient pose lens",
+    keywords:
+      "position rotation fov projection orthographic perspective look at orient pose lens live readout telemetry default free",
   },
   {
     value: "orbit",
     label: "Orbit",
     keywords: "elevation azimuth radius spin speed pause center focal auto rotate",
   },
-  { value: "districts", label: "Districts", keywords: "shells borders outline color region zones" },
   {
     value: "roads",
     label: "Roads",
     keywords:
-      "highways arterials streets traffic cars headlights taillights planning tier ribbons network",
+      "highways arterials streets traffic cars headlights taillights planning tier ribbons network highlight",
+  },
+  {
+    value: "window-profiles",
+    label: "Buildings",
+    keywords:
+      "windows lit ratio width range min max size flicker brightness emissive profiles glow building facade wall color colour saturation lightness hue masonry glass debug tint population district landuse archetype depth height wash",
+  },
+  {
+    value: "population",
+    label: "Population",
+    keywords:
+      "districts shells borders outline color region zones density heat map heatmap people residents traffic coupling estimate profile centres centers spread shoulder satellites gradient",
   },
   {
     value: "city-details",
     label: "City Details",
-    keywords: "shape circle square scale size buildings count footprint",
+    keywords:
+      "shape circle square scale size buildings count footprint seed reroll random refresh regenerate",
   },
   {
     value: "stars",
@@ -219,26 +248,17 @@ const SETTINGS_SECTIONS: { value: string; label: string; keywords: string }[] = 
     label: "Atmosphere",
     keywords: "fog haze ground near far density amount color exp2 distance depth atmosphere",
   },
-  { value: "windows", label: "Anti-Aliasing", keywords: "aa msaa samples smoothing jaggies moire" },
-  {
-    value: "window-profiles",
-    label: "Buildings",
-    keywords:
-      "windows lit ratio width range min max size flicker brightness emissive profiles glow building facade wall color colour saturation lightness hue masonry glass",
-  },
-  {
-    value: "intro",
-    label: "Intro",
-    keywords: "wake reveal duration streetlight stars speed animation startup",
-  },
-  { value: "live", label: "Live readout", keywords: "position rotation fov debug telemetry" },
-  { value: "seed", label: "Seed", keywords: "reroll random refresh regenerate city" },
-  { value: "perf", label: "Performance", keywords: "fps frame rate draw calls monitor gpu" },
   {
     value: "debug",
     label: "Debug View",
     keywords:
-      "render modes wireframe hidden tensor field flow visualization overlay building tint ground tile culling cull frustum freeze grid materialise",
+      "render modes wireframe hidden tensor field flow visualization overlay ground tile culling cull frustum freeze grid materialise city shape size tier deviation",
+  },
+  {
+    value: "perf",
+    label: "Performance",
+    keywords:
+      "fps frame rate draw calls monitor gpu aa msaa samples smoothing jaggies moire anti-aliasing",
   },
 ];
 
@@ -277,16 +297,8 @@ function persistPanelWidth(w: number) {
 }
 
 export function CameraPanel() {
-  const {
-    cameraMode,
-    cameraIntent,
-    cameraLive,
-    setCameraIntent,
-    resetCamera,
-    saveCurrentAsDefault,
-    revertToSaved,
-    hasSavedConfig,
-  } = useSceneStore();
+  const { cameraMode, cameraLive, resetCamera, saveCurrentAsDefault, revertToSaved, hasSavedConfig } =
+    useSceneStore();
   const orbitRestoreSet = useSceneStore((s) => s.orbitRestore !== null);
 
   const [hidden, setHidden] = useState(true);
@@ -334,7 +346,7 @@ export function CameraPanel() {
     return (
       <button
         onClick={() => setHidden(false)}
-        className="bg-popover text-foreground/85 border-foreground/10 active:bg-foreground/5 grey:bg-popover/70 grey:backdrop-blur-md pointer-events-auto fixed top-3 right-3 z-30 flex size-11 items-center justify-center rounded-full border shadow-lg"
+        className="bg-popover/70 text-foreground/85 border-foreground/10 active:bg-foreground/5 pointer-events-auto fixed top-3 right-3 z-30 flex size-11 items-center justify-center rounded-full border shadow-lg backdrop-blur-md"
         title="Show settings (H)"
         aria-label="Show settings"
       >
@@ -346,19 +358,12 @@ export function CameraPanel() {
   }
 
   const flying = cameraMode === "fly";
-  const orbiting = cameraMode === "orbit";
-  const locked = flying || orbiting;
   const modeTab = currentCameraTab(cameraMode, orbitRestoreSet);
   const livePos = cameraLive.position;
   const liveRotDeg: Vec3 = [
     cameraLive.rotation[0] * RAD2DEG,
     cameraLive.rotation[1] * RAD2DEG,
     cameraLive.rotation[2] * RAD2DEG,
-  ];
-  const intentRotDeg: Vec3 = [
-    cameraIntent.rotation[0] * RAD2DEG,
-    cameraIntent.rotation[1] * RAD2DEG,
-    cameraIntent.rotation[2] * RAD2DEG,
   ];
 
   const searching = query.trim().length > 0;
@@ -369,7 +374,7 @@ export function CameraPanel() {
 
   return (
     <div
-      className="border-foreground/10 bg-popover text-foreground grey:bg-popover/70 grey:backdrop-blur-md pointer-events-auto fixed top-0 right-0 bottom-0 z-20 flex h-dvh max-h-dvh max-w-full flex-col border-l shadow-2xl"
+      className="border-foreground/10 bg-popover/70 text-foreground pointer-events-auto fixed top-0 right-0 bottom-0 z-20 flex h-dvh max-h-dvh max-w-full flex-col border-l shadow-2xl backdrop-blur-md"
       style={{ width: panelWidth }}
     >
       {/* Grab the left edge to resize; double-click resets to the default width. */}
@@ -393,7 +398,6 @@ export function CameraPanel() {
             Settings
           </span>
           <div className="flex items-center gap-1.5">
-            <HeaderPauseButton tab={modeTab} />
             <ThemeToggle />
             <Button
               variant="ghost"
@@ -466,68 +470,10 @@ export function CameraPanel() {
             }}
             className="flex flex-col gap-1.5"
           >
-            <Section value="pose" icon={Camera} label="Camera" hidden={!show("pose")}>
-              <PoseSection
-                locked={locked}
-                flying={flying}
-                cameraIntent={cameraIntent}
-                intentRotDeg={intentRotDeg}
-                setCameraIntent={setCameraIntent}
-              />
-            </Section>
-
-            <Section value="orbit" icon={OrbitIcon} label="Orbit" hidden={!show("orbit")}>
-              <OrbitSection />
-            </Section>
-
-            <Section value="districts" icon={MapIcon} label="Districts" hidden={!show("districts")}>
-              <DistrictsSection />
-            </Section>
-            <Section value="roads" icon={Route} label="Roads" hidden={!show("roads")}>
-              <RoadsSection />
-              <TrafficSection />
-              <LodSection />
-            </Section>
-
-            <Section
-              value="city-details"
-              icon={Info}
-              label="City Details"
-              hidden={!show("city-details")}
-            >
-              <CityDetailsSection />
-            </Section>
-
-            <Section value="stars" icon={Stars} label="Stars" hidden={!show("stars")}>
-              <StarsSection />
-            </Section>
-
-            <Section value="moon" icon={Moon} label="Moon" hidden={!show("moon")}>
-              <MoonSection />
-            </Section>
-
-            <Section value="fog" icon={CloudFog} label="Atmosphere" hidden={!show("fog")}>
-              <FogSection />
-            </Section>
-
-            <Section
-              value="windows"
-              icon={AppWindow}
-              label="Anti-Aliasing"
-              hidden={!show("windows")}
-            >
-              <AntiAliasingSection />
-            </Section>
-
-            <Section
-              value="window-profiles"
-              icon={Building2}
-              label="Buildings"
-              hidden={!show("window-profiles")}
-            >
-              <BuildingsSection />
-            </Section>
-
+            {/* Section order is the user's reading order (2026-06-07): Intro,
+                Camera, Orbit, Roads, Buildings, Population, City Details*,
+                Stars, Moon, Atmosphere, Debug, Performance. (*unlisted — kept
+                with the city group.) */}
             <Section
               value="intro"
               icon={Sparkles}
@@ -541,38 +487,130 @@ export function CameraPanel() {
                   className="h-6 bg-amber-300 px-2 text-xs text-black hover:bg-amber-300/90"
                   onClick={() => useSceneStore.getState().playAllIntros()}
                 >
-                  ▶ play
+                  replay
                 </Button>
               }
             >
               <IntroSection />
             </Section>
 
-            <Section value="live" icon={Radio} label="Live readout" hidden={!show("live")}>
-              <div className="text-foreground/70 grid grid-cols-[5rem_1fr] gap-1 font-mono text-xs">
-                <div>position</div>
-                <div className="tabular-nums">
-                  {fmt(livePos[0])} {fmt(livePos[1])} {fmt(livePos[2])}
+            <Section
+              value="pose"
+              icon={Camera}
+              label="Camera"
+              hidden={!show("pose")}
+              action={<CameraPoseToggle />}
+            >
+              <PoseSection flying={flying} />
+              {/* Live readout — lives with the camera controls (user 2026-06-07). */}
+              <div className="border-foreground/10 border-t pt-2">
+                <div className="text-foreground/70 grid grid-cols-[5rem_1fr] gap-1 font-mono text-xs">
+                  <div>position</div>
+                  <div className="tabular-nums">
+                    {fmt(livePos[0])} {fmt(livePos[1])} {fmt(livePos[2])}
+                  </div>
+                  <div>rotation°</div>
+                  <div className="tabular-nums">
+                    {fmt(liveRotDeg[0], 1)} {fmt(liveRotDeg[1], 1)} {fmt(liveRotDeg[2], 1)}
+                  </div>
+                  <div>fov</div>
+                  <div className="tabular-nums">{fmt(cameraLive.fov)}</div>
                 </div>
-                <div>rotation°</div>
-                <div className="tabular-nums">
-                  {fmt(liveRotDeg[0], 1)} {fmt(liveRotDeg[1], 1)} {fmt(liveRotDeg[2], 1)}
-                </div>
-                <div>fov</div>
-                <div className="tabular-nums">{fmt(cameraLive.fov)}</div>
               </div>
             </Section>
 
-            <Section value="seed" icon={Sprout} label="Seed" hidden={!show("seed")}>
-              <SeedRow />
+            <Section
+              value="orbit"
+              icon={OrbitIcon}
+              label="Orbit"
+              hidden={!show("orbit")}
+              action={<OrbitStillToggle />}
+            >
+              <OrbitSection />
             </Section>
 
-            <Section value="perf" icon={Gauge} label="Performance" hidden={!show("perf")}>
-              <PerfReadout />
+            {/* Roads (user 2026-06-08): each block is its own expandable
+                sub-group — Highlight (tri-switch on header), Streetlights,
+                Traffic, Distance LOD — all collapsed by default. */}
+            <Section value="roads" icon={Route} label="Roads" hidden={!show("roads")}>
+              <SubGroup label="Highlight" action={<RoadHighlightAction />}>
+                <RoadHighlightTiers />
+              </SubGroup>
+              <StreetlightsGroup />
+              <TrafficGroup />
+              <LodGroup />
+            </Section>
+
+            <Section
+              value="window-profiles"
+              icon={Building2}
+              label="Buildings"
+              hidden={!show("window-profiles")}
+            >
+              <BuildingsSection />
+            </Section>
+
+            {/* Population (user 2026-06-07): the old Districts panel, expanded —
+                density layer (heat map + traffic coupling) above districts as
+                collapsible sub-groups; shells switch on the Districts header. */}
+            <Section
+              value="population"
+              icon={MapIcon}
+              label="Population"
+              hidden={!show("population")}
+            >
+              <SubGroup label="Density" action={<PopulationHeatAction />}>
+                <DensitySection />
+              </SubGroup>
+              <SubGroup label="Districts" action={<DistrictShellsAction />}>
+                <DistrictsSection />
+              </SubGroup>
+            </Section>
+
+            <Section
+              value="city-details"
+              icon={Info}
+              label="City Details"
+              hidden={!show("city-details")}
+            >
+              <SeedRow />
+              <CityDetailsSection />
+            </Section>
+
+            <Section value="stars" icon={Stars} label="Stars" hidden={!show("stars")}>
+              <StarsSection />
+            </Section>
+
+            <Section value="moon" icon={Moon} label="Moon" hidden={!show("moon")}>
+              <MoonSection />
+            </Section>
+
+            <Section
+              value="fog"
+              icon={CloudFog}
+              label="Atmosphere"
+              hidden={!show("fog")}
+              action={<AtmosphereToggle />}
+            >
+              <FogSection />
             </Section>
 
             <Section value="debug" icon={Bug} label="Debug View" hidden={!show("debug")}>
               <DebugSection />
+            </Section>
+
+            <Section
+              value="perf"
+              icon={Gauge}
+              label="Performance"
+              hidden={!show("perf")}
+              action={<FpsBadgeToggle />}
+            >
+              <PerfReadout />
+              {/* Anti-aliasing is a perf/quality trade — lives here (user 2026-06-07). */}
+              <div className="border-foreground/10 border-t pt-2">
+                <AntiAliasingSection />
+              </div>
             </Section>
           </Accordion>
           {searching && matchedValues.length === 0 && (
@@ -665,75 +703,16 @@ function Section({
   );
 }
 
-function PoseSection({
-  locked,
-  flying,
-  cameraIntent,
-  intentRotDeg,
-  setCameraIntent,
-}: {
-  locked: boolean;
-  flying: boolean;
-  cameraIntent: ReturnType<typeof useSceneStore.getState>["cameraIntent"];
-  intentRotDeg: Vec3;
-  setCameraIntent: ReturnType<typeof useSceneStore.getState>["setCameraIntent"];
-}) {
+// The manual position / orient-by / lookAt / rotation intent inputs were
+// removed 2026-06-07 (user): `locked = flying || orbiting` is true in every
+// camera mode that exists, so they were permanently disabled — pre-orbit-rig
+// plumbing. The live readout below the section covers the read side; the
+// store API (setCameraIntent) is unchanged for scripts + camera internals.
+function PoseSection({ flying }: { flying: boolean }) {
   return (
     <>
       <ProjectionRow />
       <FovOrSizeSlider />
-
-      <Vec3Header />
-      <Vec3Input
-        label="position"
-        value={cameraIntent.position}
-        disabled={locked}
-        onChange={(position) => setCameraIntent({ position })}
-      />
-
-      <div className="flex items-center justify-between">
-        <span className="text-foreground/40 text-xs tracking-wide uppercase">orient by</span>
-        <div className="flex gap-1">
-          {(["lookAt", "rotation"] as const).map((o) => (
-            <Button
-              key={o}
-              variant="secondary"
-              size="sm"
-              disabled={locked}
-              onClick={() => setCameraIntent({ orient: o })}
-              className={cn(
-                cameraIntent.orient === o
-                  ? "bg-foreground/25 text-foreground hover:bg-foreground/25"
-                  : "bg-foreground/5 text-foreground/60 hover:bg-foreground/15",
-              )}
-            >
-              {o}
-            </Button>
-          ))}
-        </div>
-      </div>
-
-      <Vec3Input
-        label="lookAt"
-        value={cameraIntent.lookAt}
-        disabled={locked || cameraIntent.orient !== "lookAt"}
-        onChange={(lookAt) => setCameraIntent({ lookAt, orient: "lookAt" })}
-      />
-
-      <Vec3Input
-        label="rotation"
-        hint="degrees"
-        step={1}
-        value={intentRotDeg}
-        disabled={locked || cameraIntent.orient !== "rotation"}
-        onChange={(rotDeg) =>
-          setCameraIntent({
-            rotation: [rotDeg[0] * DEG2RAD, rotDeg[1] * DEG2RAD, rotDeg[2] * DEG2RAD],
-            orient: "rotation",
-          })
-        }
-      />
-
       {flying ? <FlySpeedSlider /> : null}
     </>
   );
@@ -935,10 +914,47 @@ function BuildingsSection() {
       >
         <WindowsSection />
       </SubGroup>
-      <SubGroup label="Facade" defaultOpen>
+      <SubGroup label="Facade">
         <FacadeSection />
       </SubGroup>
+      {/* Debug tint (moved from Debug View, user 2026-06-08): header switch
+          gates the wash, dropdown picks the category. */}
+      <BuildingTintGroup />
     </>
+  );
+}
+
+// Building debug tint — washes the massing by a category (population, district,
+// landuse…). The header switch is the on/off (the retired "off" mode); the
+// dropdown remembers the category while off.
+function BuildingTintGroup() {
+  const tint = useSceneStore((s) => s.debug.buildingTint);
+  const setBuildingTint = useSceneStore((s) => s.setBuildingTint);
+  return (
+    <SubGroup
+      label="Debug tint"
+      action={
+        <Switch
+          checked={tint.enabled}
+          onCheckedChange={(enabled) => setBuildingTint({ enabled })}
+          title="Wash the buildings by the selected category"
+        />
+      }
+    >
+      <ModeSelect
+        value={tint.mode}
+        modes={TINT_MODES}
+        onChange={(v) => setBuildingTint({ mode: v as BuildingTintMode })}
+      />
+      <ValueSlider
+        label="intensity"
+        value={tint.intensity}
+        min={0}
+        max={1}
+        step={0.05}
+        onChange={(intensity) => setBuildingTint({ intensity })}
+      />
+    </SubGroup>
   );
 }
 
@@ -957,7 +973,7 @@ function FacadeSection() {
   return (
     <>
       <div className="text-foreground/55 text-[10px] leading-snug">
-        Wall colour. Each building flips a weighted coin (warm %) for its hue family — warm masonry
+        Wall color. Each building flips a weighted coin (warm %) for its hue family — warm masonry
         vs cool glass — then rolls one hue, saturation + lightness from these ranges (lightness
         skews dark, so pale towers stay rare). Live — no regen.
       </div>
@@ -1317,7 +1333,7 @@ function FogSection() {
           value={fog.color}
           onChange={(e) => setFog({ color: e.target.value })}
           className="border-foreground/15 h-7 w-12 cursor-pointer rounded border bg-transparent"
-          title="Fog colour (also drives the scene background)"
+          title="Fog color (also drives the scene background)"
         />
         <code className="text-foreground/60 tabular-nums">{fog.color}</code>
       </div>
@@ -1481,84 +1497,80 @@ function IntroSection() {
         </Tabs>
       </div>
 
-      <SubHeader label="Windows" />
-      <ValueSlider
-        label="duration"
-        value={intro.durationSec}
-        min={1}
-        max={480}
-        step={1}
-        onChange={(durationSec) => setIntroDuration(durationSec)}
-      />
-      <ValueSlider
-        label="off cycle"
-        value={intro.offCycleSec}
-        min={1}
-        max={480}
-        step={1}
-        onChange={(offCycleSec) => setOffCycle(offCycleSec)}
-      />
-      <ValueSlider
-        label="retrigger"
-        value={intro.retriggerSec}
-        min={1}
-        max={480}
-        step={1}
-        onChange={(retriggerSec) => setRetrigger(retriggerSec)}
-      />
-      <ValueSlider
-        label="jitter"
-        value={intro.cycleJitter}
-        min={0}
-        max={1}
-        step={0.02}
-        onChange={(cycleJitter) => setCycleJitter(cycleJitter)}
-      />
-      <ModeSelect
-        value={intro.mode}
-        modes={windowModes}
-        onChange={(v) => setIntroMode(v as typeof intro.mode)}
-      />
-      <ProgressRow label="progress" value={intro.progress} />
+      {/* Expandable wake-sequence groups (user 2026-06-08), collapsed by default. */}
+      <SubGroup label="Windows">
+        <ValueSlider
+          label="duration"
+          value={intro.durationSec}
+          min={1}
+          max={480}
+          step={1}
+          onChange={(durationSec) => setIntroDuration(durationSec)}
+        />
+        <ValueSlider
+          label="off cycle"
+          value={intro.offCycleSec}
+          min={1}
+          max={480}
+          step={1}
+          onChange={(offCycleSec) => setOffCycle(offCycleSec)}
+        />
+        <ValueSlider
+          label="retrigger"
+          value={intro.retriggerSec}
+          min={1}
+          max={480}
+          step={1}
+          onChange={(retriggerSec) => setRetrigger(retriggerSec)}
+        />
+        <ValueSlider
+          label="jitter"
+          value={intro.cycleJitter}
+          min={0}
+          max={1}
+          step={0.02}
+          onChange={(cycleJitter) => setCycleJitter(cycleJitter)}
+        />
+        <ModeSelect
+          value={intro.mode}
+          modes={windowModes}
+          onChange={(v) => setIntroMode(v as typeof intro.mode)}
+        />
+        <ProgressRow label="progress" value={intro.progress} />
+      </SubGroup>
 
-      <SubHeader label="Stars" />
-      <ValueSlider
-        label="duration"
-        value={starIntro.durationSec}
-        min={1}
-        max={480}
-        step={1}
-        onChange={(durationSec) => setStarIntroDuration(durationSec)}
-      />
-      <ModeSelect
-        value={starIntro.mode}
-        modes={starModes}
-        onChange={(v) => setStarIntroMode(v as typeof starIntro.mode)}
-      />
-      <ProgressRow label="progress" value={starIntro.progress} />
+      <SubGroup label="Stars">
+        <ValueSlider
+          label="duration"
+          value={starIntro.durationSec}
+          min={1}
+          max={480}
+          step={1}
+          onChange={(durationSec) => setStarIntroDuration(durationSec)}
+        />
+        <ModeSelect
+          value={starIntro.mode}
+          modes={starModes}
+          onChange={(v) => setStarIntroMode(v as typeof starIntro.mode)}
+        />
+        <ProgressRow label="progress" value={starIntro.progress} />
+      </SubGroup>
 
-      <SubHeader label="Streetlights" />
-      <ValueSlider
-        label="duration"
-        value={intro.streetlightDurationSec}
-        min={0.5}
-        max={120}
-        step={0.5}
-        onChange={(streetlightDurationSec) => setStreetlightDuration(streetlightDurationSec)}
-      />
+      <SubGroup label="Streetlights">
+        <ValueSlider
+          label="duration"
+          value={intro.streetlightDurationSec}
+          min={0.5}
+          max={120}
+          step={0.5}
+          onChange={(streetlightDurationSec) => setStreetlightDuration(streetlightDurationSec)}
+        />
+      </SubGroup>
     </>
   );
 }
 
-function SubHeader({ label }: { label: string }) {
-  return (
-    <div className="text-foreground/55 mt-1 border-t border-white/10 pt-2 text-[11px] font-medium tracking-wide uppercase">
-      {label}
-    </div>
-  );
-}
-
-// Collapsible variant of SubHeader: same look, plus a chevron toggle. Open
+// Collapsible group: an uppercase header with a chevron toggle. Open
 // state is transient (like the archetype filter) — not part of saved configs.
 // `action` renders in the header row as a SIBLING of the toggle button (same
 // pattern as Section) so clicking it doesn't collapse the group.
@@ -1602,7 +1614,15 @@ function SubGroup({
   );
 }
 
-const TINT_MODES = ["off", "district", "landuse", "archetype", "depth", "height"] as const;
+// Alphabetised, no "off" (the header switch gates it now, 2026-06-08).
+const TINT_MODES = [
+  "archetype",
+  "depth",
+  "district",
+  "height",
+  "landuse",
+  "population",
+] as const;
 const CITY_SHAPE_MODES = ["auto", ...CITY_SHAPES] as const;
 const RENDER_GROUP_LABELS: Record<RenderGroup, string> = {
   buildings: "Buildings",
@@ -1614,12 +1634,10 @@ const RENDER_GROUP_LABELS: Record<RenderGroup, string> = {
 
 // Debug View (#39): building tint (Slice A) + per-group render mode (Slice B).
 function DebugSection() {
-  const tint = useSceneStore((s) => s.debug.buildingTint);
   const renderModes = useSceneStore((s) => s.debug.renderModes);
   const showTensorField = useSceneStore((s) => s.debug.showTensorField);
   const tileOverlay = useSceneStore((s) => s.debug.tileOverlay);
   const tileFreeze = useSceneStore((s) => s.debug.tileFreeze);
-  const setBuildingTint = useSceneStore((s) => s.setBuildingTint);
   const setRenderMode = useSceneStore((s) => s.setRenderMode);
   const setAllRenderModes = useSceneStore((s) => s.setAllRenderModes);
   const setShowTensorField = useSceneStore((s) => s.setShowTensorField);
@@ -1721,22 +1739,6 @@ function DebugSection() {
         </div>
       </SubGroup>
 
-      <SubGroup label="Building tint">
-        <ModeSelect
-          value={tint.mode}
-          modes={TINT_MODES}
-          onChange={(v) => setBuildingTint({ mode: v as BuildingTintMode })}
-        />
-        <ValueSlider
-          label="intensity"
-          value={tint.intensity}
-          min={0}
-          max={1}
-          step={0.05}
-          onChange={(intensity) => setBuildingTint({ intensity })}
-        />
-      </SubGroup>
-
       <SubGroup label="Render modes">
         <RenderModeTabs
           label="all"
@@ -1769,7 +1771,7 @@ function DebugSection() {
         }
       >
         <div className="text-foreground/45 text-[11px] leading-snug">
-          The major-eigenvector field the roads follow — ticks coloured by grain angle.
+          The major-eigenvector field the roads follow — ticks colored by grain angle.
         </div>
       </SubGroup>
 
@@ -1829,17 +1831,61 @@ function TileCullReadout() {
   );
 }
 
-function TrafficSection() {
+// Streetlights — expandable group (user 2026-06-08), enable switch on header.
+function StreetlightsGroup() {
+  const enabled = useSceneStore((s) => s.streetlights.enabled);
+  const setStreetlights = useSceneStore((s) => s.setStreetlights);
+  return (
+    <SubGroup
+      label="Streetlights"
+      action={
+        <Switch
+          checked={enabled}
+          onCheckedChange={(v) => setStreetlights({ enabled: v })}
+          title="Streetlight glow layer on / off"
+        />
+      }
+    >
+      <StreetlightControls />
+    </SubGroup>
+  );
+}
+
+// Distance LOD — expandable group (user 2026-06-08), enable switch on header.
+function LodGroup() {
+  const enabled = useSceneStore((s) => s.lod.enabled);
+  const setLod = useSceneStore((s) => s.setLod);
+  return (
+    <SubGroup
+      label="Distance LOD"
+      action={
+        <Switch
+          checked={enabled}
+          onCheckedChange={(v) => setLod({ enabled: v })}
+          title="Distance attenuation + per-tile culling on / off"
+        />
+      }
+    >
+      <LodControls />
+    </SubGroup>
+  );
+}
+
+// Traffic — expandable group (user 2026-06-08), enable switch on header.
+function TrafficGroup() {
   const traffic = useSceneStore((s) => s.traffic);
   const setTraffic = useSceneStore((s) => s.setTraffic);
   return (
-    <>
-      <div className="flex items-center justify-between gap-2 pt-1">
-        <span className="text-foreground/60 text-[11px] font-medium tracking-wide uppercase">
-          Traffic
-        </span>
-        <Switch checked={traffic.enabled} onCheckedChange={(v) => setTraffic({ enabled: v })} />
-      </div>
+    <SubGroup
+      label="Traffic"
+      action={
+        <Switch
+          checked={traffic.enabled}
+          onCheckedChange={(v) => setTraffic({ enabled: v })}
+          title="Car head/tail-light layer on / off"
+        />
+      }
+    >
       <ValueSlider
         label="density"
         value={traffic.density}
@@ -1873,7 +1919,7 @@ function TrafficSection() {
         step={0.1}
         onChange={(minor) => setTraffic({ minor })}
       />
-    </>
+    </SubGroup>
   );
 }
 
@@ -1940,38 +1986,23 @@ function ProgressRow({ label, value }: { label: string; value: number }) {
   );
 }
 
-// Pause/resume in the panel header. Contextual: in Orbit it pauses the camera
-// auto-revolution (orbitPaused); in Top-down — a static pose — it freezes the
-// scene animation clock (paused) so traffic / twinkle / flicker hold. Hidden in
-// Fly (you're driving manually). Replaces the old per-mode detail box.
-function HeaderPauseButton({ tab }: { tab: CameraTab }) {
+// Orbit section header action (user 2026-06-08): pause/resume the camera
+// auto-revolution, moved from the panel header. Label = the CURRENT state
+// ("orbit" revolving / "still" paused), same sizing as the other header
+// actions (CameraPoseToggle). Space still toggles it.
+function OrbitStillToggle() {
   const orbitPaused = useSceneStore((s) => s.orbitPaused);
   const setOrbitPaused = useSceneStore((s) => s.setOrbitPaused);
-  const paused = useSceneStore((s) => s.paused);
-  const setPaused = useSceneStore((s) => s.setPaused);
-  if (tab === "fly") return null;
-  const isOrbit = tab === "orbit";
-  const active = isOrbit ? orbitPaused : paused;
-  const toggle = () => (isOrbit ? setOrbitPaused(!orbitPaused) : setPaused(!paused));
-  const what = isOrbit ? "orbit revolution" : "scene animation";
   return (
     <Button
+      variant="secondary"
       size="sm"
-      onClick={toggle}
-      title={
-        active
-          ? `Resume ${what}${isOrbit ? " (Space)" : ""}`
-          : `Pause ${what}${isOrbit ? " (Space)" : ""}`
-      }
-      aria-label={active ? `Resume ${what}` : `Pause ${what}`}
-      className={cn(
-        "min-w-[5.5rem] gap-1.5 font-medium",
-        active
-          ? "bg-emerald-400 text-black hover:bg-emerald-400/90"
-          : "bg-sky-400 text-black hover:bg-sky-400/90",
-      )}
+      className="bg-foreground/10 text-foreground/80 hover:bg-foreground/20 h-6 px-2 text-xs"
+      title={orbitPaused ? "Resume the orbit revolution (Space)" : "Pause the orbit revolution (Space)"}
+      aria-label={orbitPaused ? "Resume orbit revolution" : "Pause orbit revolution"}
+      onClick={() => setOrbitPaused(!orbitPaused)}
     >
-      {active ? "▶ Resume" : "⏸ Pause"}
+      {orbitPaused ? "still" : "orbit"}
     </Button>
   );
 }
@@ -2110,62 +2141,7 @@ function MoonReadout() {
 
 // ValueSlider moved to components/ui/value-slider.tsx (shared with RoadsPanel,
 // upgraded with a base-ui number-field stepper + label scrubbing).
-
-function Vec3Header() {
-  return (
-    <div className="flex items-center gap-2 text-xs">
-      <div className="w-16 shrink-0" />
-      {(["X", "Y", "Z"] as const).map((axis) => (
-        <span
-          key={axis}
-          className="text-foreground/40 flex-1 text-center text-[11px] font-medium tracking-wider uppercase"
-        >
-          {axis}
-        </span>
-      ))}
-    </div>
-  );
-}
-
-function Vec3Input({
-  label,
-  value,
-  disabled,
-  hint,
-  step = 0.5,
-  onChange,
-}: {
-  label: string;
-  value: Vec3;
-  disabled: boolean;
-  hint?: string;
-  step?: number;
-  onChange: (v: Vec3) => void;
-}) {
-  return (
-    <div className="flex items-center gap-2 text-xs">
-      <div className="text-foreground/60 flex w-16 shrink-0 flex-col">
-        <span>{label}</span>
-        {hint ? <span className="text-foreground/35 text-[10px]">{hint}</span> : null}
-      </div>
-      {(["x", "y", "z"] as const).map((axis, i) => (
-        <input
-          key={axis}
-          type="number"
-          step={step}
-          disabled={disabled}
-          value={value[i]}
-          onChange={(e) => {
-            const v = [...value] as Vec3;
-            v[i] = parseFloat(e.target.value) || 0;
-            onChange(v);
-          }}
-          className="border-foreground/15 bg-background/60 text-foreground w-0 min-w-0 flex-1 rounded border px-1.5 py-1 tabular-nums disabled:opacity-50"
-        />
-      ))}
-    </div>
-  );
-}
+// Vec3Header/Vec3Input removed with the manual camera-intent inputs (2026-06-07).
 
 function SeedRow() {
   const seed = useSceneStore((s) => s.masterSeed);
@@ -2210,13 +2186,89 @@ function SeedRow() {
   );
 }
 
+function FpsBadgeToggle() {
+  const fpsHud = useSceneStore((s) => s.fpsHud);
+  const setFpsHud = useSceneStore((s) => s.setFpsHud);
+  return (
+    <label className="flex cursor-pointer items-center gap-2 text-xs">
+      <span className="text-foreground/70">badge</span>
+      <Switch checked={fpsHud} onCheckedChange={setFpsHud} title="Show the floating FPS badge" />
+    </label>
+  );
+}
+
+// Camera header action (user 2026-06-07): one-press toggle between the DEFAULT
+// orbit framing and the user's own ("free") pose. Pressing "default" snapshots
+// the current orbit (elevation / radius / orthoSize — azimuth is deliberately
+// left alone, same as Default Orbit, so nothing spins) and tweens to the
+// default framing; pressing "free" tweens back to the snapshot. Transient —
+// the snapshot is component state, never persisted.
+function CameraPoseToggle() {
+  const [freePose, setFreePose] = useState<{
+    elevationDeg: number;
+    radius: number;
+    orthoSize: number;
+  } | null>(null);
+  const atDefault = freePose !== null;
+  return (
+    <Button
+      variant="secondary"
+      size="sm"
+      className="bg-foreground/10 text-foreground/80 hover:bg-foreground/20 h-6 px-2 text-xs"
+      title={
+        atDefault
+          ? "Return to the pose you were at before snapping to default"
+          : "Snap to the default orbit framing (remembers your current pose)"
+      }
+      onClick={() => {
+        const s = useSceneStore.getState();
+        if (atDefault && freePose) {
+          if (s.cameraMode !== "orbit") s.setCameraMode("orbit");
+          tweenOrbitTowards(freePose.elevationDeg, freePose.radius, freePose.orthoSize);
+          setFreePose(null);
+        } else {
+          setFreePose({
+            elevationDeg: s.orbit.elevationDeg,
+            radius: s.orbit.radius,
+            orthoSize: s.orthoSize,
+          });
+          tweenOrbitToDefault();
+        }
+      }}
+    >
+      {/* Label = the CURRENT mode (user 2026-06-07), not the action — the
+          title text explains what clicking does. */}
+      {atDefault ? "default" : "free"}
+    </Button>
+  );
+}
+
+// Atmosphere header action (user 2026-06-07): master on/off for the whole
+// section — fog AND ground haze together. Checked while either is on; the
+// individual switches inside the section still control each independently.
+function AtmosphereToggle() {
+  const fogOn = useSceneStore((s) => s.fog.enabled);
+  const hazeOn = useSceneStore((s) => s.haze.enabled);
+  const setFog = useSceneStore((s) => s.setFog);
+  const setHaze = useSceneStore((s) => s.setHaze);
+  return (
+    <Switch
+      checked={fogOn || hazeOn}
+      onCheckedChange={(v) => {
+        setFog({ enabled: v });
+        setHaze({ enabled: v });
+      }}
+      title="Toggle fog + ground haze together"
+      aria-label="Toggle atmosphere"
+    />
+  );
+}
+
 function PerfReadout() {
   const perf = useSceneStore((s) => s.perf);
   const qualityTier = useSceneStore((s) => s.qualityTier);
   const setQualityTier = useSceneStore((s) => s.setQualityTier);
   const setStars = useSceneStore((s) => s.setStars);
-  const fpsHud = useSceneStore((s) => s.fpsHud);
-  const setFpsHud = useSceneStore((s) => s.setFpsHud);
   const tierCfg = QUALITY_TIERS[qualityTier];
   const fpsColor =
     perf.fps >= 55 ? "text-emerald-300" : perf.fps >= 35 ? "text-amber-300" : "text-rose-400";
@@ -2246,10 +2298,6 @@ function PerfReadout() {
             ))}
           </SelectContent>
         </Select>
-      </div>
-      <div className="flex items-center gap-2 text-xs">
-        <span className="text-foreground/70 w-14 shrink-0">fps badge</span>
-        <Switch checked={fpsHud} onCheckedChange={setFpsHud} />
       </div>
       <div className="text-foreground/70 grid grid-cols-[5rem_1fr] gap-1 font-mono text-xs">
         <div>dpr cap</div>

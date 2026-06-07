@@ -178,6 +178,26 @@ function assignCharacters(
     assigned.add(subCand[s].i);
   }
 
+  // 3c. Outer "edge-city" subcentre pockets (user 2026-06-07: "a few more
+  //     pockets of subcentre"). Real metros grow secondary tower clusters out
+  //     in the suburban belt (Bellevue / Tysons pattern); a seeded roll per
+  //     candidate so not every seed grows them. Their density character floor
+  //     keeps each pocket reading as a bright lit island in the sprawl.
+  const rOuterSub = Math.min(2300, maxD * 0.75);
+  const outerTarget = Math.max(1, Math.round(n * 0.06));
+  const outerCand = dist
+    .filter((o) => !assigned.has(o.i) && o.d >= R_SUBCENTRE && o.d < rOuterSub)
+    .sort((a, b) => b.area - a.area);
+  let outers = 0;
+  for (const o of outerCand) {
+    if (outers >= outerTarget) break;
+    if (rng() < 0.45) {
+      chars[o.i] = "subcentre";
+      assigned.add(o.i);
+      outers++;
+    }
+  }
+
   // 4. Industrial — a thin fringe at the rim (furthest districts past half the
   //    outer radius: docks / yards on the edge). Scales gently with city size.
   const industrialTarget = Math.max(1, Math.round(n * 0.08));
@@ -191,11 +211,23 @@ function assignCharacters(
     }
   }
 
-  // 5. Remaining by absolute band: a mixed-use transition belt inside R_MIXED,
-  //    else residential — the low-density bulk that fills the rest of the city.
+  // 5. Remaining: a GRADED mixed-use → residential transition (user
+  //    2026-06-07: "more of a gradient from downtown to residential, a few
+  //    more pockets of mixed-use"). Instead of a hard ring, each district
+  //    rolls against a probability that fades with radius across the belt —
+  //    so residential pockets appear progressively inside the belt and
+  //    mixed-use pockets (neighbourhood retail / apartment nodes) persist
+  //    beyond it. The belt edge is the absolute band CAPPED at a fraction of
+  //    the extent (#49): R_MIXED was tuned at Metro scale, where 1900 m is
+  //    the inner transition — at small tiers it swallowed the whole map, so a
+  //    4 km city had apartment-block periphery and no house ring at all.
+  //    Metro+ is unchanged (0.72·half ≥ 1900 from half ≈ 2640).
+  const rMixed = Math.min(R_MIXED, topo.halfExtent * 0.72);
   for (const o of dist) {
     if (assigned.has(o.i)) continue;
-    chars[o.i] = o.d < R_MIXED ? "mixed-use" : "residential";
+    const t = (o.d - R_SUBCENTRE) / Math.max(1, rMixed - R_SUBCENTRE);
+    const pMixed = t <= 0 ? 0.95 : t >= 1 ? 0.12 : 0.95 - 0.7 * t;
+    chars[o.i] = rng() < pMixed ? "mixed-use" : "residential";
   }
 
   return chars;

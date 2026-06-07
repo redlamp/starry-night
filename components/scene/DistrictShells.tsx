@@ -18,9 +18,10 @@ const BORDER_Y = 0.3; // just above the fill so the line is never z-hidden
 
 export function DistrictShells({ masterSeed }: { masterSeed: string }) {
   const show = useSceneStore((s) => s.cityPlanning.showDistrictShells);
+  const highlightId = useSceneStore((s) => s.highlightDistrictId);
   const citySize = useSceneStore((s) => s.citySize);
 
-  const group = useMemo(() => {
+  const { group, cellsByDistrict, stepX, stepZ } = useMemo(() => {
     void citySize; // tier drives the module-level gen extent (#58) — a switch must rebuild
     const field = tensorDistrictField(masterSeed);
     const { minX, maxX, minZ, maxZ } = field.bounds;
@@ -41,15 +42,23 @@ export function DistrictShells({ masterSeed }: { masterSeed: string }) {
 
     // --- Fill: one quad per occupied cell ---
     const cells: Array<{ x: number; z: number; color: string }> = [];
+    // Cells grouped by owning district — the hover-highlight layer (Population
+    // panel district list) builds its emphasis mesh from these.
+    const cellsByDistrict = new Map<string, { cells: Array<{ x: number; z: number }>; color: string }>();
     for (let gx = 0; gx < OVERLAY_STEPS; gx++) {
       for (let gz = 0; gz < OVERLAY_STEPS; gz++) {
         const idx = idxGrid[gx][gz];
         if (idx < 0) continue;
-        cells.push({
-          x: minX + (gx + 0.5) * stepX,
-          z: minZ + (gz + 0.5) * stepZ,
-          color: field.districts[idx].color,
-        });
+        const x = minX + (gx + 0.5) * stepX;
+        const z = minZ + (gz + 0.5) * stepZ;
+        const d = field.districts[idx];
+        cells.push({ x, z, color: d.color });
+        let entry = cellsByDistrict.get(d.id);
+        if (!entry) {
+          entry = { cells: [], color: d.color };
+          cellsByDistrict.set(d.id, entry);
+        }
+        entry.cells.push({ x, z });
       }
     }
 
@@ -122,8 +131,43 @@ export function DistrictShells({ masterSeed }: { masterSeed: string }) {
     const g = new THREE.Group();
     g.add(im);
     g.add(lines);
-    return g;
+    return { group: g, cellsByDistrict, stepX, stepZ };
   }, [masterSeed, citySize]);
+
+  // Hover highlight: the hovered district's cells, brighter + above everything
+  // (renders with or without the base shells — hover alone reveals a district).
+  const highlight = useMemo(() => {
+    if (!highlightId) return null;
+    const entry = cellsByDistrict.get(highlightId);
+    if (!entry || entry.cells.length === 0) return null;
+    const geo = new THREE.PlaneGeometry(stepX, stepZ);
+    const color = new THREE.Color(entry.color).lerp(new THREE.Color("#ffffff"), 0.25);
+    const mat = new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity: 0.8,
+      depthWrite: false,
+      depthTest: false,
+      fog: false,
+      side: THREE.DoubleSide,
+      toneMapped: false,
+    });
+    const im = new THREE.InstancedMesh(geo, mat, entry.cells.length);
+    im.frustumCulled = false;
+    im.renderOrder = 1002; // above fill, borders, and the population heat map
+    const matrix = new THREE.Matrix4();
+    const pos = new THREE.Vector3();
+    const quat = new THREE.Quaternion();
+    const scale = new THREE.Vector3(1, 1, 1);
+    quat.setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0));
+    for (let i = 0; i < entry.cells.length; i++) {
+      pos.set(entry.cells[i].x, BORDER_Y + 0.1, entry.cells[i].z);
+      matrix.compose(pos, quat, scale);
+      im.setMatrixAt(i, matrix);
+    }
+    im.instanceMatrix.needsUpdate = true;
+    return im;
+  }, [highlightId, cellsByDistrict, stepX, stepZ]);
 
   useEffect(() => {
     return () => {
@@ -136,6 +180,19 @@ export function DistrictShells({ masterSeed }: { masterSeed: string }) {
     };
   }, [group]);
 
-  if (!show) return null;
-  return <primitive object={group} />;
+  useEffect(() => {
+    return () => {
+      if (!highlight) return;
+      highlight.geometry.dispose();
+      (highlight.material as THREE.Material).dispose();
+    };
+  }, [highlight]);
+
+  if (!show && !highlight) return null;
+  return (
+    <>
+      {show && <primitive object={group} />}
+      {highlight && <primitive object={highlight} />}
+    </>
+  );
 }

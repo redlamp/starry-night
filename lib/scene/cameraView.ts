@@ -8,7 +8,7 @@ import {
   type RenderGroup,
   type RenderMode,
 } from "@/lib/state/sceneStore";
-import { CITY_HALF_EXTENT } from "@/lib/seed/topology";
+import { maxHalfExtent } from "@/lib/seed/topology";
 
 // Shared camera-mode logic — the single source of truth for the Fly / Orbit /
 // Top-down switch, used by the Camera panel's mode tabs, the `t` hotkey, and the
@@ -24,9 +24,12 @@ import { CITY_HALF_EXTENT } from "@/lib/seed/topology";
 
 const ORBIT_TWEEN_SEC = 2.0;
 
-// Top-down must frame the WHOLE city (± CITY_HALF_EXTENT) plus a margin, in any
-// aspect. orthoSize is the ortho frustum half-height; half-width = aspect ×
-// orthoSize (see ProjectionBlender), so the limiting axis sets
+// Top-down must frame the WHOLE city plus a margin, in any aspect — the
+// CURRENT tier's gen extent (maxHalfExtent, runtime), not the fixed look-scale
+// CITY_HALF_EXTENT, which stopped tracking the city when the size tiers (#58)
+// landed (a Metropolis only showed its central 3 km). orthoSize is the ortho
+// frustum half-height; half-width = aspect × orthoSize (see ProjectionBlender),
+// so the limiting axis sets
 //   orthoSize = H / min(1, aspect).
 // The margin also absorbs the orbit-centre Z offset (the camera pivots on the
 // orbit centre, not the city centre). Perspective frames the same extent at
@@ -35,7 +38,7 @@ const ORBIT_TWEEN_SEC = 2.0;
 const TOP_DOWN_MARGIN = 1.15;
 
 function topDownFraming(): { orthoSize: number; radius: number } {
-  const H = CITY_HALF_EXTENT * TOP_DOWN_MARGIN;
+  const H = maxHalfExtent() * TOP_DOWN_MARGIN;
   const aspect =
     typeof window !== "undefined" ? window.innerWidth / Math.max(1, window.innerHeight) : 1;
   const orthoSize = H / Math.min(1, aspect);
@@ -44,7 +47,8 @@ function topDownFraming(): { orthoSize: number; radius: number } {
   return { orthoSize, radius };
 }
 
-function tweenOrbitTowards(
+// Exported for the Camera header's default/free pose toggle (CameraPanel).
+export function tweenOrbitTowards(
   targetEl: number,
   targetR: number,
   targetOrtho: number,

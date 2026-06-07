@@ -33,6 +33,8 @@ export function Traffic({ masterSeed }: { masterSeed: string }) {
   const highway = useSceneStore((s) => s.traffic.highway);
   const arterial = useSceneStore((s) => s.traffic.arterial);
   const minor = useSceneStore((s) => s.traffic.minor);
+  // `?? 1` — configs saved before population coupling landed lack the key.
+  const popCoupling = useSceneStore((s) => s.traffic.popCoupling ?? 1);
   const cityShape = useSceneStore((s) => s.cityShape);
   const cityShapeScale = useSceneStore((s) => s.cityShapeScale);
   const citySize = useSceneStore((s) => s.citySize);
@@ -45,6 +47,7 @@ export function Traffic({ masterSeed }: { masterSeed: string }) {
       { highway, arterial, minor },
       cityShape,
       cityShapeScale,
+      popCoupling,
     );
 
     // #55 tile partition: a car shuttles between aA and aB (shader-animated), so
@@ -138,7 +141,7 @@ export function Traffic({ masterSeed }: { masterSeed: string }) {
     const pts = new THREE.Points(geo, mat);
     pts.frustumCulled = false; // positions live in the shader; bounds are unknown
     return { points: pts, partition: part as TilePartition, channels: chans };
-  }, [masterSeed, density, highway, arterial, minor, cityShape, cityShapeScale, citySize]);
+  }, [masterSeed, density, highway, arterial, minor, popCoupling, cityShape, cityShapeScale, citySize]);
 
   useEffect(() => {
     return () => {

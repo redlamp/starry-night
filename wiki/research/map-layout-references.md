@@ -12,6 +12,21 @@ Real city-plan screenshots (captured 2026-05-30) + textual references for
 grounding the grid-first city rework ([[decision-grid-first-city-generation]],
 [[plan-grid-first-rework]]). Images live in `assets/`.
 
+## Odd-angle core districts (added 2026-06-08, #49 round 4)
+
+User-supplied OSM captures grounding the tensor-field grid PATCHES
+(`tensorField.ts` — hard-override regions with a smoothstep seam band):
+
+- `![[San Diego California.jpg]]` — **Barrio Logan / Golden Hill run ~45°**
+  against the downtown grid; each rotated zone is district-sized and
+  internally coherent, seams are short curved connector blocks.
+- `![[San Francisco 1 California.jpg]]` — **Market St** as the single diagonal
+  seam between the northern grid and SoMa's rotated, larger-block grid.
+
+Takeaway: the metro core keeps its grid but carries 1–3 district-scale
+rotated patches; the seam reads as bent connector streets / one diagonal,
+never as a gradual warp. Relates: [[suburban-street-patterns]].
+
 ## Seam fork — RESOLVED (tiered / seam-as-arterial)
 
 The plan's open question: promote **every** Voronoi district boundary to a thin

@@ -23,6 +23,7 @@ import { FogBoundsMarkers } from "./FogBoundsMarkers";
 import { GroundHaze } from "./GroundHaze";
 import { Roads } from "./Roads";
 import { DistrictShells } from "./DistrictShells";
+import { PopulationHeatmap } from "./PopulationHeatmap";
 import { TensorFieldOverlay } from "./TensorFieldOverlay";
 import { TileCullOverlay } from "./TileCullOverlay";
 import { Traffic } from "./Traffic";
@@ -61,7 +62,8 @@ export function Scene() {
       <ProjectionBlender />
       <PerfMonitor />
       <TimeTicker />
-      <IntroTicker />
+      {/* City cascade waits for cityReady (user 2026-06-08) — see IntroTicker. */}
+      <IntroTicker cityReady={cityReady} />
       <FogTicker />
       <FogBoundsMarkers />
 
@@ -114,6 +116,7 @@ export function Scene() {
           {/* Planning overlays — each respects its own visibility flag (default
               off). Highway/arterial/street tier tinting now lives in <Roads/>. */}
           <DistrictShells masterSeed={masterSeed} />
+          <PopulationHeatmap masterSeed={masterSeed} />
           <TensorFieldOverlay masterSeed={masterSeed} />
           <TileCullOverlay masterSeed={masterSeed} />
         </>

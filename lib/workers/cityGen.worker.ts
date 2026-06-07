@@ -19,6 +19,11 @@ import { buildCityBundle } from "@/lib/seed/cityGen";
 import { setCityTier, type CityTier } from "@/lib/seed/topology";
 import { setCitySketch } from "@/lib/seed/citySketch";
 import { setFieldDeviation } from "@/lib/seed/tensorField";
+import {
+  setDensityProfile,
+  DEFAULT_DENSITY_PROFILE,
+  type DensityProfile,
+} from "@/lib/seed/density";
 import type { CityShapeSetting } from "@/lib/seed/cityShape";
 import type { SketchTensorSource } from "@/lib/sketch/orientationField";
 
@@ -34,6 +39,8 @@ export type CityGenRequest = {
   sketch: SketchTensorSource | null;
   // #51: runtime tensor-field deviation scale (1 = the seeded default).
   deviation: number;
+  // #49: population profile (centres / spread / shoulder / satellite strength).
+  density: DensityProfile;
 };
 
 // One traced road, decimated for display: [x0, z0, x1, z1, ...].
@@ -54,11 +61,12 @@ const DECIMATE = 5; // keep every 5th vertex (plus the last) for the display tra
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
 
 ctx.onmessage = (e: MessageEvent<CityGenRequest>) => {
-  const { reqId, seed, shape, scale, tier, sketch, deviation } = e.data;
+  const { reqId, seed, shape, scale, tier, sketch, deviation, density } = e.data;
   try {
     setCityTier(tier); // the worker's module extent is independent of the main thread's
     setCitySketch(sketch ?? null); // ...and so is its sketch registry (#40)
     setFieldDeviation(deviation ?? 1); // ...and its deviation scale (#51); default = seeded
+    setDensityProfile(density ?? DEFAULT_DENSITY_PROFILE); // ...and the population profile (#49)
     let batch: TracedLine[] = [];
     const flush = () => {
       if (!batch.length) return;

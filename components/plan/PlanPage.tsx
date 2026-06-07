@@ -10,6 +10,7 @@ import {
   Milestone,
   Route,
   Lightbulb,
+  Radar,
   Ruler,
   Scaling,
   Spline,
@@ -54,6 +55,7 @@ import { isTypingTarget } from "@/lib/utils";
 // Sorted largest feature → smallest, per the requested order.
 const LAYER_KEYS: (keyof PlanLayers)[] = [
   "districts",
+  "density",
   "buildings",
   "streets",
   "arterials",
@@ -63,6 +65,7 @@ const LAYER_KEYS: (keyof PlanLayers)[] = [
 
 const LAYER_ICONS: Record<keyof PlanLayers, React.ReactNode> = {
   districts: <Map size={16} />,
+  density: <Radar size={16} />,
   buildings: <Building2 size={16} />,
   streets: <Spline size={16} />,
   arterials: <Route size={16} />,
@@ -98,6 +101,7 @@ export function PlanPage() {
   const [cellSize, setCellSize] = useState<number | null>(null);
   const [layers, setLayers] = useState<PlanLayers>({
     districts: true,
+    density: false,
     buildings: true,
     highways: true,
     arterials: true,

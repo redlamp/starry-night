@@ -1,5 +1,6 @@
 import seedrandom from "seedrandom";
 import { generateCity } from "./cityGen";
+import { buildPopulationField } from "./population";
 import type { CityShapeSetting } from "./cityShape";
 
 // Deterministic car head/tail-light placement (research strand D). Each "car" is
@@ -82,6 +83,23 @@ function tierCfg(tier: "highway" | "arterial" | "minor"): TierCfg {
   }
 }
 
+// Population coupling (user 2026-06-07): a road's business reflects the area
+// it's in. Per macro-segment, local population (0..1) maps to a car-count
+// multiplier — downtown arterials keep their stream, remote ones carry a
+// trickle. The floor keeps no road completely dead; the sub-linear exponent
+// stops mid-density suburbs from emptying out. Highways are EXEMPT: they carry
+// through-traffic that doesn't care who lives beside the embankment (same
+// reasoning as the streetlight "mains exempt" rule).
+const BUSY_FLOOR = 0.12;
+const BUSY_GAMMA = 0.7;
+// Local pop (0..1) at which a road reads "fully busy" — saturating well below
+// the p99 peak keeps downtown at its established traffic level; the coupling
+// only ever *removes* cars from the quiet bands.
+const BUSY_REF = 0.45;
+function busyness(pop: number): number {
+  return BUSY_FLOOR + (1 - BUSY_FLOOR) * Math.min(1, Math.pow(pop / BUSY_REF, BUSY_GAMMA));
+}
+
 export function buildTraffic(
   masterSeed: string,
   density = 1,
@@ -92,9 +110,11 @@ export function buildTraffic(
   },
   shape: CityShapeSetting = "square",
   shapeScale = 1,
+  popCoupling = 1, // 0 = uniform (old look), 1 = fully population-driven
 ): TrafficData {
   const rng = seedrandom(`${masterSeed}::traffic`);
   const city = generateCity(masterSeed, shape, shapeScale);
+  const pop = popCoupling > 0 ? buildPopulationField(masterSeed, shape, shapeScale) : null;
 
   type Seg = {
     ax: number;
@@ -108,7 +128,7 @@ export function buildTraffic(
   const segs: Seg[] = [];
   const collect = (verts: Vert[], tier: "highway" | "arterial" | "minor") => {
     const cfg = tierCfg(tier);
-    const mult = tierMul[tier];
+    const baseMult = tierMul[tier];
     if (verts.length < 2) return;
     let startIdx = 0;
     let accum = 0;
@@ -119,7 +139,14 @@ export function buildTraffic(
         const a = verts[startIdx];
         const b = verts[i];
         const len = Math.hypot(b.x - a.x, b.z - a.z); // chord length
-        if (len >= MIN_SEG) segs.push({ ax: a.x, az: a.z, bx: b.x, bz: b.z, len, cfg, mult });
+        if (len >= MIN_SEG) {
+          let mult = baseMult;
+          if (pop && tier !== "highway") {
+            const p = pop.sample((a.x + b.x) / 2, (a.z + b.z) / 2);
+            mult *= 1 + (busyness(p) - 1) * popCoupling;
+          }
+          segs.push({ ax: a.x, az: a.z, bx: b.x, bz: b.z, len, cfg, mult });
+        }
         startIdx = i;
         accum = 0;
       }

@@ -10,6 +10,7 @@ import {
 } from "./district";
 import { buildSilhouette, isHighRise, type SilhouetteField } from "./silhouette";
 import { generateTensorStreets, type StreetTraceHook } from "./tensorStreets";
+import { sampleSuburbNodes, nodeProximity } from "./suburbField";
 import { type RoadPoly } from "./streets";
 import {
   resolveCityShape,
@@ -19,6 +20,14 @@ import {
 } from "./cityShape";
 import { citySketchTensor, sketchKey } from "./citySketch";
 import { fieldDeviation } from "./tensorField";
+import {
+  buildDensityField,
+  buildDevelopmentMask,
+  suburbAmount,
+  densityProfileKey,
+  CORE_T,
+  SUBURB_T,
+} from "./density";
 
 // Any road tier, for the building-skip corridor test.
 type RoadLike = { vertices: Array<{ x: number; z: number }>; width: number; closed: boolean };
@@ -194,6 +203,13 @@ function pickArchetype(
   rng: () => number,
   character: DistrictCharacter,
   downtown: number,
+  // 0 = core fabric (unchanged mix), 1 = fully suburban/rural (#49). Only the
+  // residential / mixed-use branch reads it — one rng draw either way, so the
+  // stream stays aligned for every other consumer.
+  suburb = 0,
+  // 0..1 positional gradient toward high-density neighbours (radial density +
+  // core proximity at the BUILDING, not the district) — mixed-use only.
+  urban = 0,
 ): Archetype {
   const r = rng();
   if (character === "downtown" || character === "subcentre") {
@@ -210,10 +226,38 @@ function pickArchetype(
     if (r < 0.9) return "residential-tower";
     return "mid-rise";
   }
-  if (character === "residential" || character === "mixed-use") {
-    if (r < 0.1) return "residential-tower";
-    if (r < 0.45) return "mid-rise";
-    if (r < 0.8) return "low-rise";
+  if (character === "mixed-use") {
+    // Mixed-use blend (user 2026-06-08): no spires, but the big NON-spire
+    // forms appear — office blocks and apartment slabs — and their share rides
+    // `urban`, the POSITIONAL gradient toward downtown / subcentres /
+    // population centres. So the side of a mixed-use district that faces a
+    // high-density neighbour grows its large fabric; the far side stays
+    // low-rise. Same single rng draw as every branch.
+    const large = (0.1 + 0.32 * urban) * (1 - 0.8 * suburb);
+    const a = large * 0.55; // office-block
+    const b = large; // residential-tower (slab)
+    const c = b + 0.34 - 0.2 * suburb; // mid-rise
+    const d = 1 - (0.1 + 0.06 * suburb); // low-rise bulk; rest strip-mall
+    if (r < a) return "office-block";
+    if (r < b) return "residential-tower";
+    if (r < c) return "mid-rise";
+    if (r < d) return "low-rise";
+    return "warehouse";
+  }
+  if (character === "residential") {
+    // Suburban tilt (#49): thresholds slide from the urban mix toward
+    // low-rise-dominated (the Stage-0 review: density picks SMALLER archetypes
+    // toward the edge — homes and corner shops, the odd strip mall; towers and
+    // apartment slabs vanish). At suburb=0 the numbers are exactly the
+    // pre-#49 mix; at suburb=1 a residential street is ~81% low-rise homes.
+    // The 2026-06-08 suburbAmount re-anchor feeds this LOWER suburb values
+    // across the belt, so the same formulas now read denser there.
+    const a = 0.1 - 0.1 * suburb; // residential-tower → 0
+    const b = 0.45 - 0.31 * suburb; // mid-rise → 0.14
+    const c = 0.8 + 0.15 * suburb; // low-rise → the bulk (rest: strip-mall)
+    if (r < a) return "residential-tower";
+    if (r < b) return "mid-rise";
+    if (r < c) return "low-rise";
     return "warehouse";
   }
   if (character === "industrial") {
@@ -522,7 +566,7 @@ function buildTensorRoadsImpl(masterSeed: string, onLine?: StreetTraceHook) {
 // a different city for the same seed, so a stale entry must never be served.
 const tensorRoadsCache = new Map<string, ReturnType<typeof buildTensorRoadsImpl>>();
 function buildTensorRoads(masterSeed: string, onLine?: StreetTraceHook) {
-  const key = `${masterSeed}::${maxHalfExtent()}::${sketchKey()}::${fieldDeviation()}`;
+  const key = `${masterSeed}::${maxHalfExtent()}::${sketchKey()}::${fieldDeviation()}::${densityProfileKey()}`;
   const hit = tensorRoadsCache.get(key);
   if (hit) return hit; // warm cache → nothing streams (the result lands at once anyway)
   const result = buildTensorRoadsImpl(masterSeed, onLine);
@@ -594,7 +638,7 @@ export function primeCityCaches(
 ): void {
   const { roads, city, lights } = bundle;
   const field = districtFieldFromRaster(roads.districts, roads.bounds, roads.raster);
-  const roadsKey = `${rawSeed}::${maxHalfExtent()}::${sketchKey()}::${fieldDeviation()}`;
+  const roadsKey = `${rawSeed}::${maxHalfExtent()}::${sketchKey()}::${fieldDeviation()}::${densityProfileKey()}`;
   if (tensorRoadsCache.size > 64) tensorRoadsCache.clear();
   tensorRoadsCache.set(roadsKey, {
     topology: roads.topology,
@@ -602,7 +646,7 @@ export function primeCityCaches(
     arterials: roads.arterials,
     minorStreets: roads.minorStreets,
   });
-  const key = `${rawSeed}::${shape}::${shapeScale}::${maxHalfExtent()}::${sketchKey()}::${fieldDeviation()}`;
+  const key = `${rawSeed}::${shape}::${shapeScale}::${maxHalfExtent()}::${sketchKey()}::${fieldDeviation()}::${densityProfileKey()}`;
   if (cityCache.size > 64) cityCache.clear();
   cityCache.set(key, city);
   if (lightsCache.size > 64) lightsCache.clear();
@@ -727,12 +771,39 @@ function fillTensorBuildings(
   roads: RoadLike[],
 ): Building[] {
   const rng = seedrandom(`${masterSeed}::tensor::buildings`);
+  // #49 density gradient: per-district development density + the block-coherent
+  // dropout mask. Both are pure functions of (seed, field) — rebuilt here, never
+  // cached, so the worker path (#59) needs no new transfer.
+  const density = buildDensityField(masterSeed, field);
+  // #49 Stage 4: cluster development on the suburban PODS. Re-sample the exact
+  // node set the streets were built around (same seed/radial/mask as
+  // generateTensorStreets → byte-identical list), and feed its proximity field
+  // into the dev mask so buildings hug the pods and inter-pod / inter-hamlet
+  // land goes dark. Re-sampling (vs threading the list from buildTensorRoads) is
+  // cheap and keeps the worker path transfer-free.
+  const sketch = citySketchTensor();
+  const suburbNodes = sampleSuburbNodes(masterSeed, density.radial, sketch ? sketch.mask : undefined);
+  const devMask = buildDevelopmentMask(masterSeed, nodeProximity(suburbNodes));
+  // Suburban buildings shrink as density falls — the Stage-0 review's "smaller
+  // archetypes toward the edge". Footprint AND height scale, so window grids
+  // (cols/floors derive from dims) follow automatically. 0.4 puts a full-
+  // suburb low-rise at 6–12 m wide / 2.5–6 m tall — house scale, not the
+  // apartment-block read the periphery had at 0.28.
+  const SUBURB_SHRINK = 0.4;
   const silhouetteByIndex = new Map<number, SilhouetteField>();
   for (const d of field.districts) {
     if (isHighRise(d.character)) silhouetteByIndex.set(d.index, buildSilhouette(masterSeed, d));
   }
   const coreProx = makeCoreProximity([...silhouetteByIndex.values()]);
   const roadIndex = new RoadIndex(roads);
+  // Mixed-use urban gradient (user 2026-06-08): how "city-facing" a POINT is —
+  // the radial population field eased over the suburban→core range (catches
+  // downtown AND satellite centres), or the high-rise silhouette proximity if
+  // that's stronger (catches subcentre pockets). Pure reads, no rng.
+  const urbanAt = (x: number, z: number, prox: number): number => {
+    const t = (density.radial.at(x, z) - SUBURB_T) / (CORE_T - SUBURB_T);
+    return Math.max(prox, Math.max(0, Math.min(1, t)));
+  };
 
   const buildings: Building[] = [];
   const bIndex = new Map<string, Footprint[]>();
@@ -793,9 +864,28 @@ function fillTensorBuildings(
         const district = field.districts[idx];
         const character = district.character;
         const grammar = GRAMMAR[character];
+
+        // #49: block-coherent dropout. A dropped development cell places
+        // nothing — the gap is a whole parcel, not a missing tooth in a row.
+        const localDensity = density.byIndex[idx] ?? density.radial.at(sx, sz);
+        if (!devMask.keepAt(sx, sz, localDensity)) {
+          i += 3;
+          continue;
+        }
+        const suburb = suburbAmount(localDensity);
+
         const prox = coreProx(sx, sz);
-        const archetype = pickArchetype(rng, character, prox);
+        const urban = character === "mixed-use" ? urbanAt(sx, sz, prox) : 0;
+        const archetype = pickArchetype(rng, character, prox, suburb, urban);
         const dims = dimensionsForArchetype(archetype, rng);
+        if (suburb > 0 && (character === "residential" || character === "mixed-use")) {
+          // urban (mixed-use only) counters the shrink — the city-facing side
+          // keeps full scale so its large blend reads large.
+          const s = 1 - SUBURB_SHRINK * suburb * (1 - urban);
+          dims.width *= s;
+          dims.depth *= s;
+          dims.height *= s;
+        }
         const hJ = 0.78 + rng() * 0.44;
         const outlierH = rng() < 0.06 ? (rng() < 0.5 ? 0.6 : 1.5) : 1.0;
 
@@ -870,7 +960,7 @@ function fillTensorBuildings(
     downtown: 0.4,
     subcentre: 0.4,
     heritage: 0.3,
-    residential: 0.55,
+    residential: 0.62, // 0.55 → 0.62 (user 2026-06-08: denser residential)
     industrial: 0.7,
     "mixed-use": 0.5,
   };
@@ -888,11 +978,25 @@ function fillTensorBuildings(
       if (q.edge < INTERIOR_NEAR || q.edge > INTERIOR_FAR) continue;
       const district = field.districts[idx];
       const character = district.character;
-      if (densityRoll > INTERIOR_DENSITY[character]) continue;
+      // #49: dropped cells stay empty inside too, and suburban block hearts
+      // fade toward yards (interiors thin harder than frontage as density
+      // falls — a rural block is a ring of homes around open land).
+      const localDensity = density.byIndex[idx] ?? density.radial.at(px, pz);
+      if (!devMask.keepAt(px, pz, localDensity)) continue;
+      const suburb = suburbAmount(localDensity);
+      if (densityRoll > INTERIOR_DENSITY[character] * (1 - 0.65 * suburb)) continue;
       const grammar = GRAMMAR[character];
       const prox = coreProx(px, pz);
-      const archetype = pickArchetype(irng, character, prox);
+      const urban = character === "mixed-use" ? urbanAt(px, pz, prox) : 0;
+      const archetype = pickArchetype(irng, character, prox, suburb, urban);
       const dims = dimensionsForArchetype(archetype, irng);
+      if (suburb > 0 && (character === "residential" || character === "mixed-use")) {
+        // Same urban counter-shrink as frontage (mixed-use city-facing side).
+        const s = 1 - SUBURB_SHRINK * suburb * (1 - urban);
+        dims.width *= s;
+        dims.depth *= s;
+        dims.height *= s;
+      }
       const hJ = 0.78 + irng() * 0.44;
       const outlierH = irng() < 0.06 ? (irng() < 0.5 ? 0.6 : 1.5) : 1.0;
       // Align to the nearest road's bearing (a back building still faces the
@@ -1024,7 +1128,7 @@ export function generateCity(
   shape: CityShapeSetting = "square",
   shapeScale = 1,
 ): CityData {
-  const key = `${rawSeed}::${shape}::${shapeScale}::${maxHalfExtent()}::${sketchKey()}::${fieldDeviation()}`;
+  const key = `${rawSeed}::${shape}::${shapeScale}::${maxHalfExtent()}::${sketchKey()}::${fieldDeviation()}::${densityProfileKey()}`;
   const hit = cityCache.get(key);
   if (hit) return hit;
   const result = generateCityTensor(rawSeed, shape, shapeScale);
@@ -1090,8 +1194,19 @@ function bandPick(rng: () => number, band: readonly [number, number]): number {
   return band[0] + rng() * (band[1] - band[0]);
 }
 
+// #49 suburban lamp rules (Stage-0 review). Sparseness is expressed by WIDER
+// SPACING along the street — never by dimming (constant brightness across
+// bands) and never to zero (every lit street keeps lamps, just farther apart).
+// Past the stagger threshold, lamps also switch from opposite pairs to the
+// one-sided zig-zag of real low-volume residential streets (FHWA staggered
+// layout). Both read from the local density at the station, so one long
+// streamline tightens/loosens as it crosses the core→suburb→rural seams.
+const SUBURB_SPACING_STRETCH = 1.5; // ×(1 + stretch·suburb) — up to 2.5× at full rural
+const STAGGER_T = 0.35; // suburbAmount above which lamps alternate sides
+
 // Emit lights in pairs along both sides of a road polyline at fixed spacing.
 // `pickKelvin` is evaluated per lamp (position-dependent for local streets).
+// `suburbAt` (local streets only) drives the #49 spacing stretch + stagger.
 function emitRoadLights(
   rng: () => number,
   road: RoadLike,
@@ -1099,12 +1214,11 @@ function emitRoadLights(
   pickKelvin: (x: number, z: number) => number,
   spacing: number,
   out: Streetlight[],
+  suburbAt?: (x: number, z: number) => number,
 ) {
   const verts = road.vertices;
   const last = road.closed ? verts.length : verts.length - 1;
   const offset = road.width / 2 + 2;
-  const minDist = spacing * MIN_SPACING_FRAC;
-  const maxDist = spacing * MAX_SPACING_FRAC;
   // Last KEPT lamp position per side (-1 → index 0, +1 → index 1), used to clamp
   // the post-offset world spacing. null until each side's first lamp is placed.
   const lastBySide: ([number, number] | null)[] = [null, null];
@@ -1130,6 +1244,7 @@ function emitRoadLights(
   // never fire (spacing >> segment length) — accumulate across the segment seams.
   let acc = 0; // arc-length up to vertex i
   let nextAt = spacing; // arc-length of the next light to place
+  let staggerParity = 0; // which side the next one-sided lamp takes
   for (let i = 0; i < last; i++) {
     const a = verts[i];
     const b = verts[(i + 1) % verts.length];
@@ -1141,7 +1256,16 @@ function emitRoadLights(
     const nz = ux;
     while (nextAt <= acc + segLen) {
       const s = nextAt - acc; // distance into this segment
-      for (const side of [-1, 1] as const) {
+      // #49: read the local density once per station (centreline point).
+      const sub = suburbAt ? suburbAt(a.x + ux * s, a.z + uz * s) : 0;
+      const mul = 1 + SUBURB_SPACING_STRETCH * sub;
+      const minDist = spacing * mul * MIN_SPACING_FRAC;
+      const maxDist = spacing * mul * MAX_SPACING_FRAC;
+      const staggered = sub > STAGGER_T;
+      const sides: ReadonlyArray<-1 | 1> = staggered
+        ? [staggerParity++ % 2 === 0 ? -1 : 1]
+        : [-1, 1];
+      for (const side of sides) {
         const sideIdx = side < 0 ? 0 : 1;
         const lx = a.x + ux * s + nx * offset * side;
         const lz = a.z + uz * s + nz * offset * side;
@@ -1154,14 +1278,16 @@ function emitRoadLights(
           // Outer-curve thinning: gap too wide — drop one interpolated lamp at the
           // midpoint first, then place the candidate. Midpoint of two offset
           // points stays on the offset line for straight runs and is a clean,
-          // deterministic cap on the worst gaps.
-          if (d > maxDist) {
+          // deterministic cap on the worst gaps. Staggered runs skip it: a
+          // one-sided zig-zag's same-side gap is 2 stations wide BY DESIGN —
+          // back-filling it would quietly rebuild the opposite-pairs look.
+          if (d > maxDist && !staggered) {
             place((prev[0] + lx) / 2, (prev[1] + lz) / 2, sideIdx);
           }
         }
         place(lx, lz, sideIdx);
       }
-      nextAt += spacing;
+      nextAt += spacing * mul;
     }
     acc += segLen;
   }
@@ -1365,9 +1491,23 @@ function generateStreetlightsTensor(
       lights,
     );
   }
+  // #49: local lamps stretch their spacing and go one-sided (staggered) as
+  // density falls — see SUBURB_SPACING_STRETCH/STAGGER_T. Constant brightness:
+  // kelvin/intensity never change with band. Highway + arterial lamps are
+  // exempt (real metros keep their main roads continuously lit).
+  const density = buildDensityField(masterSeed, field);
+  const suburbAt = (x: number, z: number) => suburbAmount(density.densityAt(x, z));
   const minRng = seedrandom(`${masterSeed}::streetlights::minor`);
   for (const s of minorStreets) {
-    emitRoadLights(minRng, s, "local", (x, z) => bandPick(minRng, localBand(x, z)), 40, lights);
+    emitRoadLights(
+      minRng,
+      s,
+      "local",
+      (x, z) => bandPick(minRng, localBand(x, z)),
+      40,
+      lights,
+      suburbAt,
+    );
   }
   // De-bunch across all tiers before clipping to the footprint mask.
   let deduped = dedupeByMinDistance(lights, STREETLIGHT_MIN_DIST);
@@ -1386,7 +1526,7 @@ export function generateStreetlights(
   shape: CityShapeSetting = "square",
   shapeScale = 1,
 ): Streetlight[] {
-  const key = `${rawSeed}::${shape}::${shapeScale}::${maxHalfExtent()}::${sketchKey()}::${fieldDeviation()}`;
+  const key = `${rawSeed}::${shape}::${shapeScale}::${maxHalfExtent()}::${sketchKey()}::${fieldDeviation()}::${densityProfileKey()}`;
   const hit = lightsCache.get(key);
   if (hit) return hit;
   const result = generateStreetlightsTensor(rawSeed, shape, shapeScale);

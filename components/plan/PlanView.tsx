@@ -8,17 +8,44 @@ import {
   tensorDistrictField,
   dropRadialSpokes,
 } from "@/lib/seed/cityGen";
+import {
+  buildDensityField,
+  CORE_T,
+  SUBURB_T,
+  EXURB_T,
+  RURAL_T,
+  type DensityBand,
+} from "@/lib/seed/density";
+import { sampleSuburbNodes } from "@/lib/seed/suburbField";
+import { makeShapeMask, resolveCityShape } from "@/lib/seed/cityShape";
 import { useSceneStore } from "@/lib/state/sceneStore";
 import { useGeneratedCity } from "@/lib/hooks/useGeneratedCity";
 
 export type PlanLayers = {
   districts: boolean;
+  density: boolean;
   buildings: boolean;
   highways: boolean;
   arterials: boolean;
   streets: boolean;
   streetlights: boolean;
 };
+
+// Density bands as a luminance ramp — bright core fading to near-background
+// fringe, matching the night-view metaphor (bright core, dim sprawl, dark gaps).
+const BAND_FILL: Record<DensityBand, string> = {
+  core: "#ffd34daa",
+  suburban: "#4f9e6baa",
+  exurban: "#46795aaa", // the 2026-06-08 tier — between suburban and rural greens
+  rural: "#3e5a4aaa",
+  fringe: "#1e2735aa",
+};
+const BAND_EDGE: Array<{ t: number; color: string }> = [
+  { t: CORE_T, color: "#ffd34d" },
+  { t: SUBURB_T, color: "#4f9e6b" },
+  { t: EXURB_T, color: "#5d8a68" },
+  { t: RURAL_T, color: "#7a8a6b" },
+];
 
 type Props = {
   seed: string;
@@ -41,11 +68,13 @@ export function PlanView({ seed, size, layers }: Props) {
   const citySize = useSceneStore((s) => s.citySize);
   const citySketch = useSceneStore((s) => s.citySketch);
   const fieldDeviation = useSceneStore((s) => s.fieldDeviation);
+  const densityProfile = useSceneStore((s) => s.densityProfile);
   const data = useMemo(() => {
     if (!ready) return null;
     void citySize; // tier drives the module-level gen extent (#58) — a switch must redraw
     void citySketch; // a registered sketch is a different city (#40) — likewise
     void fieldDeviation; // deviation scale (#51) — likewise
+    void densityProfile; // population profile (#49) — likewise
     // Tensor is the only city model. Districts follow the arterial network
     // (built inside generateCity); read that exact field + roads so the overlay
     // matches where the buildings were placed. The cache is warm here, so these
@@ -54,8 +83,17 @@ export function PlanView({ seed, size, layers }: Props) {
     const field = tensorDistrictField(seed);
     const city = generateCity(seed, cityShape, cityShapeScale);
     const lights = generateStreetlights(seed, cityShape, cityShapeScale);
-    return { topo, field, city, lights };
-  }, [ready, seed, cityShape, cityShapeScale, citySize, citySketch, fieldDeviation]);
+    // Cheap (one rng draw per district) — rebuilt per redraw, never cached.
+    const density = buildDensityField(seed, field);
+    // #49 node-field rebuild Stage 1: suburb population nodes (cheap grid scan).
+    // Same mask as the street generator so the overlay shows the real pod set.
+    const nodes = sampleSuburbNodes(
+      seed,
+      density.radial,
+      makeShapeMask(resolveCityShape(cityShape, seed), cityShapeScale),
+    );
+    return { topo, field, city, lights, density, nodes };
+  }, [ready, seed, cityShape, cityShapeScale, citySize, citySketch, fieldDeviation, densityProfile]);
 
   useEffect(() => {
     if (!data) return;
@@ -68,7 +106,7 @@ export function PlanView({ seed, size, layers }: Props) {
     if (!ctx) return;
     ctx.scale(dpr, dpr);
 
-    const { topo, field, city, lights } = data;
+    const { topo, field, city, lights, density, nodes } = data;
     const cx = CITY_CENTER.x;
     const cz = CITY_CENTER.z;
     // Frame the current tier's full gen extent (#58) — not the fixed default
@@ -104,6 +142,67 @@ export function PlanView({ seed, size, layers }: Props) {
           ctx.fillRect(toX(wx - step / 2), toY(wz - step / 2), cellPx, cellPx);
         }
       }
+    }
+
+    // Density bands (#49) — per-district development density as band-filled
+    // cells (what the building/lamp/window consumers act on) + the raw radial
+    // band edges as contours (the unjittered field the districts sampled).
+    // Where a cell's band disagrees with its contour ring, that's the per-
+    // district jitter / character floor doing its job.
+    if (layers.density) {
+      const gridN = 70;
+      const step = (2 * half) / gridN;
+      const cellPx = size / gridN;
+      for (let gi = 0; gi < gridN; gi++) {
+        for (let gj = 0; gj < gridN; gj++) {
+          const wx = cx - half + (gi + 0.5) * step;
+          const wz = cz - half + (gj + 0.5) * step;
+          ctx.fillStyle = BAND_FILL[density.bandAt(wx, wz)];
+          ctx.fillRect(toX(wx - step / 2), toY(wz - step / 2), cellPx, cellPx);
+        }
+      }
+      ctx.save();
+      ctx.globalAlpha = 0.9;
+      ctx.lineWidth = 1.2;
+      const SEGS = 180;
+      for (const { t, color } of BAND_EDGE) {
+        ctx.beginPath();
+        for (let s = 0; s <= SEGS; s++) {
+          const th = (s / SEGS) * Math.PI * 2;
+          const r = density.radial.radiusAt(t, th);
+          const px = toX(cx + Math.cos(th) * r);
+          const py = toY(cz + Math.sin(th) * r);
+          if (s === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.strokeStyle = color;
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      // Suburb population nodes (#49 node-field rebuild, Stage 1): pod centre
+      // dots + elliptical pod footprints. These are the organising centres the
+      // Stage-2 crescents/entries will trace around — placement is what this
+      // overlay verifies (spacing by density, band coverage, squash variety).
+      ctx.save();
+      for (const n of nodes) {
+        const px = toX(n.x);
+        const py = toY(n.z);
+        const rMaj = worldWToPx(n.r);
+        const rMin = rMaj * n.squash;
+        ctx.beginPath();
+        ctx.ellipse(px, py, rMaj, rMin, n.angle, 0, Math.PI * 2);
+        ctx.strokeStyle = "#ffd34d";
+        ctx.globalAlpha = 0.55;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(px, py, 2.2, 0, Math.PI * 2);
+        ctx.fillStyle = "#ffe9a0";
+        ctx.globalAlpha = 0.95;
+        ctx.fill();
+      }
+      ctx.restore();
     }
 
     // Road polyline helper
