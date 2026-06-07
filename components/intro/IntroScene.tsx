@@ -24,6 +24,12 @@ import type { BwLevels, IntroViewMode, ScreenColorMode } from "./viewMode";
 const MAC_X: Record<"daz" | "stock", number> = { daz: 0, stock: 0.5 };
 type MacId = keyof typeof MAC_X;
 
+// The stock reference Mac is parked for now — it returns when the material /
+// compression work lands (it's the before/after yardstick). Flip to restore;
+// the focus/dblclick machinery (orbitToMac("stock"), MAC_X.stock) is kept
+// intact so it's a one-line bring-back. See #74 / wiki intro decision note.
+const SHOW_REFERENCE_MAC = false;
+
 // Orbit-down limit: the eye may dip below the Mac's chin to peek under the
 // front overhang, but must stay above the sweep at any orbit radius — so the
 // polar cap is derived from the current radius on every change, not fixed.
@@ -98,6 +104,7 @@ export function IntroScene({
   halation,
   scanline,
   bloom,
+  autoOrbit,
   onBrightnessChange,
   onScreenSettingsReset,
 }: {
@@ -109,6 +116,7 @@ export function IntroScene({
   halation: number;
   scanline: number;
   bloom: number;
+  autoOrbit: boolean;
   onBrightnessChange: (v: number) => void;
   onScreenSettingsReset?: () => void;
 }) {
@@ -249,6 +257,7 @@ export function IntroScene({
           halation={halation}
           scanline={scanline}
           screenInteractive={screenActive}
+          screenAutoOrbit={autoOrbit}
           knobLocked={dragOwner !== null && dragOwner !== "knob"}
           onScreenHoverChange={setScreenHover}
           onScreenDragChange={(d) => (d ? claimDrag("screen") : releaseDrag("screen"))}
@@ -267,18 +276,21 @@ export function IntroScene({
           onPointerOut={() => setCursorZone("mac", false)}
         />
       </Suspense>
-      {/* the Daz model unchanged from source, stage right */}
-      <Suspense fallback={null}>
-        <MacDazStock
-          position={[MAC_X.stock, 0, 0]}
-          onDoubleClick={(e) => {
-            e.stopPropagation();
-            orbitToMac("stock");
-          }}
-          onPointerOver={() => setCursorZone("mac", true)}
-          onPointerOut={() => setCursorZone("mac", false)}
-        />
-      </Suspense>
+      {/* the Daz model unchanged from source, stage right — parked until the
+          material/compression work lands (the before/after reference) */}
+      {SHOW_REFERENCE_MAC && (
+        <Suspense fallback={null}>
+          <MacDazStock
+            position={[MAC_X.stock, 0, 0]}
+            onDoubleClick={(e) => {
+              e.stopPropagation();
+              orbitToMac("stock");
+            }}
+            onPointerOver={() => setCursorZone("mac", true)}
+            onPointerOut={() => setCursorZone("mac", false)}
+          />
+        </Suspense>
+      )}
 
       {/* step 2 of the glow plan: over-the-bezel bloom. HDR buffer so only
           emissive (>1) content crosses the threshold — the screen, not the

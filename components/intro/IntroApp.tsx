@@ -1,7 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Globe, Monitor, MonitorCog, RotateCcw, Settings } from "lucide-react";
+import { useSceneStore } from "@/lib/state/sceneStore";
+import type { CityTier } from "@/lib/seed/topology";
 import { IntroScene } from "./IntroScene";
 import { IntroFpsBadge } from "./IntroFpsBadge";
 import { Button } from "@/components/ui/button";
@@ -29,6 +31,10 @@ const COLOR_MODES: { id: ScreenColorMode; label: string; tip: string }[] = [
 
 // Depth locked to B/W for now — flip to restore the selector.
 const SHOW_DEPTH_CHIPS = false;
+
+// The intro stages a 3 km city (tier 3): enough skyline to fill the CRT,
+// light enough to regenerate fast on every Apple-badge reroll.
+const INTRO_CITY_TIER: CityTier = 3;
 
 // Screen-settings defaults (the Reset button's target).
 const SCREEN_DEFAULTS = {
@@ -76,6 +82,19 @@ function SliderRow({
 }
 
 export function IntroApp() {
+  // Pin the intro's city tier; put the visitor's own tier back on the way
+  // out. Shared-store caveat until profiles exist: closing the tab while on
+  // /intro persists tier 3 into the main app's next load.
+  useEffect(() => {
+    const s = useSceneStore.getState();
+    const prev = s.citySize;
+    if (prev !== INTRO_CITY_TIER) s.setCitySize(INTRO_CITY_TIER);
+    return () => {
+      const cur = useSceneStore.getState();
+      if (prev !== INTRO_CITY_TIER && cur.citySize === INTRO_CITY_TIER) cur.setCitySize(prev);
+    };
+  }, []);
+
   const [mode, setMode] = useState<IntroViewMode>("screen");
   const [colorMode, setColorMode] = useState<ScreenColorMode>("bw");
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -93,6 +112,20 @@ export function IntroApp() {
   const [scanline, setScanline] = useState(SCREEN_DEFAULTS.scanline);
   // over-the-bezel bloom (post-processing, step 2 of the glow plan)
   const [bloom, setBloom] = useState(SCREEN_DEFAULTS.bloom);
+  // spacebar turntable — revolve the city inside the screen, hands-free
+  // (snow-globe coupling still composes on top); main-app parity (orbit mode)
+  const [autoOrbit, setAutoOrbit] = useState(false);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code !== "Space" || e.repeat) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+      e.preventDefault(); // Space would scroll the page
+      setAutoOrbit((v) => !v);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   const resetScreenSettings = () => {
     setBrightness(SCREEN_DEFAULTS.brightness);
@@ -130,6 +163,7 @@ export function IntroApp() {
         halation={halation}
         scanline={scanline}
         bloom={bloom}
+        autoOrbit={autoOrbit}
         onBrightnessChange={setBrightness}
         onScreenSettingsReset={resetScreenSettings}
       />

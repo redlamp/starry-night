@@ -9,9 +9,9 @@ import { useSceneStore } from "@/lib/state/sceneStore";
 import { CITY_SCALE } from "@/lib/seed/topology";
 import { useGeneratedCity } from "@/lib/hooks/useGeneratedCity";
 import { TimeTicker } from "@/components/scene/TimeTicker";
-import { SkyGradient } from "@/components/scene/SkyGradient";
-import { StarField } from "@/components/scene/StarField";
+import { IntroTicker } from "@/components/scene/IntroTicker";
 import { ShootingStars } from "@/components/scene/ShootingStars";
+import { IntroStarField } from "./IntroStarField";
 import { Moon } from "@/components/scene/Moon";
 import { Ground } from "@/components/scene/Ground";
 import { Roads } from "@/components/scene/Roads";
@@ -32,9 +32,14 @@ import type { IntroViewMode } from "./viewMode";
  * orbit the same pivot. Projection stays orthographic throughout.
  */
 const SCREEN_ASPECT = 512 / 342;
-const VIEW_HALF_H = 120; // metres of city per half screen-height
+// Framing (measured at tier 3): heights run p50 16m / p90 70m / p99 ~180m,
+// with ~25 towers >250m and a 470m freak per city. Half-height 180 with the
+// camera at 170 spans y -10..350 — ground hugs the bottom edge, the p99.9
+// skyline fits, the upper half belongs to stars; only the handful of >350m
+// outliers crop.
+const VIEW_HALF_H = 180; // metres of city per half screen-height
 const VIEW_HALF_W = VIEW_HALF_H * SCREEN_ASPECT;
-const BASE_POS: [number, number, number] = [-22, 110, 800];
+const BASE_POS: [number, number, number] = [-22, 170, 800];
 const PIVOT = new THREE.Vector3(BASE_POS[0], BASE_POS[1], 0); // city point the base pose frames
 const RADIUS = BASE_POS[2];
 // Rest-pose orbit angles, derived from the studio camera's *orientation*
@@ -48,6 +53,14 @@ const BASE_ELEV = Math.atan2(
 const AZIMUTH_GAIN = 1; // studio orbit → city orbit, 1:1 = solid snow globe
 const ELEV_GAIN = 1;
 const EPS = 1e-3;
+// Spacebar auto-orbit: a turntable revolution of the city (the record
+// spinning on the platter). The rig advances the FOUNDATION azimuth, so the
+// snow-globe coupling — the platter following the Mac — composes on top. The
+// spin runs only while the rig owns the camera: it pauses when you reach in
+// to manipulate (hover/drag), then resumes. Speed kept in autoRotateSpeed
+// units for familiarity: 0.1 ≈ (2π/60)·0.1 rad/s ≈ 10 min per revolution.
+const AUTO_ORBIT_SPEED = 0.1;
+const AUTO_ORBIT_RAD_PER_SEC = ((2 * Math.PI) / 60) * AUTO_ORBIT_SPEED;
 
 /**
  * The snow-globe "foundation": the pose deltas are applied around. Starts at
@@ -75,6 +88,7 @@ function rootStateOf(state: RootState): RootState {
 function ScreenRig({
   mode,
   interactive,
+  autoOrbit,
   resetting,
   onResetSettled,
   base,
@@ -82,6 +96,7 @@ function ScreenRig({
 }: {
   mode: IntroViewMode;
   interactive: boolean;
+  autoOrbit: boolean;
   resetting: boolean;
   onResetSettled: () => void;
   base: MutableRefObject<OrbitBase>;
@@ -123,6 +138,14 @@ function ScreenRig({
       o.el = b.el;
       o.rad = b.rad;
       o.tgt.copy(b.tgt);
+    }
+    // Auto-orbit advances the FOUNDATION azimuth (snowglobe then offsets from
+    // it, so the turntable spin and the Mac-orientation coupling compose). Off
+    // during a reset glide, so the settle test below can converge. While the
+    // pointer is over the screen the rig yields entirely — OrbitControls'
+    // autoRotate carries the spin there instead (same speed).
+    if (autoOrbit && !resetting) {
+      b.az += AUTO_ORBIT_RAD_PER_SEC * delta;
     }
     let azTarget = b.az;
     let elTarget = b.el;
@@ -192,11 +215,14 @@ function ScreenRig({
 export function ScreenCity({
   mode,
   interactive = false,
+  autoOrbit = false,
   resetSignal = 0,
   onDragChange,
 }: {
   mode: IntroViewMode;
   interactive?: boolean;
+  /** spacebar turntable: revolve the city around its pivot, hands-free */
+  autoOrbit?: boolean;
   resetSignal?: number;
   /** city-orbit drag lifecycle — lets the stage's drag-owner lock keep the
    * gesture alive when the pointer leaves the CRT mid-drag */
@@ -206,12 +232,20 @@ export function ScreenCity({
   const cityShape = useSceneStore((s) => s.cityShape);
   const cityShapeScale = useSceneStore((s) => s.cityShapeScale);
   const stars = useSceneStore((s) => s.stars);
-  const fog = useSceneStore((s) => s.fog);
   const { ready: cityReady } = useGeneratedCity(masterSeed, cityShape, cityShapeScale);
   // sticky foundation: survives hover cycles, owned here so the rig and the
   // (conditionally mounted) controls agree on the pivot
   const base = useRef(makeDefaultBase());
   const cityControls = useRef<OrbitControlsImpl | null>(null);
+  // The Mac's screensaver city has "been running a while" when you walk up:
+  // windows snap to fully-awake on mount (fresh visitors land with progress 0
+  // and no autoplay). Stars are the exception — IntroStarField owns its own
+  // gradual wake so the sky fades in. Replays come from the Apple badge.
+  useEffect(() => {
+    const s = useSceneStore.getState();
+    if (!s.intro.playing && s.intro.progress < 1) s.setIntroProgress(1);
+  }, []);
+
   // double-click on the screen: foundation back to default, rig glides home
   // (controls stand down for the glide, even though the pointer still hovers)
   const [resetting, setResetting] = useState(false);
@@ -229,6 +263,7 @@ export function ScreenCity({
       <ScreenRig
         mode={mode}
         interactive={interactive}
+        autoOrbit={autoOrbit}
         resetting={resetting}
         onResetSettled={onResetSettled}
         base={base}
@@ -255,21 +290,17 @@ export function ScreenCity({
           touches={{ ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN }}
         />
       )}
-      {/* flat ortho frustum is a narrow box — the SkyGradient dome barely
-          intersects it, so the background carries the sky. Zenith indigo,
-          per the #26 night-reads-luminous note. */}
+      {/* atmosphere off: flat near-black sky (crushes solid under the 1-bit
+          levels) — no SkyGradient. The main StarField's 9 km dome is gone
+          too; IntroStarField's cylindrical band owns the sky here. */}
       <color attach="background" args={["#070b22"]} />
       <TimeTicker />
+      {/* advances wake progress + stamps shader start-times on replay; no
+          autoplay — the badge (playAllIntros) is the only replay trigger */}
+      <IntroTicker autoPlay={false} />
       <ambientLight intensity={0.04} />
 
-      <SkyGradient horizonColor={fog.color} zenithColor="#070b22" />
-      <StarField
-        masterSeed={masterSeed}
-        radius={stars.radius}
-        depth={stars.depth}
-        count={stars.count}
-        size={stars.factor}
-      />
+      <IntroStarField masterSeed={masterSeed} />
       <ShootingStars masterSeed={masterSeed} radius={stars.radius} />
       <Moon />
       <Ground />

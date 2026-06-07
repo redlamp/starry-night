@@ -239,6 +239,7 @@ const FACADE_TILT = -0.12; // rad — the front face leans back slightly
 function AppleBadge() {
   const { scene } = useGLTF(DAZ_URL);
   const setSeed = useSceneStore((s) => s.setSeed);
+  const playAllIntros = useSceneStore((s) => s.playAllIntros);
   const position = useMemo(() => {
     let glassMesh: THREE.Mesh | undefined;
     let bodyMesh: THREE.Mesh | undefined;
@@ -264,7 +265,10 @@ function AppleBadge() {
       rotation={[FACADE_TILT, 0, 0]}
       onClick={(e) => {
         e.stopPropagation();
+        // a fresh city deserves a fresh boot: reroll the seed AND replay the
+        // wake sequence (windows + stars), like the screensaver restarting
         setSeed(randomSeed());
+        playAllIntros();
       }}
       onDoubleClick={(e) => e.stopPropagation()}
       onPointerOver={(e) => {
@@ -331,17 +335,35 @@ function BrightnessKnob({
   } | null>(null);
   const engaged = useRef({ hover: false, drag: false });
 
+  const raycaster = useMemo(() => new THREE.Raycaster(), []);
   const knob = useMemo(() => {
     const mesh = scene.getObjectByName(KNOB_MESH) as THREE.Mesh | undefined;
     if (!mesh) return null;
     scene.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(mesh);
+    // case shell + front bezel — the geometry whose overhang occludes the
+    // recessed wheel at grazing angles
+    const occluders = ["Computer_Computer_0", "Computer_Blackplastic_0"]
+      .map((n) => scene.getObjectByName(n))
+      .filter((o): o is THREE.Object3D => !!o);
     return {
       mesh,
+      occluders,
       center: box.getCenter(new THREE.Vector3()),
       size: box.getSize(new THREE.Vector3()),
     };
   }, [scene]);
+
+  // Occlusion gate: the hotspot box can poke past the bezel lip, so a ray can
+  // still reach it from angles where the case visually covers the wheel. If a
+  // case mesh is hit closer than the hotspot, the wheel is hidden — refuse the
+  // interaction (the user's preferred fix over a flush blocker cube).
+  const occluded = (e: { ray: THREE.Ray; distance: number }) => {
+    if (!knob) return false;
+    raycaster.set(e.ray.origin, e.ray.direction);
+    const hits = raycaster.intersectObjects(knob.occluders, false);
+    return hits.length > 0 && hits[0].distance < e.distance - 0.001;
+  };
 
   // the wheel angle tracks the value, whatever set it (drag, slider, Reset).
   // Sign: the hand pushes the EXPOSED BOTTOM of the wheel, so value-up
@@ -361,23 +383,34 @@ function BrightnessKnob({
     onEngageChange?.(engaged.current.hover || engaged.current.drag);
   };
 
+  // Sync the hover/cursor to occlusion on EVERY relevant pointer event, not
+  // just on enter: approaching the wheel from above, the first onPointerOver
+  // fires while the bezel lip still occludes, so hover must be (re)claimed
+  // when the pointer reaches the visible sliver. Returns whether the knob owns
+  // the pointer (caller stops propagation so the body's grab cursor yields).
+  const syncHover = (e: { ray: THREE.Ray; distance: number }) => {
+    const owns = !occluded(e);
+    if (engaged.current.hover !== owns) setEngaged({ hover: owns });
+    setCursorZone("knob", owns);
+    return owns;
+  };
+
   if (!knob) return null;
   return (
-    // invisible hotspot over the wheel, padded for grabbability and poking
-    // through the bezel slot (the wheel itself is mostly recessed)
+    // invisible hotspot hugging the VISIBLE part of the wheel — the sliver
+    // below the bezel lip — biased downward so it stays clear of the Apple
+    // badge's zone directly above (badge bottom ~7.67cm, wheel centre 6.06)
     <mesh
-      position={knob.center.toArray()}
+      position={[knob.center.x, knob.center.y - 0.35, knob.center.z]}
       onPointerOver={(e) => {
-        e.stopPropagation();
-        setEngaged({ hover: true });
-        setCursorZone("knob", true);
+        if (syncHover(e)) e.stopPropagation();
       }}
       onPointerOut={() => {
         setEngaged({ hover: false });
         setCursorZone("knob", false);
       }}
       onPointerDown={(e) => {
-        if (locked) return;
+        if (locked || occluded(e)) return;
         e.stopPropagation();
         drag.current = {
           pointerId: e.pointerId,
@@ -391,7 +424,13 @@ function BrightnessKnob({
       }}
       onPointerMove={(e) => {
         const d = drag.current;
-        if (!d || e.pointerId !== d.pointerId) return;
+        if (!d || e.pointerId !== d.pointerId) {
+          // not dragging: keep cursor in sync with occlusion — claims hover
+          // when the pointer reaches the visible sliver (top-down approach),
+          // drops it when the lip slides in front
+          if (syncHover(e)) e.stopPropagation();
+          return;
+        }
         e.stopPropagation();
         // dual-axis scrub: right or up brightens, left or down dims —
         // whichever way the hand naturally rolls the wheel
@@ -406,7 +445,7 @@ function BrightnessKnob({
         onDragChange?.(false);
       }}
       onWheel={(e) => {
-        if (locked) return;
+        if (locked || occluded(e)) return;
         e.stopPropagation();
         onChange(THREE.MathUtils.clamp(value - e.deltaY * 0.0008, 0, KNOB_MAX));
       }}
@@ -418,7 +457,7 @@ function BrightnessKnob({
         if (!locked) onReset?.();
       }}
     >
-      <boxGeometry args={[knob.size.x * 1.5, knob.size.y * 1.5, knob.size.z * 3.5]} />
+      <boxGeometry args={[knob.size.x * 1.05, knob.size.y, knob.size.z * 2.5]} />
       <meshBasicMaterial transparent opacity={0} depthWrite={false} />
     </mesh>
   );
@@ -437,6 +476,7 @@ function BrightnessKnob({
 function DazScreenViewport({
   mode,
   interactive,
+  autoOrbit,
   colorMode,
   bwLevels,
   brightness,
@@ -448,6 +488,7 @@ function DazScreenViewport({
 }: {
   mode: IntroViewMode;
   interactive: boolean;
+  autoOrbit: boolean;
   colorMode: ScreenColorMode;
   bwLevels: BwLevels;
   brightness: number;
@@ -637,6 +678,7 @@ function DazScreenViewport({
                       <ScreenCity
                         mode={mode}
                         interactive={interactive}
+                        autoOrbit={autoOrbit}
                         resetSignal={resetSignal}
                         onDragChange={onDragChange}
                       />
@@ -664,6 +706,7 @@ export function MacDaz({
   scanline = 0.6,
   showPeripherals = false,
   screenInteractive = false,
+  screenAutoOrbit = false,
   knobLocked = false,
   onScreenHoverChange,
   onScreenDragChange,
@@ -682,6 +725,7 @@ export function MacDaz({
   scanline?: number;
   showPeripherals?: boolean;
   screenInteractive?: boolean;
+  screenAutoOrbit?: boolean;
   knobLocked?: boolean;
   onScreenHoverChange?: (hovering: boolean) => void;
   onScreenDragChange?: (dragging: boolean) => void;
@@ -707,6 +751,7 @@ export function MacDaz({
         halation={halation}
         scanline={scanline}
         interactive={screenInteractive}
+        autoOrbit={screenAutoOrbit}
         onHoverChange={onScreenHoverChange}
         onDragChange={onScreenDragChange}
       />
