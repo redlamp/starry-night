@@ -81,6 +81,11 @@ function SliderRow({
   );
 }
 
+const isTypingTarget = (t: EventTarget | null) => {
+  const el = t as HTMLElement | null;
+  return !!el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
+};
+
 export function IntroApp() {
   // Pin the intro's city tier; put the visitor's own tier back on the way
   // out. Shared-store caveat until profiles exist: closing the tab while on
@@ -96,6 +101,15 @@ export function IntroApp() {
   }, []);
 
   const [mode, setMode] = useState<IntroViewMode>("screen");
+  // S toggles the viewport between screen and snow-globe (mirrors the chips).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code !== "KeyS" || e.repeat || isTypingTarget(e.target)) return;
+      setMode((m) => (m === "screen" ? "snowglobe" : "screen"));
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
   const [colorMode, setColorMode] = useState<ScreenColorMode>("bw");
   const [settingsOpen, setSettingsOpen] = useState(false);
   // beam gain ahead of all processing — two-way bound to the Mac's physical
