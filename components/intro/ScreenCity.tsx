@@ -143,9 +143,11 @@ function ScreenRig({
     // it, so the turntable spin and the Mac-orientation coupling compose). Off
     // during a reset glide, so the settle test below can converge. While the
     // pointer is over the screen the rig yields entirely — OrbitControls'
-    // autoRotate carries the spin there instead (same speed).
+    // autoRotate carries the spin there instead. Sign matches autoRotate's
+    // rotateLeft (theta decreases) so the spin direction is continuous across
+    // the hover boundary — a mismatch reads as "the orbit flips with the mouse".
     if (autoOrbit && !resetting) {
-      b.az += AUTO_ORBIT_RAD_PER_SEC * delta;
+      b.az -= AUTO_ORBIT_RAD_PER_SEC * delta;
     }
     let azTarget = b.az;
     let elTarget = b.el;
@@ -278,6 +280,8 @@ export function ScreenCity({
           target={base.current.tgt.toArray()}
           onStart={() => onDragChange?.(true)}
           onEnd={() => onDragChange?.(false)}
+          autoRotate={autoOrbit}
+          autoRotateSpeed={AUTO_ORBIT_SPEED}
           screenSpacePanning
           enableDamping
           zoomSpeed={0.8}
