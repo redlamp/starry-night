@@ -55,11 +55,11 @@ export type TensorField = {
 type Morphology = "warp" | "shear" | "grid" | "radial";
 
 // #51: runtime deviation scale — multiplies each seed's rolled deviation
-// (0.7…1.6). 1 = exactly the seeded value (x*1 === x, so the default is
-// byte-identical); <1 calms every city, >1 deforms harder. Same module-mirror
+// (0.7…1.6). 1 = exactly the seeded value (x*1 === x); <1 calms every city,
+// >1 deforms harder (default 1.5, user 2026-06-08). Same module-mirror
 // pattern as setCityTier / setCitySketch: the store is the source of truth,
 // gen caches key on the current value.
-let deviationScale = 1;
+let deviationScale = 1.5;
 export function setFieldDeviation(v: number): void {
   deviationScale = v;
 }

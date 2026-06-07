@@ -35,7 +35,7 @@ import type { DistrictCharacter, DistrictField } from "./district";
 // index order). No existing stream gains or loses a draw — the road network and
 // building layout are byte-identical until a consumer opts in.
 
-export type DensityBand = "core" | "suburban" | "rural" | "fringe";
+export type DensityBand = "core" | "suburban" | "exurban" | "rural" | "fringe";
 
 // --- Population profile (user 2026-06-08: "tools to help influence the
 // population gradient and density… mark population centers and radiate out
@@ -43,8 +43,9 @@ export type DensityBand = "core" | "suburban" | "rural" | "fringe";
 // Runtime authoring knobs over the radial field. Same module-mirror pattern as
 // setCityTier / setFieldDeviation: the store is the source of truth, gen reads
 // this at call time, every gen cache keys on densityProfileKey().
-//   centres   — 1 = the classic single CBD; 2–3 add SEEDED satellite centres
-//               in the mid/suburban ring (each radiates its own gradient).
+//   centres   — 1 = the classic single CBD; 2–6 add SEEDED satellite centres
+//               fanned evenly around the core in the mid/suburban ring (each
+//               radiates its own gradient). UI labels use "centers".
 //   spread    — × on the falloff radius R0 (how far the city reaches).
 //   shoulder  — × on the exponent P (flat mid-city plateau vs sharp peak).
 //   satellite — strength of the satellite centres (0..1 of the primary).
@@ -56,10 +57,15 @@ export type DensityProfile = {
   shoulder: number;
   satellite: number;
 };
+// Satellite slots always drawn (stream stability) → centres caps at 1 + slots.
+export const SAT_SLOTS = 5;
+export const MAX_CENTRES = 1 + SAT_SLOTS;
+// Defaults per user 2026-06-08: a polycentric metro out of the box — 4 centres,
+// wider reach, softer shoulder.
 export const DEFAULT_DENSITY_PROFILE: DensityProfile = {
-  centres: 1,
-  spread: 1,
-  shoulder: 1,
+  centres: 4,
+  spread: 1.2,
+  shoulder: 0.8,
   satellite: 0.7,
 };
 let profile: DensityProfile = { ...DEFAULT_DENSITY_PROFILE };
@@ -73,14 +79,19 @@ export function densityProfileKey(): string {
   return `${profile.centres}:${profile.spread}:${profile.shoulder}:${profile.satellite}`;
 }
 
-// Band thresholds on the density scalar.
+// Band thresholds on the density scalar. EXURB (user 2026-06-08): a new tier
+// between the residential belt and rural — the belt itself densifies (see
+// SUBURB_ANCHORS) and this band inherits the belt's OLD look, so the fade
+// gains a step: packed residential → today's looser residential → rural.
 export const CORE_T = 0.62;
 export const SUBURB_T = 0.3;
+export const EXURB_T = 0.2;
 export const RURAL_T = 0.12;
 
 export function bandOf(density: number): DensityBand {
   if (density >= CORE_T) return "core";
   if (density >= SUBURB_T) return "suburban";
+  if (density >= EXURB_T) return "exurban";
   if (density >= RURAL_T) return "rural";
   return "fringe";
 }
@@ -137,15 +148,20 @@ export function buildRadialDensity(
   const cx = CITY_CENTER.x;
   const cz = CITY_CENTER.z;
 
-  // Satellite population centres — ALWAYS draw both slots (3 draws each) after
-  // the harmonics, so the stream never shifts when `centres` is tuned. Seeded
-  // placement in the mid/suburban ring, clamped inside the tier's land.
+  // Satellite population centres — ALWAYS draw every slot (fixed 1 + 3·SAT_SLOTS
+  // draws) after the harmonics, so the stream never shifts when `centres` is
+  // tuned. Active satellites fan evenly around the core (stratified sectors +
+  // in-sector jitter, seeded global phase) so 3+ centres never clump on one
+  // side; placement in the mid/suburban ring, clamped inside the tier's land.
+  const nSats = Math.min(SAT_SLOTS, Math.max(0, Math.round(centres) - 1));
+  const phase = rng() * Math.PI * 2;
   const sats: Array<{ x: number; z: number; r0: number }> = [];
-  for (let i = 0; i < 2; i++) {
-    const ang = rng() * Math.PI * 2;
+  for (let i = 0; i < SAT_SLOTS; i++) {
+    const jitter = rng();
     const dist = Math.min(1500 + rng() * 1100, maxHalfExtent() * 0.8);
     const scale = 0.32 + rng() * 0.16;
-    if (i < centres - 1) {
+    if (i < nSats) {
+      const ang = phase + ((i + jitter) / nSats) * Math.PI * 2;
       sats.push({ x: cx + Math.cos(ang) * dist, z: cz + Math.sin(ang) * dist, r0: R0e * scale });
     }
   }
@@ -205,9 +221,28 @@ const JITTER = 0.12;
 // 0 at the core threshold → 1 at the rural threshold: "how far into the
 // low-density regime" a point is. The shared easing for consumers (archetype
 // mix, building size, lamp spacing) so they all thin in lockstep.
+// Piecewise (user 2026-06-08, was linear CORE_T→RURAL_T): the residential belt
+// densifies — at SUBURB_T the easing now reads 0.45 where the old line gave
+// 0.64 (bigger archetypes, less shrink, tighter lamps) — and the exurban band
+// spans 0.45→0.84, so its middle (~0.65) lands on the belt's OLD value: the
+// new tier looks like residential used to.
+const SUBURB_EASE_ANCHORS: ReadonlyArray<readonly [number, number]> = [
+  [CORE_T, 0],
+  [SUBURB_T, 0.45],
+  [EXURB_T, 0.84],
+  [RURAL_T, 1],
+];
 export function suburbAmount(density: number): number {
-  const t = (CORE_T - density) / (CORE_T - RURAL_T);
-  return Math.max(0, Math.min(1, t));
+  if (density >= CORE_T) return 0;
+  if (density <= RURAL_T) return 1;
+  for (let i = 1; i < SUBURB_EASE_ANCHORS.length; i++) {
+    const [d1, s1] = SUBURB_EASE_ANCHORS[i];
+    if (density >= d1) {
+      const [d0, s0] = SUBURB_EASE_ANCHORS[i - 1];
+      return s0 + ((d0 - density) / (d0 - d1)) * (s1 - s0);
+    }
+  }
+  return 1;
 }
 
 // Density → probability that a development CELL is built at all. Piecewise on
@@ -216,11 +251,14 @@ export function suburbAmount(density: number): number {
 // scattered clusters; the fringe a stray structure. The Stage-0 review's
 // "whole-block dropout, keep developed blocks filled" — the in-cell fabric
 // stays dense, the cell either exists or doesn't.
+// 2026-06-08: the belt densifies (SUBURB_T 0.45 → 0.62, upper belt 0.85 →
+// 0.9); the new exurban band inherits the belt's OLD 0.45 keep.
 const KEEP_ANCHORS: ReadonlyArray<readonly [number, number]> = [
   [0, 0.02],
   [RURAL_T, 0.08],
-  [SUBURB_T, 0.45],
-  [0.45, 0.85],
+  [EXURB_T, 0.45],
+  [SUBURB_T, 0.62],
+  [0.45, 0.9],
   [CORE_T, 1],
 ];
 export function keepProbForDensity(density: number): number {

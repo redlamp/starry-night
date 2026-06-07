@@ -4,7 +4,7 @@ import { useMemo, useEffect } from "react";
 import * as THREE from "three";
 import { useSceneStore } from "@/lib/state/sceneStore";
 import { buildPopulationField } from "@/lib/seed/population";
-import { buildRadialDensity, CORE_T, SUBURB_T, RURAL_T } from "@/lib/seed/density";
+import { buildRadialDensity, CORE_T, SUBURB_T, EXURB_T, RURAL_T } from "@/lib/seed/density";
 import { CITY_CENTER, CITY_TIERS } from "@/lib/seed/topology";
 
 // Population-density heat map (Population panel). One plane over the city,
@@ -92,7 +92,7 @@ export function PopulationHeatmap({ masterSeed }: { masterSeed: string }) {
         // Preview only: etch the band edges so spread/shoulder read as moving
         // contour rings, not just a brightness change.
         if (draft) {
-          for (const t of [CORE_T, SUBURB_T, RURAL_T]) {
+          for (const t of [CORE_T, SUBURB_T, EXURB_T, RURAL_T]) {
             if (Math.abs(v - t) < 0.012) {
               r = 255;
               g = 255;

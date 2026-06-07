@@ -64,15 +64,15 @@ export const CITY_SCALE = CITY_HALF_EXTENT / BASE_HALF_EXTENT;
 export const CITY_TIERS = {
   1: 500, // Truck Stop
   2: 1000, // Village
-  3: 1500, // Town (default — the old "city")
+  3: 1500, // Town (the old "city")
   4: 2000, // Borough
   5: 2500, // Small City
-  6: 3000, // City (the old "metro" — the #63 gen-perf baseline)
+  6: 3000, // City (default, user 2026-06-08 — the old "metro", #63 gen-perf baseline)
   7: 3500, // Big City
   8: 4000, // Metropolis
 } as const;
 export type CityTier = keyof typeof CITY_TIERS;
-export const DEFAULT_CITY_TIER: CityTier = 3;
+export const DEFAULT_CITY_TIER: CityTier = 6;
 export const CITY_TIER_ORDER: CityTier[] = [1, 2, 3, 4, 5, 6, 7, 8];
 
 let genHalfExtent: number = CITY_TIERS[DEFAULT_CITY_TIER];

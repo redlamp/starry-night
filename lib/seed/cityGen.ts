@@ -24,6 +24,8 @@ import {
   buildDevelopmentMask,
   suburbAmount,
   densityProfileKey,
+  CORE_T,
+  SUBURB_T,
 } from "./density";
 
 // Any road tier, for the building-skip corridor test.
@@ -204,6 +206,9 @@ function pickArchetype(
   // residential / mixed-use branch reads it — one rng draw either way, so the
   // stream stays aligned for every other consumer.
   suburb = 0,
+  // 0..1 positional gradient toward high-density neighbours (radial density +
+  // core proximity at the BUILDING, not the district) — mixed-use only.
+  urban = 0,
 ): Archetype {
   const r = rng();
   if (character === "downtown" || character === "subcentre") {
@@ -220,12 +225,32 @@ function pickArchetype(
     if (r < 0.9) return "residential-tower";
     return "mid-rise";
   }
-  if (character === "residential" || character === "mixed-use") {
+  if (character === "mixed-use") {
+    // Mixed-use blend (user 2026-06-08): no spires, but the big NON-spire
+    // forms appear — office blocks and apartment slabs — and their share rides
+    // `urban`, the POSITIONAL gradient toward downtown / subcentres /
+    // population centres. So the side of a mixed-use district that faces a
+    // high-density neighbour grows its large fabric; the far side stays
+    // low-rise. Same single rng draw as every branch.
+    const large = (0.1 + 0.32 * urban) * (1 - 0.8 * suburb);
+    const a = large * 0.55; // office-block
+    const b = large; // residential-tower (slab)
+    const c = b + 0.34 - 0.2 * suburb; // mid-rise
+    const d = 1 - (0.1 + 0.06 * suburb); // low-rise bulk; rest strip-mall
+    if (r < a) return "office-block";
+    if (r < b) return "residential-tower";
+    if (r < c) return "mid-rise";
+    if (r < d) return "low-rise";
+    return "warehouse";
+  }
+  if (character === "residential") {
     // Suburban tilt (#49): thresholds slide from the urban mix toward
     // low-rise-dominated (the Stage-0 review: density picks SMALLER archetypes
     // toward the edge — homes and corner shops, the odd strip mall; towers and
     // apartment slabs vanish). At suburb=0 the numbers are exactly the
     // pre-#49 mix; at suburb=1 a residential street is ~81% low-rise homes.
+    // The 2026-06-08 suburbAmount re-anchor feeds this LOWER suburb values
+    // across the belt, so the same formulas now read denser there.
     const a = 0.1 - 0.1 * suburb; // residential-tower → 0
     const b = 0.45 - 0.31 * suburb; // mid-rise → 0.14
     const c = 0.8 + 0.15 * suburb; // low-rise → the bulk (rest: strip-mall)
@@ -762,6 +787,14 @@ function fillTensorBuildings(
   }
   const coreProx = makeCoreProximity([...silhouetteByIndex.values()]);
   const roadIndex = new RoadIndex(roads);
+  // Mixed-use urban gradient (user 2026-06-08): how "city-facing" a POINT is —
+  // the radial population field eased over the suburban→core range (catches
+  // downtown AND satellite centres), or the high-rise silhouette proximity if
+  // that's stronger (catches subcentre pockets). Pure reads, no rng.
+  const urbanAt = (x: number, z: number, prox: number): number => {
+    const t = (density.radial.at(x, z) - SUBURB_T) / (CORE_T - SUBURB_T);
+    return Math.max(prox, Math.max(0, Math.min(1, t)));
+  };
 
   const buildings: Building[] = [];
   const bIndex = new Map<string, Footprint[]>();
@@ -833,10 +866,13 @@ function fillTensorBuildings(
         const suburb = suburbAmount(localDensity);
 
         const prox = coreProx(sx, sz);
-        const archetype = pickArchetype(rng, character, prox, suburb);
+        const urban = character === "mixed-use" ? urbanAt(sx, sz, prox) : 0;
+        const archetype = pickArchetype(rng, character, prox, suburb, urban);
         const dims = dimensionsForArchetype(archetype, rng);
         if (suburb > 0 && (character === "residential" || character === "mixed-use")) {
-          const s = 1 - SUBURB_SHRINK * suburb;
+          // urban (mixed-use only) counters the shrink — the city-facing side
+          // keeps full scale so its large blend reads large.
+          const s = 1 - SUBURB_SHRINK * suburb * (1 - urban);
           dims.width *= s;
           dims.depth *= s;
           dims.height *= s;
@@ -915,7 +951,7 @@ function fillTensorBuildings(
     downtown: 0.4,
     subcentre: 0.4,
     heritage: 0.3,
-    residential: 0.55,
+    residential: 0.62, // 0.55 → 0.62 (user 2026-06-08: denser residential)
     industrial: 0.7,
     "mixed-use": 0.5,
   };
@@ -942,10 +978,12 @@ function fillTensorBuildings(
       if (densityRoll > INTERIOR_DENSITY[character] * (1 - 0.65 * suburb)) continue;
       const grammar = GRAMMAR[character];
       const prox = coreProx(px, pz);
-      const archetype = pickArchetype(irng, character, prox, suburb);
+      const urban = character === "mixed-use" ? urbanAt(px, pz, prox) : 0;
+      const archetype = pickArchetype(irng, character, prox, suburb, urban);
       const dims = dimensionsForArchetype(archetype, irng);
       if (suburb > 0 && (character === "residential" || character === "mixed-use")) {
-        const s = 1 - SUBURB_SHRINK * suburb;
+        // Same urban counter-shrink as frontage (mixed-use city-facing side).
+        const s = 1 - SUBURB_SHRINK * suburb * (1 - urban);
         dims.width *= s;
         dims.depth *= s;
         dims.height *= s;

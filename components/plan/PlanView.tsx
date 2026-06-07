@@ -12,6 +12,7 @@ import {
   buildDensityField,
   CORE_T,
   SUBURB_T,
+  EXURB_T,
   RURAL_T,
   type DensityBand,
 } from "@/lib/seed/density";
@@ -35,12 +36,14 @@ export type PlanLayers = {
 const BAND_FILL: Record<DensityBand, string> = {
   core: "#ffd34daa",
   suburban: "#4f9e6baa",
+  exurban: "#46795aaa", // the 2026-06-08 tier — between suburban and rural greens
   rural: "#3e5a4aaa",
   fringe: "#1e2735aa",
 };
 const BAND_EDGE: Array<{ t: number; color: string }> = [
   { t: CORE_T, color: "#ffd34d" },
   { t: SUBURB_T, color: "#4f9e6b" },
+  { t: EXURB_T, color: "#5d8a68" },
   { t: RURAL_T, color: "#7a8a6b" },
 ];
 
