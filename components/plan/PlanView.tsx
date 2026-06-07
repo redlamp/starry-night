@@ -15,6 +15,7 @@ import {
   RURAL_T,
   type DensityBand,
 } from "@/lib/seed/density";
+import { sampleSuburbNodes } from "@/lib/seed/suburbField";
 import { useSceneStore } from "@/lib/state/sceneStore";
 import { useGeneratedCity } from "@/lib/hooks/useGeneratedCity";
 
@@ -78,7 +79,9 @@ export function PlanView({ seed, size, layers }: Props) {
     const lights = generateStreetlights(seed, cityShape, cityShapeScale);
     // Cheap (one rng draw per district) — rebuilt per redraw, never cached.
     const density = buildDensityField(seed, field);
-    return { topo, field, city, lights, density };
+    // #49 node-field rebuild Stage 1: suburb population nodes (cheap grid scan).
+    const nodes = sampleSuburbNodes(seed, density.radial);
+    return { topo, field, city, lights, density, nodes };
   }, [ready, seed, cityShape, cityShapeScale, citySize, citySketch, fieldDeviation]);
 
   useEffect(() => {
@@ -92,7 +95,7 @@ export function PlanView({ seed, size, layers }: Props) {
     if (!ctx) return;
     ctx.scale(dpr, dpr);
 
-    const { topo, field, city, lights, density } = data;
+    const { topo, field, city, lights, density, nodes } = data;
     const cx = CITY_CENTER.x;
     const cz = CITY_CENTER.z;
     // Frame the current tier's full gen extent (#58) — not the fixed default
@@ -163,6 +166,30 @@ export function PlanView({ seed, size, layers }: Props) {
         }
         ctx.strokeStyle = color;
         ctx.stroke();
+      }
+      ctx.restore();
+
+      // Suburb population nodes (#49 node-field rebuild, Stage 1): pod centre
+      // dots + elliptical pod footprints. These are the organising centres the
+      // Stage-2 crescents/entries will trace around — placement is what this
+      // overlay verifies (spacing by density, band coverage, squash variety).
+      ctx.save();
+      for (const n of nodes) {
+        const px = toX(n.x);
+        const py = toY(n.z);
+        const rMaj = worldWToPx(n.r);
+        const rMin = rMaj * n.squash;
+        ctx.beginPath();
+        ctx.ellipse(px, py, rMaj, rMin, n.angle, 0, Math.PI * 2);
+        ctx.strokeStyle = "#ffd34d";
+        ctx.globalAlpha = 0.55;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(px, py, 2.2, 0, Math.PI * 2);
+        ctx.fillStyle = "#ffe9a0";
+        ctx.globalAlpha = 0.95;
+        ctx.fill();
       }
       ctx.restore();
     }
