@@ -235,7 +235,6 @@ const FACADE_TILT = -0.12; // rad — the front face leans back slightly
 function AppleBadge() {
   const { scene } = useGLTF(DAZ_URL);
   const setSeed = useSceneStore((s) => s.setSeed);
-  const [hovered, setHovered] = useState(false);
   const position = useMemo(() => {
     let glassMesh: THREE.Mesh | undefined;
     let bodyMesh: THREE.Mesh | undefined;
@@ -267,17 +266,13 @@ function AppleBadge() {
       onPointerOver={(e) => {
         e.stopPropagation();
         setCursorZone("badge", true);
-        setHovered(true);
       }}
-      onPointerOut={() => {
-        setCursorZone("badge", false);
-        setHovered(false);
-      }}
+      onPointerOut={() => setCursorZone("badge", false)}
     >
       <planeGeometry args={[2.1, 2.2]} />
       <meshBasicMaterial
         transparent
-        opacity={BADGE_DEBUG ? 0.35 : hovered ? 0.15 : 0}
+        opacity={BADGE_DEBUG ? 0.35 : 0}
         color="#ffffff"
         depthWrite={false}
       />
