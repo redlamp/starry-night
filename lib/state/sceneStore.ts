@@ -71,7 +71,7 @@ export const DEFAULT_INTENT: CameraIntent = {
   position: [3, 36, 720],
   lookAt: [-3.377, 36.474, -759.372],
   rotation: [2.9051946114622647, -0.005135430560327543, 3.140355522200459],
-  fov: 28,
+  fov: 25, // narrow / low-distortion, matching Google Maps' 3D camera
   orient: "lookAt",
 };
 

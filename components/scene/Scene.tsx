@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import * as THREE from "three";
 import { useSceneStore, QUALITY_TIERS } from "@/lib/state/sceneStore";
@@ -13,6 +14,7 @@ import { Ground } from "./Ground";
 import { Streetlights } from "./Streetlights";
 import { Beacons } from "./Beacons";
 import { CameraControls } from "./CameraControls";
+import { DreiSceneControls } from "./DreiSceneControls";
 import { PerfMonitor } from "./PerfMonitor";
 import { TimeTicker } from "./TimeTicker";
 import { ProjectionBlender } from "./ProjectionBlender";
@@ -40,6 +42,17 @@ export function Scene() {
   const qualityTier = useSceneStore((s) => s.qualityTier);
   const dprMax = QUALITY_TIERS[qualityTier].dprMax;
 
+  // Phase-1 migration flag: ?controls=drei (or =map) opts into the new drei
+  // bridge (DreiSceneControls — Google-Maps input model); default stays on the
+  // production controller. The controls live inside <Canvas> (client-only WebGL),
+  // so reading the param in a useState initialiser can't cause a hydration mismatch.
+  const [controlsFlag] = useState(() =>
+    typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search).get("controls")
+      : null,
+  );
+  const useDreiControls = controlsFlag === "drei" || controlsFlag === "map";
+
   // #44: warm the heavy city-generation cache off the mount-critical path. The
   // canvas + sky / stars / moon / ground mount immediately; the city-derived
   // layers stream in one idle tick later, once their shared seeded cache is warm
@@ -58,7 +71,7 @@ export function Scene() {
       dpr={[1, dprMax]}
       style={{ touchAction: "none" }}
     >
-      <CameraControls />
+      {useDreiControls ? <DreiSceneControls /> : <CameraControls />}
       <ProjectionBlender />
       <PerfMonitor />
       <TimeTicker />
@@ -121,7 +134,9 @@ export function Scene() {
           <TileCullOverlay masterSeed={masterSeed} />
         </>
       )}
-      <FocalIndicator />
+      {/* old controller's store-based indicator; the drei bridge renders its own
+          live one (tracks the camera-controls target with no throttle lag) */}
+      {!useDreiControls && <FocalIndicator />}
     </Canvas>
   );
 }

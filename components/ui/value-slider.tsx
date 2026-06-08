@@ -24,6 +24,7 @@ export function ValueSlider({
   step,
   onChange,
   labelClass,
+  stepperClass,
 }: {
   label: string;
   value: number;
@@ -32,6 +33,7 @@ export function ValueSlider({
   step: number;
   onChange: (v: number) => void;
   labelClass?: string;
+  stepperClass?: string;
 }) {
   return (
     <NumberField
@@ -55,7 +57,7 @@ export function ValueSlider({
         onValueChange={(v) => onChange(typeof v === "number" ? v : v[0])}
         className="flex-1"
       />
-      <NumberFieldGroup className="bg-background/60 h-7 w-[6.25rem] shrink-0">
+      <NumberFieldGroup className={cn("bg-background/60 h-7 shrink-0", stepperClass ?? "w-[6.25rem]")}>
         <NumberFieldDecrement />
         <NumberFieldInput className="text-xs" />
         <NumberFieldIncrement />

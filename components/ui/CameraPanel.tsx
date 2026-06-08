@@ -26,6 +26,7 @@ import { CITY_TIER_ORDER } from "@/lib/seed/topology";
 import { TIER_LABELS, tierKm } from "@/components/ui/cityTiers";
 import { cn, isTypingTarget } from "@/lib/utils";
 import {
+  Box,
   Bug,
   Building,
   Building2,
@@ -41,18 +42,22 @@ import {
   Info,
   LayoutGrid,
   Map as MapIcon,
+  MapPin,
   Moon,
   MoonStar,
   Orbit as OrbitIcon,
   RadioTower,
+  Rotate3d,
   RotateCcw,
   Route,
+  RulerDimensionLine,
   Save,
   Search,
   Settings,
   Sparkles,
   Stars,
   Sun,
+  Telescope,
   TowerControl,
   Undo2,
   Warehouse,
@@ -297,8 +302,15 @@ function persistPanelWidth(w: number) {
 }
 
 export function CameraPanel() {
-  const { cameraMode, cameraLive, resetCamera, saveCurrentAsDefault, revertToSaved, hasSavedConfig } =
-    useSceneStore();
+  const {
+    cameraMode,
+    cameraLive,
+    orbit,
+    resetCamera,
+    saveCurrentAsDefault,
+    revertToSaved,
+    hasSavedConfig,
+  } = useSceneStore();
   const orbitRestoreSet = useSceneStore((s) => s.orbitRestore !== null);
 
   const [hidden, setHidden] = useState(true);
@@ -504,17 +516,43 @@ export function CameraPanel() {
               <PoseSection flying={flying} />
               {/* Live readout — lives with the camera controls (user 2026-06-07). */}
               <div className="border-foreground/10 border-t pt-2">
-                <div className="text-foreground/70 grid grid-cols-[5rem_1fr] gap-1 font-mono text-xs">
-                  <div>position</div>
-                  <div className="tabular-nums">
-                    {fmt(livePos[0])} {fmt(livePos[1])} {fmt(livePos[2])}
-                  </div>
-                  <div>rotation°</div>
-                  <div className="tabular-nums">
-                    {fmt(liveRotDeg[0], 1)} {fmt(liveRotDeg[1], 1)} {fmt(liveRotDeg[2], 1)}
-                  </div>
-                  <div>fov</div>
-                  <div className="tabular-nums">{fmt(cameraLive.fov)}</div>
+                <div className="text-foreground/70 grid grid-cols-[auto_1fr_1fr_1fr] items-center gap-x-2 gap-y-1 font-mono text-xs">
+                  {/* header row: x / y / z over the value columns */}
+                  <div />
+                  <div className="text-foreground/40 text-right text-[10px] uppercase">x</div>
+                  <div className="text-foreground/40 text-right text-[10px] uppercase">y</div>
+                  <div className="text-foreground/40 text-right text-[10px] uppercase">z</div>
+
+                  <Camera className="size-3.5" aria-label="camera position">
+                    <title>camera position</title>
+                  </Camera>
+                  <div className="tabular-nums text-right">{fmt(livePos[0])}</div>
+                  <div className="tabular-nums text-right">{fmt(livePos[1])}</div>
+                  <div className="tabular-nums text-right">{fmt(livePos[2])}</div>
+
+                  <MapPin className="size-3.5" aria-label="focal point">
+                    <title>focal point</title>
+                  </MapPin>
+                  <div className="tabular-nums text-right">{fmt(orbit.centerX)}</div>
+                  <div className="tabular-nums text-right">{fmt(orbit.lookAtY)}</div>
+                  <div className="tabular-nums text-right">{fmt(orbit.centerZ)}</div>
+
+                  <Rotate3d className="size-3.5" aria-label="rotation (degrees)">
+                    <title>rotation (degrees)</title>
+                  </Rotate3d>
+                  <div className="tabular-nums text-right">{fmt(liveRotDeg[0], 1)}</div>
+                  <div className="tabular-nums text-right">{fmt(liveRotDeg[1], 1)}</div>
+                  <div className="tabular-nums text-right">{fmt(liveRotDeg[2], 1)}</div>
+
+                  <div className="text-foreground/40 text-[10px] uppercase">fov</div>
+                  <div className="tabular-nums text-right">{fmt(cameraLive.fov)}</div>
+                  <RulerDimensionLine
+                    className="size-3.5 justify-self-end"
+                    aria-label="distance (camera → focal)"
+                  >
+                    <title>distance camera → focal</title>
+                  </RulerDimensionLine>
+                  <div className="tabular-nums text-right">{fmt(orbit.radius)}</div>
                 </div>
               </div>
             </Section>
@@ -737,11 +775,12 @@ function OrbitSection() {
       </div>
       <ValueSlider
         label="speed °/s"
-        value={Number((360 / Math.max(1, orbit.periodSec)).toFixed(1))}
-        min={0}
-        max={72}
+        value={orbit.periodSec !== 0 ? Number((360 / orbit.periodSec).toFixed(1)) : 0}
+        min={-60}
+        max={60}
         step={0.1}
-        onChange={(dps) => setOrbit({ periodSec: 360 / Math.max(0.1, dps) })}
+        onChange={(dps) => setOrbit({ periodSec: dps !== 0 ? 360 / dps : 0 })}
+        stepperClass="w-32"
       />
       <ValueSlider
         label="radius"
@@ -750,6 +789,7 @@ function OrbitSection() {
         max={5000}
         step={5}
         onChange={(radius) => setOrbit({ radius })}
+        stepperClass="w-32"
       />
       <ValueSlider
         label="elev°"
@@ -758,6 +798,7 @@ function OrbitSection() {
         max={90}
         step={0.5}
         onChange={(elevationDeg) => setOrbit({ elevationDeg })}
+        stepperClass="w-32"
       />
       <ValueSlider
         label="azim°"
@@ -766,6 +807,7 @@ function OrbitSection() {
         max={360}
         step={1}
         onChange={(azimuthDeg) => setOrbit({ azimuthDeg })}
+        stepperClass="w-32"
       />
       <ValueSlider
         label="focal y"
@@ -774,6 +816,7 @@ function OrbitSection() {
         max={2000}
         step={1}
         onChange={(lookAtY) => setOrbit({ lookAtY })}
+        stepperClass="w-32"
       />
     </>
   );
@@ -2033,8 +2076,12 @@ function ProjectionRow() {
         onValueChange={(v) => tweenProjectionTo(v as "perspective" | "orthographic")}
       >
         <TabsList className="w-full">
-          <TabsTrigger value="perspective">Perspective</TabsTrigger>
-          <TabsTrigger value="orthographic">Orthographic</TabsTrigger>
+          <TabsTrigger value="perspective" title="Perspective" aria-label="Perspective">
+            <Telescope className="size-4" />
+          </TabsTrigger>
+          <TabsTrigger value="orthographic" title="Orthographic" aria-label="Orthographic">
+            <Box className="size-4" />
+          </TabsTrigger>
         </TabsList>
       </Tabs>
     </div>
