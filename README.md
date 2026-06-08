@@ -8,8 +8,6 @@
 
 **Live demo:** https://redlamp.github.io/starry-night/
 
-A small city sits beneath a vast star-filled sky, lit from within by warm residential and cool commercial windows, turning slowly on a distant orbit. It is built to reward long looks rather than demand attention, the kind of thing you might leave running on a second monitor. The guiding goal: the still frame, with no motion at all, should already carry the mood.
-
 ## Highlights
 
 - **Seeded and deterministic.** Every city is a pure function of its seed. The same seed always produces the same city, down to each lit window; different seeds produce categorically different cities, not variations on a template.
