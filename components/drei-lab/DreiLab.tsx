@@ -13,7 +13,7 @@ import * as THREE from "three";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import {
   CameraControls,
-  FlyControls,
+  FirstPersonControls,
   Grid,
   GizmoHelper,
   GizmoViewport,
@@ -313,7 +313,7 @@ export function DreiLab() {
               <p className="text-[11px] text-zinc-500">
                 {mode === "orbit"
                   ? "orbit pivots on the target (= focus point); right-drag / two-finger trucks it"
-                  : "WASD / R-F move · drag to look — drei FlyControls (stock; rolls). Migration pairs it with PointerLockControls."}
+                  : "WASD move · mouse looks (drei FirstPersonControls — look follows the cursor, no roll/horizon-tilt)."}
               </p>
             </Section>
 
@@ -411,7 +411,7 @@ export function DreiLab() {
           {mode === "orbit" ? (
             <CameraControls ref={controls} />
           ) : (
-            <FlyControls movementSpeed={12} rollSpeed={0.4} dragToLook />
+            <FirstPersonControls movementSpeed={10} lookSpeed={0.1} />
           )}
           {/* after the controls so it owns the final projection matrix */}
           <ProjectionMorph controls={controls} targetRef={orthoTarget} />
