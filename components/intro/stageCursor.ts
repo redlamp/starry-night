@@ -117,3 +117,24 @@ export function setDragCursorLock(lock: StageDragOwner | null) {
 export function stagePointerHot() {
   return flags.screen || flags.knob;
 }
+
+// Touch double-tap detection. Mouse uses R3F's native onDoubleClick; touch
+// doesn't fire dblclick reliably (and mobile often hijacks it for zoom), so we
+// detect it ourselves: two taps in the SAME zone, close in time and space.
+// Keyed by zone so a screen tap then a Mac tap isn't read as a double.
+let lastTap: { t: number; x: number; y: number; zone: string } | null = null;
+const DOUBLE_TAP_MS = 300;
+const DOUBLE_TAP_PX = 30;
+export function isDoubleTap(
+  e: { timeStamp: number; clientX: number; clientY: number; pointerType: string },
+  zone: string,
+): boolean {
+  if (e.pointerType !== "touch") return false;
+  const dbl =
+    lastTap !== null &&
+    lastTap.zone === zone &&
+    e.timeStamp - lastTap.t < DOUBLE_TAP_MS &&
+    Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < DOUBLE_TAP_PX;
+  lastTap = dbl ? null : { t: e.timeStamp, x: e.clientX, y: e.clientY, zone };
+  return dbl;
+}

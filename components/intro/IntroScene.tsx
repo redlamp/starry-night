@@ -3,7 +3,7 @@
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import gsap from "gsap";
-import { Canvas } from "@react-three/fiber";
+import { Canvas, type ThreeEvent } from "@react-three/fiber";
 import { Backdrop, OrbitControls } from "@react-three/drei";
 import { Bloom, EffectComposer, ToneMapping } from "@react-three/postprocessing";
 import { ToneMappingMode } from "postprocessing";
@@ -13,6 +13,7 @@ import {
   setCursorZone,
   setDragCursorLock,
   stagePointerHot,
+  isDoubleTap,
   type StageDragOwner,
 } from "./stageCursor";
 import { PerfMonitor } from "@/components/scene/PerfMonitor";
@@ -128,6 +129,10 @@ export function IntroScene({
   // stand down for the duration. Same while a tween owns the camera, or
   // while the pointer engages the brightness knob (its drag owns the input).
   const [screenHover, setScreenHover] = useState(false);
+  // Touch path: tapping the glass arms this (touch has no hover to do it), and
+  // it persists until you tap the stage or double-tap a Mac. Desktop never
+  // sets it — it stays hover-driven via screenHover below.
+  const [screenFocused, setScreenFocused] = useState(false);
   const [knobEngaged, setKnobEngaged] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [selectedMac, setSelectedMac] = useState<MacId>("daz");
@@ -185,7 +190,8 @@ export function IntroScene({
   // hover takes effect only while unowned; an owning drag holds its mode
   // even when the pointer strays (city drag keeps the city, studio drag
   // never reroutes to the city)
-  const screenActive = dragOwner === "screen" || (dragOwner === null && screenHover);
+  const screenActive =
+    dragOwner === "screen" || screenFocused || (dragOwner === null && screenHover);
   const knobActive = dragOwner === "knob" || (dragOwner === null && knobEngaged);
 
   // dblclick a Mac: focus it AND reset the camera to its frontal pose;
@@ -263,6 +269,12 @@ export function IntroScene({
         scale={[16, 6, 6]}
         position={[0, -0.012, -2.1]}
         onDoubleClick={handleStageDoubleClick}
+        onPointerDown={(e: ThreeEvent<PointerEvent>) => {
+          // touch: tapping the stage exits screen-focus; double-tap recenters
+          if (e.pointerType !== "touch") return;
+          setScreenFocused(false);
+          if (isDoubleTap(e, "stage")) handleStageDoubleClick();
+        }}
         onPointerOver={() => setCursorZone("stage", true)}
         onPointerOut={() => setCursorZone("stage", false)}
       >
@@ -283,6 +295,7 @@ export function IntroScene({
           knobLocked={dragOwner !== null && dragOwner !== "knob"}
           onScreenHoverChange={handleScreenHoverChange}
           onScreenDragChange={(d) => (d ? claimDrag("screen") : releaseDrag("screen"))}
+          onScreenFocus={() => setScreenFocused(true)}
           onBrightnessChange={onBrightnessChange}
           onKnobEngageChange={setKnobEngaged}
           onKnobDragChange={(d) => (d ? claimDrag("knob") : releaseDrag("knob"))}
@@ -293,6 +306,14 @@ export function IntroScene({
             // this, the same dblclick also fires the stage reset behind us
             e.stopPropagation();
             orbitToMac("daz");
+          }}
+          onPointerDown={(e) => {
+            // touch: a tap on the Mac BODY (the screen stops propagation, so
+            // this never fires for the glass) exits screen-focus; double-tap
+            // recenters the studio camera on this Mac
+            if (e.pointerType !== "touch") return;
+            setScreenFocused(false);
+            if (isDoubleTap(e, "mac:daz")) orbitToMac("daz");
           }}
           onPointerOver={() => setCursorZone("mac", true)}
           onPointerOut={() => setCursorZone("mac", false)}

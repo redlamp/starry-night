@@ -6,7 +6,7 @@ import { RenderTexture, useGLTF } from "@react-three/drei";
 import { useThree } from "@react-three/fiber";
 import type { ThreeElements } from "@react-three/fiber";
 import { ScreenCity } from "./ScreenCity";
-import { setCursorZone } from "./stageCursor";
+import { setCursorZone, isDoubleTap } from "./stageCursor";
 import { useSceneStore } from "@/lib/state/sceneStore";
 import { randomSeed } from "@/lib/seed/rng";
 import { asset } from "@/lib/basePath";
@@ -502,6 +502,7 @@ function DazScreenViewport({
   scanline,
   onHoverChange,
   onDragChange,
+  onScreenFocus,
 }: {
   mode: IntroViewMode;
   interactive: boolean;
@@ -514,6 +515,8 @@ function DazScreenViewport({
   scanline: number;
   onHoverChange?: (hovering: boolean) => void;
   onDragChange?: (dragging: boolean) => void;
+  /** touch: a tap on the glass arms screen-focus (no hover to do it for us) */
+  onScreenFocus?: () => void;
 }) {
   const { scene } = useGLTF(DAZ_URL);
   const dpr = useThree((s) => s.viewport.dpr);
@@ -641,6 +644,17 @@ function DazScreenViewport({
         onHoverChange?.(false);
         setCursorZone("screen", false);
       }}
+      onPointerDown={(e) => {
+        // Touch has no hover to arm screen-focus, so a tap on the glass does it
+        // (desktop still uses hover). flags.screen — set on touch's synthesized
+        // pointerover just before this — vetoes the studio orbit, so this
+        // focusing tap doesn't pan the Mac. stopPropagation keeps the Mac body's
+        // tap-to-blur from firing. A double-tap recenters the city camera.
+        if (e.pointerType !== "touch") return;
+        e.stopPropagation();
+        onScreenFocus?.();
+        if (isDoubleTap(e, "screen")) setResetSignal((c) => c + 1);
+      }}
       onDoubleClick={(e) => {
         // screen dblclick = city-orbit reset only; don't bubble into the
         // Mac-focus dblclick on the body group
@@ -727,6 +741,7 @@ export function MacDaz({
   knobLocked = false,
   onScreenHoverChange,
   onScreenDragChange,
+  onScreenFocus,
   onBrightnessChange,
   onKnobEngageChange,
   onKnobDragChange,
@@ -746,6 +761,7 @@ export function MacDaz({
   knobLocked?: boolean;
   onScreenHoverChange?: (hovering: boolean) => void;
   onScreenDragChange?: (dragging: boolean) => void;
+  onScreenFocus?: () => void;
   onBrightnessChange?: (v: number) => void;
   onKnobEngageChange?: (engaged: boolean) => void;
   onKnobDragChange?: (dragging: boolean) => void;
@@ -771,6 +787,7 @@ export function MacDaz({
         autoOrbit={screenAutoOrbit}
         onHoverChange={onScreenHoverChange}
         onDragChange={onScreenDragChange}
+        onScreenFocus={onScreenFocus}
       />
       <AppleBadge />
       {onBrightnessChange && (
