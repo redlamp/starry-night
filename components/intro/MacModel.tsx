@@ -9,6 +9,7 @@ import { ScreenCity } from "./ScreenCity";
 import { setCursorZone } from "./stageCursor";
 import { useSceneStore } from "@/lib/state/sceneStore";
 import { randomSeed } from "@/lib/seed/rng";
+import { asset } from "@/lib/basePath";
 import {
   SCREEN_COLOR_MODE_INDEX,
   type BwLevels,
@@ -32,7 +33,9 @@ type GroupProps = ThreeElements["group"];
  * the starry-night viewport.
  */
 
-const DAZ_URL = "/models/mac-128k-daz.glb";
+// Routed through asset() so the GLB resolves under the Pages base path
+// (/starry-night/models/...); a bare "/models/..." 404s on the deploy.
+const DAZ_URL = asset("/models/mac-128k-daz.glb");
 const SCREEN_MESH = "Computer_Screen_0";
 const COMPUTER_ONLY = /^(Computer|Brightness)_/;
 
