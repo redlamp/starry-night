@@ -12,6 +12,7 @@ import * as THREE from "three";
 import { Canvas, useFrame } from "@react-three/fiber";
 import {
   CameraControls,
+  FlyControls,
   Grid,
   GizmoHelper,
   GizmoViewport,
@@ -113,13 +114,11 @@ function Readout({
 }) {
   const last = useRef(0);
   useFrame((state) => {
-    const c = controls.current;
-    if (!c) return;
     // throttle to ~6/s so the overlay isn't a re-render storm
     if (state.clock.elapsedTime - last.current < 0.16) return;
     last.current = state.clock.elapsedTime;
-    c.getPosition(_pos);
-    c.getTarget(_tgt);
+    _pos.copy(state.camera.position); // camera position works in orbit AND fly
+    controls.current?.getTarget(_tgt); // target is only meaningful in orbit
     onChange(_pos, _tgt);
   });
   return null;
@@ -147,6 +146,7 @@ function Satellites() {
 export function DreiLab() {
   const controls = useRef<CameraControlsImpl | null>(null);
   const [projection, setProjection] = useState<Projection>("perspective");
+  const [mode, setMode] = useState<"orbit" | "fly">("orbit");
   const [readout, setReadout] = useState({ pos: "—", tgt: "—" });
 
   // checklist tick state, persisted to localStorage (hydration-safe: load in effect)
@@ -177,6 +177,26 @@ export function DreiLab() {
     setReadout({ pos: fmt(pos), tgt: fmt(tgt) });
   }, []);
 
+  // F toggles orbit <-> fly (matches `/`).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() !== "f" || e.repeat) return;
+      const t = e.target as HTMLElement | null;
+      if (t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+      setMode((m) => (m === "orbit" ? "fly" : "orbit"));
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  // Orbit pivots on the "focus point" — camera-controls calls it the TARGET.
+  // Frame the centre box as the target whenever we (re)enter orbit, or swap
+  // projection (which remounts the controls and would reset the target to origin).
+  useEffect(() => {
+    if (mode !== "orbit") return;
+    controls.current?.setLookAt(14, 9, 14, 0, 1, 0, true);
+  }, [mode, projection]);
+
   // imperative-API probes — the migration-critical camera-controls calls
   const poseA = () => controls.current?.setLookAt(20, 12, 20, 0, 1, 0, true);
   const poseB = () => controls.current?.setLookAt(0.001, 28, 0.001, 0, 0, 0, true); // ~top-down
@@ -200,7 +220,13 @@ export function DreiLab() {
           <OrthographicCamera makeDefault position={[14, 9, 14]} zoom={28} near={0.1} far={500} />
         )}
         {/* key=projection forces a re-bind when the default camera swaps */}
-        <CameraControls key={projection} ref={controls} />
+        {mode === "orbit" ? (
+          <CameraControls key={projection} ref={controls} />
+        ) : (
+          // fly mode — drei's stock FlyControls (WASD/RF + drag-to-look). The
+          // migration pairs this with PointerLockControls for the `/` feel.
+          <FlyControls movementSpeed={12} rollSpeed={0.4} dragToLook />
+        )}
         <Readout controls={controls} onChange={onReadout} />
 
         <ambientLight intensity={0.6} />
@@ -259,11 +285,38 @@ export function DreiLab() {
             >
               projection: {projection === "perspective" ? "persp" : "ortho"}
             </button>
+            <button className={btn} onClick={() => controls.current?.setTarget(0, 1, 0, true)}>
+              focus → centre
+            </button>
+            <button className={btn} onClick={() => controls.current?.setTarget(9, 1, 0, true)}>
+              focus → red
+            </button>
           </div>
           <div className="mt-2 font-mono text-[10px] text-neutral-400">
             pos [{readout.pos}]<br />
             tgt [{readout.tgt}]
           </div>
+        </div>
+
+        <div className="mt-3">
+          <div className="text-[11px] font-medium text-neutral-300">Mode</div>
+          <div className="mt-1.5 flex flex-wrap items-center gap-2">
+            <button
+              className={btn}
+              onClick={() => setMode((m) => (m === "orbit" ? "fly" : "orbit"))}
+            >
+              {mode === "orbit" ? "→ fly" : "→ orbit"}
+            </button>
+            <span className="text-[11px] text-neutral-400">
+              current: <b className="text-neutral-200">{mode}</b>{" "}
+              <span className="text-neutral-600">(F)</span>
+            </span>
+          </div>
+          <p className="mt-1 text-[10px] text-neutral-500">
+            {mode === "orbit"
+              ? "orbit pivots on the target (= the focus point); right-drag / two-finger trucks it"
+              : "WASD / R-F move · drag to look — drei FlyControls (stock; rolls). The / migration pairs this with PointerLockControls."}
+          </p>
         </div>
 
         <div className="mt-4 border-t border-neutral-700 pt-3">
