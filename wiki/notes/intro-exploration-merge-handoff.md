@@ -1,11 +1,17 @@
 ---
 tags:
   - domain/intro
-  - status/open
+  - status/verified
   - origin/worktree-merge
 ---
 
 # Intro Exploration → dev Merge Handoff
+
+> **✅ RESOLVED 2026-06-08.** Merged `intro/exploration` → `dev` (`--no-ff`,
+> `a4eb8b2`) and shipped `dev` → `main`. Conflicts resolved as planned (IntroTicker
+> reconciled with `autoPlay` + `cityReady`; daily union; ScreenCity call-site fixed).
+> Verified tsc + eslint clean; `/intro` + `/` eyeballed. Branch + worktrees torn down.
+> Stars-on-`/` follow-ups filed: #75/#76/#77. Kept for the record.
 
 **Date:** 2026-06-08 · **Branch:** `intro/exploration` (worktree
 `.claude/worktrees/intro-exploration`) · **HEAD:** `ad07ce7`

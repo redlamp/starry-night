@@ -87,9 +87,11 @@ const isTypingTarget = (t: EventTarget | null) => {
 };
 
 export function IntroApp() {
-  // Pin the intro's city tier; put the visitor's own tier back on the way
-  // out. Shared-store caveat until profiles exist: closing the tab while on
-  // /intro persists tier 3 into the main app's next load.
+  // Pin the intro's city tier; put the visitor's own tier back on the way out
+  // (SPA nav). The store is a shared singleton, but persistence is explicit-save
+  // only (the main-app Save button, absent here) — so this pin is in-memory and a
+  // reload re-hydrates / from the saved config or defaults; /intro can't leak
+  // tier 3 into the main app's saved state.
   useEffect(() => {
     const s = useSceneStore.getState();
     const prev = s.citySize;
