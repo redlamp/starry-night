@@ -7,7 +7,7 @@ tags:
 
 # Intro Exploration → dev Merge Handoff
 
-> **✅ RESOLVED 2026-06-08.** Merged `intro/exploration` → `dev` (`--no-ff`,
+> **✅ RESOLVED 2026-06-07 (late night).** Merged `intro/exploration` → `dev` (`--no-ff`,
 > `a4eb8b2`) and shipped `dev` → `main`. Conflicts resolved as planned (IntroTicker
 > reconciled with `autoPlay` + `cityReady`; daily union; ScreenCity call-site fixed).
 > Verified tsc + eslint clean; `/intro` + `/` eyeballed. Branch + worktrees torn down.
