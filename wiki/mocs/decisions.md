@@ -33,4 +33,5 @@ Map of Content for architectural and product decisions. Each decision is an atom
 ## Intro exploration
 
 - [[decision-intro-mac-viewport]] — **/intro Mac stage + screen pipeline:** Daz 128K model (CC BY-NC, screen mesh separable), native-512×342 multi-pass chain (process-then-filter kills dither moiré), screen-blend over the model's glass, halation in-chain / bloom quality-gated, orientation-derived snow-globe coupling, dblclick gesture map
-- [[plan-drei-camera-migration]] — **planned:** unify `/` + `/intro` camera controls on drei `<CameraControls>` (camera-controls); fly via drei FlyControls/PointerLockControls; auto-revolution + projection + north-up roll stay thin custom; phased behind the Zustand store; `gate1` unaffected
+- [[plan-drei-camera-migration]] — **planned:** unify `/` + `/intro` camera controls on drei `<CameraControls>` (camera-controls); fly via a small custom drag-look controller (desktop-only, no stock drei fits); auto-revolution + projection + north-up roll stay thin custom; phased behind the Zustand store; `gate1` unaffected
+- [[camera-controls-feature-matrix]] — **living reference:** behavior-by-behavior matrix (old `/` custom vs drei out-of-the-box vs our thin layer) for the camera migration; single source of truth, kept current before/during implementation
