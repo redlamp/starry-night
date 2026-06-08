@@ -102,8 +102,10 @@ export function IntroApp() {
     };
   }, []);
 
-  const [mode, setMode] = useState<IntroViewMode>("screen");
-  // S toggles the viewport between screen and snow-globe (mirrors the chips).
+  // Default to snow-globe so the city parallaxes with the camera from the
+  // start; rest pose = zero parallax, so it reads like screen mode until you
+  // orbit the Mac. S toggles back to the flat screen view (mirrors the chips).
+  const [mode, setMode] = useState<IntroViewMode>("snowglobe");
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.code !== "KeyS" || e.repeat || isTypingTarget(e.target)) return;
