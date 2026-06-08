@@ -13,7 +13,6 @@ import * as THREE from "three";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import {
   CameraControls,
-  FirstPersonControls,
   Grid,
   GizmoHelper,
   GizmoViewport,
@@ -112,6 +111,11 @@ const _projTgt = new THREE.Vector3();
 const _projMat = new THREE.Matrix4();
 const _projTrans = new THREE.Matrix4();
 const _projBlend = new THREE.Matrix4();
+// drag-look fly temps
+const _flyFwd = new THREE.Vector3();
+const _flyRight = new THREE.Vector3();
+const _flyEuler = new THREE.Euler(0, 0, 0, "YXZ");
+const _FLY_UP = new THREE.Vector3(0, 1, 0);
 
 function Readout({
   controls,
@@ -199,6 +203,92 @@ function ProjectionMorph({
     camera.projectionMatrix.copy(_projBlend);
     camera.projectionMatrixInverse.copy(_projBlend).invert();
   });
+  return null;
+}
+
+// Drag-to-look first-person fly: WASD / Q-E move, and the heading changes ONLY
+// while the mouse is held (horizon-locked yaw/pitch, no roll). Releasing frees the
+// cursor, so you can move to the settings without the camera re-aiming — the gap
+// in drei's FirstPersonControls (which steers continuously from cursor position).
+function DragLookFly({
+  moveSpeed = 10,
+  lookSpeed = 0.0025,
+}: {
+  moveSpeed?: number;
+  lookSpeed?: number;
+}) {
+  const camera = useThree((s) => s.camera);
+  const gl = useThree((s) => s.gl);
+  const keys = useRef<Record<string, boolean>>({});
+  const dragging = useRef(false);
+  const yaw = useRef(0);
+  const pitch = useRef(0);
+
+  // seed yaw/pitch from the camera's current orientation (carry over from orbit)
+  useEffect(() => {
+    _flyEuler.setFromQuaternion(camera.quaternion);
+    yaw.current = _flyEuler.y;
+    pitch.current = _flyEuler.x;
+  }, [camera]);
+
+  useEffect(() => {
+    const dom = gl.domElement;
+    const onDown = (e: PointerEvent) => {
+      dragging.current = true;
+      dom.setPointerCapture?.(e.pointerId);
+    };
+    const onUp = (e: PointerEvent) => {
+      dragging.current = false;
+      dom.releasePointerCapture?.(e.pointerId);
+    };
+    const onMove = (e: PointerEvent) => {
+      if (!dragging.current) return;
+      yaw.current -= e.movementX * lookSpeed;
+      pitch.current -= e.movementY * lookSpeed;
+      const lim = Math.PI / 2 - 0.01;
+      pitch.current = Math.max(-lim, Math.min(lim, pitch.current));
+    };
+    const typing = (t: EventTarget | null) =>
+      t instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName);
+    const kd = (e: KeyboardEvent) => {
+      if (typing(e.target)) return;
+      if (e.key === " ") e.preventDefault(); // Space would scroll the page
+      keys.current[e.key.toLowerCase()] = true;
+    };
+    const ku = (e: KeyboardEvent) => {
+      keys.current[e.key.toLowerCase()] = false;
+    };
+    dom.addEventListener("pointerdown", onDown);
+    window.addEventListener("pointerup", onUp);
+    dom.addEventListener("pointermove", onMove);
+    window.addEventListener("keydown", kd);
+    window.addEventListener("keyup", ku);
+    return () => {
+      dom.removeEventListener("pointerdown", onDown);
+      window.removeEventListener("pointerup", onUp);
+      dom.removeEventListener("pointermove", onMove);
+      window.removeEventListener("keydown", kd);
+      window.removeEventListener("keyup", ku);
+      keys.current = {};
+      dragging.current = false;
+    };
+  }, [gl, lookSpeed]);
+
+  useFrame((_, dt) => {
+    _flyEuler.set(pitch.current, yaw.current, 0, "YXZ");
+    camera.quaternion.setFromEuler(_flyEuler);
+    const k = keys.current;
+    const v = moveSpeed * dt;
+    camera.getWorldDirection(_flyFwd);
+    _flyRight.crossVectors(_flyFwd, _FLY_UP).normalize();
+    if (k["w"]) camera.position.addScaledVector(_flyFwd, v);
+    if (k["s"]) camera.position.addScaledVector(_flyFwd, -v);
+    if (k["d"]) camera.position.addScaledVector(_flyRight, v);
+    if (k["a"]) camera.position.addScaledVector(_flyRight, -v);
+    if (k["e"] || k[" "]) camera.position.y += v;
+    if (k["q"]) camera.position.y -= v;
+  });
+
   return null;
 }
 
@@ -313,7 +403,7 @@ export function DreiLab() {
               <p className="text-[11px] text-zinc-500">
                 {mode === "orbit"
                   ? "orbit pivots on the target (= focus point); right-drag / two-finger trucks it"
-                  : "WASD move · mouse looks (drei FirstPersonControls — look follows the cursor, no roll/horizon-tilt)."}
+                  : "WASD / Q-E move · hold-drag to look (horizon-locked, no roll); release frees the cursor for the settings."}
               </p>
             </Section>
 
@@ -411,7 +501,7 @@ export function DreiLab() {
           {mode === "orbit" ? (
             <CameraControls ref={controls} />
           ) : (
-            <FirstPersonControls movementSpeed={10} lookSpeed={0.1} />
+            <DragLookFly moveSpeed={12} lookSpeed={0.0025} />
           )}
           {/* after the controls so it owns the final projection matrix */}
           <ProjectionMorph controls={controls} targetRef={orthoTarget} />

@@ -27,11 +27,12 @@ persistence (`cameraIntent`), not in generation.
    transition-aware `setLookAt`/`fitToBox`/`zoomTo`, `saveState`/`reset`, ortho
    support, and configurable mouse+touch maps. Costs: a new `camera-controls`
    peer dep, and it has **no `autoRotate`** and **no fly mode** (handled below).
-2. **Fly mode → drei `FirstPersonControls`.** (Dropped `FlyControls` — its
-   flight-sim roll / no horizon lock felt wrong in `/drei-lab`.) WASD + cursor
-   look, no roll. The look-follows-cursor feel differs from the current UE5-style
-   drag-to-look; being validated in the lab (fall back to `PointerLockControls` +
-   WASD if the feel doesn't land).
+2. **Fly mode → small CUSTOM drag-to-look controller** (~50 lines: WASD/QE move +
+   hold-drag yaw/pitch, horizon-locked, no roll). No stock drei controller fits —
+   `FlyControls` rolls, `FirstPersonControls` steers continuously from cursor
+   position (re-aims when you reach for the settings), `PointerLockControls` needs
+   a click + hides the cursor. This is ≈ `/`'s existing UE5 fly, drag-gated
+   instead of pointer-locked. Validated in `/drei-lab`.
 3. **Scope = unify both `/` and `/intro`** onto the shared base (the actual
    goal), including the intro stage + CRT screen.
 
@@ -50,7 +51,7 @@ persistence (`cameraIntent`), not in generation.
 | Spacebar pause/resume + speed | thin custom (toggles the sweep driver) |
 | Perspective ↔ ortho + `orthoSize` + blend | partial — drei drives either camera; the projection *switch* + blend tween stays custom |
 | `cameraLive` readout (throttled) | thin — read cam each frame → store |
-| Fly mode (WASD + pointer-lock + touch) | drei `FirstPersonControls` (WASD + cursor-look, no roll; `FlyControls` dropped — flight-sim roll felt wrong) |
+| Fly mode (WASD + pointer-lock + touch) | small **custom** drag-to-look (~50 lines, horizon-locked); no stock drei controller fits — `FlyControls` rolls, `FirstPersonControls` re-aims from cursor, `PointerLock` hides the cursor |
 | Intro stage + CRT screen controls | swap `OrbitControls` → `CameraControls`; resolve the `ScreenRig`/snow-globe handoff |
 
 Net: ~70% collapses into drei (and deletes the gsap tween code), ~25% becomes a
@@ -69,7 +70,8 @@ Each phase is independently shippable (to `/dev` first).
    store-bridged; hand-roll the auto-revolution driver + spacebar pause. Old fly
    path coexists for now.
 2. **`/` projection** (perspective↔ortho + blend) on the new base.
-3. **`/` fly** via drei `FirstPersonControls`, replacing the custom fly layer.
+3. **`/` fly** via the custom drag-to-look controller (port the lab's `DragLookFly`),
+   replacing the old pointer-lock fly layer.
 4. **Intro unify** — stage + CRT screen → `<CameraControls>` (the parity
    payoff). Resolve the `ScreenRig`/snow-globe ownership here; fold in the
    touch-to-focus work.
@@ -82,9 +84,9 @@ Each phase is independently shippable (to `/dev` first).
   the screensaver's whole identity.
 - **WYSIWYG Save/Restore** (`cameraIntent`) must round-trip through
   `saveState`/`reset`.
-- **Fly feel** — `FirstPersonControls` looks by cursor position (Doom-style),
-  not pointer-lock drag-to-look; validate in `/drei-lab` and tune `lookSpeed`, or
-  fall back to `PointerLockControls` + WASD.
+- **Fly stays custom** — no stock drei controller does drag-to-look + horizon
+  lock, so fly is a small custom controller (one of the few bits drei doesn't
+  absorb). Tune `lookSpeed`/`moveSpeed` in `/drei-lab`; touch fly is still TBD.
 - **Intro `ScreenRig`/snow-globe** is the trickiest integration (phase 4).
 - **New dep** (`camera-controls`) + bundle size.
 - **Mobile** — re-verify on `/dev` each phase.
