@@ -22,8 +22,7 @@ import type CameraControlsImpl from "camera-controls";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { LabSection as Section } from "@/components/ui/lab-controls";
+import { LabSection as Section, LabSidebar } from "@/components/ui/lab-controls";
 
 // --- the acceptance checklist: what the migration must preserve ----------------
 type Group = { title: string; items: { id: string; label: string }[] };
@@ -368,6 +367,7 @@ export function DreiLab() {
     setMode("orbit");
   }, []);
   const [readout, setReadout] = useState({ pos: "—", tgt: "—" });
+  const [panelOpen, setPanelOpen] = useState(true);
 
   // checklist tick state, persisted to localStorage (hydration-safe: load in effect)
   const [checked, setChecked] = useState<Record<string, boolean>>({});
@@ -499,23 +499,21 @@ export function DreiLab() {
 
   return (
     <main className="fixed inset-0 flex bg-[#080c18] text-white">
-      {/* left sidebar — controls + acceptance checklist */}
-      <aside className="w-[340px] max-w-[88vw] shrink-0">
-        <ScrollArea className="h-full">
-          <div className="flex flex-col gap-4 p-4">
-            <div className="flex items-baseline justify-between">
-              <h1 className="font-mono text-sm text-zinc-300">drei lab</h1>
-              <Button
-                variant="link"
-                size="xs"
-                className="px-0 text-zinc-400 hover:text-white"
-                render={<Link href="/" />}
-                nativeButton={false}
-              >
-                ← scene
-              </Button>
-            </div>
-            <p className="-mt-3 text-xs text-zinc-500">phase-0 camera-controls spike</p>
+      {/* left sidebar — controls + acceptance checklist (collapsible for mobile) */}
+      <LabSidebar open={panelOpen} onOpenChange={setPanelOpen} width={340}>
+        <div className="flex items-baseline justify-between">
+          <h1 className="font-mono text-sm text-zinc-300">drei lab</h1>
+          <Button
+            variant="link"
+            size="xs"
+            className="px-0 text-zinc-400 hover:text-white"
+            render={<Link href="/" />}
+            nativeButton={false}
+          >
+            ← scene
+          </Button>
+        </div>
+        <p className="-mt-3 text-xs text-zinc-500">phase-0 camera-controls spike</p>
 
             <Section title="mode">
               <Label className="flex w-full cursor-pointer items-center justify-between gap-2 text-xs font-normal text-zinc-300">
@@ -631,9 +629,7 @@ export function DreiLab() {
                 ))}
               </Section>
             ))}
-          </div>
-        </ScrollArea>
-      </aside>
+      </LabSidebar>
 
       {/* right pane — the live scene */}
       <div className="relative flex-1">

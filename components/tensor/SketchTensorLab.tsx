@@ -7,8 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { LabSection as Section, LabSlider } from "@/components/ui/lab-controls";
+import { LabSection as Section, LabSlider, LabSidebar } from "@/components/ui/lab-controls";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   recoverOrientationField,
@@ -88,6 +87,7 @@ export function SketchTensorLab() {
 
   // sidebar width — drag the border to resize
   const [sideW, setSideW] = useState(300);
+  const [panelOpen, setPanelOpen] = useState(true);
   const sideDrag = useRef(false);
 
   // city bridge (#40) — register the recovered field as the scene's street plan
@@ -297,10 +297,8 @@ export function SketchTensorLab() {
           if (file?.type.startsWith("image/")) void loadFile(file, file.name);
         }}
       >
-        {/* Left sidebar — all settings */}
-        <aside className="shrink-0" style={{ width: sideW }}>
-          <ScrollArea className="h-full">
-            <div className="flex flex-col gap-4 p-4">
+        {/* Left sidebar — all settings (collapsible for mobile) */}
+        <LabSidebar open={panelOpen} onOpenChange={setPanelOpen} width={sideW}>
               <div className="flex items-baseline justify-between">
                 <h1 className="font-mono text-sm text-zinc-300">Tensor lab</h1>
                 <Button
@@ -469,11 +467,10 @@ export function SketchTensorLab() {
                   </dl>
                 </Section>
               ) : null}
-            </div>
-          </ScrollArea>
-        </aside>
+        </LabSidebar>
 
-        {/* Drag handle — the sidebar border */}
+        {/* Drag handle — the sidebar border (hidden while collapsed) */}
+        {panelOpen && (
         <Tooltip>
           <TooltipTrigger
             render={
@@ -501,6 +498,7 @@ export function SketchTensorLab() {
           />
           <TooltipContent side="right">Drag to resize</TooltipContent>
         </Tooltip>
+        )}
 
         {/* Canvas area */}
         <section className="flex min-w-0 flex-1 flex-col p-4">

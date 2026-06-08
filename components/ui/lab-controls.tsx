@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { Separator } from "@/components/ui/separator";
 import { Slider } from "@/components/ui/slider";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   NumberField,
   NumberFieldScrubArea,
@@ -14,6 +15,52 @@ import {
 
 // Shared sidebar primitives for the lab pages (/tensor, /plan): a separated,
 // uppercase-titled settings section and the slider + number-field stepper row.
+
+// Collapsible lab sidebar shell. Wraps the scrollable settings column and adds a
+// drawer toggle so the canvas can go full-bleed — essential on mobile, where the
+// panel otherwise buries the scene. Controlled (`open`/`onOpenChange`) so a lab
+// can also gate sibling chrome (e.g. /tensor's resize handle) on the open state.
+// The toggle is a fixed, vertically-centred edge tab that rides the sidebar's
+// outer edge open or closed, so it never overlaps the header and is always a
+// thumb-sized tap target. Width caps at 88vw so it never eats a whole phone.
+export function LabSidebar({
+  open,
+  onOpenChange,
+  width = 340,
+  children,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  width?: number;
+  children: ReactNode;
+}) {
+  const openW = `min(${width}px, 88vw)`;
+  return (
+    <>
+      <aside
+        className="shrink-0 overflow-hidden transition-[width] duration-200 ease-out"
+        style={{ width: open ? openW : 0 }}
+      >
+        {/* fixed-width inner so content slides & clips instead of squishing */}
+        <div className="h-full" style={{ width: openW }}>
+          <ScrollArea className="h-full">
+            <div className="flex flex-col gap-4 p-4">{children}</div>
+          </ScrollArea>
+        </div>
+      </aside>
+      <button
+        type="button"
+        onClick={() => onOpenChange(!open)}
+        aria-label={open ? "Collapse panel" : "Expand panel"}
+        title={open ? "Collapse panel" : "Expand panel"}
+        className="fixed top-3 z-50 flex h-9 w-6 items-center justify-center rounded-r-md border border-l-0 border-zinc-700 bg-zinc-900/90 text-lg leading-none text-zinc-300 shadow-md backdrop-blur transition-[left] duration-200 ease-out hover:bg-zinc-800 hover:text-white"
+        style={{ left: open ? openW : 0 }}
+      >
+        <span aria-hidden>{open ? "‹" : "›"}</span>
+      </button>
+    </>
+  );
+}
 
 export function LabSection({ title, children }: { title: string; children: ReactNode }) {
   return (
