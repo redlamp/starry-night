@@ -205,10 +205,20 @@ export function DreiLab() {
 
   // imperative-API probes — the migration-critical camera-controls calls
   const poseA = () => controls.current?.setLookAt(20, 12, 20, 0, 1, 0, true);
-  // Top-down: rotate ONLY the polar angle to straight-down, keeping the current
-  // azimuth — so it never sweeps the long way round. camera-controls lerps the
-  // raw azimuth, so setLookAt to a fixed overhead point can take the 300°-route.
-  const topDown = () => controls.current?.rotatePolarTo(0.0001, true);
+  // Top-down, NORTH UP. At a tiny overhead polar, camera-controls' azimuth is
+  // atan2(x, z), so azimuth = PI puts +Z (north) at screen-top (azimuth 0 would
+  // put -Z up). Snap to that azimuth the SHORTEST way — never the long route the
+  // raw-azimuth lerp would otherwise take — then tilt straight down.
+  const topDown = () => {
+    const c = controls.current;
+    if (!c) return;
+    const NORTH_AZ = Math.PI;
+    const cur = c.azimuthAngle;
+    let d = (NORTH_AZ - cur) % (Math.PI * 2);
+    if (d > Math.PI) d -= Math.PI * 2;
+    if (d < -Math.PI) d += Math.PI * 2;
+    c.rotateTo(cur + d, 0.0001, true);
+  };
   const fit = () =>
     controls.current?.fitToBox(
       new THREE.Box3(new THREE.Vector3(-1, 0, -1), new THREE.Vector3(1, 2, 1)),
