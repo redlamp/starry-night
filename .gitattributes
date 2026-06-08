@@ -1,0 +1,21 @@
+# Line-ending normalization.
+#
+# The repo is LF. Windows editors — notably Obsidian, which re-saves notes with
+# CRLF the moment they're opened — otherwise leave files showing as phantom
+# "modified" with no content change. This file is authoritative for EOL (it
+# overrides core.autocrlf, and ships to every clone + CI). Locally it's paired
+# with `git config core.autocrlf false` so git doesn't double-handle EOL.
+* text=auto eol=lf
+*.md text eol=lf
+
+# Binary assets — never apply text/EOL conversion.
+*.glb binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
