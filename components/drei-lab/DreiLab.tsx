@@ -285,8 +285,8 @@ function DragLookFly({
     if (k["s"]) camera.position.addScaledVector(_flyFwd, -v);
     if (k["d"]) camera.position.addScaledVector(_flyRight, v);
     if (k["a"]) camera.position.addScaledVector(_flyRight, -v);
-    if (k["e"] || k[" "]) camera.position.y += v;
-    if (k["q"]) camera.position.y -= v;
+    if (k["e"] || k[" "]) camera.position.y += v; // E / Space = up
+    if (k["q"] || k["shift"]) camera.position.y -= v; // Q / Shift = down
   });
 
   return null;
@@ -403,7 +403,7 @@ export function DreiLab() {
               <p className="text-[11px] text-zinc-500">
                 {mode === "orbit"
                   ? "orbit pivots on the target (= focus point); right-drag / two-finger trucks it"
-                  : "WASD / Q-E move · hold-drag to look (horizon-locked, no roll); release frees the cursor for the settings."}
+                  : "WASD move · E/Space up, Q/Shift down · hold-drag to look (horizon-locked); release frees the cursor."}
               </p>
             </Section>
 
