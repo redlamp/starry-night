@@ -10,7 +10,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import * as THREE from "three";
-import { Canvas, useFrame } from "@react-three/fiber";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import {
   CameraControls,
   FlyControls,
@@ -18,7 +18,6 @@ import {
   GizmoHelper,
   GizmoViewport,
   PerspectiveCamera,
-  OrthographicCamera,
 } from "@react-three/drei";
 import type CameraControlsImpl from "camera-controls";
 import { Button } from "@/components/ui/button";
@@ -26,8 +25,6 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { LabSection as Section } from "@/components/ui/lab-controls";
-
-type Projection = "perspective" | "orthographic";
 
 // --- the acceptance checklist: what the migration must preserve ----------------
 type Group = { title: string; items: { id: string; label: string }[] };
@@ -110,6 +107,11 @@ const STORAGE_KEY = "drei-lab.checklist";
 // reusable temps for the readout (no per-frame allocation)
 const _pos = new THREE.Vector3();
 const _tgt = new THREE.Vector3();
+// projection-morph temps
+const _projTgt = new THREE.Vector3();
+const _projMat = new THREE.Matrix4();
+const _projTrans = new THREE.Matrix4();
+const _projBlend = new THREE.Matrix4();
 
 function Readout({
   controls,
@@ -149,9 +151,61 @@ function Satellites() {
   );
 }
 
+// Perspective↔ortho MORPH (no hard camera swap): keeps one PerspectiveCamera and
+// rewrites its projection matrix each frame from a receding virtual eye — ortho ==
+// perspective with the eye at infinity (same trick as /'s ProjectionBlender).
+// `targetRef` is the 0..1 goal; blend damps toward it so the toggle TWEENS. Runs
+// after the controls' useFrame (rendered after them) so it owns the projection.
+function ProjectionMorph({
+  controls,
+  targetRef,
+}: {
+  controls: React.RefObject<CameraControlsImpl | null>;
+  targetRef: React.RefObject<number>;
+}) {
+  const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
+  const size = useThree((s) => s.size);
+  const blend = useRef(0);
+  useFrame((_, dt) => {
+    if (!camera.isPerspectiveCamera) return;
+    blend.current = THREE.MathUtils.damp(blend.current, targetRef.current ?? 0, 6, dt);
+    const b = blend.current;
+    camera.updateProjectionMatrix(); // rebuild pure perspective first
+    if (b <= 0.0001) return;
+
+    const c = controls.current;
+    if (c) c.getTarget(_projTgt);
+    else _projTgt.set(0, 1, 0);
+    const d = Math.max(1, camera.position.distanceTo(_projTgt)); // focal distance
+    const halfH = d * Math.tan((camera.fov * Math.PI) / 360); // match size at the focal plane
+    const aspect = size.width / Math.max(1, size.height);
+    const near = camera.near;
+    const far = camera.far;
+
+    if (b >= 0.9999) {
+      _projMat.makeOrthographic(-aspect * halfH, aspect * halfH, halfH, -halfH, near, far);
+      camera.projectionMatrix.copy(_projMat);
+      camera.projectionMatrixInverse.copy(_projMat).invert();
+      return;
+    }
+    const u = Math.max(1 - b, 1e-4); // 1 = perspective … 0 = ortho
+    const E = d / u; // virtual eye recedes toward infinity as b → 1
+    const dz = E - d;
+    const top = ((near + dz) * halfH) / E;
+    const right = top * aspect;
+    _projMat.makePerspective(-right, right, top, -top, near + dz, far + dz);
+    _projTrans.makeTranslation(0, 0, -dz);
+    _projBlend.multiplyMatrices(_projMat, _projTrans);
+    camera.projectionMatrix.copy(_projBlend);
+    camera.projectionMatrixInverse.copy(_projBlend).invert();
+  });
+  return null;
+}
+
 export function DreiLab() {
   const controls = useRef<CameraControlsImpl | null>(null);
-  const [projection, setProjection] = useState<Projection>("perspective");
+  const [ortho, setOrtho] = useState(false);
+  const orthoTarget = useRef(0); // 0 persp … 1 ortho — ProjectionMorph damps toward it
   const [mode, setMode] = useState<"orbit" | "fly">("orbit");
   const [readout, setReadout] = useState({ pos: "—", tgt: "—" });
 
@@ -196,12 +250,11 @@ export function DreiLab() {
   }, []);
 
   // Orbit pivots on the "focus point" — camera-controls calls it the TARGET.
-  // Frame the centre box as the target whenever we (re)enter orbit, or swap
-  // projection (which remounts the controls and would reset the target to origin).
+  // Frame the centre box as the target whenever we (re)enter orbit.
   useEffect(() => {
     if (mode !== "orbit") return;
     controls.current?.setLookAt(14, 9, 14, 0, 1, 0, true);
-  }, [mode, projection]);
+  }, [mode]);
 
   // imperative-API probes — the migration-critical camera-controls calls
   const poseA = () => controls.current?.setLookAt(20, 12, 20, 0, 1, 0, true);
@@ -266,10 +319,15 @@ export function DreiLab() {
 
             <Section title="projection">
               <Label className="flex w-full cursor-pointer items-center justify-between gap-2 text-xs font-normal text-zinc-300">
-                orthographic
+                <span>
+                  orthographic <span className="text-zinc-600">(tweens)</span>
+                </span>
                 <Switch
-                  checked={projection === "orthographic"}
-                  onCheckedChange={(c) => setProjection(c ? "orthographic" : "perspective")}
+                  checked={ortho}
+                  onCheckedChange={(c) => {
+                    setOrtho(c);
+                    orthoTarget.current = c ? 1 : 0;
+                  }}
                 />
               </Label>
             </Section>
@@ -347,17 +405,16 @@ export function DreiLab() {
       {/* right pane — the live scene */}
       <div className="relative flex-1">
         <Canvas shadows dpr={[1, 2]} style={{ touchAction: "none" }}>
-          {projection === "perspective" ? (
-            <PerspectiveCamera makeDefault position={[14, 9, 14]} fov={45} near={0.1} far={500} />
-          ) : (
-            <OrthographicCamera makeDefault position={[14, 9, 14]} zoom={28} near={0.1} far={500} />
-          )}
-          {/* key=projection forces a re-bind when the default camera swaps */}
+          {/* one perspective camera always; ProjectionMorph rewrites its matrix
+              to tween toward ortho — no hard camera swap, so it doesn't snap */}
+          <PerspectiveCamera makeDefault position={[14, 9, 14]} fov={45} near={0.1} far={500} />
           {mode === "orbit" ? (
-            <CameraControls key={projection} ref={controls} />
+            <CameraControls ref={controls} />
           ) : (
             <FlyControls movementSpeed={12} rollSpeed={0.4} dragToLook />
           )}
+          {/* after the controls so it owns the final projection matrix */}
+          <ProjectionMorph controls={controls} targetRef={orthoTarget} />
           <Readout controls={controls} onChange={onReadout} />
 
           <ambientLight intensity={0.6} />
