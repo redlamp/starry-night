@@ -17,11 +17,13 @@ Top-level Map of Content. See `CLAUDE.md` for conventions.
 - [[plan-city-scale-migration]] — **#14 in flight** on `spike/city-scale`: generate-at-max + crop migration checklist (audit map + critic + 8 gate1-gated steps)
 - [[decision-additive-growth-citygen]] — generate-at-max + crop architecture (the #14 unblock)
 - [[decision-intro-mac-viewport]] — **/intro shipped to main (2026-06-07)**: live city on a Mac's CRT (snow-globe coupling, 1-bit + CRT effect chain, dual-Mac stage). Follow-ups: #71–#74; stars-on-`/` #75/#76/#77. Merge plan: [[intro-exploration-merge-handoff]] (resolved)
+- [[plan-drei-camera-migration]] — **planned:** unify `/` + `/intro` camera onto drei `<CameraControls>` (fly → drei FlyControls/PointerLockControls); phased, behind the store
 
 ## Daily
 
 Daily logs live in `wiki/daily/YYYY-MM-DD.md`. Latest:
 
+- [[2026-06-08]]
 - [[2026-06-07]]
 - [[2026-06-03]]
 - [[2026-06-02]]
