@@ -985,7 +985,7 @@ type SceneState = {
 };
 
 export const useSceneStore = create<SceneState>((set, get) => ({
-  masterSeed: "starry-night-0",
+  masterSeed: "starry-night",
   lightingMode: "classic",
   qualityTier: "high",
   paused: false,
