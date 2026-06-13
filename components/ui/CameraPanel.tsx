@@ -26,6 +26,7 @@ import { CITY_TIER_ORDER } from "@/lib/seed/topology";
 import { TIER_LABELS, tierKm } from "@/components/ui/cityTiers";
 import { cn, isTypingTarget } from "@/lib/utils";
 import {
+  Box,
   Bug,
   Building,
   Building2,
@@ -41,18 +42,22 @@ import {
   Info,
   LayoutGrid,
   Map as MapIcon,
+  MapPin,
   Moon,
   MoonStar,
   Orbit as OrbitIcon,
   RadioTower,
+  Rotate3d,
   RotateCcw,
   Route,
+  RulerDimensionLine,
   Save,
   Search,
   Settings,
   Sparkles,
   Stars,
   Sun,
+  Telescope,
   TowerControl,
   Undo2,
   Warehouse,
@@ -211,7 +216,7 @@ const SETTINGS_SECTIONS: { value: string; label: string; keywords: string }[] = 
   {
     value: "orbit",
     label: "Orbit",
-    keywords: "elevation azimuth radius spin speed pause center focal auto rotate",
+    keywords: "elevation azimuth compass radius distance spin speed pause center focal auto rotate",
   },
   {
     value: "roads",
@@ -297,8 +302,15 @@ function persistPanelWidth(w: number) {
 }
 
 export function CameraPanel() {
-  const { cameraMode, cameraLive, resetCamera, saveCurrentAsDefault, revertToSaved, hasSavedConfig } =
-    useSceneStore();
+  const {
+    cameraMode,
+    cameraLive,
+    orbit,
+    resetCamera,
+    saveCurrentAsDefault,
+    revertToSaved,
+    hasSavedConfig,
+  } = useSceneStore();
   const orbitRestoreSet = useSceneStore((s) => s.orbitRestore !== null);
 
   const [hidden, setHidden] = useState(true);
@@ -504,18 +516,49 @@ export function CameraPanel() {
               <PoseSection flying={flying} />
               {/* Live readout — lives with the camera controls (user 2026-06-07). */}
               <div className="border-foreground/10 border-t pt-2">
-                <div className="text-foreground/70 grid grid-cols-[5rem_1fr] gap-1 font-mono text-xs">
-                  <div>position</div>
-                  <div className="tabular-nums">
-                    {fmt(livePos[0])} {fmt(livePos[1])} {fmt(livePos[2])}
+                <TooltipProvider>
+                  <div className="text-foreground/70 grid grid-cols-[auto_1fr_1fr_1fr] items-center gap-x-2 gap-y-1 font-mono text-xs">
+                    {/* header row: x / y / z over the value columns */}
+                    <div />
+                    <div className="text-foreground/40 text-right text-[10px] uppercase">x</div>
+                    <div className="text-foreground/40 text-right text-[10px] uppercase">y</div>
+                    <div className="text-foreground/40 text-right text-[10px] uppercase">z</div>
+
+                    <Tooltip>
+                      <TooltipTrigger render={<Camera className="size-3.5" />} />
+                      <TooltipContent>camera position</TooltipContent>
+                    </Tooltip>
+                    <div className="text-right tabular-nums">{fmt(livePos[0])}</div>
+                    <div className="text-right tabular-nums">{fmt(livePos[1])}</div>
+                    <div className="text-right tabular-nums">{fmt(livePos[2])}</div>
+
+                    <Tooltip>
+                      <TooltipTrigger render={<MapPin className="size-3.5" />} />
+                      <TooltipContent>focal point</TooltipContent>
+                    </Tooltip>
+                    <div className="text-right tabular-nums">{fmt(orbit.centerX)}</div>
+                    <div className="text-right tabular-nums">{fmt(orbit.lookAtY)}</div>
+                    <div className="text-right tabular-nums">{fmt(orbit.centerZ)}</div>
+
+                    <Tooltip>
+                      <TooltipTrigger render={<Rotate3d className="size-3.5" />} />
+                      <TooltipContent>rotation (degrees)</TooltipContent>
+                    </Tooltip>
+                    <div className="text-right tabular-nums">{fmt(liveRotDeg[0], 1)}</div>
+                    <div className="text-right tabular-nums">{fmt(liveRotDeg[1], 1)}</div>
+                    <div className="text-right tabular-nums">{fmt(liveRotDeg[2], 1)}</div>
+
+                    <div className="text-foreground/40 text-[10px] uppercase">fov</div>
+                    <div className="text-right tabular-nums">{fmt(cameraLive.fov)}</div>
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={<RulerDimensionLine className="size-3.5 justify-self-end" />}
+                      />
+                      <TooltipContent>distance camera → focal</TooltipContent>
+                    </Tooltip>
+                    <div className="text-right tabular-nums">{fmt(orbit.radius)}</div>
                   </div>
-                  <div>rotation°</div>
-                  <div className="tabular-nums">
-                    {fmt(liveRotDeg[0], 1)} {fmt(liveRotDeg[1], 1)} {fmt(liveRotDeg[2], 1)}
-                  </div>
-                  <div>fov</div>
-                  <div className="tabular-nums">{fmt(cameraLive.fov)}</div>
-                </div>
+                </TooltipProvider>
               </div>
             </Section>
 
@@ -721,9 +764,40 @@ function PoseSection({ flying }: { flying: boolean }) {
 function OrbitSection() {
   const orbit = useSceneStore((s) => s.orbit);
   const setOrbit = useSceneStore((s) => s.setOrbit);
+  const pivot = useSceneStore((s) => s.orbitPivotFromBottom);
+  const setPivot = useSceneStore((s) => s.setOrbitPivotFromBottom);
+  const setFocalAdjust = useSceneStore((s) => s.setFocalAdjust);
+  // In ortho the radius is auto-parked (zoom = orthoSize via the "size" control), so the
+  // Distance slider would be misleading — hide it there.
+  const isOrtho = useSceneStore((s) => s.projection === "orthographic");
+  // Show the focal pin (and, for Screen Y, the guide line) WHILE a slider is being adjusted,
+  // then revert on release: a slider drag ends precisely via onCommit (base-ui's
+  // onValueCommitted); the timeout is only a fallback for non-drag inputs (stepper / typing /
+  // label-scrub) that don't emit a commit. Prior pin state is preserved because focalAdjust is
+  // separate from the showFocalIndicator toggle.
+  const focalAdjustTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showFocalAdjust = useCallback(
+    (which: "focalY" | "screenY") => {
+      setFocalAdjust(which);
+      if (focalAdjustTimeout.current) clearTimeout(focalAdjustTimeout.current);
+      focalAdjustTimeout.current = setTimeout(() => setFocalAdjust(""), 1000);
+    },
+    [setFocalAdjust],
+  );
+  const endFocalAdjust = useCallback(() => {
+    if (focalAdjustTimeout.current) clearTimeout(focalAdjustTimeout.current);
+    setFocalAdjust("");
+  }, [setFocalAdjust]);
+  useEffect(
+    () => () => {
+      if (focalAdjustTimeout.current) clearTimeout(focalAdjustTimeout.current);
+      setFocalAdjust("");
+    },
+    [setFocalAdjust],
+  );
   return (
     <>
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-1.5">
         <Button
           variant="secondary"
           size="sm"
@@ -733,47 +807,80 @@ function OrbitSection() {
         >
           Default Orbit
         </Button>
-        <FocalIndicatorToggle />
+        <div className="flex flex-wrap items-center justify-end gap-1.5">
+          <FocalIndicatorToggle />
+          <ZoomModeToggle />
+        </div>
       </div>
       <ValueSlider
-        label="speed °/s"
-        value={Number((360 / Math.max(1, orbit.periodSec)).toFixed(1))}
-        min={0}
-        max={72}
+        label="Speed °/s"
+        value={orbit.periodSec !== 0 ? Number((360 / orbit.periodSec).toFixed(1)) : 0}
+        min={-60}
+        max={60}
         step={0.1}
-        onChange={(dps) => setOrbit({ periodSec: 360 / Math.max(0.1, dps) })}
+        onChange={(dps) => setOrbit({ periodSec: dps !== 0 ? 360 / dps : 0 })}
+        stepperClass="w-32"
       />
+      {!isOrtho && (
+        <ValueSlider
+          label="Distance"
+          value={orbit.radius}
+          min={50}
+          max={5000}
+          step={5}
+          onChange={(radius) => setOrbit({ radius })}
+          stepperClass="w-32"
+        />
+      )}
       <ValueSlider
-        label="radius"
-        value={orbit.radius}
-        min={50}
-        max={5000}
-        step={5}
-        onChange={(radius) => setOrbit({ radius })}
-      />
-      <ValueSlider
-        label="elev°"
+        label="Elevation"
         value={orbit.elevationDeg}
         min={0.01}
         max={90}
         step={0.5}
         onChange={(elevationDeg) => setOrbit({ elevationDeg })}
+        stepperClass="w-32"
       />
       <ValueSlider
-        label="azim°"
+        label="Compass"
         value={orbit.azimuthDeg}
         min={0}
         max={360}
         step={1}
         onChange={(azimuthDeg) => setOrbit({ azimuthDeg })}
+        stepperClass="w-32"
       />
       <ValueSlider
-        label="focal y"
+        label="Focal Y"
         value={orbit.lookAtY}
-        min={-200}
-        max={2000}
+        min={-1000}
+        max={1000}
         step={1}
-        onChange={(lookAtY) => setOrbit({ lookAtY })}
+        onChange={(lookAtY) => {
+          setOrbit({ lookAtY });
+          showFocalAdjust("focalY");
+        }}
+        onCommit={endFocalAdjust}
+        stepperClass="w-32"
+        origin={0}
+        // fill out from 0; match the focal pin — sky-blue above ground, soil-brown below
+        // (COLOR_ABOVE / COLOR_BELOW in DreiSceneControls).
+        indicatorStyle={{ background: orbit.lookAtY >= 0 ? "#7dd3fc" : "#b5835a" }}
+      />
+      <ValueSlider
+        label="Screen Y"
+        // Screen Y is top-down: 0 = top of screen, 100 = bottom. The store holds
+        // orbitPivotFromBottom (fraction UP from the bottom), so invert at the display layer.
+        value={Math.round((1 - pivot) * 100)}
+        min={0}
+        max={100}
+        step={1}
+        onChange={(pct) => {
+          setPivot(1 - pct / 100);
+          showFocalAdjust("screenY");
+        }}
+        onCommit={endFocalAdjust}
+        stepperClass="w-32"
       />
     </>
   );
@@ -1615,14 +1722,7 @@ function SubGroup({
 }
 
 // Alphabetised, no "off" (the header switch gates it now, 2026-06-08).
-const TINT_MODES = [
-  "archetype",
-  "depth",
-  "district",
-  "height",
-  "landuse",
-  "population",
-] as const;
+const TINT_MODES = ["archetype", "depth", "district", "height", "landuse", "population"] as const;
 const CITY_SHAPE_MODES = ["auto", ...CITY_SHAPES] as const;
 const RENDER_GROUP_LABELS: Record<RenderGroup, string> = {
   buildings: "Buildings",
@@ -1998,7 +2098,9 @@ function OrbitStillToggle() {
       variant="secondary"
       size="sm"
       className="bg-foreground/10 text-foreground/80 hover:bg-foreground/20 h-6 px-2 text-xs"
-      title={orbitPaused ? "Resume the orbit revolution (Space)" : "Pause the orbit revolution (Space)"}
+      title={
+        orbitPaused ? "Resume the orbit revolution (Space)" : "Pause the orbit revolution (Space)"
+      }
       aria-label={orbitPaused ? "Resume orbit revolution" : "Pause orbit revolution"}
       onClick={() => setOrbitPaused(!orbitPaused)}
     >
@@ -2026,18 +2128,38 @@ function FlySpeedSlider() {
 function ProjectionRow() {
   const projection = useSceneStore((s) => s.projection);
   return (
-    <div className="flex flex-col gap-1.5">
-      <span className="text-foreground/40 text-xs tracking-wide uppercase">projection</span>
-      <Tabs
-        value={projection}
-        onValueChange={(v) => tweenProjectionTo(v as "perspective" | "orthographic")}
-      >
-        <TabsList className="w-full">
-          <TabsTrigger value="perspective">Perspective</TabsTrigger>
-          <TabsTrigger value="orthographic">Orthographic</TabsTrigger>
-        </TabsList>
-      </Tabs>
-    </div>
+    <TooltipProvider>
+      <div className="flex flex-col gap-1.5">
+        <span className="text-foreground/40 text-xs tracking-wide uppercase">projection</span>
+        <Tabs
+          value={projection}
+          onValueChange={(v) => tweenProjectionTo(v as "perspective" | "orthographic")}
+        >
+          <TabsList className="w-full">
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <TabsTrigger value="perspective" aria-label="Perspective">
+                    <Telescope className="size-4" />
+                  </TabsTrigger>
+                }
+              />
+              <TooltipContent>Perspective</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <TabsTrigger value="orthographic" aria-label="Orthographic">
+                    <Box className="size-4" />
+                  </TabsTrigger>
+                }
+              />
+              <TooltipContent>Orthographic</TooltipContent>
+            </Tooltip>
+          </TabsList>
+        </Tabs>
+      </div>
+    </TooltipProvider>
   );
 }
 
@@ -2117,6 +2239,26 @@ function FocalIndicatorToggle() {
       )}
     >
       focal point {show ? "[on]" : "[off]"}
+    </Button>
+  );
+}
+
+function ZoomModeToggle() {
+  const toPin = useSceneStore((s) => s.orbitZoomToPin);
+  const setToPin = useSceneStore((s) => s.setOrbitZoomToPin);
+  return (
+    <Button
+      variant="secondary"
+      size="sm"
+      onClick={() => setToPin(!toPin)}
+      title="Wheel-zoom target: toward the cursor (default) or toward the pin/focal (z)"
+      className={cn(
+        toPin
+          ? "bg-amber-400 text-black hover:bg-amber-400"
+          : "bg-foreground/10 text-foreground/80 hover:bg-foreground/20",
+      )}
+    >
+      zoom: {toPin ? "pin" : "cursor"}
     </Button>
   );
 }

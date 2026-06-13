@@ -71,7 +71,7 @@ export const DEFAULT_INTENT: CameraIntent = {
   position: [3, 36, 720],
   lookAt: [-3.377, 36.474, -759.372],
   rotation: [2.9051946114622647, -0.005135430560327543, 3.140355522200459],
-  fov: 28,
+  fov: 25, // narrow / low-distortion, matching Google Maps' 3D camera
   orient: "lookAt",
 };
 
@@ -448,6 +448,9 @@ type AnySettingEntry =
   | SettingEntry<"flySpeed">
   | SettingEntry<"orbitPaused">
   | SettingEntry<"showFocalIndicator">
+  | SettingEntry<"orbitPivotFromBottom">
+  | SettingEntry<"orbitZoomToPin">
+  | SettingEntry<"allowUnderview">
   | SettingEntry<"cameraMode">
   | SettingEntry<"orbitRestore">
   | SettingEntry<"topDownTip">
@@ -492,6 +495,9 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "flySpeed", defaultValue: DEFAULT_FLY_SPEED, persist: true },
   { key: "orbitPaused", defaultValue: false as const, persist: true },
   { key: "showFocalIndicator", defaultValue: false as const, persist: true },
+  { key: "orbitPivotFromBottom", defaultValue: 0.37, persist: true },
+  { key: "orbitZoomToPin", defaultValue: false as const, persist: false },
+  { key: "allowUnderview", defaultValue: false as const, persist: false },
   { key: "cameraMode", defaultValue: "orbit" as const, persist: true },
   { key: "orbitRestore", defaultValue: null as SceneState["orbitRestore"], persist: false },
   { key: "topDownTip", defaultValue: 0, persist: false },
@@ -828,6 +834,21 @@ type SceneState = {
   // Visibility of the orbit focal-point crosshair.
   showFocalIndicator: boolean;
   setShowFocalIndicator: (v: boolean) => void;
+  // Transient: which focal slider is being adjusted ("" = none). Shows the pin (either
+  // slider) and the Screen-Y guide line (screenY only). Not persisted.
+  focalAdjust: "" | "focalY" | "screenY";
+  setFocalAdjust: (v: "" | "focalY" | "screenY") => void;
+  // Orbit/rotate pivot height as a fraction up from the bottom of the screen
+  // (Google-Maps ~0.37). Drives the RMB pivot + the focal-marker raycast.
+  orbitPivotFromBottom: number;
+  setOrbitPivotFromBottom: (v: number) => void;
+  // Zoom mode: false = toward the cursor (default), true = toward the pin/focal.
+  orbitZoomToPin: boolean;
+  setOrbitZoomToPin: (v: boolean) => void;
+  // Intentional underview: relax the ground/elevation clamp so the camera may drop below the
+  // ground and look up at the world from underneath (off by default — prevents accidents).
+  allowUnderview: boolean;
+  setAllowUnderview: (v: boolean) => void;
   // Intro / wake-up sequence (After-Dark model). progress 0..1 = cascade
   // completion for the UI readout; the actual wake / on-off cycle is
   // time-driven in the shader. mode selects ordering across cells.
@@ -1044,6 +1065,14 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setHaze: (patch) => set((s) => ({ haze: { ...s.haze, ...patch } })),
   showFocalIndicator: false,
   setShowFocalIndicator: (showFocalIndicator) => set({ showFocalIndicator }),
+  focalAdjust: "",
+  setFocalAdjust: (focalAdjust) => set({ focalAdjust }),
+  orbitPivotFromBottom: 0.37,
+  setOrbitPivotFromBottom: (orbitPivotFromBottom) => set({ orbitPivotFromBottom }),
+  orbitZoomToPin: false,
+  setOrbitZoomToPin: (orbitZoomToPin) => set({ orbitZoomToPin }),
+  allowUnderview: false,
+  setAllowUnderview: (allowUnderview) => set({ allowUnderview }),
   intro: DEFAULT_INTRO,
   starIntro: DEFAULT_STAR_INTRO,
   setIntroProgress: (progress) => set((s) => ({ intro: { ...s.intro, progress } })),
@@ -1159,8 +1188,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   fieldDeviation: 1.5,
   setFieldDeviation: (fieldDeviation) => set({ fieldDeviation }),
   densityProfile: DEFAULT_DENSITY_PROFILE,
-  setDensityProfile: (patch) =>
-    set((s) => ({ densityProfile: { ...s.densityProfile, ...patch } })),
+  setDensityProfile: (patch) => set((s) => ({ densityProfile: { ...s.densityProfile, ...patch } })),
   densityProfileDraft: null,
   setDensityProfileDraft: (densityProfileDraft) => set({ densityProfileDraft }),
   traffic: DEFAULT_TRAFFIC,
@@ -1198,6 +1226,12 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       }
       // cityPlanning visibility toggles only — preserve runtime readouts.
       patch.cityPlanning = { ...s.cityPlanning, ...DEFAULT_CITY_PLANNING_VIS };
+      // intro / starIntro are boot WAKE animations, not look settings — their hardcoded
+      // default is "not yet woken" (progress 0). On a live scene there's no remount to
+      // replay the reveal, so progress 0 leaves a black sky / dark city (stars vanish —
+      // the reported bug). Reset should land on the SETTLED look, so snap them fully woken.
+      patch.intro = { ...DEFAULT_INTRO, progress: 1 };
+      patch.starIntro = { ...DEFAULT_STAR_INTRO, progress: 1 };
       return patch;
     });
   },
@@ -1268,6 +1302,11 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       if (saved.cityPlanning !== undefined) {
         patch.cityPlanning = { ...s.cityPlanning, ...saved.cityPlanning };
       }
+      // Never leave the wake animations un-played on a live scene (same as Reset): a saved
+      // mid-wake progress would hide the stars / dark the city until a reload. On boot, the
+      // IntroTicker's mount replay overrides this, so the wake still runs at load.
+      patch.intro = { ...(patch.intro ?? s.intro), progress: 1, playing: false };
+      patch.starIntro = { ...(patch.starIntro ?? s.starIntro), progress: 1, playing: false };
       return patch;
     });
   },

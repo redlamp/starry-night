@@ -80,6 +80,62 @@ Each phase is independently shippable (to `/dev` first).
 5. **Cleanup** — delete the dead custom controls + gsap tween code; full verify
    (desktop + mobile via `/dev`).
 
+## Phase 1 — build sequence (in progress, 2026-06-08)
+
+The crux is a **data-flow inversion**. Today the store *is* the source of truth:
+`components/scene/CameraControls.tsx` reads `orbit.{azimuthDeg,elevationDeg,radius,
+lookAtY,centerX,centerZ}` every frame and *derives* the camera. drei
+`<CameraControls>` makes the **camera authoritative** (imperative); the store has
+to sync on discrete events instead of driving per-frame.
+
+Coexistence: gated by a `?controls=drei` flag read in `Scene.tsx`. **Default = the
+old controller, so `/` is 100% untouched.** The flag swaps in the new
+`DreiSceneControls` for opt-in feel-testing. Old controller stays until Phase 5.
+
+Mapping (old orbit ↔ camera-controls spherical), verified against `OrbitConfig`:
+- `azimuthAngle = azimuthDeg` (both are `atan2(x, z)`; 0 = +Z)
+- `polarAngle = (90° − elevationDeg)` (elevation above horizon → polar from +Y)
+- `distance = radius`; `target = (centerX, lookAtY, centerZ)`
+- auto-revolution: `rotate(2π/periodSec · dt, 0)` each frame when not paused/dragging
+
+Bidirectional sync (the bug-prone part) uses a `syncing` ref: gestures + auto-rev
+are drei-owned; on `controlend` (and on pause/`controlstart`) read spherical →
+write `orbit` (suppressing the store→camera effect via the ref); slider/preset
+edits to `orbit` push store→camera via `setLookAt`.
+
+Sub-steps (each compiles + feel-tested at `/?controls=drei` before the next):
+- **A — orbit core (this step):** mount drei `<CameraControls>` behind the flag;
+  store↔camera sync; auto-revolution + `Space` pause; throttled `cameraLive`
+  readback. Fly/still/projection NOT ported yet (flip the flag off for those).
+- **B — transitions:** presets / Default / top-down via `setLookAt(…, true)`
+  (keep gsap only where a multi-axis swing is wanted); north-up roll.
+- **C — save/restore:** `cameraIntent` round-trips through `saveState`/`reset` +
+  `getPosition`/`getTarget` (the load-bearing WYSIWYG guarantee).
+- **D — still mode** + remove the flag once orbit reaches parity; old controller
+  keeps fly until Phase 3.
+
+### Decisions from the sub-step-A tuning pass (2026-06-08)
+
+- **Input model** (feel-tested live): desktop **LMB = ground-anchored pan**
+  (Google grab-the-earth), **RMB = rotate + tilt** (Google uses Ctrl+LMB),
+  **wheel + pinch = zoom toward the cursor / pinch-point** in *both* projections
+  (shared `zoomToPoint` pins the ground point; ortho scales `orthoSize`, perspective
+  dollies), **double-click = zoom in toward the point**. Touch is **fully custom** (camera-controls touch off,
+  so it's ortho-correct and we own the directions): 1-finger ground pan, 2-finger
+  pinch-zoom + twist-rotate + parallel-drag tilt — the full Google mobile model.
+- **Auto-revolution**: pause only once a press becomes a real drag (**>6 px**, so
+  clicks/taps don't pause); on release wait **0.4 s** then **ramp 0→full linearly
+  over 1 s**; `Space` enable ramps up, disable stops instantly. Speed slider is
+  **−60…60 °/s** (signed = direction, 0 = stopped), `periodSec = 360/speed`.
+- **Ortho is faked** (see below), so the anchored pan builds a **parallel ortho
+  ray by hand** (matching `ProjectionBlender`'s frustum) — `setFromCamera` would
+  give a diverging perspective ray on the ortho-matrix'd perspective camera.
+- **Projection model (Phase 2) = approach A — KEEP the single `PerspectiveCamera`
+  + `ProjectionBlender` morph.** We do *not* swap to a real `OrthographicCamera`.
+  Trade-off accepted: a real ortho camera would give native raycast + `camera.zoom`
+  (no manual ortho ray / `orthoSize` handling), but it loses the smooth persp↔ortho
+  morph, which we want to keep. The manual ortho handling is contained.
+
 ## Risks
 
 - **Auto-revolution must read identically** after the hand-rolled driver — it's

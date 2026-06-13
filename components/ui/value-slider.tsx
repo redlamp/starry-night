@@ -23,7 +23,11 @@ export function ValueSlider({
   max,
   step,
   onChange,
+  onCommit,
   labelClass,
+  stepperClass,
+  origin,
+  indicatorStyle,
 }: {
   label: string;
   value: number;
@@ -31,7 +35,15 @@ export function ValueSlider({
   max: number;
   step: number;
   onChange: (v: number) => void;
+  // Fires when a slider DRAG is released (base-ui onValueCommitted) — e.g. to end a
+  // transient "while adjusting" state precisely on release rather than on a timeout.
+  onCommit?: () => void;
   labelClass?: string;
+  stepperClass?: string;
+  // Fill the slider OUT from `origin` (e.g. 0) and paint it via `indicatorStyle`
+  // (e.g. a sign-dependent colour) — see Slider's `origin`/`indicatorStyle`.
+  origin?: number;
+  indicatorStyle?: CSSProperties;
 }) {
   return (
     <NumberField
@@ -53,9 +65,14 @@ export function ValueSlider({
         step={step}
         value={value}
         onValueChange={(v) => onChange(typeof v === "number" ? v : v[0])}
+        onValueCommitted={onCommit}
         className="flex-1"
+        origin={origin}
+        indicatorStyle={indicatorStyle}
       />
-      <NumberFieldGroup className="bg-background/60 h-7 w-[6.25rem] shrink-0">
+      <NumberFieldGroup
+        className={cn("bg-background/60 h-7 shrink-0", stepperClass ?? "w-[6.25rem]")}
+      >
         <NumberFieldDecrement />
         <NumberFieldInput className="text-xs" />
         <NumberFieldIncrement />

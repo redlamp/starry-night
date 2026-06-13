@@ -27,6 +27,10 @@ Map of Content for external references that shape direction.
 - [[taxicab-geometry]] — Manhattan (L1) / Chebyshev (L∞) vs Euclidean; rectilinear, map-like seams for the grid rework
 - [[block-proportions]] — real-world block aspect ratios (1:2–1:3 downtown, 1:1.5–1:2 residential); recommended W:D bands per GRAMMAR character; how to apply in grid-first block formation (issue #33)
 
+## Interaction / camera references
+
+- [[camera-interaction-models]] — survey of camera/navigation models (Google Maps, Mapbox, Cesium; RTS + city-builders; Blender/Maya/Fusion/Unity/Unreal; drei `<CameraControls>` / camera-controls / OrbitControls vs MapControls) to evaluate "drag the pin to set Focal Y" + find missing angles for the drei camera bridge. Includes the open-decisions list awaiting review.
+
 ## Colour references
 
 - [[color-usage-night-skyline]] — kelvin distribution per source kind, what real night-skyline windows actually look like, where current palette skews wrong, recalibration plan
