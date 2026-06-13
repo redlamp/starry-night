@@ -258,7 +258,7 @@ const SETTINGS_SECTIONS: { value: string; label: string; keywords: string }[] = 
     value: "perf",
     label: "Performance",
     keywords:
-      "fps frame rate draw calls monitor gpu aa msaa samples smoothing jaggies moire anti-aliasing",
+      "fps frame rate draw calls monitor gpu aa msaa samples smoothing jaggies moire anti-aliasing dpr resolution pixel ratio quality tier lod level of detail distance culling tiles attenuation wash",
   },
 ];
 
@@ -531,14 +531,14 @@ export function CameraPanel() {
 
             {/* Roads (user 2026-06-08): each block is its own expandable
                 sub-group — Highlight (tri-switch on header), Streetlights,
-                Traffic, Distance LOD — all collapsed by default. */}
+                Traffic — all collapsed by default. (Distance LOD moved to
+                Performance → Level of Detail, user 2026-06-13.) */}
             <Section value="roads" icon={Route} label="Roads" hidden={!show("roads")}>
               <SubGroup label="Highlight" action={<RoadHighlightAction />}>
                 <RoadHighlightTiers />
               </SubGroup>
               <StreetlightsGroup />
               <TrafficGroup />
-              <LodGroup />
             </Section>
 
             <Section
@@ -935,13 +935,15 @@ function ResolutionSection() {
   );
 }
 
-// Level of Detail — currently the painted-window distance-wash (header toggle
-// gates it: off = full per-cell detail to the horizon). Named generally so more
-// LOD controls (e.g. the distance/tile-cull group) can move in later. Distinct
-// for now from the Distance-LOD group (LodGroup) under the city sections.
+// Level of Detail (LOD) — all LOD in one place (user 2026-06-13): the painted-
+// window distance-wash (header toggle: off = full per-cell detail to the horizon)
+// + the distance attenuation / per-tile culling consolidated from the Roads panel
+// (its own enable, since it's a separate mechanism).
 function LevelOfDetailSection() {
   const wa = useSceneStore((s) => s.windowAA);
   const setWindowAA = useSceneStore((s) => s.setWindowAA);
+  const distEnabled = useSceneStore((s) => s.lod.enabled);
+  const setLod = useSceneStore((s) => s.setLod);
   return (
     <SubGroup
       label="Level of Detail (LOD)"
@@ -953,6 +955,7 @@ function LevelOfDetailSection() {
         />
       }
     >
+      <div className="text-foreground/40 text-[10px]">Window distance-wash (header toggle)</div>
       <ValueSlider
         label="LOD near"
         value={wa.lodNear}
@@ -969,6 +972,13 @@ function LevelOfDetailSection() {
         step={0.01}
         onChange={(lodRange) => setWindowAA({ lodRange })}
       />
+      <div className="mt-1 flex items-center justify-between gap-2 border-t border-white/10 pt-2 text-xs">
+        <span className="text-foreground/70" title="Distance attenuation + per-tile culling on / off">
+          distance culling
+        </span>
+        <Switch checked={distEnabled} onCheckedChange={(v) => setLod({ enabled: v })} />
+      </div>
+      <LodControls />
     </SubGroup>
   );
 }
@@ -1923,26 +1933,6 @@ function StreetlightsGroup() {
       }
     >
       <StreetlightControls />
-    </SubGroup>
-  );
-}
-
-// Distance LOD — expandable group (user 2026-06-08), enable switch on header.
-function LodGroup() {
-  const enabled = useSceneStore((s) => s.lod.enabled);
-  const setLod = useSceneStore((s) => s.setLod);
-  return (
-    <SubGroup
-      label="Distance LOD"
-      action={
-        <Switch
-          checked={enabled}
-          onCheckedChange={(v) => setLod({ enabled: v })}
-          title="Distance attenuation + per-tile culling on / off"
-        />
-      }
-    >
-      <LodControls />
     </SubGroup>
   );
 }
