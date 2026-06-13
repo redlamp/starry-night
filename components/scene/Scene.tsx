@@ -43,16 +43,24 @@ export function Scene() {
   const qualityTier = useSceneStore((s) => s.qualityTier);
   const dprMax = QUALITY_TIERS[qualityTier].dprMax;
 
-  // Phase-1 migration flag: ?controls=drei (or =map) opts into the new drei
-  // bridge (DreiSceneControls — Google-Maps input model); default stays on the
-  // production controller. The controls live inside <Canvas> (client-only WebGL),
-  // so reading the param in a useState initialiser can't cause a hydration mismatch.
+  // The drei <CameraControls> bridge (DreiSceneControls — Google-Maps input model) is now the
+  // DEFAULT for ORBIT. fly / still aren't ported to the bridge yet (Phase 3 / sub-step D), so
+  // they fall back to the old controller; `?controls=legacy` (or `=old`) forces the old
+  // controller for every mode. Read in a useState initialiser (client-only WebGL) so it can't
+  // cause a hydration mismatch.
   const [controlsFlag] = useState(() =>
     typeof window !== "undefined"
       ? new URLSearchParams(window.location.search).get("controls")
       : null,
   );
-  const useDreiControls = controlsFlag === "drei" || controlsFlag === "map";
+  const legacyControls = controlsFlag === "legacy" || controlsFlag === "old";
+  const cameraMode = useSceneStore((s) => s.cameraMode);
+  // drei owns orbit unless forced legacy. Keep DreiSceneControls MOUNTED across modes (it
+  // self-gates to orbit and goes inert otherwise) so its once-per-mount "pin perspective"
+  // entry effect doesn't re-fire each time you return to orbit; the old controller mounts only
+  // for fly / still (or all modes in legacy).
+  const dreiOrbit = !legacyControls && cameraMode === "orbit";
+  const oldController = legacyControls || cameraMode !== "orbit";
 
   // #44: warm the heavy city-generation cache off the mount-critical path. The
   // canvas + sky / stars / moon / ground mount immediately; the city-derived
@@ -73,7 +81,8 @@ export function Scene() {
         dpr={[1, dprMax]}
         style={{ touchAction: "none" }}
       >
-        {useDreiControls ? <DreiSceneControls /> : <CameraControls />}
+        {!legacyControls && <DreiSceneControls />}
+        {oldController && <CameraControls />}
         <ProjectionBlender />
         <PerfMonitor />
         <TimeTicker />
@@ -138,9 +147,9 @@ export function Scene() {
         )}
         {/* old controller's store-based indicator; the drei bridge renders its own
           live one (tracks the camera-controls target with no throttle lag) */}
-        {!useDreiControls && <FocalIndicator />}
+        {oldController && <FocalIndicator />}
       </Canvas>
-      {useDreiControls && <ScreenYGuide />}
+      {dreiOrbit && <ScreenYGuide />}
     </>
   );
 }
