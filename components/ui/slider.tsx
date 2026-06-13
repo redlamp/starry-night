@@ -9,20 +9,33 @@ function Slider({
   value,
   min = 0,
   max = 100,
+  origin,
   trackStyle,
+  indicatorStyle,
   indicatorClassName,
   ...props
 }: SliderPrimitive.Root.Props & {
   // Optional track paint (e.g. a hue-spectrum gradient) + indicator override
   // (e.g. a translucent wash so the gradient stays visible inside the range).
   trackStyle?: CSSProperties;
+  indicatorStyle?: CSSProperties;
   indicatorClassName?: string;
+  // Fill anchor: when set, the fill spans origin↔value (a signed slider that fills
+  // OUT from a point, e.g. 0) instead of the default min→value. Horizontal sliders only.
+  origin?: number;
 }) {
   const _values = Array.isArray(value)
     ? value
     : Array.isArray(defaultValue)
       ? defaultValue
       : [min, max];
+
+  // Origin-anchored fill (single-value horizontal sliders): paint from the origin to the
+  // value rather than from the track's start, so a signed value reads as "out from 0".
+  const useOrigin = origin != null && typeof value === "number" && max > min;
+  const toPct = (v: number) => ((Math.min(Math.max(v, min), max) - min) / (max - min)) * 100;
+  const originPct = useOrigin ? toPct(origin) : 0;
+  const valuePct = useOrigin ? toPct(value as number) : 0;
 
   return (
     <SliderPrimitive.Root
@@ -41,13 +54,28 @@ function Slider({
           style={trackStyle}
           className="bg-muted relative grow overflow-hidden rounded-full select-none data-horizontal:h-1 data-horizontal:w-full data-vertical:h-full data-vertical:w-1"
         >
-          <SliderPrimitive.Indicator
-            data-slot="slider-range"
-            className={cn(
-              "bg-primary select-none data-horizontal:h-full data-vertical:w-full",
-              indicatorClassName,
-            )}
-          />
+          {useOrigin ? (
+            <div
+              data-slot="slider-range"
+              className={cn("pointer-events-none absolute select-none", indicatorClassName)}
+              style={{
+                top: 0,
+                bottom: 0,
+                left: `${Math.min(originPct, valuePct)}%`,
+                width: `${Math.abs(valuePct - originPct)}%`,
+                ...indicatorStyle,
+              }}
+            />
+          ) : (
+            <SliderPrimitive.Indicator
+              data-slot="slider-range"
+              style={indicatorStyle}
+              className={cn(
+                "bg-primary select-none data-horizontal:h-full data-vertical:w-full",
+                indicatorClassName,
+              )}
+            />
+          )}
         </SliderPrimitive.Track>
         {Array.from({ length: _values.length }, (_, index) => (
           <SliderPrimitive.Thumb

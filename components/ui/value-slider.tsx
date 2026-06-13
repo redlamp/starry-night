@@ -25,6 +25,8 @@ export function ValueSlider({
   onChange,
   labelClass,
   stepperClass,
+  origin,
+  indicatorStyle,
 }: {
   label: string;
   value: number;
@@ -34,6 +36,10 @@ export function ValueSlider({
   onChange: (v: number) => void;
   labelClass?: string;
   stepperClass?: string;
+  // Fill the slider OUT from `origin` (e.g. 0) and paint it via `indicatorStyle`
+  // (e.g. a sign-dependent colour) — see Slider's `origin`/`indicatorStyle`.
+  origin?: number;
+  indicatorStyle?: CSSProperties;
 }) {
   return (
     <NumberField
@@ -56,8 +62,12 @@ export function ValueSlider({
         value={value}
         onValueChange={(v) => onChange(typeof v === "number" ? v : v[0])}
         className="flex-1"
+        origin={origin}
+        indicatorStyle={indicatorStyle}
       />
-      <NumberFieldGroup className={cn("bg-background/60 h-7 shrink-0", stepperClass ?? "w-[6.25rem]")}>
+      <NumberFieldGroup
+        className={cn("bg-background/60 h-7 shrink-0", stepperClass ?? "w-[6.25rem]")}
+      >
         <NumberFieldDecrement />
         <NumberFieldInput className="text-xs" />
         <NumberFieldIncrement />

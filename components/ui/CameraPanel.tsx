@@ -820,13 +820,17 @@ function OrbitSection() {
         stepperClass="w-32"
       />
       <ValueSlider
-        label="focal y"
+        label="Focal Y"
         value={orbit.lookAtY}
         min={-1000}
         max={1000}
         step={1}
         onChange={(lookAtY) => setOrbit({ lookAtY })}
         stepperClass="w-32"
+        origin={0}
+        // fill out from 0; match the focal pin — sky-blue above ground, soil-brown below
+        // (COLOR_ABOVE / COLOR_BELOW in DreiSceneControls).
+        indicatorStyle={{ background: orbit.lookAtY >= 0 ? "#7dd3fc" : "#b5835a" }}
       />
       <ValueSlider
         label="screen focus %"
