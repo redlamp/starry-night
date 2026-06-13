@@ -14,6 +14,7 @@ import { Streetlights } from "./Streetlights";
 import { Beacons } from "./Beacons";
 import { CameraControls } from "./CameraControls";
 import { PerfMonitor } from "./PerfMonitor";
+import { AdaptiveQuality } from "./AdaptiveQuality";
 import { TimeTicker } from "./TimeTicker";
 import { ProjectionBlender } from "./ProjectionBlender";
 import { FocalIndicator } from "./FocalIndicator";
@@ -61,6 +62,9 @@ export function Scene() {
       <CameraControls />
       <ProjectionBlender />
       <PerfMonitor />
+      {/* Dynamic DPR regression — default-inert; enable with ?adaptive (see
+          AdaptiveQuality + samples/perf-report.html). Verify on real devices. */}
+      <AdaptiveQuality />
       <TimeTicker />
       {/* City cascade waits for cityReady (user 2026-06-08) — see IntroTicker. */}
       <IntroTicker cityReady={cityReady} />
