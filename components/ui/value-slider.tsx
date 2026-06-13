@@ -23,6 +23,7 @@ export function ValueSlider({
   max,
   step,
   onChange,
+  onCommit,
   labelClass,
   stepperClass,
   origin,
@@ -34,6 +35,9 @@ export function ValueSlider({
   max: number;
   step: number;
   onChange: (v: number) => void;
+  // Fires when a slider DRAG is released (base-ui onValueCommitted) — e.g. to end a
+  // transient "while adjusting" state precisely on release rather than on a timeout.
+  onCommit?: () => void;
   labelClass?: string;
   stepperClass?: string;
   // Fill the slider OUT from `origin` (e.g. 0) and paint it via `indicatorStyle`
@@ -61,6 +65,7 @@ export function ValueSlider({
         step={step}
         value={value}
         onValueChange={(v) => onChange(typeof v === "number" ? v : v[0])}
+        onValueCommitted={onCommit}
         className="flex-1"
         origin={origin}
         indicatorStyle={indicatorStyle}

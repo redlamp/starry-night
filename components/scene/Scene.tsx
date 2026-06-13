@@ -15,6 +15,7 @@ import { Streetlights } from "./Streetlights";
 import { Beacons } from "./Beacons";
 import { CameraControls } from "./CameraControls";
 import { DreiSceneControls } from "./DreiSceneControls";
+import { ScreenYGuide } from "./ScreenYGuide";
 import { PerfMonitor } from "./PerfMonitor";
 import { TimeTicker } from "./TimeTicker";
 import { ProjectionBlender } from "./ProjectionBlender";
@@ -61,82 +62,85 @@ export function Scene() {
   const { ready: cityReady } = useGeneratedCity(masterSeed, cityShape, cityShapeScale);
 
   return (
-    <Canvas
-      camera={{ position: intent.position, fov: intent.fov, near: 0.5, far: 12000 * CITY_SCALE }}
-      gl={{
-        antialias: true,
-        toneMapping: THREE.ACESFilmicToneMapping,
-        outputColorSpace: THREE.SRGBColorSpace,
-      }}
-      dpr={[1, dprMax]}
-      style={{ touchAction: "none" }}
-    >
-      {useDreiControls ? <DreiSceneControls /> : <CameraControls />}
-      <ProjectionBlender />
-      <PerfMonitor />
-      <TimeTicker />
-      {/* City cascade waits for cityReady (user 2026-06-08) — see IntroTicker. */}
-      <IntroTicker cityReady={cityReady} />
-      <FogTicker />
-      <FogBoundsMarkers />
+    <>
+      <Canvas
+        camera={{ position: intent.position, fov: intent.fov, near: 0.5, far: 12000 * CITY_SCALE }}
+        gl={{
+          antialias: true,
+          toneMapping: THREE.ACESFilmicToneMapping,
+          outputColorSpace: THREE.SRGBColorSpace,
+        }}
+        dpr={[1, dprMax]}
+        style={{ touchAction: "none" }}
+      >
+        {useDreiControls ? <DreiSceneControls /> : <CameraControls />}
+        <ProjectionBlender />
+        <PerfMonitor />
+        <TimeTicker />
+        {/* City cascade waits for cityReady (user 2026-06-08) — see IntroTicker. */}
+        <IntroTicker cityReady={cityReady} />
+        <FogTicker />
+        <FogBoundsMarkers />
 
-      {/* near/far/density args are placeholders — FogTicker re-derives them
+        {/* near/far/density args are placeholders — FogTicker re-derives them
           every frame around the camera→city-centre distance (city-anchored
           fog), so only the colour matters here. */}
-      {fog.enabled ? (
-        fog.mode === "exp2" ? (
-          <fogExp2 attach="fog" args={[fog.color, 0.0001]} />
-        ) : (
-          <fog attach="fog" args={[fog.color, 1, 10]} />
-        )
-      ) : null}
-      <ambientLight intensity={0.04} />
+        {fog.enabled ? (
+          fog.mode === "exp2" ? (
+            <fogExp2 attach="fog" args={[fog.color, 0.0001]} />
+          ) : (
+            <fog attach="fog" args={[fog.color, 1, 10]} />
+          )
+        ) : null}
+        <ambientLight intensity={0.04} />
 
-      <StarPass backgroundColor={fog.color} haze={<GroundHaze />}>
-        {/* #26: zenith lifted from near-black to a saturated indigo (research:
+        <StarPass backgroundColor={fog.color} haze={<GroundHaze />}>
+          {/* #26: zenith lifted from near-black to a saturated indigo (research:
             night reads luminous via deep blue + warm contrast, never #000). */}
-        <SkyGradient horizonColor={fog.color} zenithColor="#070b22" />
-        <StarField
-          masterSeed={masterSeed}
-          radius={stars.radius}
-          depth={stars.depth}
-          count={stars.count}
-          size={stars.factor}
-        />
-        {/* #26: rare tapering streak (~every 40s), homage to the original's
+          <SkyGradient horizonColor={fog.color} zenithColor="#070b22" />
+          <StarField
+            masterSeed={masterSeed}
+            radius={stars.radius}
+            depth={stars.depth}
+            count={stars.count}
+            size={stars.factor}
+          />
+          {/* #26: rare tapering streak (~every 40s), homage to the original's
             shooting stars. Shader-clocked, deterministic per seed. */}
-        <ShootingStars masterSeed={masterSeed} radius={stars.radius} />
-      </StarPass>
+          <ShootingStars masterSeed={masterSeed} radius={stars.radius} />
+        </StarPass>
 
-      <Moon />
-      <Ground />
-      {/* City-derived layers: held back until the seeded generation cache is warm
+        <Moon />
+        <Ground />
+        {/* City-derived layers: held back until the seeded generation cache is warm
           (#44) so the first mount frame paints the sky/ground without the ~200ms
           generation stall. Once cityReady flips, every generator below hits the
           warm cache and runs synchronously. */}
-      {/* While the worker generates, the scene stays dark (ground + stars) and
+        {/* While the worker generates, the scene stays dark (ground + stars) and
           the city pops in whole when the bundle lands. The old GenTrace overlay
           (#59 streamed "city sketches itself" lines) read as stray bright
           scribbles over the intro — removed; the worker stream + cityGenClient
           subscribe API stay for the road-reveal choreography to consume. */}
-      {cityReady && (
-        <>
-          <Roads masterSeed={masterSeed} />
-          <InstancedCity masterSeed={masterSeed} />
-          <Streetlights masterSeed={masterSeed} />
-          <Beacons masterSeed={masterSeed} />
-          <Traffic masterSeed={masterSeed} />
-          {/* Planning overlays — each respects its own visibility flag (default
+        {cityReady && (
+          <>
+            <Roads masterSeed={masterSeed} />
+            <InstancedCity masterSeed={masterSeed} />
+            <Streetlights masterSeed={masterSeed} />
+            <Beacons masterSeed={masterSeed} />
+            <Traffic masterSeed={masterSeed} />
+            {/* Planning overlays — each respects its own visibility flag (default
               off). Highway/arterial/street tier tinting now lives in <Roads/>. */}
-          <DistrictShells masterSeed={masterSeed} />
-          <PopulationHeatmap masterSeed={masterSeed} />
-          <TensorFieldOverlay masterSeed={masterSeed} />
-          <TileCullOverlay masterSeed={masterSeed} />
-        </>
-      )}
-      {/* old controller's store-based indicator; the drei bridge renders its own
+            <DistrictShells masterSeed={masterSeed} />
+            <PopulationHeatmap masterSeed={masterSeed} />
+            <TensorFieldOverlay masterSeed={masterSeed} />
+            <TileCullOverlay masterSeed={masterSeed} />
+          </>
+        )}
+        {/* old controller's store-based indicator; the drei bridge renders its own
           live one (tracks the camera-controls target with no throttle lag) */}
-      {!useDreiControls && <FocalIndicator />}
-    </Canvas>
+        {!useDreiControls && <FocalIndicator />}
+      </Canvas>
+      {useDreiControls && <ScreenYGuide />}
+    </>
   );
 }

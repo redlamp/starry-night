@@ -766,21 +766,31 @@ function OrbitSection() {
   const setOrbit = useSceneStore((s) => s.setOrbit);
   const pivot = useSceneStore((s) => s.orbitPivotFromBottom);
   const setPivot = useSceneStore((s) => s.setOrbitPivotFromBottom);
-  const setFocalAdjusting = useSceneStore((s) => s.setFocalAdjusting);
-  // Show the focal pin while Focal Y / Screen Y is being adjusted (even if the indicator
-  // toggle is off), lingering after the last change — mirrors fog's adjust ping.
+  const setFocalAdjust = useSceneStore((s) => s.setFocalAdjust);
+  // Show the focal pin (and, for Screen Y, the guide line) WHILE a slider is being adjusted,
+  // then revert on release: a slider drag ends precisely via onCommit (base-ui's
+  // onValueCommitted); the timeout is only a fallback for non-drag inputs (stepper / typing /
+  // label-scrub) that don't emit a commit. Prior pin state is preserved because focalAdjust is
+  // separate from the showFocalIndicator toggle.
   const focalAdjustTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pingFocalAdjusting = useCallback(() => {
-    setFocalAdjusting(true);
+  const showFocalAdjust = useCallback(
+    (which: "focalY" | "screenY") => {
+      setFocalAdjust(which);
+      if (focalAdjustTimeout.current) clearTimeout(focalAdjustTimeout.current);
+      focalAdjustTimeout.current = setTimeout(() => setFocalAdjust(""), 1000);
+    },
+    [setFocalAdjust],
+  );
+  const endFocalAdjust = useCallback(() => {
     if (focalAdjustTimeout.current) clearTimeout(focalAdjustTimeout.current);
-    focalAdjustTimeout.current = setTimeout(() => setFocalAdjusting(false), 1000);
-  }, [setFocalAdjusting]);
+    setFocalAdjust("");
+  }, [setFocalAdjust]);
   useEffect(
     () => () => {
       if (focalAdjustTimeout.current) clearTimeout(focalAdjustTimeout.current);
-      setFocalAdjusting(false);
+      setFocalAdjust("");
     },
-    [setFocalAdjusting],
+    [setFocalAdjust],
   );
   return (
     <>
@@ -843,8 +853,9 @@ function OrbitSection() {
         step={1}
         onChange={(lookAtY) => {
           setOrbit({ lookAtY });
-          pingFocalAdjusting();
+          showFocalAdjust("focalY");
         }}
+        onCommit={endFocalAdjust}
         stepperClass="w-32"
         origin={0}
         // fill out from 0; match the focal pin — sky-blue above ground, soil-brown below
@@ -861,8 +872,9 @@ function OrbitSection() {
         step={1}
         onChange={(pct) => {
           setPivot(1 - pct / 100);
-          pingFocalAdjusting();
+          showFocalAdjust("screenY");
         }}
+        onCommit={endFocalAdjust}
         stepperClass="w-32"
       />
     </>

@@ -832,10 +832,10 @@ type SceneState = {
   // Visibility of the orbit focal-point crosshair.
   showFocalIndicator: boolean;
   setShowFocalIndicator: (v: boolean) => void;
-  // Transient: show the focal pin while a panel slider (Focal Y / Screen Y) is being
-  // adjusted, even when the toggle above is off. Lingers briefly. Not persisted.
-  focalAdjusting: boolean;
-  setFocalAdjusting: (v: boolean) => void;
+  // Transient: which focal slider is being adjusted ("" = none). Shows the pin (either
+  // slider) and the Screen-Y guide line (screenY only). Not persisted.
+  focalAdjust: "" | "focalY" | "screenY";
+  setFocalAdjust: (v: "" | "focalY" | "screenY") => void;
   // Orbit/rotate pivot height as a fraction up from the bottom of the screen
   // (Google-Maps ~0.37). Drives the RMB pivot + the focal-marker raycast.
   orbitPivotFromBottom: number;
@@ -1059,8 +1059,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setHaze: (patch) => set((s) => ({ haze: { ...s.haze, ...patch } })),
   showFocalIndicator: false,
   setShowFocalIndicator: (showFocalIndicator) => set({ showFocalIndicator }),
-  focalAdjusting: false,
-  setFocalAdjusting: (focalAdjusting) => set({ focalAdjusting }),
+  focalAdjust: "",
+  setFocalAdjust: (focalAdjust) => set({ focalAdjust }),
   orbitPivotFromBottom: 0.37,
   setOrbitPivotFromBottom: (orbitPivotFromBottom) => set({ orbitPivotFromBottom }),
   orbitZoomToPin: false,
