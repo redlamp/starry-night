@@ -810,7 +810,7 @@ function OrbitSection() {
         </div>
       </div>
       <ValueSlider
-        label="speed °/s"
+        label="Speed °/s"
         value={orbit.periodSec !== 0 ? Number((360 / orbit.periodSec).toFixed(1)) : 0}
         min={-60}
         max={60}
@@ -819,7 +819,7 @@ function OrbitSection() {
         stepperClass="w-32"
       />
       <ValueSlider
-        label="distance"
+        label="Distance"
         value={orbit.radius}
         min={50}
         max={5000}
@@ -828,7 +828,7 @@ function OrbitSection() {
         stepperClass="w-32"
       />
       <ValueSlider
-        label="elevation"
+        label="Elevation"
         value={orbit.elevationDeg}
         min={0.01}
         max={90}
@@ -837,7 +837,7 @@ function OrbitSection() {
         stepperClass="w-32"
       />
       <ValueSlider
-        label="compass"
+        label="Compass"
         value={orbit.azimuthDeg}
         min={0}
         max={360}
