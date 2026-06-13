@@ -766,6 +766,22 @@ function OrbitSection() {
   const setOrbit = useSceneStore((s) => s.setOrbit);
   const pivot = useSceneStore((s) => s.orbitPivotFromBottom);
   const setPivot = useSceneStore((s) => s.setOrbitPivotFromBottom);
+  const setFocalAdjusting = useSceneStore((s) => s.setFocalAdjusting);
+  // Show the focal pin while Focal Y / Screen Y is being adjusted (even if the indicator
+  // toggle is off), lingering after the last change — mirrors fog's adjust ping.
+  const focalAdjustTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pingFocalAdjusting = useCallback(() => {
+    setFocalAdjusting(true);
+    if (focalAdjustTimeout.current) clearTimeout(focalAdjustTimeout.current);
+    focalAdjustTimeout.current = setTimeout(() => setFocalAdjusting(false), 1000);
+  }, [setFocalAdjusting]);
+  useEffect(
+    () => () => {
+      if (focalAdjustTimeout.current) clearTimeout(focalAdjustTimeout.current);
+      setFocalAdjusting(false);
+    },
+    [setFocalAdjusting],
+  );
   return (
     <>
       <div className="flex items-center justify-between gap-1.5">
@@ -825,7 +841,10 @@ function OrbitSection() {
         min={-1000}
         max={1000}
         step={1}
-        onChange={(lookAtY) => setOrbit({ lookAtY })}
+        onChange={(lookAtY) => {
+          setOrbit({ lookAtY });
+          pingFocalAdjusting();
+        }}
         stepperClass="w-32"
         origin={0}
         // fill out from 0; match the focal pin — sky-blue above ground, soil-brown below
@@ -840,7 +859,10 @@ function OrbitSection() {
         min={0}
         max={100}
         step={1}
-        onChange={(pct) => setPivot(1 - pct / 100)}
+        onChange={(pct) => {
+          setPivot(1 - pct / 100);
+          pingFocalAdjusting();
+        }}
         stepperClass="w-32"
       />
     </>

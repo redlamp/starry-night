@@ -832,6 +832,10 @@ type SceneState = {
   // Visibility of the orbit focal-point crosshair.
   showFocalIndicator: boolean;
   setShowFocalIndicator: (v: boolean) => void;
+  // Transient: show the focal pin while a panel slider (Focal Y / Screen Y) is being
+  // adjusted, even when the toggle above is off. Lingers briefly. Not persisted.
+  focalAdjusting: boolean;
+  setFocalAdjusting: (v: boolean) => void;
   // Orbit/rotate pivot height as a fraction up from the bottom of the screen
   // (Google-Maps ~0.37). Drives the RMB pivot + the focal-marker raycast.
   orbitPivotFromBottom: number;
@@ -1055,6 +1059,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setHaze: (patch) => set((s) => ({ haze: { ...s.haze, ...patch } })),
   showFocalIndicator: false,
   setShowFocalIndicator: (showFocalIndicator) => set({ showFocalIndicator }),
+  focalAdjusting: false,
+  setFocalAdjusting: (focalAdjusting) => set({ focalAdjusting }),
   orbitPivotFromBottom: 0.37,
   setOrbitPivotFromBottom: (orbitPivotFromBottom) => set({ orbitPivotFromBottom }),
   orbitZoomToPin: false,
@@ -1174,8 +1180,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   fieldDeviation: 1.5,
   setFieldDeviation: (fieldDeviation) => set({ fieldDeviation }),
   densityProfile: DEFAULT_DENSITY_PROFILE,
-  setDensityProfile: (patch) =>
-    set((s) => ({ densityProfile: { ...s.densityProfile, ...patch } })),
+  setDensityProfile: (patch) => set((s) => ({ densityProfile: { ...s.densityProfile, ...patch } })),
   densityProfileDraft: null,
   setDensityProfileDraft: (densityProfileDraft) => set({ densityProfileDraft }),
   traffic: DEFAULT_TRAFFIC,

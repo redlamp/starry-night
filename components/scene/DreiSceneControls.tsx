@@ -340,7 +340,9 @@ export function DreiSceneControls() {
   const resumeAt = useRef(0); // clock time the sweep may resume after a gesture
   const wasControlling = useRef(false);
   const syncingFromCamera = useRef(false); // true while writing readback → store
-  const showFocal = useSceneStore((s) => s.showFocalIndicator);
+  // Show the markers when the indicator is toggled on OR while a panel slider (Focal Y /
+  // Screen Y) is being adjusted (transient focalAdjusting flag).
+  const showFocal = useSceneStore((s) => s.showFocalIndicator || s.focalAdjusting);
   const pinRef = useRef<THREE.Group>(null); // map-pin marker AT the focal point (camera aim)
   const ringRef = useRef<THREE.Group>(null); // ground beacon ring below the focal
   const plumbRef = useRef<ComponentRef<typeof Line>>(null); // plumbline: focal → ground
