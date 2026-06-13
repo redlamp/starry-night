@@ -604,7 +604,7 @@ export function CameraPanel() {
               icon={Gauge}
               label="Performance"
               hidden={!show("perf")}
-              action={<FpsBadgeToggle />}
+              action={<PerfDisplayToggle />}
             >
               <PerfReadout />
               {/* Adaptive + AA / DPR / LOD / Stats as collapsible SubGroups
@@ -2254,14 +2254,51 @@ function SeedRow() {
   );
 }
 
-function FpsBadgeToggle() {
+// Performance display — 3-step: off / badge (floating FPS badge) / stats (the
+// detailed overlay). Mutually exclusive, so only one floating display shows at a
+// time. Rendered as a Section header action (sibling of the trigger); buttons
+// stopPropagation so a click selects a mode without toggling the accordion.
+function PerfDisplayToggle() {
   const fpsHud = useSceneStore((s) => s.fpsHud);
+  const perfStats = useSceneStore((s) => s.perfStats);
   const setFpsHud = useSceneStore((s) => s.setFpsHud);
+  const setPerfStats = useSceneStore((s) => s.setPerfStats);
+  const active: "off" | "badge" | "stats" = perfStats ? "stats" : fpsHud ? "badge" : "off";
+  const apply = (v: "off" | "badge" | "stats") => {
+    setFpsHud(v === "badge");
+    setPerfStats(v === "stats");
+  };
+  const opts: Array<{ v: "off" | "badge" | "stats"; title: string }> = [
+    { v: "off", title: "No on-screen performance display" },
+    { v: "badge", title: "Small floating FPS badge" },
+    { v: "stats", title: "Detailed overlay: boot timeline, long tasks, last gen" },
+  ];
   return (
-    <label className="flex cursor-pointer items-center gap-2 text-xs">
-      <span className="text-foreground/70">badge</span>
-      <Switch checked={fpsHud} onCheckedChange={setFpsHud} title="Show the floating FPS badge" />
-    </label>
+    <div
+      role="group"
+      aria-label="Performance display"
+      className="bg-background/40 flex rounded-md p-0.5 text-[11px]"
+    >
+      {opts.map((o) => (
+        <button
+          key={o.v}
+          type="button"
+          title={o.title}
+          onClick={(e) => {
+            e.stopPropagation();
+            apply(o.v);
+          }}
+          className={cn(
+            "rounded px-1.5 py-0.5 transition-colors",
+            active === o.v
+              ? "bg-foreground/15 text-foreground"
+              : "text-foreground/45 hover:text-foreground/80",
+          )}
+        >
+          {o.v}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -2392,28 +2429,19 @@ function AdaptiveGroup() {
 
 // Stats — header switch shows the detailed on-screen overlay (PerfOverlay: boot
 // timeline, long tasks, last gen); the body is the live readout grid.
+// Stats — in-panel live readout grid. The detailed FLOATING overlay (boot
+// timeline · long tasks · last gen) is the section header's "stats" option.
 function StatsGroup() {
   const perf = useSceneStore((s) => s.perf);
   const qualityTier = useSceneStore((s) => s.qualityTier);
   const dprCap = useSceneStore((s) => s.dprCap);
-  const perfStats = useSceneStore((s) => s.perfStats);
-  const setPerfStats = useSceneStore((s) => s.setPerfStats);
   const tierCfg = QUALITY_TIERS[qualityTier];
   const fpsColor =
     perf.fps >= 55 ? "text-emerald-300" : perf.fps >= 35 ? "text-amber-300" : "text-rose-400";
   return (
-    <SubGroup
-      label="Stats"
-      action={
-        <Switch
-          checked={perfStats}
-          onCheckedChange={(v) => setPerfStats(v)}
-          title="Show the detailed on-screen overlay: boot timeline, main-thread long tasks, last gen time."
-        />
-      }
-    >
+    <SubGroup label="Stats">
       <div className="text-foreground/40 text-[10px]">
-        Header switch shows the detailed overlay (boot timeline · long tasks · last gen).
+        Live readout. Set the header to “stats” for the floating overlay (+ boot timeline · long tasks).
       </div>
       <div className="text-foreground/70 grid grid-cols-[5rem_1fr] gap-1 font-mono text-xs">
         <div>dpr cap</div>
