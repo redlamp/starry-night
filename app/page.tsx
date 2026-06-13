@@ -2,6 +2,7 @@ import { Scene } from "@/components/scene/Scene";
 import { CameraPanel } from "@/components/ui/CameraPanel";
 import { SeedControls } from "@/components/ui/SeedControls";
 import { FpsHud } from "@/components/ui/FpsHud";
+import { PerfOverlay } from "@/components/ui/PerfOverlay";
 import { CaptureBoot } from "@/components/scene/CaptureBoot";
 import { ViewHotkeys } from "@/components/scene/ViewHotkeys";
 
@@ -15,6 +16,7 @@ export default function Page() {
         <CameraPanel />
         <SeedControls />
         <FpsHud />
+        <PerfOverlay />
       </div>
     </main>
   );

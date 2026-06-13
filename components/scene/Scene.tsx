@@ -17,6 +17,8 @@ import { CameraControls } from "./CameraControls";
 import { DreiSceneControls } from "./DreiSceneControls";
 import { ScreenYGuide } from "./ScreenYGuide";
 import { PerfMonitor } from "./PerfMonitor";
+import { AdaptiveQuality } from "./AdaptiveQuality";
+import { CityReveal } from "./CityReveal";
 import { TimeTicker } from "./TimeTicker";
 import { ProjectionBlender } from "./ProjectionBlender";
 import { FocalIndicator } from "./FocalIndicator";
@@ -42,6 +44,10 @@ export function Scene() {
   const fog = useSceneStore((s) => s.fog);
   const qualityTier = useSceneStore((s) => s.qualityTier);
   const dprMax = QUALITY_TIERS[qualityTier].dprMax;
+  // MSAA (off by default) — a context-creation flag, so it can't change live; the
+  // `key` remounts the canvas (brief re-init) when it's toggled. DPR cap is live.
+  const antialias = useSceneStore((s) => s.antialias);
+  const dprCap = useSceneStore((s) => s.dprCap);
 
   // The drei <CameraControls> bridge (DreiSceneControls — Google-Maps input model) is now the
   // DEFAULT for ORBIT. fly / still aren't ported to the bridge yet (Phase 3 / sub-step D), so
@@ -72,19 +78,23 @@ export function Scene() {
   return (
     <>
       <Canvas
+        key={antialias ? "aa-on" : "aa-off"} // remount on MSAA change (context-creation flag)
         camera={{ position: intent.position, fov: intent.fov, near: 0.5, far: 12000 * CITY_SCALE }}
         gl={{
-          antialias: true,
+          antialias,
           toneMapping: THREE.ACESFilmicToneMapping,
           outputColorSpace: THREE.SRGBColorSpace,
         }}
-        dpr={[1, dprMax]}
+        dpr={dprCap ?? [1, dprMax]}
         style={{ touchAction: "none" }}
       >
         {!legacyControls && <DreiSceneControls />}
         {oldController && <CameraControls />}
         <ProjectionBlender />
         <PerfMonitor />
+        {/* Dynamic DPR regression — default-inert; enable with ?adaptive (see
+            AdaptiveQuality + samples/perf-report.html). Verify on real devices. */}
+        <AdaptiveQuality />
         <TimeTicker />
         {/* City cascade waits for cityReady (user 2026-06-08) — see IntroTicker. */}
         <IntroTicker cityReady={cityReady} />
@@ -130,8 +140,10 @@ export function Scene() {
           (#59 streamed "city sketches itself" lines) read as stray bright
           scribbles over the intro — removed; the worker stream + cityGenClient
           subscribe API stay for the road-reveal choreography to consume. */}
+        {/* CityReveal pre-warms shaders off the visible frame (compileAsync) and
+            reveals once compiled — removes the city-first-frame compile stall. */}
         {cityReady && (
-          <>
+          <CityReveal>
             <Roads masterSeed={masterSeed} />
             <InstancedCity masterSeed={masterSeed} />
             <Streetlights masterSeed={masterSeed} />
@@ -143,7 +155,7 @@ export function Scene() {
             <PopulationHeatmap masterSeed={masterSeed} />
             <TensorFieldOverlay masterSeed={masterSeed} />
             <TileCullOverlay masterSeed={masterSeed} />
-          </>
+          </CityReveal>
         )}
         {/* old controller's store-based indicator; the drei bridge renders its own
           live one (tracks the camera-controls target with no throttle lag) */}

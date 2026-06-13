@@ -161,6 +161,7 @@ export const DEFAULT_STARS = {
 //             full curtain look — opt-in because it reads as a neon tube).
 export const DEFAULT_WINDOW_AA = {
   edge: 1.1,
+  lodEnabled: true, // window distance-wash LOD; header toggle in the LOD group
   lodNear: 0.2,
   lodRange: 0.4,
   litBias: 0.7,
@@ -466,7 +467,11 @@ type AnySettingEntry =
   | SettingEntry<"cropLock">
   | SettingEntry<"fpsHud">
   | SettingEntry<"fieldDeviation">
-  | SettingEntry<"densityProfile">;
+  | SettingEntry<"densityProfile">
+  | SettingEntry<"antialias">
+  | SettingEntry<"dprCap">
+  | SettingEntry<"adaptive">
+  | SettingEntry<"perfStats">;
 
 export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "cameraIntent", defaultValue: DEFAULT_INTENT, persist: true },
@@ -520,6 +525,12 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "fieldDeviation", defaultValue: 1.5, persist: true },
   // Population profile (#49) — gen input, persisted.
   { key: "densityProfile", defaultValue: DEFAULT_DENSITY_PROFILE, persist: true },
+  // Perf overrides (user 2026-06-13): MSAA off by default; dpr cap null = auto (tier).
+  { key: "antialias", defaultValue: false as const, persist: true },
+  { key: "dprCap", defaultValue: null as SceneState["dprCap"], persist: true },
+  // Adaptive quality + detailed perf overlay — settings (URL ?adaptive/?perf set them on boot).
+  { key: "adaptive", defaultValue: false as const, persist: true },
+  { key: "perfStats", defaultValue: false as const, persist: true },
 ];
 
 // cityPlanning visibility toggles — persisted separately because `cityPlanning`
@@ -563,6 +574,10 @@ type SavedConfig = {
   fpsHud?: boolean;
   fieldDeviation?: number;
   densityProfile?: DensityProfile;
+  antialias?: boolean;
+  dprCap?: number | null;
+  adaptive?: boolean;
+  perfStats?: boolean;
   // Only the layer-visibility toggles persist — topologyKind / arterialCount
   // are per-seed runtime readouts, not settings.
   cityPlanning?: {
@@ -738,6 +753,23 @@ type SceneState = {
   masterSeed: string;
   lightingMode: LightingMode;
   qualityTier: QualityTier;
+  // Canvas MSAA. Off by default (perf): hardware multisampling is fill-rate cost
+  // that compounds with DPR. Cannot change live (WebGL context-creation flag) —
+  // Scene remounts the canvas on change. (user 2026-06-13)
+  antialias: boolean;
+  setAntialias: (v: boolean) => void;
+  // Manual device-pixel-ratio cap. null = auto (the quality tier's dprMax range).
+  // A number pins a fixed DPR. Live (renderer.setPixelRatio) — no reload.
+  dprCap: number | null;
+  setDprCap: (v: number | null) => void;
+  // Adaptive quality (AdaptiveQuality): device-fit tier+radius on enable + dynamic
+  // DPR regression. Off by default. (?adaptive URL just sets this on boot.)
+  adaptive: boolean;
+  setAdaptive: (v: boolean) => void;
+  // Show the detailed perf overlay (PerfOverlay HUD). Off by default. (?perf URL
+  // just sets this on boot.)
+  perfStats: boolean;
+  setPerfStats: (v: boolean) => void;
   paused: boolean;
   captureMode: boolean;
   setCaptureMode: (captureMode: boolean) => void;
@@ -1009,6 +1041,14 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   masterSeed: "starry-night",
   lightingMode: "classic",
   qualityTier: "high",
+  antialias: false, // off by default (user 2026-06-13)
+  setAntialias: (antialias) => set({ antialias }),
+  dprCap: null, // auto = use the quality tier's dprMax range
+  setDprCap: (dprCap) => set({ dprCap }),
+  adaptive: false,
+  setAdaptive: (adaptive) => set({ adaptive }),
+  perfStats: false,
+  setPerfStats: (perfStats) => set({ perfStats }),
   paused: false,
   captureMode: false,
   setCaptureMode: (captureMode) => set({ captureMode }),

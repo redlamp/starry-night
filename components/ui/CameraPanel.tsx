@@ -263,7 +263,7 @@ const SETTINGS_SECTIONS: { value: string; label: string; keywords: string }[] = 
     value: "perf",
     label: "Performance",
     keywords:
-      "fps frame rate draw calls monitor gpu aa msaa samples smoothing jaggies moire anti-aliasing",
+      "fps frame rate draw calls monitor gpu aa msaa samples smoothing jaggies moire anti-aliasing dpr resolution pixel ratio quality tier lod level of detail distance culling tiles attenuation wash",
   },
 ];
 
@@ -574,14 +574,14 @@ export function CameraPanel() {
 
             {/* Roads (user 2026-06-08): each block is its own expandable
                 sub-group — Highlight (tri-switch on header), Streetlights,
-                Traffic, Distance LOD — all collapsed by default. */}
+                Traffic — all collapsed by default. (Distance LOD moved to
+                Performance → Level of Detail, user 2026-06-13.) */}
             <Section value="roads" icon={Route} label="Roads" hidden={!show("roads")}>
               <SubGroup label="Highlight" action={<RoadHighlightAction />}>
                 <RoadHighlightTiers />
               </SubGroup>
               <StreetlightsGroup />
               <TrafficGroup />
-              <LodGroup />
             </Section>
 
             <Section
@@ -647,13 +647,16 @@ export function CameraPanel() {
               icon={Gauge}
               label="Performance"
               hidden={!show("perf")}
-              action={<FpsBadgeToggle />}
+              action={<PerfDisplayToggle />}
             >
               <PerfReadout />
-              {/* Anti-aliasing is a perf/quality trade — lives here (user 2026-06-07). */}
-              <div className="border-foreground/10 border-t pt-2">
-                <AntiAliasingSection />
-              </div>
+              {/* Adaptive + AA / DPR / LOD / Stats as collapsible SubGroups
+                  (parity with the other panels; user 2026-06-13). */}
+              <AdaptiveGroup />
+              <AntiAliasingSection />
+              <ResolutionSection />
+              <LevelOfDetailSection />
+              <StatsGroup />
             </Section>
           </Accordion>
           {searching && matchedValues.length === 0 && (
@@ -970,12 +973,26 @@ function StarsSection() {
   );
 }
 
+// AA and LOD are split into separate collapsible SubGroups (user 2026-06-13), to
+// match the Streetlights / Traffic / Distance-LOD groups. AA = hardware MSAA on
+// the header (off by default; reloads the canvas) + the window-shader edge slider.
 function AntiAliasingSection() {
+  const antialias = useSceneStore((s) => s.antialias);
+  const setAntialias = useSceneStore((s) => s.setAntialias);
   const wa = useSceneStore((s) => s.windowAA);
   const setWindowAA = useSceneStore((s) => s.setWindowAA);
   return (
-    <>
-      <div className="text-foreground/55 text-[10px] tracking-wide uppercase">Anti-alias / LOD</div>
+    <SubGroup
+      label="Anti-Aliasing (AA)"
+      action={
+        <Switch
+          checked={antialias}
+          onCheckedChange={(v) => setAntialias(v)}
+          title="Hardware MSAA. Off = faster (fill-rate scales with it × DPR²). Reloads the view when toggled."
+        />
+      }
+    >
+      <div className="text-foreground/40 text-[10px]">MSAA (header) reloads the view; edge AA is live.</div>
       <ValueSlider
         label="edge AA"
         value={wa.edge}
@@ -984,6 +1001,70 @@ function AntiAliasingSection() {
         step={0.05}
         onChange={(edge) => setWindowAA({ edge })}
       />
+    </SubGroup>
+  );
+}
+
+// Render resolution (device-pixel-ratio) cap. Live — no reload. Cost ∝ DPR², so
+// this is the biggest fill-rate lever on HiDPI screens. Auto = the tier's range.
+function ResolutionSection() {
+  const dprCap = useSceneStore((s) => s.dprCap);
+  const setDprCap = useSceneStore((s) => s.setDprCap);
+  const opts = ["auto", "1", "1.25", "1.5", "2"] as const;
+  const labelOf = (v: string) => (v === "auto" ? "Auto (tier)" : `${v}×`);
+  return (
+    <SubGroup label="Resolution (DPR)">
+      <div className="flex items-center gap-2 text-xs">
+        <span
+          className="text-foreground/70 w-14 shrink-0"
+          title="Render pixel ratio. Lower = much faster (cost scales with DPR²). Applies instantly."
+        >
+          dpr
+        </span>
+        <Select
+          value={dprCap == null ? "auto" : String(dprCap)}
+          onValueChange={(v) => setDprCap(v === "auto" ? null : Number(v))}
+        >
+          <SelectTrigger
+            size="sm"
+            className="bg-background/50 text-foreground hover:bg-background/60 w-full"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {opts.map((v) => (
+              <SelectItem key={v} value={v}>
+                {labelOf(v)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </SubGroup>
+  );
+}
+
+// Level of Detail (LOD) — all LOD in one place (user 2026-06-13): the painted-
+// window distance-wash (header toggle: off = full per-cell detail to the horizon)
+// + the distance attenuation / per-tile culling consolidated from the Roads panel
+// (its own enable, since it's a separate mechanism).
+function LevelOfDetailSection() {
+  const wa = useSceneStore((s) => s.windowAA);
+  const setWindowAA = useSceneStore((s) => s.setWindowAA);
+  const distEnabled = useSceneStore((s) => s.lod.enabled);
+  const setLod = useSceneStore((s) => s.setLod);
+  return (
+    <SubGroup
+      label="Level of Detail (LOD)"
+      action={
+        <Switch
+          checked={wa.lodEnabled}
+          onCheckedChange={(v) => setWindowAA({ lodEnabled: v })}
+          title="Window distance-wash LOD. Off = full per-cell window detail everywhere (crisper far field, slightly more fragment cost)."
+        />
+      }
+    >
+      <div className="text-foreground/40 text-[10px]">Window distance-wash (header toggle)</div>
       <ValueSlider
         label="LOD near"
         value={wa.lodNear}
@@ -1000,7 +1081,14 @@ function AntiAliasingSection() {
         step={0.01}
         onChange={(lodRange) => setWindowAA({ lodRange })}
       />
-    </>
+      <div className="mt-1 flex items-center justify-between gap-2 border-t border-white/10 pt-2 text-xs">
+        <span className="text-foreground/70" title="Distance attenuation + per-tile culling on / off">
+          distance culling
+        </span>
+        <Switch checked={distEnabled} onCheckedChange={(v) => setLod({ enabled: v })} />
+      </div>
+      <LodControls />
+    </SubGroup>
   );
 }
 
@@ -1951,26 +2039,6 @@ function StreetlightsGroup() {
   );
 }
 
-// Distance LOD — expandable group (user 2026-06-08), enable switch on header.
-function LodGroup() {
-  const enabled = useSceneStore((s) => s.lod.enabled);
-  const setLod = useSceneStore((s) => s.setLod);
-  return (
-    <SubGroup
-      label="Distance LOD"
-      action={
-        <Switch
-          checked={enabled}
-          onCheckedChange={(v) => setLod({ enabled: v })}
-          title="Distance attenuation + per-tile culling on / off"
-        />
-      }
-    >
-      <LodControls />
-    </SubGroup>
-  );
-}
-
 // Traffic — expandable group (user 2026-06-08), enable switch on header.
 function TrafficGroup() {
   const traffic = useSceneStore((s) => s.traffic);
@@ -2328,14 +2396,51 @@ function SeedRow() {
   );
 }
 
-function FpsBadgeToggle() {
+// Performance display — 3-step: off / badge (floating FPS badge) / stats (the
+// detailed overlay). Mutually exclusive, so only one floating display shows at a
+// time. Rendered as a Section header action (sibling of the trigger); buttons
+// stopPropagation so a click selects a mode without toggling the accordion.
+function PerfDisplayToggle() {
   const fpsHud = useSceneStore((s) => s.fpsHud);
+  const perfStats = useSceneStore((s) => s.perfStats);
   const setFpsHud = useSceneStore((s) => s.setFpsHud);
+  const setPerfStats = useSceneStore((s) => s.setPerfStats);
+  const active: "off" | "badge" | "stats" = perfStats ? "stats" : fpsHud ? "badge" : "off";
+  const apply = (v: "off" | "badge" | "stats") => {
+    setFpsHud(v === "badge");
+    setPerfStats(v === "stats");
+  };
+  const opts: Array<{ v: "off" | "badge" | "stats"; title: string }> = [
+    { v: "off", title: "No on-screen performance display" },
+    { v: "badge", title: "Small floating FPS badge" },
+    { v: "stats", title: "Detailed overlay: boot timeline, long tasks, last gen" },
+  ];
   return (
-    <label className="flex cursor-pointer items-center gap-2 text-xs">
-      <span className="text-foreground/70">badge</span>
-      <Switch checked={fpsHud} onCheckedChange={setFpsHud} title="Show the floating FPS badge" />
-    </label>
+    <div
+      role="group"
+      aria-label="Performance display"
+      className="bg-background/40 flex rounded-md p-0.5 text-[11px]"
+    >
+      {opts.map((o) => (
+        <button
+          key={o.v}
+          type="button"
+          title={o.title}
+          onClick={(e) => {
+            e.stopPropagation();
+            apply(o.v);
+          }}
+          className={cn(
+            "rounded px-1.5 py-0.5 transition-colors",
+            active === o.v
+              ? "bg-foreground/15 text-foreground"
+              : "text-foreground/45 hover:text-foreground/80",
+          )}
+        >
+          {o.v}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -2406,44 +2511,86 @@ function AtmosphereToggle() {
   );
 }
 
+// Quality tier select — the primary Performance control.
 function PerfReadout() {
-  const perf = useSceneStore((s) => s.perf);
   const qualityTier = useSceneStore((s) => s.qualityTier);
   const setQualityTier = useSceneStore((s) => s.setQualityTier);
   const setStars = useSceneStore((s) => s.setStars);
+  return (
+    <div className="flex items-center gap-2 text-xs">
+      <span className="text-foreground/70 w-14 shrink-0">quality</span>
+      <Select
+        value={qualityTier}
+        onValueChange={(v) => {
+          const tier = v as QualityTier;
+          setQualityTier(tier);
+          setStars({ count: QUALITY_TIERS[tier].starCount });
+        }}
+      >
+        <SelectTrigger
+          size="sm"
+          className="bg-background/50 text-foreground hover:bg-background/60 w-full"
+        >
+          <SelectValue placeholder="tier" />
+        </SelectTrigger>
+        <SelectContent>
+          {(Object.keys(QUALITY_TIERS) as QualityTier[]).map((t) => (
+            <SelectItem key={t} value={t}>
+              {QUALITY_TIERS[t].label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+// Adaptive quality (header toggle) — auto-fit tier + radius for this GPU on enable,
+// then dynamic DPR regression to hold framerate. Drives AdaptiveQuality (the
+// ?adaptive URL just sets it). Off by default; verify on real hardware first.
+function AdaptiveGroup() {
+  const adaptive = useSceneStore((s) => s.adaptive);
+  const setAdaptive = useSceneStore((s) => s.setAdaptive);
+  return (
+    <SubGroup
+      label="Adaptive quality"
+      action={
+        <Switch
+          checked={adaptive}
+          onCheckedChange={(v) => setAdaptive(v)}
+          title="Auto-pick the quality tier + render radius for this GPU, then step DPR down to hold framerate. Verify on real hardware."
+        />
+      }
+    >
+      <div className="text-foreground/40 text-[10px]">
+        Device-fit tier + radius on enable, then dynamic DPR to hold fps. Strong GPUs stay full.
+      </div>
+    </SubGroup>
+  );
+}
+
+// Stats — header switch shows the detailed on-screen overlay (PerfOverlay: boot
+// timeline, long tasks, last gen); the body is the live readout grid.
+// Stats — in-panel live readout grid. The detailed FLOATING overlay (boot
+// timeline · long tasks · last gen) is the section header's "stats" option.
+function StatsGroup() {
+  const perf = useSceneStore((s) => s.perf);
+  const qualityTier = useSceneStore((s) => s.qualityTier);
+  const dprCap = useSceneStore((s) => s.dprCap);
   const tierCfg = QUALITY_TIERS[qualityTier];
   const fpsColor =
     perf.fps >= 55 ? "text-emerald-300" : perf.fps >= 35 ? "text-amber-300" : "text-rose-400";
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-center gap-2 text-xs">
-        <span className="text-foreground/70 w-14 shrink-0">quality</span>
-        <Select
-          value={qualityTier}
-          onValueChange={(v) => {
-            const tier = v as QualityTier;
-            setQualityTier(tier);
-            setStars({ count: QUALITY_TIERS[tier].starCount });
-          }}
-        >
-          <SelectTrigger
-            size="sm"
-            className="bg-background/50 text-foreground hover:bg-background/60 w-full"
-          >
-            <SelectValue placeholder="tier" />
-          </SelectTrigger>
-          <SelectContent>
-            {(Object.keys(QUALITY_TIERS) as QualityTier[]).map((t) => (
-              <SelectItem key={t} value={t}>
-                {QUALITY_TIERS[t].label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+    <SubGroup label="Stats">
+      <div className="text-foreground/40 text-[10px]">
+        Live readout. Set the header to “stats” for the floating overlay (+ boot timeline · long tasks).
       </div>
       <div className="text-foreground/70 grid grid-cols-[5rem_1fr] gap-1 font-mono text-xs">
         <div>dpr cap</div>
-        <div className="tabular-nums">{tierCfg.dprMax}</div>
+        <div className="tabular-nums">
+          {dprCap ?? tierCfg.dprMax}
+          {dprCap == null ? " (auto)" : ""}
+        </div>
         <div>fps</div>
         <div className={`tabular-nums ${fpsColor}`}>{Math.round(perf.fps)}</div>
         <div>triangles</div>
@@ -2455,6 +2602,6 @@ function PerfReadout() {
         <div>textures</div>
         <div className="tabular-nums">{perf.textures}</div>
       </div>
-    </div>
+    </SubGroup>
   );
 }

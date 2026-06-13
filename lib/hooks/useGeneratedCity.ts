@@ -1,9 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { generateCity, primeCityCaches } from "@/lib/seed/cityGen";
+import { generateCity, primeCityCaches, type CityBundle } from "@/lib/seed/cityGen";
 import { sketchKey } from "@/lib/seed/citySketch";
 import { generateCityInWorker } from "@/lib/workers/cityGenClient";
+import { fingerprintCurrent } from "@/lib/seed/bundleFingerprint";
+import { getBundle, putBundle } from "@/lib/cache/bundleStore";
+import { mark, genCycleStart, genCycleEnd } from "@/lib/perf/bootTrace";
 import { useSceneStore } from "@/lib/state/sceneStore";
 import type { CityShapeSetting } from "@/lib/seed/cityShape";
 import type { CityTier } from "@/lib/seed/topology";
@@ -114,12 +117,19 @@ export function useGeneratedCity(
   }
 
   useEffect(() => {
-    if (warmedKeys.has(key)) return; // already warm — nothing to schedule
+    if (warmedKeys.has(key)) return; // (1) already warm in-memory — nothing to do
     let cancelled = false;
     let cancelFallback: (() => void) | null = null;
     const finish = () => {
+      mark("gen:ready"); // city available → consumers mount; cascade wakes it in
       warmedKeys.add(key);
       setState({ key, ready: true });
+    };
+    const primeFromBundle = (bundle: CityBundle) => {
+      // The store subscriptions have already mirrored tier / sketch / deviation /
+      // density into the gen modules, so the prime keys match this bundle.
+      primeCityCaches(seed, shape, scale, bundle);
+      finish();
     };
     // Sync fallback — the pre-#59 path: one cold generateCity on an idle
     // callback. Fine at Town/City cost; only the worker makes Metro painless.
@@ -127,28 +137,48 @@ export function useGeneratedCity(
       scheduleOffCritical(() => {
         if (cancelled) return;
         generateCity(seed, shape, scale); // warms cityGen's cache + the shared field
+        genCycleEnd("sync");
         finish();
       });
 
-    // #59: prefer the worker — generation runs off-thread and the main thread
-    // only pays the cache-priming copy. Falls back to sync when Workers are
-    // unavailable (SSR mismatch, old browser) or the worker crashes.
-    const viaWorker = generateCityInWorker(seed, shape, scale, citySize);
-    if (viaWorker) {
-      viaWorker
-        .then((bundle) => {
+    // Resolution order, all converging on primeCityCaches → finish():
+    //   (2) IndexedDB — a stored realization from a previous visit (local, ~ms),
+    //       so repeat visits skip generation entirely.
+    //   (3) #59 worker — generation off-thread; sync fallback if Workers are gone.
+    // The fingerprint matches both the runtime cache keys (priming) and the stored
+    // IndexedDB key. Every await re-checks `cancelled`, so a mid-flight tier/seed
+    // switch can never prime a stale bundle.
+    mark("gen:start");
+    genCycleStart(); // per-cycle timer (fires every seed/shape/tier change)
+    const fp = fingerprintCurrent(seed, shape, scale);
+    void (async () => {
+      const cached = await getBundle(fp); // (2)
+      if (cancelled) return;
+      if (cached) {
+        mark("gen:idb-hit"); // repeat visit — full bundle from IndexedDB, no gen
+        genCycleEnd("idb");
+        primeFromBundle(cached);
+        return;
+      }
+
+      if (cancelled) return; // (3)
+      const viaWorker = generateCityInWorker(seed, shape, scale, citySize);
+      if (viaWorker) {
+        try {
+          const bundle = await viaWorker;
           if (cancelled) return;
-          // The store subscription has already pointed the main thread's gen
-          // extent at `citySize`, so the prime keys match this bundle's tier.
-          primeCityCaches(seed, shape, scale, bundle);
-          finish();
-        })
-        .catch(() => {
+          mark("gen:worker-done"); // first-visit generation finished off-thread
+          genCycleEnd("worker");
+          primeFromBundle(bundle);
+          void putBundle(fp, bundle); // persist for repeat visits
+        } catch {
           if (!cancelled) cancelFallback = startSyncFallback();
-        });
-    } else {
-      cancelFallback = startSyncFallback();
-    }
+        }
+      } else if (!cancelled) {
+        cancelFallback = startSyncFallback();
+      }
+    })();
+
     return () => {
       cancelled = true;
       cancelFallback?.();

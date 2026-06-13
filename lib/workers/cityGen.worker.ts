@@ -12,10 +12,17 @@
 // buildCityBundle, so no timer can fire mid-generation). Lines are decimated
 // for display — they are a visual, never an input to anything deterministic.
 //
-// NOTE: no transferables on purpose. Transferring the raster's ArrayBuffer would
-// detach it in the worker and poison the worker-side caches for repeat requests
-// (same seed after a tier round-trip); structured-cloning ~1.25 MB costs ~ms.
+// The bundle is posted in the packed wire form (bundleWire.ts): its object
+// arrays (buildings / lights / road vertices) become Struct-of-Arrays typed
+// buffers, so structured clone — which here runs the DESERIALIZE on the MAIN
+// thread when the city lands — drops from ~100ms to ~6ms (V8). packBundle reads
+// the worker-side caches without mutating them, so repeat requests are safe.
+//
+// NOTE: still no transferables. The packed buffers are freshly allocated (safe
+// to transfer), but the kept-native raster would detach and poison the worker's
+// caches for repeat requests; structured-cloning the wire is already ~ms.
 import { buildCityBundle } from "@/lib/seed/cityGen";
+import { packBundle, type CityBundleWire } from "@/lib/seed/bundleWire";
 import { setCityTier, type CityTier } from "@/lib/seed/topology";
 import { setCitySketch } from "@/lib/seed/citySketch";
 import { setFieldDeviation } from "@/lib/seed/tensorField";
@@ -49,7 +56,7 @@ export type TracedLine = { pts: number[]; tier: "arterial" | "minor" };
 export type CityGenProgress = { reqId: number; type: "progress"; lines: TracedLine[] };
 
 export type CityGenResult =
-  | { reqId: number; type: "done"; ok: true; bundle: ReturnType<typeof buildCityBundle> }
+  | { reqId: number; type: "done"; ok: true; bundle: CityBundleWire }
   | { reqId: number; type: "done"; ok: false; error: string };
 
 export type CityGenMessage = CityGenProgress | CityGenResult;
@@ -82,7 +89,7 @@ ctx.onmessage = (e: MessageEvent<CityGenRequest>) => {
       if (batch.length >= BATCH_LINES) flush();
     });
     flush();
-    ctx.postMessage({ reqId, type: "done", ok: true, bundle } satisfies CityGenResult);
+    ctx.postMessage({ reqId, type: "done", ok: true, bundle: packBundle(bundle) } satisfies CityGenResult);
   } catch (err) {
     ctx.postMessage({
       reqId,

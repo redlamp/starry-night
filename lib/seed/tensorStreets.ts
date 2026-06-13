@@ -1,6 +1,6 @@
 import seedrandom from "seedrandom";
 import { computeLattice } from "./lattice";
-import { buildTensorField, alignDir, type TensorField, type Vec2 } from "./tensorField";
+import { buildTensorField, gridCacheField, alignDir, type TensorField, type Vec2 } from "./tensorField";
 import type { RoadPoly, RoadTier } from "./streets";
 import { genScale } from "./topology";
 import type { ShapeMask } from "./cityShape";
@@ -648,14 +648,13 @@ function inBounds(p: Vec2, b: BBox) {
 }
 
 function rk4(field: TensorField, p: Vec2, prevDir: Vec2, major: boolean): Vec2 | null {
+  // Midpoints feed straight into sample() as scalars — no per-step {x,z} boxes.
+  // The arithmetic is identical to the boxed form, so output stays byte-identical.
   const k1 = alignDir(field.sample(p.x, p.z, major), prevDir);
   if (!k1) return null;
-  const p2 = { x: p.x + (k1.x * DSTEP) / 2, z: p.z + (k1.z * DSTEP) / 2 };
-  const k2 = alignDir(field.sample(p2.x, p2.z, major), k1) ?? k1;
-  const p3 = { x: p.x + (k2.x * DSTEP) / 2, z: p.z + (k2.z * DSTEP) / 2 };
-  const k3 = alignDir(field.sample(p3.x, p3.z, major), k2) ?? k2;
-  const p4 = { x: p.x + k3.x * DSTEP, z: p.z + k3.z * DSTEP };
-  const k4 = alignDir(field.sample(p4.x, p4.z, major), k3) ?? k3;
+  const k2 = alignDir(field.sample(p.x + (k1.x * DSTEP) / 2, p.z + (k1.z * DSTEP) / 2, major), k1) ?? k1;
+  const k3 = alignDir(field.sample(p.x + (k2.x * DSTEP) / 2, p.z + (k2.z * DSTEP) / 2, major), k2) ?? k2;
+  const k4 = alignDir(field.sample(p.x + k3.x * DSTEP, p.z + k3.z * DSTEP, major), k3) ?? k3;
   const dx = (k1.x + 2 * k2.x + 2 * k3.x + k4.x) / 6;
   const dz = (k1.z + 2 * k2.z + 2 * k3.z + k4.z) / 6;
   const len = Math.hypot(dx, dz);
@@ -806,7 +805,13 @@ export function generateTensorStreets(
   // the original path, byte-identical.
   fieldOverride?: TensorField,
 ): { arterials: RoadPoly[]; minorStreets: RoadPoly[] } {
-  const tfBase = fieldOverride ?? buildTensorField(masterSeed, computeLattice(masterSeed));
+  // #b: grid-cache the seeded basis field (~3x on tracing, visually identical;
+  // golden re-baselined). A #40 sketch override is the author's exact ink, so it
+  // traces UNCACHED to preserve sharp hand-drawn detail (and is rare / not perf-
+  // critical). The grid covers the trace bounds; RK4 midpoints just outside clamp.
+  const tfBase = fieldOverride
+    ? fieldOverride
+    : gridCacheField(buildTensorField(masterSeed, computeLattice(masterSeed)), bounds);
   // #63 profiling: wrap sample() to count/time field evaluation. Returns the
   // inner result untouched, so traced geometry is byte-identical.
   const p63 = prof;

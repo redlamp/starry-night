@@ -1,12 +1,14 @@
 name: Deploy to GitHub Pages
 
-# Deploys TWO builds into one Pages artifact (the deploy-pages action replaces the
-# whole site, so root + /dev must ship together):
-#   root  → main   at basePath /starry-night        (production)
-#   /dev  → dev    at basePath /starry-night/dev     (integration preview)
-# Triggered by pushes to main; use the "Run workflow" button (workflow_dispatch) to
-# refresh /dev after committing to the dev branch. The /dev build is non-fatal
-# (continue-on-error) so a broken dev can never block the production deploy.
+# Deploys builds into one Pages artifact (the deploy-pages action replaces the
+# whole site, so every slot must ship together):
+#   root     → main                  at /starry-night          (production)
+#   /dev     → dev                    at /starry-night/dev      (integration preview)
+#   /preview → the workflow_dispatch branch, at /starry-night/preview (ad-hoc
+#              feature-branch preview — e.g. to share with a remote tester)
+# Triggered by pushes to main; use the "Run workflow" button (workflow_dispatch) and
+# pick a branch to (re)build /dev AND publish that branch at /preview. The /dev and
+# /preview builds are non-fatal (continue-on-error) so neither can block production.
 
 on:
   push:
@@ -70,7 +72,29 @@ jobs:
           bun install --frozen-lockfile
           bun run build
 
-      # --- assemble one artifact: root + /dev ---
+      # --- ad-hoc preview: the workflow_dispatch branch → site/preview ---
+      # Pick any non-main branch in the "Run workflow" dropdown to publish it at
+      # /starry-night/preview (share a feature branch with a remote tester without
+      # merging to dev/main). Skipped on push and when run from main.
+      - name: Checkout preview branch
+        if: ${{ github.event_name == 'workflow_dispatch' && github.ref_name != 'main' }}
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          path: preview-src
+
+      - name: Build preview (/preview)
+        if: ${{ github.event_name == 'workflow_dispatch' && github.ref_name != 'main' }}
+        working-directory: preview-src
+        continue-on-error: true # a broken preview must not block production
+        env:
+          NEXT_PUBLIC_BASE_PATH: /starry-night/preview
+          NEXT_OUTPUT_EXPORT: "true"
+        run: |
+          bun install --frozen-lockfile
+          bun run build
+
+      # --- assemble one artifact: root + /dev + (optional) /preview ---
       - name: Assemble site
         run: |
           mkdir -p site
@@ -81,6 +105,11 @@ jobs:
             echo "dev preview included"
           else
             echo "::warning::dev build produced no output — /dev not updated this run"
+          fi
+          if [ -d preview-src/out ]; then
+            mkdir -p site/preview
+            cp -r preview-src/out/. site/preview/
+            echo "preview included (${{ github.ref_name }})"
           fi
           touch site/.nojekyll
 

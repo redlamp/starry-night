@@ -5,8 +5,12 @@
  * Runs under Bun's Web Worker implementation (same API the browser uses).
  */
 import { buildCityBundle, tensorDistrictField, type CityBundle } from "@/lib/seed/cityGen";
+import { unpackBundle } from "@/lib/seed/bundleWire";
 import { districtFieldFromRaster } from "@/lib/seed/district";
 import { setCityTier, CITY_CENTER, type CityTier } from "@/lib/seed/topology";
+import { fieldDeviation } from "@/lib/seed/tensorField";
+import { densityProfile } from "@/lib/seed/density";
+import { activeCitySketch } from "@/lib/seed/citySketch";
 import type { CityGenMessage, TracedLine } from "@/lib/workers/cityGen.worker";
 
 const SEED = "gate1-0";
@@ -48,21 +52,27 @@ const workerBundle = await new Promise<CityBundle>((resolve, reject) => {
       return;
     }
     clearTimeout(timer);
-    if (e.data.ok) resolve(e.data.bundle);
+    // The worker posts the packed wire form — unpack to a CityBundle (this also
+    // exercises the real pack→postMessage(structured clone)→unpack round-trip).
+    if (e.data.ok) resolve(unpackBundle(e.data.bundle));
     else reject(new Error(e.data.error));
   };
   worker.onerror = (err) => {
     clearTimeout(timer);
     reject(new Error(`worker error: ${err.message ?? err}`));
   };
+  // Mirror the main thread's live gen inputs so the worker generates the SAME
+  // city — defaults are deviation 1.5 (#51) and the default density profile (#49),
+  // NOT 1 / none, so hardcoding diverged the cities (stale test, pre-#b).
   worker.postMessage({
     reqId: 1,
     seed: SEED,
     shape: SHAPE,
     scale: SCALE,
     tier: TIER,
-    sketch: null,
-    deviation: 1,
+    sketch: activeCitySketch(),
+    deviation: fieldDeviation(),
+    density: densityProfile(),
   });
 });
 worker.terminate();

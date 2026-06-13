@@ -63,6 +63,11 @@ export function CaptureBoot() {
       state.setCityShape(queryShape as CityShapeSetting);
     }
 
+    // ?adaptive / ?perf are convenience shortcuts that flip the persisted settings
+    // on boot (the real controls live in Performance → Adaptive quality / Stats).
+    if (params.has("adaptive")) state.setAdaptive(true);
+    if (params.has("perf")) state.setPerfStats(true);
+
     // Sync hash on every seed change (skip while capture mode is on — we don't
     // want the headless screenshot URL to be a moving target).
     const unsub = useSceneStore.subscribe((s, prev) => {
