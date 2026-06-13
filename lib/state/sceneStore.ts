@@ -450,6 +450,7 @@ type AnySettingEntry =
   | SettingEntry<"showFocalIndicator">
   | SettingEntry<"orbitPivotFromBottom">
   | SettingEntry<"orbitZoomToPin">
+  | SettingEntry<"allowUnderview">
   | SettingEntry<"cameraMode">
   | SettingEntry<"orbitRestore">
   | SettingEntry<"topDownTip">
@@ -496,6 +497,7 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "showFocalIndicator", defaultValue: false as const, persist: true },
   { key: "orbitPivotFromBottom", defaultValue: 0.37, persist: true },
   { key: "orbitZoomToPin", defaultValue: false as const, persist: false },
+  { key: "allowUnderview", defaultValue: false as const, persist: false },
   { key: "cameraMode", defaultValue: "orbit" as const, persist: true },
   { key: "orbitRestore", defaultValue: null as SceneState["orbitRestore"], persist: false },
   { key: "topDownTip", defaultValue: 0, persist: false },
@@ -843,6 +845,10 @@ type SceneState = {
   // Zoom mode: false = toward the cursor (default), true = toward the pin/focal.
   orbitZoomToPin: boolean;
   setOrbitZoomToPin: (v: boolean) => void;
+  // Intentional underview: relax the ground/elevation clamp so the camera may drop below the
+  // ground and look up at the world from underneath (off by default — prevents accidents).
+  allowUnderview: boolean;
+  setAllowUnderview: (v: boolean) => void;
   // Intro / wake-up sequence (After-Dark model). progress 0..1 = cascade
   // completion for the UI readout; the actual wake / on-off cycle is
   // time-driven in the shader. mode selects ordering across cells.
@@ -1065,6 +1071,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setOrbitPivotFromBottom: (orbitPivotFromBottom) => set({ orbitPivotFromBottom }),
   orbitZoomToPin: false,
   setOrbitZoomToPin: (orbitZoomToPin) => set({ orbitZoomToPin }),
+  allowUnderview: false,
+  setAllowUnderview: (allowUnderview) => set({ allowUnderview }),
   intro: DEFAULT_INTRO,
   starIntro: DEFAULT_STAR_INTRO,
   setIntroProgress: (progress) => set((s) => ({ intro: { ...s.intro, progress } })),

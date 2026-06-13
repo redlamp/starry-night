@@ -35,6 +35,7 @@ const DEG = Math.PI / 180;
 const _tgt = new THREE.Vector3();
 const _focal = new THREE.Vector3();
 const _proj = new THREE.Vector3();
+const _rel = new THREE.Vector3();
 
 // Ortho zoom = frustum half-height (matches the old controller + ProjectionBlender).
 const WHEEL_STEP = 1.1; // wheel zoom factor per tick (both projections, via zoomToPoint)
@@ -42,6 +43,17 @@ const ORTHO_SIZE_MIN = 5 * CITY_SCALE;
 const ORTHO_SIZE_MAX = 2000 * CITY_SCALE;
 const MIN_DIST = 50 * CITY_SCALE; // camera → focal distance band (keeps the fog sane)
 const MAX_DIST = 5000 * CITY_SCALE;
+// Ortho clipping: orthoSize is the zoom, so the orbit radius is decoupled from apparent size —
+// but the faked-ortho frustum still uses the real camera's near/far at the real radius. A small
+// radius parks the camera AMONG the city and clips its near half. So in ortho we hold the radius
+// out past the scene (≥ this × the tier half-extent), which is invisible (size = orthoSize) but
+// keeps the whole scene in front of the near plane. See wiki/notes/camera-tuning-notes #2.
+const ORTHO_RADIUS_FACTOR = 1.8;
+const ORTHO_ELEV_FLOOR_DEG = 8; // ortho: keep the view this far above the horizon (no accidental underview)
+function orthoMinRadius(): number {
+  const r = CITY_TIERS[useSceneStore.getState().citySize] + GROUND_APRON_M;
+  return Math.min(r * ORTHO_RADIUS_FACTOR, MAX_DIST);
+}
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const round1 = (n: number) => Math.round(n * 10) / 10; // 1 decimal place
 
@@ -231,7 +243,8 @@ function groundHit(
 // Is the cursor over the focal pin? Project the (logical) orbit target — which renders at the
 // screen-focus % via focalOffset, so projecting it with the offset camera gives its on-screen
 // spot — and test a small box around the pin icon (tip on that point, body extending upward).
-// Perspective only (camera.project is wrong under the faked ortho); callers gate on projection.
+// Under faked ortho camera.project takes the perspective branch (wrong spot), so project via the
+// parallel ortho frustum ourselves (the forward of groundHit's ortho ray).
 function pinScreenHit(
   camera: THREE.Camera,
   dom: HTMLCanvasElement,
@@ -239,11 +252,27 @@ function pinScreenHit(
   clientX: number,
   clientY: number,
 ): boolean {
-  _proj.copy(focal).project(camera);
-  if (_proj.z > 1) return false; // behind the camera
   const r = dom.getBoundingClientRect();
-  const sx = (_proj.x * 0.5 + 0.5) * r.width + r.left;
-  const sy = (-_proj.y * 0.5 + 0.5) * r.height + r.top;
+  let sx: number;
+  let sy: number;
+  if (useSceneStore.getState().projectionBlend >= 0.9999) {
+    const aspect = r.width / Math.max(1, r.height);
+    const halfH = useSceneStore.getState().orthoSize;
+    camera.updateMatrixWorld();
+    _camRight.setFromMatrixColumn(camera.matrixWorld, 0);
+    _camUp.setFromMatrixColumn(camera.matrixWorld, 1);
+    camera.getWorldDirection(_camFwd);
+    camera.getWorldPosition(_camWorld);
+    _rel.subVectors(focal, _camWorld);
+    if (_rel.dot(_camFwd) <= 0) return false; // behind the camera
+    sx = (_rel.dot(_camRight) / (halfH * aspect)) * 0.5 * r.width + 0.5 * r.width + r.left;
+    sy = -(_rel.dot(_camUp) / halfH) * 0.5 * r.height + 0.5 * r.height + r.top;
+  } else {
+    _proj.copy(focal).project(camera);
+    if (_proj.z > 1) return false; // behind the camera
+    sx = (_proj.x * 0.5 + 0.5) * r.width + r.left;
+    sy = (-_proj.y * 0.5 + 0.5) * r.height + r.top;
+  }
   const dx = clientX - sx;
   const dy = clientY - sy;
   // Below ground the pin icon is flipped (scaleY(-1)), so its body extends DOWN from the tip —
@@ -341,8 +370,8 @@ export function DreiSceneControls() {
   const wasControlling = useRef(false);
   const syncingFromCamera = useRef(false); // true while writing readback → store
   // Show the markers when the indicator is toggled on OR while a panel slider (Focal Y /
-  // Screen Y) is being adjusted (transient focalAdjusting flag).
-  const showFocal = useSceneStore((s) => s.showFocalIndicator || s.focalAdjusting);
+  // Screen Y) is being adjusted (transient focalAdjust flag).
+  const showFocal = useSceneStore((s) => s.showFocalIndicator || s.focalAdjust !== "");
   const pinRef = useRef<THREE.Group>(null); // map-pin marker AT the focal point (camera aim)
   const ringRef = useRef<THREE.Group>(null); // ground beacon ring below the focal
   const plumbRef = useRef<ComponentRef<typeof Line>>(null); // plumbline: focal → ground
@@ -451,9 +480,9 @@ export function DreiSceneControls() {
       const c = controls.current;
       if (!c) return;
       // A press on the pin belongs to the Focal-Y scrub, not pan (hit-test here so the
-      // bail is independent of listener order). Pin-scrub is perspective + indicator-on.
+      // bail is independent of listener order). Scrub needs the indicator shown.
       const s = useSceneStore.getState();
-      if (s.showFocalIndicator && s.projection === "perspective") {
+      if (s.showFocalIndicator) {
         c.getTarget(_tgt);
         if (pinScreenHit(camera, dom, _tgt, e.clientX, e.clientY)) return;
       }
@@ -500,9 +529,10 @@ export function DreiSceneControls() {
   // also follow the cursor up the screen. So we hide the cursor and read movementY: the pin holds
   // its screen spot, the camera re-aims (tilts) at the new Focal Y. A 3D scrubby-slider. Lighter
   // than the Pointer Lock API (no "press Esc" overlay): cursor:none + pointer capture + relative
-  // movement, restored on release. Perspective + indicator-on only; ortho / touch keep the Focal Y
-  // slider. See wiki/research/camera-interaction-models. Camera position never moves here (only the
-  // aim tilts), so the scrub can't push the rig through the ground.
+  // movement, restored on release. Indicator-on only; works in both projections (pinScreenHit
+  // projects ortho-correctly); touch keeps the Focal Y slider. See
+  // wiki/research/camera-interaction-models. Camera position never moves here (only the aim
+  // tilts), so the scrub can't push the rig through the ground.
   useEffect(() => {
     if (mode !== "orbit") return;
     const dom = gl.domElement;
@@ -512,7 +542,7 @@ export function DreiSceneControls() {
     const onDown = (e: PointerEvent) => {
       if (e.pointerType !== "mouse" || e.button !== 0 || e.shiftKey) return;
       const s = useSceneStore.getState();
-      if (!s.showFocalIndicator || s.projection !== "perspective") return;
+      if (!s.showFocalIndicator) return;
       const c = controls.current;
       if (!c) return;
       c.getTarget(_tgt);
@@ -533,7 +563,7 @@ export function DreiSceneControls() {
         const s = useSceneStore.getState();
         const c = controls.current;
         let over = false;
-        if (c && s.showFocalIndicator && s.projection === "perspective") {
+        if (c && s.showFocalIndicator) {
           c.getTarget(_tgt);
           over = pinScreenHit(camera, dom, _tgt, e.clientX, e.clientY);
         }
@@ -891,9 +921,9 @@ export function DreiSceneControls() {
     return unsub;
   }, []);
 
-  // Hotkeys (orbit only): Space toggles the auto-revolution sweep; "i" toggles the
-  // focal-point indicator. F / P are taken (fly / perspective), so "i" (the
-  // showFocalIndicator flag) is the free key.
+  // Hotkeys (orbit only): Space = pause sweep, "i" = focal indicator, "z" = zoom mode
+  // (cursor ↔ pin), "u" = allow underview (the intentional under-the-ground gate). F / P are
+  // taken (fly / perspective).
   useEffect(() => {
     if (mode !== "orbit") return;
     const onKey = (e: KeyboardEvent) => {
@@ -910,6 +940,9 @@ export function DreiSceneControls() {
       } else if (e.code === "KeyZ") {
         e.preventDefault();
         s.setOrbitZoomToPin(!s.orbitZoomToPin); // toggle zoom-to-cursor ↔ zoom-to-pin
+      } else if (e.code === "KeyU") {
+        e.preventDefault();
+        s.setAllowUnderview(!s.allowUnderview); // gate the intentional under-the-ground view
       }
     };
     window.addEventListener("keydown", onKey);
@@ -968,15 +1001,31 @@ export function DreiSceneControls() {
     // park the orbit pivot at the screen-focus position (focal offset; scales w/ zoom)
     applyScreenFocus(c, camera);
 
+    const ortho = s.projection === "orthographic";
+    const allowUnder = s.allowUnderview;
+
+    // Distance band. Perspective: the fog-sane band (MIN_DIST). Ortho: hold the radius out
+    // past the scene so the faked-ortho near plane never clips the city's near half — invisible
+    // since orthoSize sets the apparent size, and it makes the elevation clamp below resolve to
+    // "above the horizon" naturally. (camera-controls clamps distance to [min,max] each update.)
+    c.minDistance = ortho ? orthoMinRadius() : MIN_DIST;
+
     // Ground clamp for orbit elevation: let the camera drop BELOW the focal's level
     // (negative elevation) but never below y=0. cameraY = focalY + radius·cos(polar) ≥ 0
     // → maxPolar = acos(-focalY/radius), so a higher Focal Y allows more below-orbit.
     // Recomputed live since Focal Y and radius both move (zoom / free-look / slider).
     c.getTarget(_tgt);
-    // Rotate ground-clamp: polar <= acos(-focalY/radius) keeps cameraY >= 0 at this
-    // radius — the camera can orbit below the focal's level, but not underground.
-    // (Zoom-out past the ground is handled by liftAboveGround, not a distance cap.)
-    c.maxPolarAngle = Math.acos(clamp(-_tgt.y / Math.max(1, c.distance), -1, 1));
+    let maxPolar = Math.acos(clamp(-_tgt.y / Math.max(1, c.distance), -1, 1));
+    if (allowUnder) {
+      // Intentional underview (the "explore later" gate): relax the ground clamp so the camera
+      // can drop below the ground and look up at the world from underneath.
+      maxPolar = Math.PI * 0.98;
+    } else if (ortho) {
+      // Ortho: floor the elevation so the view never goes edge-on / dips under the horizon
+      // (the d-anchored clamp alone can sit ~2° under when Focal Y > 0).
+      maxPolar = Math.min(maxPolar, (90 - ORTHO_ELEV_FLOOR_DEG) * DEG);
+    }
+    c.maxPolarAngle = maxPolar;
 
     // (Focal markers update in a dedicated priority -1 useFrame above, so the Html pin
     // and the 3D plumbline stay in lockstep — see the comment there.)

@@ -767,6 +767,9 @@ function OrbitSection() {
   const pivot = useSceneStore((s) => s.orbitPivotFromBottom);
   const setPivot = useSceneStore((s) => s.setOrbitPivotFromBottom);
   const setFocalAdjust = useSceneStore((s) => s.setFocalAdjust);
+  // In ortho the radius is auto-parked (zoom = orthoSize via the "size" control), so the
+  // Distance slider would be misleading — hide it there.
+  const isOrtho = useSceneStore((s) => s.projection === "orthographic");
   // Show the focal pin (and, for Screen Y, the guide line) WHILE a slider is being adjusted,
   // then revert on release: a slider drag ends precisely via onCommit (base-ui's
   // onValueCommitted); the timeout is only a fallback for non-drag inputs (stepper / typing /
@@ -818,15 +821,17 @@ function OrbitSection() {
         onChange={(dps) => setOrbit({ periodSec: dps !== 0 ? 360 / dps : 0 })}
         stepperClass="w-32"
       />
-      <ValueSlider
-        label="Distance"
-        value={orbit.radius}
-        min={50}
-        max={5000}
-        step={5}
-        onChange={(radius) => setOrbit({ radius })}
-        stepperClass="w-32"
-      />
+      {!isOrtho && (
+        <ValueSlider
+          label="Distance"
+          value={orbit.radius}
+          min={50}
+          max={5000}
+          step={5}
+          onChange={(radius) => setOrbit({ radius })}
+          stepperClass="w-32"
+        />
+      )}
       <ValueSlider
         label="Elevation"
         value={orbit.elevationDeg}
