@@ -833,12 +833,14 @@ function OrbitSection() {
         indicatorStyle={{ background: orbit.lookAtY >= 0 ? "#7dd3fc" : "#b5835a" }}
       />
       <ValueSlider
-        label="screen focus %"
-        value={Math.round(pivot * 100)}
+        label="Screen Y"
+        // Screen Y is top-down: 0 = top of screen, 100 = bottom. The store holds
+        // orbitPivotFromBottom (fraction UP from the bottom), so invert at the display layer.
+        value={Math.round((1 - pivot) * 100)}
         min={0}
         max={100}
         step={1}
-        onChange={(pct) => setPivot(pct / 100)}
+        onChange={(pct) => setPivot(1 - pct / 100)}
         stepperClass="w-32"
       />
     </>
