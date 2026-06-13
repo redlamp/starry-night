@@ -1,3450 +1,3471 @@
 [
   {
     "seed": "gate1-0",
-    "buildingCount": 25559,
+    "buildingCount": 15864,
     "districtCount": 48,
-    "fullHash": "bd0c91b5",
-    "buildingsHash": "733a8e77",
-    "roadsHash": "05d4833e",
+    "fullHash": "19ac9311",
+    "buildingsHash": "3c0c6c18",
+    "roadsHash": "2455b6b3",
     "orientHash": "f366a1a4",
     "districts": [
       {
-        "id": "nw-industrial-0",
+        "id": "sw-industrial-0",
         "character": "industrial",
-        "cx": -231907,
-        "cz": 249839,
-        "area": 904669
+        "cx": -266859,
+        "cz": -273671,
+        "area": 518400
       },
       {
-        "id": "nw-residential-1",
+        "id": "w-residential-1",
         "character": "residential",
-        "cx": -265940,
-        "cz": 151134,
-        "area": 806400
+        "cx": -266789,
+        "cz": -57710,
+        "area": 577294
       },
       {
         "id": "w-residential-2",
         "character": "residential",
-        "cx": -266884,
-        "cz": 59880,
-        "area": 511088
+        "cx": -273754,
+        "cz": 41337,
+        "area": 582300
       },
       {
-        "id": "w-residential-3",
+        "id": "nw-residential-3",
         "character": "residential",
-        "cx": -272773,
-        "cz": -79623,
-        "area": 436331
+        "cx": -250477,
+        "cz": 109193,
+        "area": 750769
       },
       {
-        "id": "nw-residential-4",
-        "character": "residential",
-        "cx": -219963,
-        "cz": 179980,
-        "area": 440156
-      },
-      {
-        "id": "sw-industrial-5",
+        "id": "nw-industrial-4",
         "character": "industrial",
-        "cx": -249487,
-        "cz": -261455,
-        "area": 1056825
+        "cx": -260685,
+        "cz": 230283,
+        "area": 850556
       },
       {
-        "id": "w-residential-6",
+        "id": "sw-residential-5",
         "character": "residential",
-        "cx": -222688,
-        "cz": -48212,
-        "area": 463444
+        "cx": -242398,
+        "cz": -118667,
+        "area": 761456
       },
       {
-        "id": "sw-residential-7",
+        "id": "nw-residential-6",
         "character": "residential",
-        "cx": -252943,
-        "cz": -157977,
-        "area": 840600
+        "cx": -195728,
+        "cz": 150003,
+        "area": 982856
       },
       {
-        "id": "w-residential-8",
+        "id": "w-residential-7",
         "character": "residential",
-        "cx": -249536,
-        "cz": 8000,
-        "area": 529819
+        "cx": -216870,
+        "cz": -8768,
+        "area": 471038
       },
       {
-        "id": "w-mixed-use-9",
+        "id": "sw-mixed-use-8",
         "character": "mixed-use",
-        "cx": -172989,
-        "cz": -10938,
-        "area": 476663
+        "cx": -238933,
+        "cz": -191122,
+        "area": 846731
       },
       {
-        "id": "nw-residential-10",
-        "character": "residential",
-        "cx": -159875,
-        "cz": 90779,
-        "area": 1200206
-      },
-      {
-        "id": "nw-residential-11",
-        "character": "residential",
-        "cx": -150247,
-        "cz": 176372,
-        "area": 557606
-      },
-      {
-        "id": "sw-residential-12",
-        "character": "residential",
-        "cx": -184626,
-        "cz": -143565,
-        "area": 463388
-      },
-      {
-        "id": "sw-mixed-use-13",
+        "id": "nw-mixed-use-9",
         "character": "mixed-use",
-        "cx": -141118,
-        "cz": -116663,
-        "area": 788963
+        "cx": -191650,
+        "cz": 265086,
+        "area": 408713
       },
       {
-        "id": "nw-mixed-use-14",
-        "character": "mixed-use",
-        "cx": -106215,
-        "cz": 36833,
-        "area": 466763
-      },
-      {
-        "id": "nw-residential-15",
+        "id": "sw-residential-10",
         "character": "residential",
-        "cx": -105875,
-        "cz": 222161,
-        "area": 1103738
+        "cx": -176327,
+        "cz": -261444,
+        "area": 1118981
       },
       {
-        "id": "sw-subcentre-16",
+        "id": "w-mixed-use-11",
+        "character": "mixed-use",
+        "cx": -158107,
+        "cz": 51357,
+        "area": 816975
+      },
+      {
+        "id": "w-residential-12",
+        "character": "residential",
+        "cx": -157688,
+        "cz": -45630,
+        "area": 603844
+      },
+      {
+        "id": "sw-residential-13",
+        "character": "residential",
+        "cx": -150295,
+        "cz": -128386,
+        "area": 707681
+      },
+      {
+        "id": "nw-residential-14",
+        "character": "residential",
+        "cx": -132709,
+        "cz": 200603,
+        "area": 738450
+      },
+      {
+        "id": "n-residential-15",
+        "character": "residential",
+        "cx": -110002,
+        "cz": 255731,
+        "area": 428738
+      },
+      {
+        "id": "s-subcentre-16",
         "character": "subcentre",
-        "cx": -70421,
-        "cz": -68711,
-        "area": 709650
+        "cx": -86406,
+        "cz": -221076,
+        "area": 1575056
       },
       {
         "id": "w-mixed-use-17",
         "character": "mixed-use",
-        "cx": -97551,
-        "cz": -17725,
-        "area": 560081
+        "cx": -90566,
+        "cz": 18498,
+        "area": 658688
       },
       {
-        "id": "sw-mixed-use-18",
-        "character": "mixed-use",
-        "cx": -71899,
-        "cz": -180819,
-        "area": 385144
-      },
-      {
-        "id": "nw-mixed-use-19",
-        "character": "mixed-use",
-        "cx": -56602,
-        "cz": 120853,
-        "area": 452981
-      },
-      {
-        "id": "n-residential-20",
-        "character": "residential",
-        "cx": -64962,
-        "cz": 254395,
-        "area": 386775
-      },
-      {
-        "id": "sw-residential-21",
-        "character": "residential",
-        "cx": -117318,
-        "cz": -253716,
-        "area": 2101219
-      },
-      {
-        "id": "n-subcentre-22",
+        "id": "nw-subcentre-18",
         "character": "subcentre",
-        "cx": -14477,
-        "cz": 74167,
-        "area": 592763
+        "cx": -72322,
+        "cz": 130266,
+        "area": 980269
       },
       {
-        "id": "s-mixed-use-23",
+        "id": "n-residential-19",
+        "character": "residential",
+        "cx": -18628,
+        "cz": 237798,
+        "area": 1227206
+      },
+      {
+        "id": "sw-subcentre-20",
+        "character": "subcentre",
+        "cx": -72795,
+        "cz": -70812,
+        "area": 698738
+      },
+      {
+        "id": "n-mixed-use-21",
         "character": "mixed-use",
-        "cx": -36177,
-        "cz": -108082,
-        "area": 415463
+        "cx": -17816,
+        "cz": 89800,
+        "area": 408206
       },
       {
-        "id": "n-downtown-24",
+        "id": "s-mixed-use-22",
+        "character": "mixed-use",
+        "cx": -3497,
+        "cz": -146986,
+        "area": 1621463
+      },
+      {
+        "id": "n-downtown-23",
         "character": "downtown",
-        "cx": 2252,
-        "cz": 26684,
-        "area": 509963
+        "cx": 6079,
+        "cz": 9285,
+        "area": 1389656
       },
       {
-        "id": "n-residential-25",
+        "id": "s-residential-24",
         "character": "residential",
-        "cx": 4197,
-        "cz": 252087,
-        "area": 615994
+        "cx": 19091,
+        "cz": -275867,
+        "area": 945000
       },
       {
-        "id": "se-downtown-26",
-        "character": "downtown",
-        "cx": 21765,
-        "cz": -27148,
-        "area": 648113
-      },
-      {
-        "id": "n-mixed-use-27",
+        "id": "n-mixed-use-25",
         "character": "mixed-use",
-        "cx": -5842,
-        "cz": 156087,
-        "area": 517613
+        "cx": 31772,
+        "cz": 132269,
+        "area": 655706
       },
       {
-        "id": "s-mixed-use-28",
+        "id": "se-subcentre-26",
+        "character": "subcentre",
+        "cx": 103003,
+        "cz": -109255,
+        "area": 1126519
+      },
+      {
+        "id": "n-residential-27",
+        "character": "residential",
+        "cx": 85136,
+        "cz": 261288,
+        "area": 371756
+      },
+      {
+        "id": "n-residential-28",
+        "character": "residential",
+        "cx": 81125,
+        "cz": 211506,
+        "area": 579431
+      },
+      {
+        "id": "se-residential-29",
+        "character": "residential",
+        "cx": 92488,
+        "cz": -210921,
+        "area": 826200
+      },
+      {
+        "id": "e-subcentre-30",
+        "character": "subcentre",
+        "cx": 112218,
+        "cz": -31063,
+        "area": 885769
+      },
+      {
+        "id": "se-residential-31",
+        "character": "residential",
+        "cx": 153678,
+        "cz": -290831,
+        "area": 580388
+      },
+      {
+        "id": "ne-residential-32",
+        "character": "residential",
+        "cx": 98261,
+        "cz": 61191,
+        "area": 496069
+      },
+      {
+        "id": "ne-residential-33",
+        "character": "residential",
+        "cx": 109400,
+        "cz": 158943,
+        "area": 686981
+      },
+      {
+        "id": "se-residential-34",
+        "character": "residential",
+        "cx": 180575,
+        "cz": -210406,
+        "area": 1196550
+      },
+      {
+        "id": "ne-residential-35",
+        "character": "residential",
+        "cx": 166008,
+        "cz": 241543,
+        "area": 588319
+      },
+      {
+        "id": "ne-mixed-use-36",
         "character": "mixed-use",
-        "cx": 24005,
-        "cz": -185957,
-        "area": 1893431
+        "cx": 151775,
+        "cz": 115895,
+        "area": 412706
       },
       {
-        "id": "se-mixed-use-29",
-        "character": "mixed-use",
-        "cx": 61836,
-        "cz": -94181,
-        "area": 505463
-      },
-      {
-        "id": "n-residential-30",
+        "id": "e-residential-37",
         "character": "residential",
-        "cx": 41008,
-        "cz": 203106,
-        "area": 406181
+        "cx": 164704,
+        "cz": 36745,
+        "area": 772200
       },
       {
-        "id": "s-residential-31",
+        "id": "e-residential-38",
         "character": "residential",
-        "cx": 58471,
-        "cz": -271742,
-        "area": 678488
+        "cx": 199237,
+        "cz": -45030,
+        "area": 395831
       },
       {
-        "id": "ne-mixed-use-32",
-        "character": "mixed-use",
-        "cx": 72948,
-        "cz": 85702,
-        "area": 455850
-      },
-      {
-        "id": "e-mixed-use-33",
-        "character": "mixed-use",
-        "cx": 94490,
-        "cz": 6218,
-        "area": 551869
-      },
-      {
-        "id": "ne-residential-34",
+        "id": "se-residential-39",
         "character": "residential",
-        "cx": 79020,
-        "cz": 172043,
-        "area": 695419
+        "cx": 205116,
+        "cz": -117497,
+        "area": 440438
       },
       {
-        "id": "se-residential-35",
+        "id": "ne-industrial-40",
+        "character": "industrial",
+        "cx": 223171,
+        "cz": 266574,
+        "area": 372488
+      },
+      {
+        "id": "ne-residential-41",
         "character": "residential",
-        "cx": 162653,
-        "cz": -206405,
-        "area": 743963
+        "cx": 214818,
+        "cz": 174042,
+        "area": 576563
       },
       {
-        "id": "ne-residential-36",
+        "id": "ne-residential-42",
         "character": "residential",
-        "cx": 174198,
-        "cz": 223369,
-        "area": 943538
-      },
-      {
-        "id": "ne-residential-37",
-        "character": "residential",
-        "cx": 121265,
-        "cz": 265337,
-        "area": 599850
-      },
-      {
-        "id": "se-residential-38",
-        "character": "residential",
-        "cx": 156140,
-        "cz": -284324,
-        "area": 777825
-      },
-      {
-        "id": "ne-residential-39",
-        "character": "residential",
-        "cx": 162767,
-        "cz": 125347,
-        "area": 1138894
-      },
-      {
-        "id": "e-mixed-use-40",
-        "character": "mixed-use",
-        "cx": 163755,
-        "cz": 23137,
-        "area": 741319
-      },
-      {
-        "id": "se-mixed-use-41",
-        "character": "mixed-use",
-        "cx": 158193,
-        "cz": -100249,
-        "area": 1921950
-      },
-      {
-        "id": "e-residential-42",
-        "character": "residential",
-        "cx": 226756,
-        "cz": 55691,
-        "area": 641981
+        "cx": 239227,
+        "cz": 111383,
+        "area": 817875
       },
       {
         "id": "e-residential-43",
         "character": "residential",
-        "cx": 260781,
-        "cz": -60674,
-        "area": 1197056
+        "cx": 264348,
+        "cz": -26006,
+        "area": 665213
       },
       {
-        "id": "se-residential-44",
-        "character": "residential",
-        "cx": 255945,
-        "cz": -175605,
-        "area": 476606
-      },
-      {
-        "id": "ne-industrial-45",
+        "id": "ne-industrial-44",
         "character": "industrial",
-        "cx": 260863,
-        "cz": 200675,
-        "area": 1240031
+        "cx": 273063,
+        "cz": 223235,
+        "area": 623363
       },
       {
-        "id": "e-residential-46",
+        "id": "se-residential-45",
         "character": "residential",
-        "cx": 277849,
-        "cz": 75853,
-        "area": 483806
+        "cx": 264650,
+        "cz": -236334,
+        "area": 1106550
       },
       {
-        "id": "se-industrial-47",
-        "character": "industrial",
-        "cx": 255813,
-        "cz": -253612,
-        "area": 964069
+        "id": "e-mixed-use-46",
+        "character": "mixed-use",
+        "cx": 268180,
+        "cz": -112876,
+        "area": 545794
+      },
+      {
+        "id": "e-residential-47",
+        "character": "residential",
+        "cx": 256824,
+        "cz": 48876,
+        "area": 608231
       }
     ]
   },
   {
     "seed": "gate1-1",
-    "buildingCount": 26085,
+    "buildingCount": 15867,
     "districtCount": 48,
-    "fullHash": "7df893e8",
-    "buildingsHash": "2d5c03e2",
-    "roadsHash": "b31e7e37",
+    "fullHash": "a1fb16c8",
+    "buildingsHash": "d9c224f2",
+    "roadsHash": "ec40cc99",
     "orientHash": "6f004c9b",
     "districts": [
       {
-        "id": "w-residential-0",
+        "id": "sw-residential-0",
         "character": "residential",
-        "cx": -272152,
-        "cz": -63224,
-        "area": 665325
+        "cx": -285943,
+        "cz": -141704,
+        "area": 391894
       },
       {
-        "id": "sw-residential-1",
+        "id": "nw-residential-1",
         "character": "residential",
-        "cx": -255272,
-        "cz": -184765,
-        "area": 843188
+        "cx": -261777,
+        "cz": 98362,
+        "area": 480994
       },
       {
-        "id": "sw-industrial-2",
+        "id": "nw-residential-2",
+        "character": "residential",
+        "cx": -263979,
+        "cz": 165938,
+        "area": 520706
+      },
+      {
+        "id": "nw-industrial-3",
         "character": "industrial",
-        "cx": -252942,
-        "cz": -271352,
-        "area": 774000
+        "cx": -242758,
+        "cz": 244757,
+        "area": 975038
       },
       {
-        "id": "nw-residential-3",
-        "character": "residential",
-        "cx": -260817,
-        "cz": 184859,
-        "area": 650250
-      },
-      {
-        "id": "w-residential-4",
-        "character": "residential",
-        "cx": -240195,
-        "cz": 30520,
-        "area": 631013
-      },
-      {
-        "id": "nw-residential-5",
-        "character": "residential",
-        "cx": -235832,
-        "cz": 100003,
-        "area": 1148063
-      },
-      {
-        "id": "nw-industrial-6",
+        "id": "sw-industrial-4",
         "character": "industrial",
-        "cx": -210841,
-        "cz": 253038,
-        "area": 1203750
+        "cx": -219293,
+        "cz": -292377,
+        "area": 595688
       },
       {
-        "id": "sw-residential-7",
+        "id": "sw-residential-5",
         "character": "residential",
-        "cx": -173363,
-        "cz": -122169,
-        "area": 1334194
+        "cx": -233252,
+        "cz": -242831,
+        "area": 842006
+      },
+      {
+        "id": "sw-residential-6",
+        "character": "residential",
+        "cx": -205204,
+        "cz": -144115,
+        "area": 1805175
+      },
+      {
+        "id": "w-residential-7",
+        "character": "residential",
+        "cx": -253719,
+        "cz": -48884,
+        "area": 471994
       },
       {
         "id": "w-residential-8",
         "character": "residential",
-        "cx": -201262,
-        "cz": -25809,
-        "area": 727988
+        "cx": -258167,
+        "cz": 21151,
+        "area": 757688
       },
       {
         "id": "nw-residential-9",
         "character": "residential",
-        "cx": -150482,
-        "cz": 202569,
-        "area": 695306
+        "cx": -199000,
+        "cz": 168241,
+        "area": 414675
       },
       {
-        "id": "sw-residential-10",
+        "id": "w-residential-10",
         "character": "residential",
-        "cx": -161296,
-        "cz": -257699,
-        "area": 1035675
+        "cx": -178441,
+        "cz": 51857,
+        "area": 372881
       },
       {
-        "id": "nw-mixed-use-11",
-        "character": "mixed-use",
-        "cx": -107977,
-        "cz": 49092,
-        "area": 1441688
-      },
-      {
-        "id": "sw-residential-12",
+        "id": "nw-residential-11",
         "character": "residential",
-        "cx": -120852,
-        "cz": -177267,
-        "area": 519300
+        "cx": -113361,
+        "cz": 259118,
+        "area": 950681
       },
       {
-        "id": "nw-residential-13",
+        "id": "w-residential-12",
         "character": "residential",
-        "cx": -136557,
-        "cz": 142349,
-        "area": 638325
+        "cx": -175967,
+        "cz": -21365,
+        "area": 614700
       },
       {
-        "id": "s-residential-14",
+        "id": "sw-residential-13",
         "character": "residential",
-        "cx": -64571,
-        "cz": -283433,
-        "area": 446569
+        "cx": -93384,
+        "cz": -206862,
+        "area": 913613
       },
       {
-        "id": "w-subcentre-15",
-        "character": "subcentre",
-        "cx": -105405,
-        "cz": -45716,
-        "area": 863719
-      },
-      {
-        "id": "n-residential-16",
+        "id": "n-residential-14",
         "character": "residential",
-        "cx": -62352,
-        "cz": 244136,
-        "area": 743569
+        "cx": -82367,
+        "cz": 204360,
+        "area": 1239356
       },
       {
-        "id": "s-residential-17",
+        "id": "nw-residential-15",
         "character": "residential",
-        "cx": -81861,
-        "cz": -224255,
-        "area": 472500
+        "cx": -146849,
+        "cz": 102107,
+        "area": 1057838
       },
       {
-        "id": "n-mixed-use-18",
-        "character": "mixed-use",
-        "cx": -30452,
-        "cz": 165774,
-        "area": 882956
-      },
-      {
-        "id": "s-residential-19",
+        "id": "s-residential-16",
         "character": "residential",
-        "cx": -11499,
-        "cz": -228941,
-        "area": 1099631
+        "cx": -72663,
+        "cz": -272912,
+        "area": 1104638
       },
       {
-        "id": "n-mixed-use-20",
-        "character": "mixed-use",
-        "cx": -27042,
-        "cz": 90773,
-        "area": 498713
-      },
-      {
-        "id": "sw-mixed-use-21",
-        "character": "mixed-use",
-        "cx": -40486,
-        "cz": -97545,
-        "area": 710550
-      },
-      {
-        "id": "n-residential-22",
+        "id": "w-residential-17",
         "character": "residential",
-        "cx": 33076,
-        "cz": 250614,
-        "area": 839363
+        "cx": -119032,
+        "cz": 3748,
+        "area": 500344
       },
       {
-        "id": "n-downtown-23",
-        "character": "downtown",
-        "cx": 6094,
-        "cz": 4723,
-        "area": 854213
-      },
-      {
-        "id": "ne-subcentre-24",
-        "character": "subcentre",
-        "cx": 53461,
-        "cz": 86804,
-        "area": 935888
-      },
-      {
-        "id": "se-heritage-25",
+        "id": "nw-heritage-18",
         "character": "heritage",
-        "cx": 38181,
-        "cz": -71379,
-        "area": 608906
+        "cx": -62087,
+        "cz": 30341,
+        "area": 540225
       },
       {
-        "id": "ne-residential-26",
-        "character": "residential",
-        "cx": 94206,
-        "cz": 199364,
-        "area": 985950
-      },
-      {
-        "id": "s-mixed-use-27",
+        "id": "n-mixed-use-19",
         "character": "mixed-use",
-        "cx": 31307,
-        "cz": -153523,
-        "area": 551419
+        "cx": -20512,
+        "cz": 111268,
+        "area": 511988
       },
       {
-        "id": "ne-mixed-use-28",
+        "id": "sw-residential-20",
+        "character": "residential",
+        "cx": -95620,
+        "cz": -102573,
+        "area": 1307869
+      },
+      {
+        "id": "n-residential-21",
+        "character": "residential",
+        "cx": -36701,
+        "cz": 157081,
+        "area": 722475
+      },
+      {
+        "id": "n-subcentre-22",
+        "character": "subcentre",
+        "cx": 33192,
+        "cz": 74075,
+        "area": 845100
+      },
+      {
+        "id": "s-subcentre-23",
+        "character": "subcentre",
+        "cx": -14383,
+        "cz": -93688,
+        "area": 1021838
+      },
+      {
+        "id": "n-residential-24",
+        "character": "residential",
+        "cx": 33724,
+        "cz": 251275,
+        "area": 482006
+      },
+      {
+        "id": "s-residential-25",
+        "character": "residential",
+        "cx": 37311,
+        "cz": -236610,
+        "area": 1444894
+      },
+      {
+        "id": "n-mixed-use-26",
         "character": "mixed-use",
-        "cx": 121224,
-        "cz": 124170,
-        "area": 500231
+        "cx": 55598,
+        "cz": 166266,
+        "area": 527231
       },
       {
-        "id": "se-residential-29",
-        "character": "residential",
-        "cx": 77370,
-        "cz": -196951,
-        "area": 1251338
-      },
-      {
-        "id": "e-mixed-use-30",
+        "id": "se-mixed-use-27",
         "character": "mixed-use",
-        "cx": 116902,
-        "cz": -37151,
-        "area": 1067513
+        "cx": 52625,
+        "cz": -82514,
+        "area": 708188
       },
       {
-        "id": "ne-mixed-use-31",
+        "id": "e-downtown-28",
+        "character": "downtown",
+        "cx": 61880,
+        "cz": 3435,
+        "area": 1331831
+      },
+      {
+        "id": "n-residential-29",
+        "character": "residential",
+        "cx": 100115,
+        "cz": 256572,
+        "area": 446738
+      },
+      {
+        "id": "se-mixed-use-30",
         "character": "mixed-use",
-        "cx": 130712,
-        "cz": 48267,
-        "area": 465188
+        "cx": 104178,
+        "cz": -147557,
+        "area": 469744
       },
       {
-        "id": "ne-residential-32",
-        "character": "residential",
-        "cx": 152350,
-        "cz": 261359,
-        "area": 469294
+        "id": "ne-subcentre-31",
+        "character": "subcentre",
+        "cx": 113945,
+        "cz": 176295,
+        "area": 645131
       },
       {
-        "id": "s-residential-33",
+        "id": "se-residential-32",
         "character": "residential",
-        "cx": 105763,
-        "cz": -278275,
-        "area": 586181
+        "cx": 120602,
+        "cz": -246750,
+        "area": 908888
       },
       {
-        "id": "se-residential-34",
-        "character": "residential",
-        "cx": 189141,
-        "cz": -282902,
-        "area": 469181
+        "id": "se-subcentre-33",
+        "character": "subcentre",
+        "cx": 134082,
+        "cz": -75012,
+        "area": 640069
+      },
+      {
+        "id": "ne-mixed-use-34",
+        "character": "mixed-use",
+        "cx": 126604,
+        "cz": 87576,
+        "area": 485156
       },
       {
         "id": "ne-residential-35",
         "character": "residential",
-        "cx": 177148,
-        "cz": 177804,
-        "area": 539381
+        "cx": 186796,
+        "cz": 262331,
+        "area": 551700
       },
       {
-        "id": "ne-industrial-36",
-        "character": "industrial",
-        "cx": 242681,
-        "cz": 263087,
-        "area": 523913
-      },
-      {
-        "id": "se-residential-37",
+        "id": "se-residential-36",
         "character": "residential",
-        "cx": 183563,
-        "cz": -142071,
-        "area": 1303144
+        "cx": 172601,
+        "cz": -136277,
+        "area": 477225
+      },
+      {
+        "id": "ne-residential-37",
+        "character": "residential",
+        "cx": 172034,
+        "cz": 183834,
+        "area": 506756
       },
       {
         "id": "se-residential-38",
         "character": "residential",
-        "cx": 204327,
-        "cz": -216029,
-        "area": 812756
+        "cx": 189026,
+        "cz": -211357,
+        "area": 664931
       },
       {
-        "id": "e-residential-39",
-        "character": "residential",
-        "cx": 202675,
-        "cz": -76754,
-        "area": 391331
+        "id": "se-mixed-use-39",
+        "character": "mixed-use",
+        "cx": 210426,
+        "cz": -282086,
+        "area": 580275
       },
       {
         "id": "e-residential-40",
         "character": "residential",
-        "cx": 194404,
-        "cz": 53812,
-        "area": 954338
+        "cx": 180935,
+        "cz": 38795,
+        "area": 557438
       },
       {
-        "id": "e-residential-41",
+        "id": "e-subcentre-41",
+        "character": "subcentre",
+        "cx": 211974,
+        "cz": -33696,
+        "area": 939600
+      },
+      {
+        "id": "ne-residential-42",
         "character": "residential",
-        "cx": 227642,
-        "cz": -12250,
-        "area": 450563
-      },
-      {
-        "id": "se-industrial-42",
-        "character": "industrial",
-        "cx": 267357,
-        "cz": -261214,
-        "area": 698850
+        "cx": 240087,
+        "cz": 129818,
+        "area": 2116406
       },
       {
         "id": "e-residential-43",
         "character": "residential",
-        "cx": 272625,
-        "cz": -44889,
-        "area": 462881
+        "cx": 253130,
+        "cz": -111505,
+        "area": 651488
       },
       {
-        "id": "e-residential-44",
+        "id": "se-residential-44",
         "character": "residential",
-        "cx": 271691,
-        "cz": 71989,
-        "area": 658069
+        "cx": 263234,
+        "cz": -184566,
+        "area": 628706
       },
       {
-        "id": "se-residential-45",
-        "character": "residential",
-        "cx": 280199,
-        "cz": -130810,
-        "area": 417375
+        "id": "se-industrial-45",
+        "character": "industrial",
+        "cx": 276914,
+        "cz": -264819,
+        "area": 409275
       },
       {
-        "id": "ne-residential-46",
+        "id": "e-residential-46",
         "character": "residential",
-        "cx": 254642,
-        "cz": 203880,
-        "area": 666675
+        "cx": 277187,
+        "cz": -14046,
+        "area": 420863
       },
       {
-        "id": "ne-residential-47",
-        "character": "residential",
-        "cx": 243225,
-        "cz": 140538,
-        "area": 509794
+        "id": "ne-industrial-47",
+        "character": "industrial",
+        "cx": 274916,
+        "cz": 246111,
+        "area": 446063
       }
     ]
   },
   {
     "seed": "gate1-2",
-    "buildingCount": 26632,
+    "buildingCount": 15847,
     "districtCount": 48,
-    "fullHash": "6aec2c72",
-    "buildingsHash": "3a219ae9",
-    "roadsHash": "618f7791",
+    "fullHash": "8cb7d489",
+    "buildingsHash": "265f7b89",
+    "roadsHash": "5f73282f",
     "orientHash": "e700e5cb",
     "districts": [
       {
-        "id": "w-residential-0",
-        "character": "residential",
-        "cx": -276126,
-        "cz": -32494,
-        "area": 761850
-      },
-      {
-        "id": "nw-industrial-1",
+        "id": "sw-industrial-0",
         "character": "industrial",
-        "cx": -278227,
-        "cz": 207316,
-        "area": 636919
+        "cx": -265559,
+        "cz": -257493,
+        "area": 729450
       },
       {
-        "id": "sw-residential-2",
+        "id": "w-mixed-use-1",
+        "character": "mixed-use",
+        "cx": -269801,
+        "cz": -8739,
+        "area": 385088
+      },
+      {
+        "id": "w-residential-2",
         "character": "residential",
-        "cx": -268568,
-        "cz": -164434,
-        "area": 564638
+        "cx": -260862,
+        "cz": 83568,
+        "area": 844256
       },
       {
-        "id": "nw-residential-3",
-        "character": "residential",
-        "cx": -246532,
-        "cz": 127750,
-        "area": 640800
-      },
-      {
-        "id": "w-residential-4",
-        "character": "residential",
-        "cx": -234661,
-        "cz": 74411,
-        "area": 554513
-      },
-      {
-        "id": "nw-residential-5",
-        "character": "residential",
-        "cx": -210671,
-        "cz": 236197,
-        "area": 1046531
-      },
-      {
-        "id": "sw-industrial-6",
+        "id": "nw-industrial-3",
         "character": "industrial",
-        "cx": -263211,
-        "cz": -271206,
-        "area": 640856
+        "cx": -272351,
+        "cz": 200009,
+        "area": 790594
       },
       {
-        "id": "w-residential-7",
+        "id": "sw-residential-4",
         "character": "residential",
-        "cx": -191303,
-        "cz": 27003,
-        "area": 736988
+        "cx": -255050,
+        "cz": -156124,
+        "area": 909281
       },
       {
-        "id": "w-residential-8",
+        "id": "w-residential-5",
         "character": "residential",
-        "cx": -212921,
-        "cz": -68923,
-        "area": 997200
+        "cx": -249578,
+        "cz": -71665,
+        "area": 676350
+      },
+      {
+        "id": "nw-residential-6",
+        "character": "residential",
+        "cx": -213332,
+        "cz": 227579,
+        "area": 981788
+      },
+      {
+        "id": "sw-residential-7",
+        "character": "residential",
+        "cx": -205755,
+        "cz": -266854,
+        "area": 466650
+      },
+      {
+        "id": "nw-residential-8",
+        "character": "residential",
+        "cx": -175039,
+        "cz": 100895,
+        "area": 1137825
       },
       {
         "id": "sw-residential-9",
         "character": "residential",
-        "cx": -186929,
-        "cz": -233093,
-        "area": 1586363
+        "cx": -160064,
+        "cz": -179690,
+        "area": 1029431
       },
       {
-        "id": "sw-residential-10",
-        "character": "residential",
-        "cx": -181520,
-        "cz": -142790,
-        "area": 388406
+        "id": "w-mixed-use-10",
+        "character": "mixed-use",
+        "cx": -196313,
+        "cz": 21893,
+        "area": 448763
       },
       {
         "id": "nw-residential-11",
         "character": "residential",
-        "cx": -149648,
-        "cz": 156220,
-        "area": 786150
+        "cx": -125247,
+        "cz": 258342,
+        "area": 696319
       },
       {
-        "id": "nw-mixed-use-12",
+        "id": "sw-mixed-use-12",
         "character": "mixed-use",
-        "cx": -120829,
-        "cz": 100703,
-        "area": 639506
+        "cx": -152109,
+        "cz": -270753,
+        "area": 487800
       },
       {
-        "id": "w-mixed-use-13",
-        "character": "mixed-use",
-        "cx": -143613,
-        "cz": -26960,
-        "area": 597431
-      },
-      {
-        "id": "nw-residential-14",
+        "id": "nw-residential-13",
         "character": "residential",
-        "cx": -123602,
-        "cz": 241830,
-        "area": 709988
+        "cx": -136203,
+        "cz": 183533,
+        "area": 475200
       },
       {
-        "id": "sw-mixed-use-15",
-        "character": "mixed-use",
-        "cx": -114527,
-        "cz": -100520,
-        "area": 418781
-      },
-      {
-        "id": "sw-mixed-use-16",
-        "character": "mixed-use",
-        "cx": -97026,
-        "cz": -155473,
-        "area": 480769
-      },
-      {
-        "id": "sw-residential-17",
+        "id": "sw-residential-14",
         "character": "residential",
-        "cx": -97776,
-        "cz": -224097,
-        "area": 422888
+        "cx": -135081,
+        "cz": -105713,
+        "area": 915413
       },
       {
-        "id": "n-residential-18",
-        "character": "residential",
-        "cx": -59303,
-        "cz": 229748,
-        "area": 609863
-      },
-      {
-        "id": "n-mixed-use-19",
-        "character": "mixed-use",
-        "cx": -35214,
-        "cz": 92384,
-        "area": 397350
-      },
-      {
-        "id": "nw-mixed-use-20",
-        "character": "mixed-use",
-        "cx": -67000,
-        "cz": 31215,
-        "area": 689344
-      },
-      {
-        "id": "w-subcentre-21",
+        "id": "w-subcentre-15",
         "character": "subcentre",
-        "cx": -61484,
-        "cz": -37048,
-        "area": 768938
+        "cx": -133623,
+        "cz": -13246,
+        "area": 1287731
       },
       {
-        "id": "s-mixed-use-22",
-        "character": "mixed-use",
-        "cx": -21682,
-        "cz": -184936,
-        "area": 590625
-      },
-      {
-        "id": "s-residential-23",
+        "id": "s-residential-16",
         "character": "residential",
-        "cx": -54847,
-        "cz": -270597,
-        "area": 1011881
+        "cx": -92712,
+        "cz": -272028,
+        "area": 504506
       },
       {
-        "id": "n-mixed-use-24",
+        "id": "nw-mixed-use-17",
         "character": "mixed-use",
-        "cx": -33436,
-        "cz": 150012,
-        "area": 574763
+        "cx": -95156,
+        "cz": 90898,
+        "area": 379463
       },
       {
-        "id": "s-mixed-use-25",
-        "character": "mixed-use",
-        "cx": -29322,
-        "cz": -117138,
-        "area": 559181
+        "id": "s-residential-18",
+        "character": "residential",
+        "cx": -55083,
+        "cz": -158702,
+        "area": 468506
       },
       {
-        "id": "n-subcentre-26",
+        "id": "s-residential-19",
+        "character": "residential",
+        "cx": -35346,
+        "cz": -249606,
+        "area": 926156
+      },
+      {
+        "id": "n-residential-20",
+        "character": "residential",
+        "cx": -47726,
+        "cz": 161804,
+        "area": 1278563
+      },
+      {
+        "id": "sw-subcentre-21",
         "character": "subcentre",
-        "cx": 31052,
-        "cz": 96494,
-        "area": 944269
+        "cx": -44828,
+        "cz": -92972,
+        "area": 438300
       },
       {
-        "id": "ne-downtown-27",
+        "id": "n-residential-22",
+        "character": "residential",
+        "cx": 984,
+        "cz": 250220,
+        "area": 982575
+      },
+      {
+        "id": "nw-downtown-23",
         "character": "downtown",
-        "cx": 46605,
-        "cz": 7393,
-        "area": 636863
+        "cx": -28437,
+        "cz": 37451,
+        "area": 1021838
       },
       {
-        "id": "s-residential-28",
+        "id": "s-residential-24",
         "character": "residential",
-        "cx": 26025,
-        "cz": -273683,
-        "area": 426656
+        "cx": 26730,
+        "cz": -209366,
+        "area": 795263
       },
       {
-        "id": "se-heritage-29",
+        "id": "se-heritage-25",
         "character": "heritage",
-        "cx": 31930,
-        "cz": -59804,
-        "area": 681750
+        "cx": 39295,
+        "cz": -72127,
+        "area": 407813
       },
       {
-        "id": "n-residential-30",
+        "id": "s-residential-26",
         "character": "residential",
-        "cx": 23644,
-        "cz": 235415,
-        "area": 1158806
+        "cx": 58175,
+        "cz": -285363,
+        "area": 431269
       },
       {
-        "id": "s-mixed-use-31",
-        "character": "mixed-use",
-        "cx": 52936,
-        "cz": -148292,
-        "area": 535050
+        "id": "sw-downtown-27",
+        "character": "downtown",
+        "cx": -12945,
+        "cz": -36186,
+        "area": 637144
       },
       {
-        "id": "ne-mixed-use-32",
-        "character": "mixed-use",
-        "cx": 98655,
-        "cz": 119707,
-        "area": 445219
+        "id": "ne-subcentre-28",
+        "character": "subcentre",
+        "cx": 54628,
+        "cz": 110167,
+        "area": 1096819
+      },
+      {
+        "id": "se-subcentre-29",
+        "character": "subcentre",
+        "cx": 63096,
+        "cz": -137930,
+        "area": 1029094
+      },
+      {
+        "id": "se-residential-30",
+        "character": "residential",
+        "cx": 113248,
+        "cz": -205218,
+        "area": 497419
+      },
+      {
+        "id": "n-residential-31",
+        "character": "residential",
+        "cx": 55296,
+        "cz": 192714,
+        "area": 501975
+      },
+      {
+        "id": "ne-residential-32",
+        "character": "residential",
+        "cx": 142619,
+        "cz": 234388,
+        "area": 1426556
       },
       {
         "id": "ne-mixed-use-33",
         "character": "mixed-use",
-        "cx": 110273,
-        "cz": 55924,
-        "area": 412594
+        "cx": 133791,
+        "cz": 105070,
+        "area": 820575
       },
       {
-        "id": "se-mixed-use-34",
+        "id": "se-residential-34",
+        "character": "residential",
+        "cx": 134697,
+        "cz": -271236,
+        "area": 643219
+      },
+      {
+        "id": "e-subcentre-35",
+        "character": "subcentre",
+        "cx": 90085,
+        "cz": -3276,
+        "area": 840769
+      },
+      {
+        "id": "se-mixed-use-36",
         "character": "mixed-use",
-        "cx": 125436,
-        "cz": -97125,
-        "area": 950456
+        "cx": 172744,
+        "cz": -91546,
+        "area": 1550925
       },
       {
-        "id": "s-residential-35",
-        "character": "residential",
-        "cx": 85191,
-        "cz": -255818,
-        "area": 956813
+        "id": "e-mixed-use-37",
+        "character": "mixed-use",
+        "cx": 154565,
+        "cz": 35201,
+        "area": 461306
       },
       {
-        "id": "ne-residential-36",
+        "id": "se-residential-38",
         "character": "residential",
-        "cx": 117521,
-        "cz": 226050,
-        "area": 1141481
+        "cx": 229575,
+        "cz": -173831,
+        "area": 1040963
       },
       {
-        "id": "se-residential-37",
+        "id": "e-residential-39",
         "character": "residential",
-        "cx": 168329,
-        "cz": -169482,
-        "area": 1513688
-      },
-      {
-        "id": "ne-residential-38",
-        "character": "residential",
-        "cx": 163266,
-        "cz": 88044,
-        "area": 471038
-      },
-      {
-        "id": "se-residential-39",
-        "character": "residential",
-        "cx": 176729,
-        "cz": -265738,
-        "area": 692606
+        "cx": 189851,
+        "cz": -11463,
+        "area": 370013
       },
       {
         "id": "ne-residential-40",
         "character": "residential",
-        "cx": 197141,
-        "cz": 208182,
-        "area": 1303819
+        "cx": 206805,
+        "cz": 136936,
+        "area": 804431
       },
       {
-        "id": "ne-residential-41",
+        "id": "se-residential-41",
         "character": "residential",
-        "cx": 212293,
-        "cz": 104859,
-        "area": 495113
+        "cx": 217802,
+        "cz": -258672,
+        "area": 919294
       },
       {
         "id": "e-residential-42",
         "character": "residential",
-        "cx": 207007,
-        "cz": 2036,
-        "area": 2332800
+        "cx": 248480,
+        "cz": 74310,
+        "area": 564581
       },
       {
-        "id": "se-industrial-43",
+        "id": "ne-industrial-43",
         "character": "industrial",
-        "cx": 253740,
-        "cz": -268410,
-        "area": 705938
+        "cx": 250478,
+        "cz": 251714,
+        "area": 694744
       },
       {
         "id": "e-residential-44",
         "character": "residential",
-        "cx": 263751,
-        "cz": -91513,
-        "area": 758700
+        "cx": 259192,
+        "cz": 17885,
+        "area": 563906
       },
       {
         "id": "ne-residential-45",
         "character": "residential",
-        "cx": 265350,
-        "cz": 141339,
-        "area": 529200
+        "cx": 270738,
+        "cz": 170564,
+        "area": 604125
       },
       {
-        "id": "se-residential-46",
+        "id": "e-residential-46",
         "character": "residential",
-        "cx": 268810,
-        "cz": -192778,
-        "area": 560250
+        "cx": 272533,
+        "cz": -66397,
+        "area": 633825
       },
       {
-        "id": "ne-industrial-47",
+        "id": "se-industrial-47",
         "character": "industrial",
-        "cx": 275992,
-        "cz": 236655,
-        "area": 534375
+        "cx": 280878,
+        "cz": -261022,
+        "area": 402131
       }
     ]
   },
   {
     "seed": "gate1-3",
-    "buildingCount": 25875,
+    "buildingCount": 16201,
     "districtCount": 48,
-    "fullHash": "5b0df02c",
-    "buildingsHash": "15f80607",
-    "roadsHash": "9c5fe4d4",
+    "fullHash": "8078596a",
+    "buildingsHash": "3ae9893e",
+    "roadsHash": "1d8b2f99",
     "orientHash": "458ee033",
     "districts": [
       {
         "id": "sw-residential-0",
         "character": "residential",
-        "cx": -270305,
-        "cz": -217197,
-        "area": 497250
+        "cx": -271425,
+        "cz": -207130,
+        "area": 427894
       },
       {
-        "id": "nw-residential-1",
+        "id": "w-mixed-use-1",
+        "character": "mixed-use",
+        "cx": -276399,
+        "cz": -101862,
+        "area": 506588
+      },
+      {
+        "id": "w-residential-2",
         "character": "residential",
-        "cx": -262420,
-        "cz": 173929,
-        "area": 600750
+        "cx": -262383,
+        "cz": -30753,
+        "area": 403931
       },
       {
-        "id": "sw-industrial-2",
+        "id": "nw-residential-3",
+        "character": "residential",
+        "cx": -273579,
+        "cz": 133697,
+        "area": 452194
+      },
+      {
+        "id": "nw-residential-4",
+        "character": "residential",
+        "cx": -241635,
+        "cz": 228472,
+        "area": 1302413
+      },
+      {
+        "id": "sw-industrial-5",
         "character": "industrial",
-        "cx": -255436,
-        "cz": -288452,
-        "area": 445444
+        "cx": -261585,
+        "cz": -282430,
+        "area": 489206
       },
       {
-        "id": "w-residential-3",
+        "id": "w-residential-6",
         "character": "residential",
-        "cx": -281217,
-        "cz": -45454,
-        "area": 409106
+        "cx": -250338,
+        "cz": 38474,
+        "area": 876994
       },
       {
-        "id": "w-residential-4",
+        "id": "sw-residential-7",
         "character": "residential",
-        "cx": -224176,
-        "cz": -83858,
-        "area": 645469
+        "cx": -232018,
+        "cz": -130506,
+        "area": 577181
       },
       {
-        "id": "sw-residential-5",
+        "id": "sw-residential-8",
         "character": "residential",
-        "cx": -232711,
-        "cz": -157070,
-        "area": 1009125
-      },
-      {
-        "id": "sw-residential-6",
-        "character": "residential",
-        "cx": -194890,
-        "cz": -261181,
-        "area": 662681
-      },
-      {
-        "id": "nw-industrial-7",
-        "character": "industrial",
-        "cx": -239611,
-        "cz": 253084,
-        "area": 859669
-      },
-      {
-        "id": "w-residential-8",
-        "character": "residential",
-        "cx": -217546,
-        "cz": -8458,
-        "area": 446963
+        "cx": -208618,
+        "cz": -215803,
+        "area": 665944
       },
       {
         "id": "nw-residential-9",
         "character": "residential",
-        "cx": -188194,
-        "cz": 200070,
-        "area": 473794
+        "cx": -198358,
+        "cz": 121024,
+        "area": 1019081
       },
       {
-        "id": "w-mixed-use-10",
-        "character": "mixed-use",
-        "cx": -160750,
-        "cz": -58211,
-        "area": 560925
-      },
-      {
-        "id": "nw-residential-11",
+        "id": "w-residential-10",
         "character": "residential",
-        "cx": -204622,
-        "cz": 78065,
-        "area": 2565450
+        "cx": -195745,
+        "cz": -38804,
+        "area": 453713
       },
       {
-        "id": "sw-residential-12",
+        "id": "sw-residential-11",
         "character": "residential",
-        "cx": -150747,
-        "cz": -172683,
-        "area": 668756
+        "cx": -172383,
+        "cz": -131959,
+        "area": 399600
+      },
+      {
+        "id": "nw-residential-12",
+        "character": "residential",
+        "cx": -152836,
+        "cz": 241189,
+        "area": 651825
       },
       {
         "id": "sw-residential-13",
         "character": "residential",
-        "cx": -116926,
-        "cz": -226224,
-        "area": 730688
+        "cx": -149474,
+        "cz": -251362,
+        "area": 1091813
       },
       {
-        "id": "w-mixed-use-14",
-        "character": "mixed-use",
-        "cx": -105179,
-        "cz": -33897,
-        "area": 490050
+        "id": "w-residential-14",
+        "character": "residential",
+        "cx": -145059,
+        "cz": -54873,
+        "area": 525150
       },
       {
         "id": "nw-residential-15",
         "character": "residential",
-        "cx": -124588,
-        "cz": 242416,
-        "area": 795431
+        "cx": -115515,
+        "cz": 167921,
+        "area": 580781
       },
       {
-        "id": "s-residential-16",
+        "id": "w-residential-16",
         "character": "residential",
-        "cx": -79172,
-        "cz": -246824,
-        "area": 533700
+        "cx": -150004,
+        "cz": 29864,
+        "area": 639000
       },
       {
-        "id": "nw-residential-17",
-        "character": "residential",
-        "cx": -98312,
-        "cz": 159282,
-        "area": 447525
-      },
-      {
-        "id": "nw-mixed-use-18",
+        "id": "nw-mixed-use-17",
         "character": "mixed-use",
-        "cx": -80102,
-        "cz": 77656,
-        "area": 899606
+        "cx": -88370,
+        "cz": 112844,
+        "area": 807469
       },
       {
-        "id": "w-downtown-19",
-        "character": "downtown",
-        "cx": -40889,
-        "cz": -24928,
-        "area": 829350
+        "id": "n-residential-18",
+        "character": "residential",
+        "cx": -84812,
+        "cz": 263081,
+        "area": 466088
       },
       {
-        "id": "sw-subcentre-20",
-        "character": "subcentre",
-        "cx": -54447,
-        "cz": -110615,
-        "area": 790313
+        "id": "sw-residential-19",
+        "character": "residential",
+        "cx": -109245,
+        "cz": -156812,
+        "area": 566663
+      },
+      {
+        "id": "s-mixed-use-20",
+        "character": "mixed-use",
+        "cx": -80297,
+        "cz": -263826,
+        "area": 551644
       },
       {
         "id": "n-residential-21",
         "character": "residential",
-        "cx": -35265,
-        "cz": 199152,
-        "area": 1336388
+        "cx": -16660,
+        "cz": 221930,
+        "area": 1229231
       },
       {
-        "id": "n-mixed-use-22",
-        "character": "mixed-use",
-        "cx": -2031,
-        "cz": 61205,
-        "area": 564469
-      },
-      {
-        "id": "s-residential-23",
-        "character": "residential",
-        "cx": -2508,
-        "cz": -280295,
-        "area": 784238
-      },
-      {
-        "id": "s-mixed-use-24",
-        "character": "mixed-use",
-        "cx": -19297,
-        "cz": -191395,
-        "area": 980606
-      },
-      {
-        "id": "s-residential-25",
-        "character": "residential",
-        "cx": 68485,
-        "cz": -242129,
-        "area": 665325
-      },
-      {
-        "id": "n-residential-26",
-        "character": "residential",
-        "cx": 65917,
-        "cz": 187872,
-        "area": 1222088
-      },
-      {
-        "id": "ne-mixed-use-27",
-        "character": "mixed-use",
-        "cx": 49328,
-        "cz": 84736,
-        "area": 618075
-      },
-      {
-        "id": "n-residential-28",
-        "character": "residential",
-        "cx": 38307,
-        "cz": 267762,
-        "area": 498263
-      },
-      {
-        "id": "e-heritage-29",
-        "character": "heritage",
-        "cx": 43223,
-        "cz": -3510,
-        "area": 444150
-      },
-      {
-        "id": "se-subcentre-30",
+        "id": "sw-subcentre-22",
         "character": "subcentre",
-        "cx": 58255,
-        "cz": -63782,
-        "area": 837394
+        "cx": -50317,
+        "cz": -101436,
+        "area": 984713
       },
       {
-        "id": "ne-mixed-use-31",
-        "character": "mixed-use",
-        "cx": 118258,
-        "cz": 83983,
-        "area": 577125
+        "id": "w-downtown-23",
+        "character": "downtown",
+        "cx": -71306,
+        "cz": -24031,
+        "area": 610931
       },
       {
-        "id": "se-mixed-use-32",
+        "id": "s-residential-24",
+        "character": "residential",
+        "cx": -8820,
+        "cz": -275815,
+        "area": 724219
+      },
+      {
+        "id": "s-mixed-use-25",
         "character": "mixed-use",
-        "cx": 80765,
-        "cz": -142361,
-        "area": 1062056
+        "cx": -47141,
+        "cz": -177091,
+        "area": 425138
+      },
+      {
+        "id": "s-subcentre-26",
+        "character": "subcentre",
+        "cx": 39972,
+        "cz": -202787,
+        "area": 1138669
+      },
+      {
+        "id": "n-subcentre-27",
+        "character": "subcentre",
+        "cx": -11321,
+        "cz": 70928,
+        "area": 1845563
+      },
+      {
+        "id": "se-heritage-28",
+        "character": "heritage",
+        "cx": 36376,
+        "cz": -83210,
+        "area": 1118419
+      },
+      {
+        "id": "ne-mixed-use-29",
+        "character": "mixed-use",
+        "cx": 79382,
+        "cz": 118557,
+        "area": 429131
+      },
+      {
+        "id": "n-residential-30",
+        "character": "residential",
+        "cx": 72807,
+        "cz": 189806,
+        "area": 709594
+      },
+      {
+        "id": "ne-residential-31",
+        "character": "residential",
+        "cx": 111465,
+        "cz": 242850,
+        "area": 837900
+      },
+      {
+        "id": "ne-mixed-use-32",
+        "character": "mixed-use",
+        "cx": 84241,
+        "cz": 27332,
+        "area": 861919
       },
       {
         "id": "ne-residential-33",
         "character": "residential",
-        "cx": 132184,
-        "cz": 243995,
-        "area": 531956
+        "cx": 152534,
+        "cz": 97118,
+        "area": 772706
       },
       {
-        "id": "ne-residential-34",
-        "character": "residential",
-        "cx": 157224,
-        "cz": 131625,
-        "area": 496406
-      },
-      {
-        "id": "e-mixed-use-35",
+        "id": "se-mixed-use-34",
         "character": "mixed-use",
-        "cx": 129191,
-        "cz": 5323,
-        "area": 665100
+        "cx": 109816,
+        "cz": -61221,
+        "area": 629156
       },
       {
-        "id": "se-residential-36",
+        "id": "se-residential-35",
         "character": "residential",
-        "cx": 137874,
-        "cz": -258765,
-        "area": 910631
+        "cx": 136455,
+        "cz": -261400,
+        "area": 1551488
       },
       {
-        "id": "ne-residential-37",
+        "id": "e-residential-36",
         "character": "residential",
-        "cx": 209294,
-        "cz": 177413,
-        "area": 889369
+        "cx": 150374,
+        "cz": -3431,
+        "area": 590063
+      },
+      {
+        "id": "se-subcentre-37",
+        "character": "subcentre",
+        "cx": 141789,
+        "cz": -147197,
+        "area": 874125
       },
       {
         "id": "ne-residential-38",
         "character": "residential",
-        "cx": 208168,
-        "cz": 252915,
-        "area": 644175
+        "cx": 185825,
+        "cz": 260583,
+        "area": 521831
       },
       {
-        "id": "se-residential-39",
+        "id": "e-subcentre-39",
+        "character": "subcentre",
+        "cx": 211935,
+        "cz": -73202,
+        "area": 1053000
+      },
+      {
+        "id": "ne-residential-40",
         "character": "residential",
-        "cx": 183702,
-        "cz": -200753,
-        "area": 410681
+        "cx": 195270,
+        "cz": 153831,
+        "area": 844763
       },
       {
-        "id": "se-residential-40",
-        "character": "residential",
-        "cx": 179053,
-        "cz": -103360,
-        "area": 1458281
-      },
-      {
-        "id": "se-residential-41",
-        "character": "residential",
-        "cx": 211091,
-        "cz": -270962,
-        "area": 459788
-      },
-      {
-        "id": "e-residential-42",
-        "character": "residential",
-        "cx": 226416,
-        "cz": 77682,
-        "area": 1276706
-      },
-      {
-        "id": "se-industrial-43",
+        "id": "ne-industrial-41",
         "character": "industrial",
-        "cx": 266639,
-        "cz": -227317,
-        "area": 1086581
+        "cx": 251647,
+        "cz": 235457,
+        "area": 754088
+      },
+      {
+        "id": "se-industrial-42",
+        "character": "industrial",
+        "cx": 243003,
+        "cz": -254691,
+        "area": 894994
+      },
+      {
+        "id": "e-residential-43",
+        "character": "residential",
+        "cx": 239923,
+        "cz": 68641,
+        "area": 786600
       },
       {
         "id": "e-residential-44",
         "character": "residential",
-        "cx": 247348,
-        "cz": -41515,
-        "area": 740419
+        "cx": 270779,
+        "cz": -2981,
+        "area": 750600
       },
       {
-        "id": "ne-industrial-45",
+        "id": "se-residential-45",
+        "character": "residential",
+        "cx": 248554,
+        "cz": -138108,
+        "area": 695925
+      },
+      {
+        "id": "ne-residential-46",
+        "character": "residential",
+        "cx": 277258,
+        "cz": 167251,
+        "area": 467213
+      },
+      {
+        "id": "se-industrial-47",
         "character": "industrial",
-        "cx": 277482,
-        "cz": 234226,
-        "area": 506588
-      },
-      {
-        "id": "e-residential-46",
-        "character": "residential",
-        "cx": 273361,
-        "cz": 38387,
-        "area": 561375
-      },
-      {
-        "id": "e-residential-47",
-        "character": "residential",
-        "cx": 270991,
-        "cz": -112418,
-        "area": 409725
+        "cx": 281365,
+        "cz": -207869,
+        "area": 442856
       }
     ]
   },
   {
     "seed": "gate1-4",
-    "buildingCount": 26262,
+    "buildingCount": 16318,
     "districtCount": 48,
-    "fullHash": "5e0ba49d",
-    "buildingsHash": "42b0d1b2",
-    "roadsHash": "863dafd5",
+    "fullHash": "c3f973fd",
+    "buildingsHash": "e9173be2",
+    "roadsHash": "059d5dfd",
     "orientHash": "4fd11fc9",
     "districts": [
       {
-        "id": "w-residential-0",
-        "character": "residential",
-        "cx": -258619,
-        "cz": -49786,
-        "area": 576338
-      },
-      {
-        "id": "nw-industrial-1",
+        "id": "sw-industrial-0",
         "character": "industrial",
-        "cx": -268147,
-        "cz": 251505,
-        "area": 497194
+        "cx": -270667,
+        "cz": -251937,
+        "area": 587081
       },
       {
-        "id": "sw-residential-2",
+        "id": "w-mixed-use-1",
+        "character": "mixed-use",
+        "cx": -267415,
+        "cz": -22522,
+        "area": 631238
+      },
+      {
+        "id": "nw-residential-2",
         "character": "residential",
-        "cx": -248371,
-        "cz": -140810,
-        "area": 1153350
+        "cx": -261849,
+        "cz": 101979,
+        "area": 1045856
       },
       {
-        "id": "sw-industrial-3",
+        "id": "nw-industrial-3",
         "character": "industrial",
-        "cx": -261416,
-        "cz": -252368,
-        "area": 896906
+        "cx": -266742,
+        "cz": 228342,
+        "area": 779175
       },
       {
-        "id": "w-residential-4",
+        "id": "sw-residential-4",
         "character": "residential",
-        "cx": -256382,
-        "cz": 77889,
-        "area": 427219
+        "cx": -245915,
+        "cz": -187756,
+        "area": 702675
       },
       {
-        "id": "nw-residential-5",
-        "character": "residential",
-        "cx": -233564,
-        "cz": 153126,
-        "area": 1340888
+        "id": "sw-industrial-5",
+        "character": "industrial",
+        "cx": -218710,
+        "cz": -290011,
+        "area": 418500
       },
       {
-        "id": "w-residential-6",
+        "id": "sw-residential-6",
         "character": "residential",
-        "cx": -244277,
-        "cz": 13714,
-        "area": 745481
+        "cx": -214924,
+        "cz": -126099,
+        "area": 1367550
       },
       {
         "id": "nw-residential-7",
         "character": "residential",
-        "cx": -179020,
-        "cz": 69871,
-        "area": 395381
+        "cx": -204955,
+        "cz": 253780,
+        "area": 418781
       },
       {
         "id": "nw-residential-8",
         "character": "residential",
-        "cx": -190925,
-        "cz": 237524,
-        "area": 882450
+        "cx": -161114,
+        "cz": 162140,
+        "area": 1641544
       },
       {
-        "id": "w-residential-9",
+        "id": "sw-residential-9",
         "character": "residential",
-        "cx": -181848,
-        "cz": -70721,
-        "area": 438131
+        "cx": -153792,
+        "cz": -266625,
+        "area": 717975
       },
       {
-        "id": "sw-residential-10",
+        "id": "w-residential-10",
         "character": "residential",
-        "cx": -154376,
-        "cz": -272113,
-        "area": 1091250
+        "cx": -193582,
+        "cz": 15928,
+        "area": 1337963
       },
       {
-        "id": "sw-residential-11",
-        "character": "residential",
-        "cx": -181114,
-        "cz": -179980,
-        "area": 562163
-      },
-      {
-        "id": "w-mixed-use-12",
-        "character": "mixed-use",
-        "cx": -162146,
-        "cz": 4023,
-        "area": 562050
-      },
-      {
-        "id": "nw-mixed-use-13",
-        "character": "mixed-use",
-        "cx": -130210,
-        "cz": 91974,
-        "area": 543206
-      },
-      {
-        "id": "nw-residential-14",
-        "character": "residential",
-        "cx": -117633,
-        "cz": 173217,
-        "area": 582581
-      },
-      {
-        "id": "sw-mixed-use-15",
-        "character": "mixed-use",
-        "cx": -130498,
-        "cz": -94259,
-        "area": 485775
-      },
-      {
-        "id": "nw-residential-16",
-        "character": "residential",
-        "cx": -111330,
-        "cz": 255206,
-        "area": 502088
-      },
-      {
-        "id": "w-subcentre-17",
+        "id": "sw-subcentre-11",
         "character": "subcentre",
-        "cx": -89332,
-        "cz": -8777,
-        "area": 794925
+        "cx": -107225,
+        "cz": -203461,
+        "area": 1030219
       },
       {
-        "id": "sw-residential-18",
+        "id": "nw-residential-12",
         "character": "residential",
-        "cx": -102304,
-        "cz": -206818,
-        "area": 798300
+        "cx": -127730,
+        "cz": 256742,
+        "area": 592763
       },
       {
-        "id": "nw-mixed-use-19",
+        "id": "w-residential-13",
+        "character": "residential",
+        "cx": -147520,
+        "cz": -51380,
+        "area": 667519
+      },
+      {
+        "id": "sw-mixed-use-14",
         "character": "mixed-use",
-        "cx": -56845,
-        "cz": 100239,
-        "area": 578363
+        "cx": -94879,
+        "cz": -111460,
+        "area": 449663
       },
       {
-        "id": "s-residential-20",
+        "id": "s-residential-15",
         "character": "residential",
-        "cx": -33351,
-        "cz": -278691,
-        "area": 685969
+        "cx": -37305,
+        "cz": -275317,
+        "area": 836775
       },
       {
-        "id": "nw-heritage-21",
+        "id": "n-residential-16",
+        "character": "residential",
+        "cx": -46415,
+        "cz": 236399,
+        "area": 662175
+      },
+      {
+        "id": "sw-downtown-17",
+        "character": "downtown",
+        "cx": -44977,
+        "cz": -46541,
+        "area": 1559138
+      },
+      {
+        "id": "s-residential-18",
+        "character": "residential",
+        "cx": -37540,
+        "cz": -163717,
+        "area": 474694
+      },
+      {
+        "id": "nw-subcentre-19",
+        "character": "subcentre",
+        "cx": -76317,
+        "cz": 99074,
+        "area": 1138275
+      },
+      {
+        "id": "nw-heritage-20",
         "character": "heritage",
-        "cx": -42264,
-        "cz": 25252,
-        "area": 445613
+        "cx": -38780,
+        "cz": 29668,
+        "area": 534544
       },
       {
-        "id": "sw-mixed-use-22",
-        "character": "mixed-use",
-        "cx": -67242,
-        "cz": -134039,
-        "area": 813038
+        "id": "s-residential-21",
+        "character": "residential",
+        "cx": 13697,
+        "cz": -224647,
+        "area": 490106
       },
       {
-        "id": "n-mixed-use-23",
+        "id": "n-mixed-use-22",
         "character": "mixed-use",
-        "cx": -38496,
-        "cz": 153936,
-        "area": 403481
+        "cx": 9485,
+        "cz": 93296,
+        "area": 529819
+      },
+      {
+        "id": "s-mixed-use-23",
+        "character": "mixed-use",
+        "cx": 27629,
+        "cz": -118754,
+        "area": 551981
       },
       {
         "id": "n-residential-24",
         "character": "residential",
-        "cx": -10702,
-        "cz": 231815,
-        "area": 1441856
+        "cx": 25358,
+        "cz": 236625,
+        "area": 821306
       },
       {
-        "id": "s-residential-25",
+        "id": "n-residential-25",
         "character": "residential",
-        "cx": 16314,
-        "cz": -202755,
-        "area": 1131188
+        "cx": -15906,
+        "cz": 166953,
+        "area": 568575
       },
       {
-        "id": "s-subcentre-26",
+        "id": "ne-subcentre-26",
         "character": "subcentre",
-        "cx": 18483,
-        "cz": -88632,
-        "area": 1558744
+        "cx": 55584,
+        "cz": 30482,
+        "area": 557775
       },
       {
-        "id": "n-mixed-use-27",
+        "id": "se-subcentre-27",
+        "character": "subcentre",
+        "cx": 73125,
+        "cz": -177200,
+        "area": 770963
+      },
+      {
+        "id": "s-residential-28",
+        "character": "residential",
+        "cx": 62633,
+        "cz": -283289,
+        "area": 417038
+      },
+      {
+        "id": "ne-residential-29",
+        "character": "residential",
+        "cx": 84565,
+        "cz": 124593,
+        "area": 974419
+      },
+      {
+        "id": "se-residential-30",
+        "character": "residential",
+        "cx": 120527,
+        "cz": -239590,
+        "area": 657000
+      },
+      {
+        "id": "ne-residential-31",
+        "character": "residential",
+        "cx": 104011,
+        "cz": 235101,
+        "area": 826875
+      },
+      {
+        "id": "se-mixed-use-32",
         "character": "mixed-use",
-        "cx": 18731,
-        "cz": 81341,
-        "area": 572906
+        "cx": 114650,
+        "cz": -104231,
+        "area": 807019
       },
       {
-        "id": "n-mixed-use-28",
+        "id": "e-subcentre-33",
+        "character": "subcentre",
+        "cx": 86646,
+        "cz": -21969,
+        "area": 675956
+      },
+      {
+        "id": "se-residential-34",
+        "character": "residential",
+        "cx": 167692,
+        "cz": -287450,
+        "area": 491625
+      },
+      {
+        "id": "se-residential-35",
+        "character": "residential",
+        "cx": 177115,
+        "cz": -186231,
+        "area": 610144
+      },
+      {
+        "id": "ne-residential-36",
+        "character": "residential",
+        "cx": 170551,
+        "cz": 209571,
+        "area": 952088
+      },
+      {
+        "id": "e-residential-37",
+        "character": "residential",
+        "cx": 146068,
+        "cz": 40627,
+        "area": 621731
+      },
+      {
+        "id": "e-mixed-use-38",
         "character": "mixed-use",
-        "cx": 45494,
-        "cz": 153321,
-        "area": 476044
+        "cx": 165225,
+        "cz": -66564,
+        "area": 506981
       },
       {
-        "id": "ne-downtown-29",
-        "character": "downtown",
-        "cx": 47836,
-        "cz": 11081,
-        "area": 766688
-      },
-      {
-        "id": "n-residential-30",
+        "id": "ne-residential-39",
         "character": "residential",
-        "cx": 74841,
-        "cz": 242193,
-        "area": 395944
+        "cx": 177088,
+        "cz": 94592,
+        "area": 531113
       },
       {
-        "id": "ne-mixed-use-31",
-        "character": "mixed-use",
-        "cx": 98001,
-        "cz": 128963,
-        "area": 672919
-      },
-      {
-        "id": "e-mixed-use-32",
-        "character": "mixed-use",
-        "cx": 104730,
-        "cz": -44326,
-        "area": 390206
-      },
-      {
-        "id": "se-residential-33",
+        "id": "se-residential-40",
         "character": "residential",
-        "cx": 127834,
-        "cz": -202915,
-        "area": 639394
+        "cx": 241133,
+        "cz": -264706,
+        "area": 765169
       },
       {
-        "id": "s-residential-34",
+        "id": "ne-residential-41",
         "character": "residential",
-        "cx": 95707,
-        "cz": -278284,
-        "area": 978525
+        "cx": 249529,
+        "cz": 121940,
+        "area": 726525
       },
       {
-        "id": "ne-mixed-use-35",
-        "character": "mixed-use",
-        "cx": 140106,
-        "cz": 64280,
-        "area": 580669
-      },
-      {
-        "id": "se-residential-36",
+        "id": "e-residential-42",
         "character": "residential",
-        "cx": 200723,
-        "cz": -275569,
-        "area": 567731
-      },
-      {
-        "id": "se-residential-37",
-        "character": "residential",
-        "cx": 153018,
-        "cz": -125332,
-        "area": 1419863
-      },
-      {
-        "id": "ne-residential-38",
-        "character": "residential",
-        "cx": 167156,
-        "cz": 148229,
-        "area": 765338
-      },
-      {
-        "id": "e-mixed-use-39",
-        "character": "mixed-use",
-        "cx": 153397,
-        "cz": -4507,
-        "area": 694913
-      },
-      {
-        "id": "ne-residential-40",
-        "character": "residential",
-        "cx": 146073,
-        "cz": 242276,
-        "area": 972956
-      },
-      {
-        "id": "e-residential-41",
-        "character": "residential",
-        "cx": 217418,
-        "cz": -68672,
-        "area": 509006
-      },
-      {
-        "id": "se-residential-42",
-        "character": "residential",
-        "cx": 262541,
-        "cz": -135883,
-        "area": 723938
+        "cx": 250566,
+        "cz": -114010,
+        "area": 1305000
       },
       {
         "id": "ne-residential-43",
         "character": "residential",
-        "cx": 250933,
-        "cz": 153557,
-        "area": 742163
+        "cx": 234021,
+        "cz": 226678,
+        "area": 774113
       },
       {
         "id": "e-residential-44",
         "character": "residential",
-        "cx": 252665,
-        "cz": -23734,
-        "area": 632588
+        "cx": 216740,
+        "cz": -17646,
+        "area": 849825
       },
       {
-        "id": "se-industrial-45",
-        "character": "industrial",
-        "cx": 255197,
-        "cz": -234918,
-        "area": 1083825
+        "id": "se-residential-45",
+        "character": "residential",
+        "cx": 278081,
+        "cz": -213567,
+        "area": 455569
       },
       {
         "id": "e-residential-46",
         "character": "residential",
-        "cx": 244679,
-        "cz": 62407,
-        "area": 1158694
+        "cx": 260351,
+        "cz": 39852,
+        "area": 654581
       },
       {
         "id": "ne-industrial-47",
         "character": "industrial",
-        "cx": 255640,
-        "cz": 236971,
-        "area": 921769
+        "cx": 281833,
+        "cz": 212085,
+        "area": 512606
       }
     ]
   },
   {
     "seed": "gate1-5",
-    "buildingCount": 25795,
+    "buildingCount": 15373,
     "districtCount": 48,
-    "fullHash": "22b1795c",
-    "buildingsHash": "58522604",
-    "roadsHash": "939074ee",
+    "fullHash": "89cbe1e5",
+    "buildingsHash": "47f98d5f",
+    "roadsHash": "f44a50aa",
     "orientHash": "80e426ab",
     "districts": [
       {
-        "id": "w-residential-0",
-        "character": "residential",
-        "cx": -269165,
-        "cz": -2757,
-        "area": 691031
-      },
-      {
-        "id": "sw-industrial-1",
+        "id": "sw-industrial-0",
         "character": "industrial",
-        "cx": -247947,
-        "cz": -266829,
-        "area": 918225
+        "cx": -243397,
+        "cz": -234142,
+        "area": 1405181
       },
       {
-        "id": "w-residential-2",
+        "id": "w-residential-1",
         "character": "residential",
-        "cx": -251444,
-        "cz": 74038,
-        "area": 590906
+        "cx": -266752,
+        "cz": -51315,
+        "area": 746269
       },
       {
-        "id": "w-residential-3",
+        "id": "nw-residential-2",
         "character": "residential",
-        "cx": -230034,
-        "cz": -55990,
-        "area": 1071000
+        "cx": -265381,
+        "cz": 101291,
+        "area": 1024031
+      },
+      {
+        "id": "nw-industrial-3",
+        "character": "industrial",
+        "cx": -261761,
+        "cz": 239204,
+        "area": 807581
       },
       {
         "id": "sw-residential-4",
         "character": "residential",
-        "cx": -255168,
-        "cz": -177430,
-        "area": 884531
+        "cx": -263596,
+        "cz": -152580,
+        "area": 490163
       },
       {
-        "id": "sw-residential-5",
+        "id": "w-residential-5",
         "character": "residential",
-        "cx": -196976,
-        "cz": -126441,
-        "area": 432844
+        "cx": -228092,
+        "cz": 11878,
+        "area": 480769
       },
       {
-        "id": "nw-residential-6",
+        "id": "w-residential-6",
         "character": "residential",
-        "cx": -227441,
-        "cz": 196914,
-        "area": 2630588
+        "cx": -211358,
+        "cz": -93485,
+        "area": 607781
       },
       {
-        "id": "sw-residential-7",
+        "id": "nw-residential-7",
         "character": "residential",
-        "cx": -159382,
-        "cz": -216218,
-        "area": 740531
+        "cx": -209681,
+        "cz": 185325,
+        "area": 639281
       },
       {
-        "id": "w-mixed-use-8",
-        "character": "mixed-use",
-        "cx": -155640,
-        "cz": -54958,
-        "area": 459956
+        "id": "nw-residential-8",
+        "character": "residential",
+        "cx": -174273,
+        "cz": 62891,
+        "area": 955969
       },
       {
         "id": "sw-residential-9",
         "character": "residential",
-        "cx": -137639,
-        "cz": -289344,
-        "area": 606375
+        "cx": -175645,
+        "cz": -285738,
+        "area": 555244
       },
       {
         "id": "nw-residential-10",
         "character": "residential",
-        "cx": -175958,
-        "cz": 63117,
-        "area": 478575
+        "cx": -168830,
+        "cz": 254580,
+        "area": 572006
       },
       {
-        "id": "nw-mixed-use-11",
-        "character": "mixed-use",
-        "cx": -109640,
-        "cz": 92260,
-        "area": 464119
+        "id": "sw-subcentre-11",
+        "character": "subcentre",
+        "cx": -157816,
+        "cz": -127794,
+        "area": 670500
       },
       {
-        "id": "sw-mixed-use-12",
+        "id": "w-mixed-use-12",
         "character": "mixed-use",
-        "cx": -131984,
-        "cz": -121126,
-        "area": 598275
+        "cx": -153369,
+        "cz": -35768,
+        "area": 587306
       },
       {
         "id": "nw-residential-13",
         "character": "residential",
-        "cx": -99373,
-        "cz": 167590,
-        "area": 896231
+        "cx": -142244,
+        "cz": 145165,
+        "area": 738563
       },
       {
-        "id": "w-mixed-use-14",
-        "character": "mixed-use",
-        "cx": -117633,
-        "cz": 18826,
-        "area": 801394
-      },
-      {
-        "id": "s-residential-15",
+        "id": "sw-residential-14",
         "character": "residential",
-        "cx": -76504,
-        "cz": -216615,
-        "area": 995119
+        "cx": -114275,
+        "cz": -255175,
+        "area": 895669
       },
       {
-        "id": "sw-mixed-use-16",
-        "character": "mixed-use",
-        "cx": -56059,
-        "cz": -132877,
-        "area": 554231
+        "id": "n-residential-15",
+        "character": "residential",
+        "cx": -50646,
+        "cz": 238315,
+        "area": 1754831
+      },
+      {
+        "id": "sw-subcentre-16",
+        "character": "subcentre",
+        "cx": -73263,
+        "cz": -88988,
+        "area": 546469
       },
       {
         "id": "sw-subcentre-17",
         "character": "subcentre",
-        "cx": -77089,
-        "cz": -55495,
-        "area": 480038
+        "cx": -93893,
+        "cz": -164186,
+        "area": 762413
       },
       {
-        "id": "n-residential-18",
+        "id": "s-residential-18",
         "character": "residential",
-        "cx": -92964,
-        "cz": 248235,
-        "area": 1037363
+        "cx": -58865,
+        "cz": -221316,
+        "area": 436163
       },
       {
-        "id": "n-mixed-use-19",
+        "id": "w-mixed-use-19",
         "character": "mixed-use",
-        "cx": -34311,
-        "cz": 118035,
-        "area": 565144
+        "cx": -99368,
+        "cz": 13090,
+        "area": 524419
       },
       {
-        "id": "s-mixed-use-20",
-        "character": "mixed-use",
-        "cx": -10210,
-        "cz": -78902,
-        "area": 400781
-      },
-      {
-        "id": "nw-downtown-21",
+        "id": "n-downtown-20",
         "character": "downtown",
-        "cx": -26543,
-        "cz": 19170,
-        "area": 692044
+        "cx": -8800,
+        "cz": 49431,
+        "area": 1035788
       },
       {
-        "id": "s-mixed-use-22",
-        "character": "mixed-use",
-        "cx": 24456,
-        "cz": -165368,
-        "area": 1160269
-      },
-      {
-        "id": "s-residential-23",
+        "id": "s-residential-21",
         "character": "residential",
-        "cx": -9514,
-        "cz": -269210,
-        "area": 654638
+        "cx": 5165,
+        "cz": -164817,
+        "area": 973969
       },
       {
-        "id": "se-downtown-24",
-        "character": "downtown",
-        "cx": 35455,
-        "cz": -40935,
-        "area": 691088
-      },
-      {
-        "id": "ne-subcentre-25",
+        "id": "nw-subcentre-22",
         "character": "subcentre",
-        "cx": 26359,
-        "cz": 49278,
-        "area": 460744
+        "cx": -64570,
+        "cz": 127273,
+        "area": 925144
       },
       {
-        "id": "n-residential-26",
+        "id": "w-downtown-23",
+        "character": "downtown",
+        "cx": -47639,
+        "cz": -22234,
+        "area": 489881
+      },
+      {
+        "id": "s-downtown-24",
+        "character": "downtown",
+        "cx": -977,
+        "cz": -61423,
+        "area": 447300
+      },
+      {
+        "id": "s-residential-25",
         "character": "residential",
-        "cx": 41430,
-        "cz": 213472,
-        "area": 2158369
+        "cx": -4370,
+        "cz": -275516,
+        "area": 635794
       },
       {
-        "id": "ne-mixed-use-27",
+        "id": "se-mixed-use-26",
         "character": "mixed-use",
-        "cx": 47834,
-        "cz": 96037,
-        "area": 492863
+        "cx": 58176,
+        "cz": -106220,
+        "area": 458213
       },
       {
-        "id": "se-residential-28",
+        "id": "n-mixed-use-27",
+        "character": "mixed-use",
+        "cx": 53905,
+        "cz": 188662,
+        "area": 968681
+      },
+      {
+        "id": "e-subcentre-28",
+        "character": "subcentre",
+        "cx": 67352,
+        "cz": -32530,
+        "area": 591469
+      },
+      {
+        "id": "se-residential-29",
         "character": "residential",
-        "cx": 100301,
-        "cz": -223816,
-        "area": 516938
+        "cx": 82276,
+        "cz": -200576,
+        "area": 783113
       },
       {
-        "id": "se-mixed-use-29",
+        "id": "ne-mixed-use-30",
         "character": "mixed-use",
-        "cx": 110774,
-        "cz": -60218,
-        "area": 397631
+        "cx": 48261,
+        "cz": 99117,
+        "area": 981844
       },
       {
-        "id": "s-residential-30",
-        "character": "residential",
-        "cx": 72315,
-        "cz": -281695,
-        "area": 576844
-      },
-      {
-        "id": "se-mixed-use-31",
+        "id": "s-mixed-use-31",
         "character": "mixed-use",
-        "cx": 91993,
-        "cz": -121114,
-        "area": 471938
+        "cx": 71966,
+        "cz": -273707,
+        "area": 437231
       },
       {
-        "id": "ne-mixed-use-32",
+        "id": "e-mixed-use-32",
         "character": "mixed-use",
-        "cx": 104195,
-        "cz": 61564,
-        "area": 368044
+        "cx": 107752,
+        "cz": 30879,
+        "area": 515363
       },
       {
         "id": "se-residential-33",
         "character": "residential",
-        "cx": 157400,
-        "cz": -143442,
-        "area": 993206
+        "cx": 143050,
+        "cz": -264364,
+        "area": 718256
       },
       {
-        "id": "ne-residential-34",
-        "character": "residential",
-        "cx": 162936,
-        "cz": 265281,
-        "area": 425025
+        "id": "n-mixed-use-34",
+        "character": "mixed-use",
+        "cx": 104621,
+        "cz": 251596,
+        "area": 440381
       },
       {
         "id": "e-mixed-use-35",
         "character": "mixed-use",
-        "cx": 139087,
-        "cz": -27773,
-        "area": 685350
+        "cx": 140459,
+        "cz": -56127,
+        "area": 717525
       },
       {
-        "id": "ne-residential-36",
+        "id": "se-residential-36",
         "character": "residential",
-        "cx": 157583,
-        "cz": 152609,
-        "area": 1743356
+        "cx": 136131,
+        "cz": -142750,
+        "area": 554794
       },
       {
-        "id": "se-residential-37",
+        "id": "ne-residential-37",
         "character": "residential",
-        "cx": 154232,
-        "cz": -277177,
-        "area": 428906
+        "cx": 152956,
+        "cz": 129698,
+        "area": 1289419
       },
       {
-        "id": "e-residential-38",
+        "id": "ne-residential-38",
         "character": "residential",
-        "cx": 189248,
-        "cz": 29967,
-        "area": 1339144
+        "cx": 191796,
+        "cz": 192199,
+        "area": 558281
       },
       {
         "id": "se-residential-39",
         "character": "residential",
-        "cx": 207176,
-        "cz": -182939,
-        "area": 721913
+        "cx": 191053,
+        "cz": -183785,
+        "area": 489713
       },
       {
-        "id": "se-industrial-40",
-        "character": "industrial",
-        "cx": 221236,
-        "cz": -265267,
-        "area": 585731
-      },
-      {
-        "id": "e-residential-41",
+        "id": "e-residential-40",
         "character": "residential",
-        "cx": 264137,
-        "cz": -37822,
-        "area": 395888
+        "cx": 193094,
+        "cz": -82391,
+        "area": 416981
+      },
+      {
+        "id": "ne-industrial-41",
+        "character": "industrial",
+        "cx": 231858,
+        "cz": 240783,
+        "area": 1444275
       },
       {
         "id": "se-residential-42",
         "character": "residential",
-        "cx": 271420,
-        "cz": -191632,
-        "area": 503550
+        "cx": 225767,
+        "cz": -246783,
+        "area": 901519
       },
       {
-        "id": "e-residential-43",
+        "id": "ne-residential-43",
         "character": "residential",
-        "cx": 257900,
-        "cz": -97178,
-        "area": 612450
+        "cx": 237958,
+        "cz": 92348,
+        "area": 1042031
       },
       {
-        "id": "e-residential-44",
+        "id": "se-residential-44",
         "character": "residential",
-        "cx": 268442,
-        "cz": 30161,
-        "area": 448088
+        "cx": 254357,
+        "cz": -126314,
+        "area": 977625
       },
       {
-        "id": "se-industrial-45",
+        "id": "e-residential-45",
+        "character": "residential",
+        "cx": 227643,
+        "cz": 20140,
+        "area": 1078313
+      },
+      {
+        "id": "se-industrial-46",
         "character": "industrial",
-        "cx": 272713,
-        "cz": -280230,
-        "area": 372825
+        "cx": 275198,
+        "cz": -268149,
+        "area": 486619
       },
       {
-        "id": "ne-industrial-46",
-        "character": "industrial",
-        "cx": 250003,
-        "cz": 242224,
-        "area": 887906
-      },
-      {
-        "id": "ne-residential-47",
+        "id": "e-residential-47",
         "character": "residential",
-        "cx": 263822,
-        "cz": 139209,
-        "area": 918000
+        "cx": 279208,
+        "cz": -34202,
+        "area": 439875
       }
     ]
   },
   {
     "seed": "gate1-6",
-    "buildingCount": 25856,
+    "buildingCount": 15977,
     "districtCount": 48,
-    "fullHash": "1aee1f65",
-    "buildingsHash": "bf241764",
-    "roadsHash": "c9b8d3fa",
+    "fullHash": "67550e4f",
+    "buildingsHash": "f41559f7",
+    "roadsHash": "ed1a08c1",
     "orientHash": "32de8e1e",
     "districts": [
       {
-        "id": "w-residential-0",
+        "id": "nw-residential-0",
         "character": "residential",
-        "cx": -272193,
-        "cz": 22633,
-        "area": 534375
+        "cx": -258479,
+        "cz": 181940,
+        "area": 1311919
       },
       {
         "id": "nw-industrial-1",
         "character": "industrial",
-        "cx": -259555,
-        "cz": 222641,
-        "area": 1122694
+        "cx": -216006,
+        "cz": 262204,
+        "area": 641025
       },
       {
-        "id": "sw-industrial-2",
+        "id": "w-residential-2",
+        "character": "residential",
+        "cx": -250700,
+        "cz": -68100,
+        "area": 1455919
+      },
+      {
+        "id": "w-residential-3",
+        "character": "residential",
+        "cx": -267438,
+        "cz": 50496,
+        "area": 541181
+      },
+      {
+        "id": "sw-industrial-4",
         "character": "industrial",
-        "cx": -262514,
-        "cz": -270587,
-        "area": 666844
+        "cx": -266477,
+        "cz": -221313,
+        "area": 1009744
       },
       {
-        "id": "sw-residential-3",
+        "id": "nw-residential-5",
         "character": "residential",
-        "cx": -248482,
-        "cz": -117989,
-        "area": 789413
-      },
-      {
-        "id": "nw-residential-4",
-        "character": "residential",
-        "cx": -253551,
-        "cz": 97856,
-        "area": 731363
-      },
-      {
-        "id": "w-residential-5",
-        "character": "residential",
-        "cx": -246451,
-        "cz": -43772,
-        "area": 699581
+        "cx": -190735,
+        "cz": 129117,
+        "area": 1097550
       },
       {
         "id": "sw-residential-6",
         "character": "residential",
-        "cx": -248246,
-        "cz": -187035,
-        "area": 646369
+        "cx": -203097,
+        "cz": -138734,
+        "area": 482231
       },
       {
-        "id": "nw-residential-7",
+        "id": "sw-residential-7",
         "character": "residential",
-        "cx": -203994,
-        "cz": 161540,
-        "area": 509288
+        "cx": -186283,
+        "cz": -245192,
+        "area": 1380544
       },
       {
         "id": "w-residential-8",
         "character": "residential",
-        "cx": -179562,
-        "cz": 61371,
-        "area": 805500
+        "cx": -180340,
+        "cz": 4962,
+        "area": 762638
       },
       {
         "id": "nw-residential-9",
         "character": "residential",
-        "cx": -167428,
-        "cz": 238223,
-        "area": 757688
+        "cx": -134578,
+        "cz": 240503,
+        "area": 635456
       },
       {
-        "id": "sw-residential-10",
+        "id": "nw-residential-10",
         "character": "residential",
-        "cx": -180728,
-        "cz": -203601,
-        "area": 524025
+        "cx": -135735,
+        "cz": 100826,
+        "area": 772200
       },
       {
-        "id": "sw-residential-11",
+        "id": "s-residential-11",
         "character": "residential",
-        "cx": -162745,
-        "cz": -273972,
-        "area": 877838
+        "cx": -98079,
+        "cz": -262549,
+        "area": 925313
       },
       {
-        "id": "nw-residential-12",
-        "character": "residential",
-        "cx": -105880,
-        "cz": 164711,
-        "area": 1382513
-      },
-      {
-        "id": "w-mixed-use-13",
-        "character": "mixed-use",
-        "cx": -158106,
-        "cz": -27291,
-        "area": 909788
-      },
-      {
-        "id": "sw-mixed-use-14",
-        "character": "mixed-use",
-        "cx": -145438,
-        "cz": -109336,
-        "area": 669319
-      },
-      {
-        "id": "sw-residential-15",
-        "character": "residential",
-        "cx": -97322,
-        "cz": -224317,
-        "area": 411581
-      },
-      {
-        "id": "sw-mixed-use-16",
-        "character": "mixed-use",
-        "cx": -100558,
-        "cz": -170520,
-        "area": 553894
-      },
-      {
-        "id": "nw-subcentre-17",
+        "id": "sw-subcentre-12",
         "character": "subcentre",
-        "cx": -89554,
-        "cz": 48063,
-        "area": 867713
+        "cx": -126717,
+        "cz": -146525,
+        "area": 566663
       },
       {
-        "id": "sw-mixed-use-18",
+        "id": "w-heritage-13",
+        "character": "heritage",
+        "cx": -83316,
+        "cz": 3503,
+        "area": 481331
+      },
+      {
+        "id": "sw-subcentre-14",
+        "character": "subcentre",
+        "cx": -100183,
+        "cz": -73353,
+        "area": 1424250
+      },
+      {
+        "id": "nw-mixed-use-15",
         "character": "mixed-use",
-        "cx": -80048,
-        "cz": -81200,
-        "area": 728944
+        "cx": -80283,
+        "cz": 93987,
+        "area": 700763
       },
       {
-        "id": "n-residential-19",
+        "id": "n-residential-16",
         "character": "residential",
-        "cx": -96010,
-        "cz": 265461,
-        "area": 389869
+        "cx": -79026,
+        "cz": 190019,
+        "area": 366188
+      },
+      {
+        "id": "s-subcentre-17",
+        "character": "subcentre",
+        "cx": -45159,
+        "cz": -178073,
+        "area": 838856
+      },
+      {
+        "id": "n-residential-18",
+        "character": "residential",
+        "cx": -48110,
+        "cz": 246779,
+        "area": 734963
+      },
+      {
+        "id": "ne-downtown-19",
+        "character": "downtown",
+        "cx": 13655,
+        "cz": 12873,
+        "area": 2083725
       },
       {
         "id": "s-residential-20",
         "character": "residential",
-        "cx": -64034,
-        "cz": -284215,
-        "area": 423563
+        "cx": -18336,
+        "cz": -272366,
+        "area": 614869
       },
       {
-        "id": "s-mixed-use-21",
+        "id": "n-mixed-use-21",
         "character": "mixed-use",
-        "cx": -30618,
-        "cz": -132271,
-        "area": 393694
+        "cx": -8721,
+        "cz": 154608,
+        "area": 700706
       },
       {
-        "id": "n-residential-22",
+        "id": "s-subcentre-22",
+        "character": "subcentre",
+        "cx": 8341,
+        "cz": -113453,
+        "area": 622350
+      },
+      {
+        "id": "s-residential-23",
         "character": "residential",
-        "cx": -14051,
-        "cz": 213874,
-        "area": 1155600
+        "cx": 40917,
+        "cz": -186713,
+        "area": 411975
       },
       {
-        "id": "nw-heritage-23",
-        "character": "heritage",
-        "cx": -28102,
-        "cz": 53528,
-        "area": 701888
-      },
-      {
-        "id": "sw-downtown-24",
-        "character": "downtown",
-        "cx": -17632,
-        "cz": -48959,
-        "area": 407588
+        "id": "s-residential-24",
+        "character": "residential",
+        "cx": 57133,
+        "cz": -238261,
+        "area": 421875
       },
       {
         "id": "n-mixed-use-25",
         "character": "mixed-use",
-        "cx": 45171,
-        "cz": 97221,
-        "area": 436050
+        "cx": 36928,
+        "cz": 211348,
+        "area": 369000
       },
       {
         "id": "n-residential-26",
         "character": "residential",
-        "cx": 71634,
-        "cz": 263522,
-        "area": 559969
+        "cx": 40211,
+        "cz": 264511,
+        "area": 414788
       },
       {
         "id": "s-residential-27",
         "character": "residential",
-        "cx": 1344,
-        "cz": -207424,
-        "area": 1041075
+        "cx": 87572,
+        "cz": -285241,
+        "area": 668081
       },
       {
-        "id": "s-mixed-use-28",
-        "character": "mixed-use",
-        "cx": 29689,
-        "cz": -93404,
-        "area": 632813
-      },
-      {
-        "id": "ne-subcentre-29",
+        "id": "ne-subcentre-28",
         "character": "subcentre",
-        "cx": 61784,
-        "cz": 43235,
-        "area": 965306
+        "cx": 71446,
+        "cz": 29961,
+        "area": 521100
+      },
+      {
+        "id": "ne-mixed-use-29",
+        "character": "mixed-use",
+        "cx": 67316,
+        "cz": 136064,
+        "area": 450956
       },
       {
         "id": "ne-residential-30",
         "character": "residential",
-        "cx": 77855,
-        "cz": 166425,
-        "area": 1499794
+        "cx": 102024,
+        "cz": 196572,
+        "area": 616725
       },
       {
-        "id": "e-mixed-use-31",
+        "id": "e-residential-31",
+        "character": "residential",
+        "cx": 122717,
+        "cz": -13200,
+        "area": 433688
+      },
+      {
+        "id": "se-mixed-use-32",
         "character": "mixed-use",
-        "cx": 91653,
-        "cz": -14947,
-        "area": 780131
+        "cx": 110455,
+        "cz": -133620,
+        "area": 894263
       },
       {
-        "id": "s-residential-32",
-        "character": "residential",
-        "cx": 78698,
-        "cz": -202461,
-        "area": 438188
-      },
-      {
-        "id": "se-mixed-use-33",
+        "id": "ne-mixed-use-33",
         "character": "mixed-use",
-        "cx": 120473,
-        "cz": -72216,
-        "area": 665213
+        "cx": 132976,
+        "cz": 66281,
+        "area": 648675
       },
       {
-        "id": "s-residential-34",
+        "id": "se-residential-34",
         "character": "residential",
-        "cx": 85177,
-        "cz": -277431,
-        "area": 1402594
+        "cx": 153001,
+        "cz": -251574,
+        "area": 789075
       },
       {
-        "id": "ne-mixed-use-35",
+        "id": "ne-residential-35",
+        "character": "residential",
+        "cx": 154737,
+        "cz": 247912,
+        "area": 897244
+      },
+      {
+        "id": "ne-residential-36",
+        "character": "residential",
+        "cx": 145855,
+        "cz": 134070,
+        "area": 478125
+      },
+      {
+        "id": "e-mixed-use-37",
         "character": "mixed-use",
-        "cx": 156200,
-        "cz": 85512,
-        "area": 525825
+        "cx": 135449,
+        "cz": -61083,
+        "area": 363431
       },
       {
-        "id": "se-residential-36",
+        "id": "se-residential-38",
         "character": "residential",
-        "cx": 152467,
-        "cz": -146521,
-        "area": 1868006
+        "cx": 209480,
+        "cz": -191832,
+        "area": 1391963
       },
       {
-        "id": "ne-residential-37",
+        "id": "se-mixed-use-39",
+        "character": "mixed-use",
+        "cx": 196438,
+        "cz": -105465,
+        "area": 405056
+      },
+      {
+        "id": "ne-residential-40",
         "character": "residential",
-        "cx": 147748,
-        "cz": 207994,
-        "area": 459394
+        "cx": 211081,
+        "cz": 190235,
+        "area": 583538
       },
       {
-        "id": "e-residential-38",
+        "id": "e-mixed-use-41",
+        "character": "mixed-use",
+        "cx": 221189,
+        "cz": 70198,
+        "area": 644400
+      },
+      {
+        "id": "e-residential-42",
         "character": "residential",
-        "cx": 186189,
-        "cz": 28794,
-        "area": 458663
+        "cx": 192999,
+        "cz": 3347,
+        "area": 590006
       },
       {
-        "id": "e-residential-39",
+        "id": "ne-residential-43",
         "character": "residential",
-        "cx": 202878,
-        "cz": -24014,
-        "area": 457088
+        "cx": 265068,
+        "cz": 128226,
+        "area": 1098788
       },
       {
-        "id": "se-residential-40",
-        "character": "residential",
-        "cx": 201694,
-        "cz": -244984,
-        "area": 460969
-      },
-      {
-        "id": "ne-residential-41",
-        "character": "residential",
-        "cx": 234676,
-        "cz": 171526,
-        "area": 2320369
-      },
-      {
-        "id": "se-industrial-42",
+        "id": "se-industrial-44",
         "character": "industrial",
-        "cx": 259550,
-        "cz": -267835,
-        "area": 785981
+        "cx": 263355,
+        "cz": -264933,
+        "area": 739406
       },
       {
-        "id": "e-residential-43",
+        "id": "e-residential-45",
         "character": "residential",
-        "cx": 226578,
-        "cz": 75951,
-        "area": 388069
+        "cx": 273425,
+        "cz": -21805,
+        "area": 532519
       },
       {
-        "id": "e-residential-44",
-        "character": "residential",
-        "cx": 260641,
-        "cz": -96484,
-        "area": 431325
-      },
-      {
-        "id": "ne-industrial-45",
+        "id": "ne-industrial-46",
         "character": "industrial",
-        "cx": 261998,
-        "cz": 260200,
-        "area": 425250
+        "cx": 257967,
+        "cz": 255454,
+        "area": 586519
       },
       {
-        "id": "e-residential-46",
-        "character": "residential",
-        "cx": 265014,
-        "cz": -20838,
-        "area": 604519
-      },
-      {
-        "id": "se-residential-47",
-        "character": "residential",
-        "cx": 259438,
-        "cz": -170661,
-        "area": 732488
+        "id": "e-mixed-use-47",
+        "character": "mixed-use",
+        "cx": 251037,
+        "cz": -92647,
+        "area": 898425
       }
     ]
   },
   {
     "seed": "gate1-7",
-    "buildingCount": 26339,
+    "buildingCount": 16881,
     "districtCount": 48,
-    "fullHash": "28250661",
-    "buildingsHash": "053a7edf",
-    "roadsHash": "3e633e50",
+    "fullHash": "ef975a5e",
+    "buildingsHash": "d4051deb",
+    "roadsHash": "75e07745",
     "orientHash": "808c8bb8",
     "districts": [
       {
-        "id": "sw-industrial-0",
-        "character": "industrial",
-        "cx": -262492,
-        "cz": -285807,
-        "area": 394031
+        "id": "sw-residential-0",
+        "character": "residential",
+        "cx": -261936,
+        "cz": -143839,
+        "area": 1006875
       },
       {
         "id": "w-residential-1",
         "character": "residential",
-        "cx": -252950,
-        "cz": -25355,
-        "area": 490781
+        "cx": -274828,
+        "cz": 50016,
+        "area": 470981
       },
       {
-        "id": "w-residential-2",
-        "character": "residential",
-        "cx": -269213,
-        "cz": -103582,
-        "area": 757406
+        "id": "nw-mixed-use-2",
+        "character": "mixed-use",
+        "cx": -273395,
+        "cz": 155193,
+        "area": 542813
       },
       {
-        "id": "w-residential-3",
-        "character": "residential",
-        "cx": -272901,
-        "cz": 40448,
-        "area": 429581
+        "id": "nw-industrial-3",
+        "character": "industrial",
+        "cx": -266116,
+        "cz": 257246,
+        "area": 457088
       },
       {
         "id": "w-residential-4",
         "character": "residential",
-        "cx": -242514,
-        "cz": 87753,
-        "area": 442688
+        "cx": -256141,
+        "cz": -21303,
+        "area": 666338
       },
       {
         "id": "sw-residential-5",
         "character": "residential",
-        "cx": -269359,
-        "cz": -214278,
-        "area": 513675
+        "cx": -229009,
+        "cz": -226544,
+        "area": 1239075
       },
       {
-        "id": "nw-residential-6",
+        "id": "nw-mixed-use-6",
+        "character": "mixed-use",
+        "cx": -217366,
+        "cz": 201859,
+        "area": 787950
+      },
+      {
+        "id": "nw-residential-7",
         "character": "residential",
-        "cx": -263239,
-        "cz": 196351,
-        "area": 1273331
+        "cx": -228019,
+        "cz": 87605,
+        "area": 504394
       },
       {
-        "id": "sw-residential-7",
+        "id": "w-residential-8",
         "character": "residential",
-        "cx": -205880,
-        "cz": -110448,
-        "area": 420919
+        "cx": -208615,
+        "cz": -70578,
+        "area": 596250
       },
       {
-        "id": "sw-residential-8",
+        "id": "sw-residential-9",
         "character": "residential",
-        "cx": -206395,
-        "cz": -228687,
-        "area": 1058906
-      },
-      {
-        "id": "nw-industrial-9",
-        "character": "industrial",
-        "cx": -205034,
-        "cz": 262648,
-        "area": 424350
+        "cx": -174120,
+        "cz": -268193,
+        "area": 1063856
       },
       {
         "id": "w-mixed-use-10",
         "character": "mixed-use",
-        "cx": -151646,
-        "cz": 33345,
-        "area": 1875600
+        "cx": -168740,
+        "cz": 38396,
+        "area": 673144
       },
       {
-        "id": "nw-residential-11",
-        "character": "residential",
-        "cx": -174603,
-        "cz": 183130,
-        "area": 994781
-      },
-      {
-        "id": "w-mixed-use-12",
+        "id": "nw-mixed-use-11",
         "character": "mixed-use",
-        "cx": -145377,
-        "cz": -56968,
-        "area": 835144
+        "cx": -183564,
+        "cz": 116240,
+        "area": 387113
       },
       {
-        "id": "sw-residential-13",
+        "id": "sw-residential-12",
         "character": "residential",
-        "cx": -151460,
-        "cz": -143684,
-        "area": 620888
+        "cx": -174702,
+        "cz": -121646,
+        "area": 400444
       },
       {
-        "id": "nw-mixed-use-14",
+        "id": "nw-residential-13",
+        "character": "residential",
+        "cx": -163400,
+        "cz": 263267,
+        "area": 522731
+      },
+      {
+        "id": "w-mixed-use-14",
         "character": "mixed-use",
-        "cx": -112639,
-        "cz": 111722,
-        "area": 471544
+        "cx": -130689,
+        "cz": -17749,
+        "area": 788119
       },
       {
-        "id": "sw-residential-15",
-        "character": "residential",
-        "cx": -121902,
-        "cz": -289476,
-        "area": 425756
-      },
-      {
-        "id": "sw-residential-16",
-        "character": "residential",
-        "cx": -128189,
-        "cz": -219071,
-        "area": 689794
-      },
-      {
-        "id": "n-residential-17",
-        "character": "residential",
-        "cx": -98576,
-        "cz": 240021,
-        "area": 957375
-      },
-      {
-        "id": "nw-mixed-use-18",
+        "id": "nw-mixed-use-15",
         "character": "mixed-use",
-        "cx": -60410,
-        "cz": 132515,
-        "area": 699525
+        "cx": -140616,
+        "cz": 150493,
+        "area": 505069
       },
       {
-        "id": "nw-subcentre-19",
+        "id": "nw-mixed-use-16",
+        "character": "mixed-use",
+        "cx": -126172,
+        "cz": 229155,
+        "area": 376931
+      },
+      {
+        "id": "sw-subcentre-17",
         "character": "subcentre",
-        "cx": -48219,
-        "cz": 57245,
-        "area": 507263
+        "cx": -80193,
+        "cz": -56260,
+        "area": 722363
       },
       {
-        "id": "sw-mixed-use-20",
+        "id": "sw-subcentre-18",
+        "character": "subcentre",
+        "cx": -75926,
+        "cz": -139343,
+        "area": 1441688
+      },
+      {
+        "id": "nw-mixed-use-19",
         "character": "mixed-use",
-        "cx": -73283,
-        "cz": -107913,
-        "area": 480713
+        "cx": -64719,
+        "cz": 84188,
+        "area": 1597556
       },
       {
-        "id": "n-mixed-use-21",
-        "character": "mixed-use",
-        "cx": 10762,
-        "cz": 161522,
-        "area": 1368169
+        "id": "n-residential-20",
+        "character": "residential",
+        "cx": -79195,
+        "cz": 194129,
+        "area": 485944
       },
       {
-        "id": "sw-heritage-22",
-        "character": "heritage",
-        "cx": -22561,
-        "cz": -57760,
-        "area": 431100
+        "id": "s-residential-21",
+        "character": "residential",
+        "cx": -75828,
+        "cz": -266970,
+        "area": 833681
       },
       {
-        "id": "s-mixed-use-23",
-        "character": "mixed-use",
-        "cx": -59145,
-        "cz": -174507,
-        "area": 618806
+        "id": "n-residential-22",
+        "character": "residential",
+        "cx": -51822,
+        "cz": 247302,
+        "area": 455569
+      },
+      {
+        "id": "s-residential-23",
+        "character": "residential",
+        "cx": 2450,
+        "cz": -186482,
+        "area": 1207519
       },
       {
         "id": "n-residential-24",
         "character": "residential",
-        "cx": -14058,
-        "cz": 262503,
-        "area": 395550
+        "cx": 26221,
+        "cz": 245487,
+        "area": 889594
       },
       {
         "id": "s-residential-25",
         "character": "residential",
-        "cx": -42932,
-        "cz": -237330,
-        "area": 511031
+        "cx": 16064,
+        "cz": -279087,
+        "area": 506925
       },
       {
-        "id": "s-mixed-use-26",
-        "character": "mixed-use",
-        "cx": 33708,
-        "cz": -128222,
-        "area": 1108744
+        "id": "ne-downtown-26",
+        "character": "downtown",
+        "cx": 20041,
+        "cz": 20275,
+        "area": 845606
       },
       {
-        "id": "s-residential-27",
-        "character": "residential",
-        "cx": 6879,
-        "cz": -276490,
-        "area": 949838
+        "id": "n-subcentre-27",
+        "character": "subcentre",
+        "cx": 24941,
+        "cz": 149671,
+        "area": 1014975
       },
       {
         "id": "s-residential-28",
         "character": "residential",
-        "cx": 40445,
-        "cz": -198029,
-        "area": 410794
+        "cx": 91100,
+        "cz": -254459,
+        "area": 1074825
       },
       {
-        "id": "ne-subcentre-29",
+        "id": "se-heritage-29",
+        "character": "heritage",
+        "cx": 25023,
+        "cz": -71835,
+        "area": 702956
+      },
+      {
+        "id": "ne-residential-30",
+        "character": "residential",
+        "cx": 97371,
+        "cz": 200083,
+        "area": 508163
+      },
+      {
+        "id": "ne-mixed-use-31",
+        "character": "mixed-use",
+        "cx": 83215,
+        "cz": 72782,
+        "area": 904444
+      },
+      {
+        "id": "se-mixed-use-32",
+        "character": "mixed-use",
+        "cx": 109569,
+        "cz": -98575,
+        "area": 385481
+      },
+      {
+        "id": "ne-residential-33",
+        "character": "residential",
+        "cx": 139975,
+        "cz": 239709,
+        "area": 758306
+      },
+      {
+        "id": "se-residential-34",
+        "character": "residential",
+        "cx": 100478,
+        "cz": -161536,
+        "area": 573244
+      },
+      {
+        "id": "ne-residential-35",
+        "character": "residential",
+        "cx": 166536,
+        "cz": 96947,
+        "area": 770850
+      },
+      {
+        "id": "e-mixed-use-36",
+        "character": "mixed-use",
+        "cx": 138071,
+        "cz": 31077,
+        "area": 541913
+      },
+      {
+        "id": "e-subcentre-37",
         "character": "subcentre",
-        "cx": 78076,
-        "cz": 64696,
-        "area": 753300
-      },
-      {
-        "id": "e-downtown-30",
-        "character": "downtown",
-        "cx": 42283,
-        "cz": -25094,
-        "area": 1687331
-      },
-      {
-        "id": "n-residential-31",
-        "character": "residential",
-        "cx": 90085,
-        "cz": 228224,
-        "area": 1496194
-      },
-      {
-        "id": "ne-mixed-use-32",
-        "character": "mixed-use",
-        "cx": 139228,
-        "cz": 81762,
-        "area": 549731
-      },
-      {
-        "id": "se-mixed-use-33",
-        "character": "mixed-use",
-        "cx": 132334,
-        "cz": -141503,
-        "area": 463050
-      },
-      {
-        "id": "ne-residential-34",
-        "character": "residential",
-        "cx": 151447,
-        "cz": 200079,
-        "area": 456244
-      },
-      {
-        "id": "e-mixed-use-35",
-        "character": "mixed-use",
-        "cx": 123038,
-        "cz": -7184,
-        "area": 603731
-      },
-      {
-        "id": "se-residential-36",
-        "character": "residential",
-        "cx": 182949,
-        "cz": -98973,
-        "area": 533306
-      },
-      {
-        "id": "se-residential-37",
-        "character": "residential",
-        "cx": 155681,
-        "cz": -283503,
-        "area": 790819
+        "cx": 130777,
+        "cz": -50133,
+        "area": 848250
       },
       {
         "id": "se-residential-38",
         "character": "residential",
-        "cx": 127351,
-        "cz": -219455,
-        "area": 1043269
+        "cx": 168669,
+        "cz": -254606,
+        "area": 749756
       },
       {
         "id": "ne-residential-39",
         "character": "residential",
-        "cx": 185341,
-        "cz": 124522,
-        "area": 815963
+        "cx": 214423,
+        "cz": 128070,
+        "area": 969131
       },
       {
-        "id": "ne-residential-40",
-        "character": "residential",
-        "cx": 220311,
-        "cz": 208661,
-        "area": 461756
+        "id": "ne-industrial-40",
+        "character": "industrial",
+        "cx": 224421,
+        "cz": 260961,
+        "area": 676069
       },
       {
         "id": "e-residential-41",
         "character": "residential",
-        "cx": 262136,
-        "cz": -51928,
-        "area": 716794
+        "cx": 207491,
+        "cz": -4793,
+        "area": 580556
       },
       {
-        "id": "se-residential-42",
-        "character": "residential",
-        "cx": 254999,
-        "cz": -153538,
-        "area": 1086244
-      },
-      {
-        "id": "se-residential-43",
-        "character": "residential",
-        "cx": 224940,
-        "cz": -221760,
-        "area": 514631
-      },
-      {
-        "id": "e-residential-44",
-        "character": "residential",
-        "cx": 230246,
-        "cz": 24843,
-        "area": 1498050
-      },
-      {
-        "id": "se-industrial-45",
+        "id": "ne-industrial-42",
         "character": "industrial",
-        "cx": 265812,
-        "cz": -277192,
-        "area": 507431
+        "cx": 257910,
+        "cz": 209087,
+        "area": 617738
       },
       {
-        "id": "ne-industrial-46",
+        "id": "se-industrial-43",
         "character": "industrial",
-        "cx": 245248,
-        "cz": 256194,
-        "area": 749419
+        "cx": 254347,
+        "cz": -266027,
+        "area": 754144
+      },
+      {
+        "id": "se-residential-44",
+        "character": "residential",
+        "cx": 229616,
+        "cz": -154376,
+        "area": 2090531
+      },
+      {
+        "id": "e-residential-45",
+        "character": "residential",
+        "cx": 250305,
+        "cz": -47474,
+        "area": 670950
+      },
+      {
+        "id": "e-residential-46",
+        "character": "residential",
+        "cx": 272311,
+        "cz": 40023,
+        "area": 403481
       },
       {
         "id": "ne-residential-47",
         "character": "residential",
-        "cx": 261468,
-        "cz": 147521,
-        "area": 714656
+        "cx": 277137,
+        "cz": 138755,
+        "area": 428625
       }
     ]
   },
   {
     "seed": "gate1-8",
-    "buildingCount": 25678,
+    "buildingCount": 16360,
     "districtCount": 48,
-    "fullHash": "d7ccd713",
-    "buildingsHash": "caec9199",
-    "roadsHash": "c5c4f97e",
+    "fullHash": "41b3b1e5",
+    "buildingsHash": "e133807a",
+    "roadsHash": "0e62390c",
     "orientHash": "50ced39c",
     "districts": [
       {
         "id": "sw-industrial-0",
         "character": "industrial",
-        "cx": -245689,
-        "cz": -260425,
-        "area": 1106550
+        "cx": -275749,
+        "cz": -270809,
+        "area": 423450
       },
       {
         "id": "sw-residential-1",
         "character": "residential",
-        "cx": -270356,
-        "cz": -164085,
-        "area": 510356
+        "cx": -275741,
+        "cz": -144403,
+        "area": 602663
       },
       {
-        "id": "nw-industrial-2",
-        "character": "industrial",
-        "cx": -261816,
-        "cz": 221913,
-        "area": 995231
-      },
-      {
-        "id": "w-residential-3",
+        "id": "w-residential-2",
         "character": "residential",
-        "cx": -266293,
-        "cz": 98190,
-        "area": 634556
+        "cx": -270510,
+        "cz": 37935,
+        "area": 964631
+      },
+      {
+        "id": "nw-industrial-3",
+        "character": "industrial",
+        "cx": -280991,
+        "cz": 178972,
+        "area": 397238
       },
       {
         "id": "sw-residential-4",
         "character": "residential",
-        "cx": -216054,
-        "cz": -116076,
-        "area": 476213
+        "cx": -222498,
+        "cz": -208831,
+        "area": 848419
       },
       {
         "id": "nw-residential-5",
         "character": "residential",
-        "cx": -187704,
-        "cz": 263267,
-        "area": 447019
+        "cx": -238454,
+        "cz": 161881,
+        "area": 532463
       },
       {
         "id": "sw-residential-6",
         "character": "residential",
-        "cx": -202441,
-        "cz": -202076,
-        "area": 431100
+        "cx": -230996,
+        "cz": -119005,
+        "area": 406350
       },
       {
         "id": "w-residential-7",
         "character": "residential",
-        "cx": -255829,
-        "cz": -28600,
-        "area": 1364963
+        "cx": -240252,
+        "cz": -45292,
+        "area": 457763
       },
       {
-        "id": "nw-residential-8",
+        "id": "w-residential-8",
         "character": "residential",
-        "cx": -194668,
-        "cz": 183911,
-        "area": 801844
+        "cx": -213082,
+        "cz": 56934,
+        "area": 492019
       },
       {
-        "id": "sw-mixed-use-9",
+        "id": "nw-mixed-use-9",
         "character": "mixed-use",
-        "cx": -168631,
-        "cz": -92581,
-        "area": 442350
+        "cx": -203636,
+        "cz": 249137,
+        "area": 1378350
       },
       {
         "id": "sw-residential-10",
         "character": "residential",
-        "cx": -135484,
-        "cz": -177641,
-        "area": 988594
+        "cx": -176386,
+        "cz": -264014,
+        "area": 948319
       },
       {
         "id": "nw-residential-11",
         "character": "residential",
-        "cx": -201619,
-        "cz": 84904,
-        "area": 687994
+        "cx": -179420,
+        "cz": 147055,
+        "area": 767700
       },
       {
         "id": "sw-residential-12",
         "character": "residential",
-        "cx": -140944,
-        "cz": -279231,
-        "area": 669656
+        "cx": -187997,
+        "cz": -92512,
+        "area": 494944
       },
       {
-        "id": "w-mixed-use-13",
-        "character": "mixed-use",
+        "id": "sw-residential-13",
+        "character": "residential",
+        "cx": -136756,
+        "cz": -142694,
+        "area": 465863
+      },
+      {
+        "id": "sw-residential-14",
+        "character": "residential",
+        "cx": -93399,
+        "cz": -187719,
+        "area": 679331
+      },
+      {
+        "id": "nw-residential-15",
+        "character": "residential",
+        "cx": -119478,
+        "cz": 130601,
+        "area": 664706
+      },
+      {
+        "id": "w-subcentre-16",
+        "character": "subcentre",
+        "cx": -95866,
+        "cz": -37612,
+        "area": 1465706
+      },
+      {
+        "id": "s-residential-17",
+        "character": "residential",
+        "cx": -106811,
+        "cz": -273775,
+        "area": 416644
+      },
+      {
+        "id": "n-residential-18",
+        "character": "residential",
+        "cx": -91622,
+        "cz": 236888,
+        "area": 638944
+      },
+      {
+        "id": "w-subcentre-19",
+        "character": "subcentre",
         "cx": -132241,
-        "cz": -46492,
-        "area": 922500
+        "cz": 36223,
+        "area": 1199419
       },
       {
-        "id": "w-mixed-use-14",
-        "character": "mixed-use",
-        "cx": -151815,
-        "cz": 39867,
-        "area": 602719
-      },
-      {
-        "id": "s-residential-15",
-        "character": "residential",
-        "cx": -75372,
-        "cz": -220826,
-        "area": 390150
-      },
-      {
-        "id": "sw-mixed-use-16",
-        "character": "mixed-use",
-        "cx": -59242,
-        "cz": -136892,
-        "area": 596588
-      },
-      {
-        "id": "w-subcentre-17",
+        "id": "s-subcentre-20",
         "character": "subcentre",
-        "cx": -71366,
-        "cz": 14866,
-        "area": 695081
+        "cx": -27797,
+        "cz": -90583,
+        "area": 927450
       },
       {
-        "id": "nw-residential-18",
+        "id": "s-residential-21",
         "character": "residential",
-        "cx": -101914,
-        "cz": 185949,
-        "area": 1848038
+        "cx": -6289,
+        "cz": -254847,
+        "area": 1667475
       },
       {
-        "id": "s-residential-19",
+        "id": "n-residential-22",
         "character": "residential",
-        "cx": -52833,
-        "cz": -274046,
-        "area": 443531
+        "cx": -10221,
+        "cz": 258224,
+        "area": 531450
       },
       {
-        "id": "s-downtown-20",
-        "character": "downtown",
-        "cx": -21161,
-        "cz": -71638,
-        "area": 1053900
-      },
-      {
-        "id": "nw-mixed-use-21",
+        "id": "n-mixed-use-23",
         "character": "mixed-use",
-        "cx": -47927,
-        "cz": 102113,
-        "area": 884531
+        "cx": -37994,
+        "cz": 160922,
+        "area": 1124269
       },
       {
-        "id": "s-residential-22",
+        "id": "ne-downtown-24",
+        "character": "downtown",
+        "cx": 26710,
+        "cz": 10886,
+        "area": 721069
+      },
+      {
+        "id": "s-mixed-use-25",
+        "character": "mixed-use",
+        "cx": 11874,
+        "cz": -161531,
+        "area": 662625
+      },
+      {
+        "id": "n-residential-26",
         "character": "residential",
-        "cx": 2458,
-        "cz": -206520,
-        "area": 628706
+        "cx": 37993,
+        "cz": 165293,
+        "area": 505575
       },
       {
-        "id": "n-residential-23",
-        "character": "residential",
-        "cx": -23296,
-        "cz": 255914,
-        "area": 679781
+        "id": "n-mixed-use-27",
+        "character": "mixed-use",
+        "cx": 6493,
+        "cz": 76047,
+        "area": 833344
       },
       {
-        "id": "n-heritage-24",
+        "id": "e-heritage-28",
         "character": "heritage",
-        "cx": 12538,
-        "cz": 42939,
-        "area": 691538
+        "cx": 69809,
+        "cz": -36865,
+        "area": 464063
       },
       {
-        "id": "n-residential-25",
+        "id": "s-residential-29",
         "character": "residential",
-        "cx": 21837,
-        "cz": 178816,
-        "area": 698400
+        "cx": 78193,
+        "cz": -215675,
+        "area": 417656
       },
       {
-        "id": "s-mixed-use-26",
-        "character": "mixed-use",
-        "cx": 44119,
-        "cz": -143368,
-        "area": 417150
-      },
-      {
-        "id": "se-downtown-27",
-        "character": "downtown",
-        "cx": 38229,
-        "cz": -42996,
-        "area": 423225
-      },
-      {
-        "id": "s-residential-28",
+        "id": "n-residential-30",
         "character": "residential",
-        "cx": 77067,
-        "cz": -198419,
-        "area": 502819
+        "cx": 73891,
+        "cz": 248501,
+        "area": 697613
       },
       {
-        "id": "se-mixed-use-29",
+        "id": "se-residential-31",
+        "character": "residential",
+        "cx": 131590,
+        "cz": -226745,
+        "area": 1266806
+      },
+      {
+        "id": "e-mixed-use-32",
         "character": "mixed-use",
-        "cx": 102094,
-        "cz": -106200,
-        "area": 720675
+        "cx": 132171,
+        "cz": -39053,
+        "area": 414056
       },
       {
-        "id": "ne-mixed-use-30",
+        "id": "se-mixed-use-33",
         "character": "mixed-use",
-        "cx": 77355,
-        "cz": 91243,
-        "area": 926663
+        "cx": 75468,
+        "cz": -111653,
+        "area": 816188
       },
       {
-        "id": "e-subcentre-31",
+        "id": "ne-subcentre-34",
         "character": "subcentre",
-        "cx": 106080,
-        "cz": -2613,
-        "area": 905738
+        "cx": 102524,
+        "cz": 144056,
+        "area": 926494
       },
       {
-        "id": "s-residential-32",
-        "character": "residential",
-        "cx": 52116,
-        "cz": -283486,
-        "area": 970088
-      },
-      {
-        "id": "ne-residential-33",
-        "character": "residential",
-        "cx": 140460,
-        "cz": 178078,
-        "area": 1404450
-      },
-      {
-        "id": "e-mixed-use-34",
+        "id": "ne-mixed-use-35",
         "character": "mixed-use",
-        "cx": 158745,
-        "cz": -59831,
-        "area": 448538
+        "cx": 104935,
+        "cz": 37580,
+        "area": 396788
       },
       {
-        "id": "n-residential-35",
+        "id": "ne-residential-36",
         "character": "residential",
-        "cx": 98113,
-        "cz": 254432,
-        "area": 974025
-      },
-      {
-        "id": "se-residential-36",
-        "character": "residential",
-        "cx": 126531,
-        "cz": -218228,
-        "area": 554175
+        "cx": 143562,
+        "cz": 251450,
+        "area": 412088
       },
       {
         "id": "se-residential-37",
         "character": "residential",
-        "cx": 181479,
-        "cz": -145082,
-        "area": 485325
+        "cx": 165613,
+        "cz": -107582,
+        "area": 550744
       },
       {
-        "id": "e-residential-38",
+        "id": "ne-residential-38",
         "character": "residential",
-        "cx": 190560,
-        "cz": 6995,
-        "area": 432788
+        "cx": 162166,
+        "cz": 88806,
+        "area": 754931
       },
       {
-        "id": "ne-residential-39",
-        "character": "residential",
-        "cx": 182023,
-        "cz": 94769,
-        "area": 773269
+        "id": "se-industrial-39",
+        "character": "industrial",
+        "cx": 219209,
+        "cz": -279587,
+        "area": 910519
       },
       {
-        "id": "e-residential-40",
+        "id": "ne-residential-40",
         "character": "residential",
-        "cx": 226515,
-        "cz": -79551,
-        "area": 814163
+        "cx": 218447,
+        "cz": 219927,
+        "area": 1773675
       },
       {
         "id": "se-residential-41",
         "character": "residential",
-        "cx": 178844,
-        "cz": -245932,
-        "area": 822150
+        "cx": 218728,
+        "cz": -201009,
+        "area": 611831
       },
       {
-        "id": "e-residential-42",
+        "id": "e-subcentre-42",
+        "character": "subcentre",
+        "cx": 203044,
+        "cz": 6495,
+        "area": 1275638
+      },
+      {
+        "id": "se-residential-43",
         "character": "residential",
-        "cx": 255582,
-        "cz": 15354,
-        "area": 884025
+        "cx": 249184,
+        "cz": -133617,
+        "area": 753019
       },
       {
-        "id": "ne-residential-43",
+        "id": "ne-residential-44",
         "character": "residential",
-        "cx": 234151,
-        "cz": 157607,
-        "area": 491681
+        "cx": 254700,
+        "cz": 143647,
+        "area": 681581
       },
       {
-        "id": "e-residential-44",
+        "id": "e-residential-45",
         "character": "residential",
-        "cx": 277995,
-        "cz": 88688,
-        "area": 405731
+        "cx": 265793,
+        "cz": -49910,
+        "area": 750263
       },
       {
-        "id": "ne-industrial-45",
+        "id": "e-residential-46",
+        "character": "residential",
+        "cx": 274349,
+        "cz": 69746,
+        "area": 513056
+      },
+      {
+        "id": "se-industrial-47",
         "character": "industrial",
-        "cx": 253179,
-        "cz": 232728,
-        "area": 1149413
-      },
-      {
-        "id": "se-industrial-46",
-        "character": "industrial",
-        "cx": 255465,
-        "cz": -263010,
-        "area": 899944
-      },
-      {
-        "id": "se-residential-47",
-        "character": "residential",
-        "cx": 263995,
-        "cz": -156207,
-        "area": 902081
+        "cx": 277970,
+        "cz": -226163,
+        "area": 394819
       }
     ]
   },
   {
     "seed": "gate1-9",
-    "buildingCount": 26282,
-    "districtCount": 45,
-    "fullHash": "c382f219",
-    "buildingsHash": "7c2a7b28",
-    "roadsHash": "5a7f6bee",
+    "buildingCount": 16070,
+    "districtCount": 48,
+    "fullHash": "d8010a74",
+    "buildingsHash": "ebf47e20",
+    "roadsHash": "185ae1f2",
     "orientHash": "35760c2d",
     "districts": [
       {
-        "id": "nw-industrial-0",
+        "id": "sw-industrial-0",
         "character": "industrial",
-        "cx": -249202,
-        "cz": 258741,
-        "area": 665269
+        "cx": -248157,
+        "cz": -262600,
+        "area": 1074375
       },
       {
-        "id": "nw-residential-1",
+        "id": "sw-residential-1",
         "character": "residential",
-        "cx": -262028,
-        "cz": 142522,
-        "area": 813094
+        "cx": -278021,
+        "cz": -165180,
+        "area": 423619
       },
       {
-        "id": "w-residential-2",
+        "id": "nw-residential-2",
         "character": "residential",
-        "cx": -269974,
-        "cz": 9313,
-        "area": 848475
+        "cx": -264286,
+        "cz": 152231,
+        "area": 389250
       },
       {
-        "id": "sw-industrial-3",
+        "id": "w-residential-3",
+        "character": "residential",
+        "cx": -239919,
+        "cz": 84897,
+        "area": 1126631
+      },
+      {
+        "id": "sw-residential-4",
+        "character": "residential",
+        "cx": -224560,
+        "cz": -127908,
+        "area": 747619
+      },
+      {
+        "id": "nw-industrial-5",
         "character": "industrial",
-        "cx": -250814,
-        "cz": -248216,
-        "area": 1078875
+        "cx": -255443,
+        "cz": 235224,
+        "area": 966713
       },
       {
-        "id": "nw-residential-4",
-        "character": "residential",
-        "cx": -207688,
-        "cz": 199488,
-        "area": 827438
+        "id": "w-mixed-use-6",
+        "character": "mixed-use",
+        "cx": -248037,
+        "cz": -30249,
+        "area": 1262869
       },
       {
-        "id": "sw-residential-5",
-        "character": "residential",
-        "cx": -231143,
-        "cz": -117951,
-        "area": 2063869
-      },
-      {
-        "id": "w-residential-6",
-        "character": "residential",
-        "cx": -214718,
-        "cz": 41003,
-        "area": 687656
-      },
-      {
-        "id": "nw-residential-7",
-        "character": "residential",
-        "cx": -171161,
-        "cz": 121670,
-        "area": 594000
+        "id": "nw-mixed-use-7",
+        "character": "mixed-use",
+        "cx": -165317,
+        "cz": 183318,
+        "area": 1094850
       },
       {
         "id": "sw-residential-8",
         "character": "residential",
-        "cx": -184957,
-        "cz": -292394,
-        "area": 393694
+        "cx": -165750,
+        "cz": -188464,
+        "area": 882844
       },
       {
-        "id": "w-mixed-use-9",
-        "character": "mixed-use",
-        "cx": -155047,
-        "cz": 51584,
-        "area": 415463
-      },
-      {
-        "id": "sw-mixed-use-10",
-        "character": "mixed-use",
-        "cx": -134952,
-        "cz": -89383,
-        "area": 766238
-      },
-      {
-        "id": "nw-residential-11",
+        "id": "nw-residential-9",
         "character": "residential",
-        "cx": -134393,
-        "cz": 238727,
-        "area": 802294
+        "cx": -175888,
+        "cz": 261620,
+        "area": 367088
       },
       {
-        "id": "w-mixed-use-12",
-        "character": "mixed-use",
-        "cx": -132942,
-        "cz": -12584,
-        "area": 474413
-      },
-      {
-        "id": "sw-residential-13",
+        "id": "sw-residential-10",
         "character": "residential",
-        "cx": -136456,
-        "cz": -163710,
-        "area": 427725
+        "cx": -147796,
+        "cz": -93777,
+        "area": 763088
       },
       {
-        "id": "sw-residential-14",
+        "id": "w-residential-11",
         "character": "residential",
-        "cx": -134804,
-        "cz": -252044,
-        "area": 794531
+        "cx": -172305,
+        "cz": 39960,
+        "area": 552600
       },
       {
-        "id": "s-residential-15",
+        "id": "sw-residential-12",
         "character": "residential",
-        "cx": -72970,
-        "cz": -212732,
-        "area": 559013
+        "cx": -116527,
+        "cz": -263711,
+        "area": 1375819
       },
       {
-        "id": "nw-subcentre-16",
+        "id": "w-subcentre-13",
         "character": "subcentre",
-        "cx": -74951,
-        "cz": 37330,
-        "area": 589163
+        "cx": -132320,
+        "cz": -23632,
+        "area": 682256
       },
       {
-        "id": "nw-mixed-use-17",
+        "id": "nw-mixed-use-14",
         "character": "mixed-use",
-        "cx": -89761,
-        "cz": 125723,
-        "area": 1023581
+        "cx": -119755,
+        "cz": 95034,
+        "area": 686475
       },
       {
-        "id": "n-residential-18",
+        "id": "n-residential-15",
         "character": "residential",
-        "cx": -68089,
-        "cz": 250715,
-        "area": 429469
+        "cx": -81347,
+        "cz": 231855,
+        "area": 880763
       },
       {
-        "id": "sw-mixed-use-19",
+        "id": "nw-mixed-use-16",
         "character": "mixed-use",
-        "cx": -70935,
-        "cz": -125184,
-        "area": 509175
+        "cx": -79399,
+        "cz": 143709,
+        "area": 380475
       },
       {
-        "id": "s-residential-20",
+        "id": "sw-residential-17",
         "character": "residential",
-        "cx": -51043,
-        "cz": -281424,
-        "area": 458775
+        "cx": -74424,
+        "cz": -142210,
+        "area": 504844
       },
       {
-        "id": "sw-downtown-21",
+        "id": "s-mixed-use-18",
+        "character": "mixed-use",
+        "cx": -51879,
+        "cz": -201638,
+        "area": 371194
+      },
+      {
+        "id": "nw-mixed-use-19",
+        "character": "mixed-use",
+        "cx": -71587,
+        "cz": 23136,
+        "area": 444713
+      },
+      {
+        "id": "sw-downtown-20",
         "character": "downtown",
-        "cx": -46072,
-        "cz": -34779,
-        "area": 646481
+        "cx": -22237,
+        "cz": -30316,
+        "area": 1008000
       },
       {
-        "id": "s-heritage-22",
-        "character": "heritage",
-        "cx": 14635,
-        "cz": -92624,
-        "area": 785813
+        "id": "n-residential-21",
+        "character": "residential",
+        "cx": -3375,
+        "cz": 258605,
+        "area": 688950
+      },
+      {
+        "id": "s-residential-22",
+        "character": "residential",
+        "cx": -11983,
+        "cz": -270317,
+        "area": 549788
       },
       {
         "id": "s-mixed-use-23",
         "character": "mixed-use",
-        "cx": -8614,
-        "cz": -168137,
-        "area": 607725
+        "cx": -19927,
+        "cz": -85255,
+        "area": 383850
       },
       {
-        "id": "s-residential-24",
+        "id": "n-residential-24",
         "character": "residential",
-        "cx": 5314,
-        "cz": -231903,
-        "area": 427781
+        "cx": 17321,
+        "cz": 187888,
+        "area": 956363
       },
       {
-        "id": "n-mixed-use-25",
+        "id": "n-subcentre-25",
+        "character": "subcentre",
+        "cx": -3810,
+        "cz": 81222,
+        "area": 1189519
+      },
+      {
+        "id": "s-mixed-use-26",
         "character": "mixed-use",
-        "cx": -7638,
-        "cz": 149594,
-        "area": 1316981
-      },
-      {
-        "id": "ne-downtown-26",
-        "character": "downtown",
-        "cx": 47802,
-        "cz": 20844,
-        "area": 1754719
+        "cx": 1830,
+        "cz": -171346,
+        "area": 419681
       },
       {
         "id": "s-residential-27",
         "character": "residential",
-        "cx": 69331,
-        "cz": -284211,
-        "area": 886219
+        "cx": 32591,
+        "cz": -226339,
+        "area": 402638
       },
       {
-        "id": "n-residential-28",
-        "character": "residential",
-        "cx": 39921,
-        "cz": 227182,
-        "area": 1401638
+        "id": "ne-subcentre-28",
+        "character": "subcentre",
+        "cx": 63254,
+        "cz": 33417,
+        "area": 451463
       },
       {
         "id": "se-mixed-use-29",
         "character": "mixed-use",
-        "cx": 98199,
-        "cz": -159957,
-        "area": 1587769
+        "cx": 46209,
+        "cz": -120000,
+        "area": 920700
       },
       {
-        "id": "ne-mixed-use-30",
+        "id": "s-residential-30",
+        "character": "residential",
+        "cx": 66110,
+        "cz": -281955,
+        "area": 433238
+      },
+      {
+        "id": "ne-mixed-use-31",
         "character": "mixed-use",
-        "cx": 115189,
-        "cz": 123689,
-        "area": 964294
+        "cx": 85463,
+        "cz": 135349,
+        "area": 941906
       },
       {
-        "id": "ne-residential-31",
+        "id": "e-heritage-32",
+        "character": "heritage",
+        "cx": 74545,
+        "cz": -28350,
+        "area": 373838
+      },
+      {
+        "id": "se-subcentre-33",
+        "character": "subcentre",
+        "cx": 99497,
+        "cz": -208902,
+        "area": 712688
+      },
+      {
+        "id": "e-subcentre-34",
+        "character": "subcentre",
+        "cx": 120456,
+        "cz": -52599,
+        "area": 588206
+      },
+      {
+        "id": "n-residential-35",
         "character": "residential",
-        "cx": 145215,
-        "cz": 238845,
-        "area": 973069
+        "cx": 110361,
+        "cz": 255902,
+        "area": 551194
       },
       {
-        "id": "se-residential-32",
+        "id": "ne-residential-36",
         "character": "residential",
-        "cx": 137202,
-        "cz": -244297,
-        "area": 489600
-      },
-      {
-        "id": "e-mixed-use-33",
-        "character": "mixed-use",
-        "cx": 126678,
-        "cz": -48216,
-        "area": 726019
-      },
-      {
-        "id": "ne-residential-34",
-        "character": "residential",
-        "cx": 183810,
-        "cz": 152969,
-        "area": 470194
-      },
-      {
-        "id": "e-residential-35",
-        "character": "residential",
-        "cx": 220095,
-        "cz": 45951,
-        "area": 2000588
-      },
-      {
-        "id": "se-residential-36",
-        "character": "residential",
-        "cx": 191159,
-        "cz": -220473,
-        "area": 457988
+        "cx": 153095,
+        "cz": 180085,
+        "area": 783450
       },
       {
         "id": "se-residential-37",
         "character": "residential",
-        "cx": 186205,
-        "cz": -89262,
-        "area": 534094
+        "cx": 162505,
+        "cz": -119619,
+        "area": 1193963
       },
       {
-        "id": "ne-residential-38",
+        "id": "e-mixed-use-38",
+        "character": "mixed-use",
+        "cx": 149288,
+        "cz": 38057,
+        "area": 892800
+      },
+      {
+        "id": "se-residential-39",
         "character": "residential",
-        "cx": 246365,
-        "cz": 202090,
-        "area": 643500
+        "cx": 165415,
+        "cz": -216167,
+        "area": 373106
       },
       {
-        "id": "se-industrial-39",
+        "id": "se-residential-40",
+        "character": "residential",
+        "cx": 180932,
+        "cz": -277689,
+        "area": 918844
+      },
+      {
+        "id": "e-residential-41",
+        "character": "residential",
+        "cx": 211390,
+        "cz": 70353,
+        "area": 1081406
+      },
+      {
+        "id": "ne-residential-42",
+        "character": "residential",
+        "cx": 207196,
+        "cz": 227203,
+        "area": 875419
+      },
+      {
+        "id": "se-residential-43",
+        "character": "residential",
+        "cx": 253213,
+        "cz": -135282,
+        "area": 1186256
+      },
+      {
+        "id": "ne-mixed-use-44",
+        "character": "mixed-use",
+        "cx": 268654,
+        "cz": 116110,
+        "area": 915581
+      },
+      {
+        "id": "se-industrial-45",
         "character": "industrial",
-        "cx": 232629,
-        "cz": -284311,
-        "area": 732431
+        "cx": 267305,
+        "cz": -245632,
+        "area": 804375
       },
       {
-        "id": "e-residential-40",
+        "id": "e-residential-46",
         "character": "residential",
-        "cx": 231132,
-        "cz": -31927,
-        "area": 512156
+        "cx": 247207,
+        "cz": -31416,
+        "area": 820125
       },
       {
-        "id": "ne-industrial-41",
+        "id": "ne-industrial-47",
         "character": "industrial",
-        "cx": 236751,
-        "cz": 263349,
-        "area": 591863
-      },
-      {
-        "id": "se-residential-42",
-        "character": "residential",
-        "cx": 245223,
-        "cz": -184795,
-        "area": 1188563
-      },
-      {
-        "id": "e-residential-43",
-        "character": "residential",
-        "cx": 270557,
-        "cz": -103572,
-        "area": 564300
-      },
-      {
-        "id": "ne-residential-44",
-        "character": "residential",
-        "cx": 265772,
-        "cz": 142144,
-        "area": 514013
+        "cx": 267780,
+        "cz": 244681,
+        "area": 604575
       }
     ]
   }

@@ -1,6 +1,6 @@
 import seedrandom from "seedrandom";
 import { computeLattice } from "./lattice";
-import { buildTensorField, alignDir, type TensorField, type Vec2 } from "./tensorField";
+import { buildTensorField, gridCacheField, alignDir, type TensorField, type Vec2 } from "./tensorField";
 import type { RoadPoly, RoadTier } from "./streets";
 import { genScale } from "./topology";
 import type { ShapeMask } from "./cityShape";
@@ -805,7 +805,13 @@ export function generateTensorStreets(
   // the original path, byte-identical.
   fieldOverride?: TensorField,
 ): { arterials: RoadPoly[]; minorStreets: RoadPoly[] } {
-  const tfBase = fieldOverride ?? buildTensorField(masterSeed, computeLattice(masterSeed));
+  // #b: grid-cache the seeded basis field (~3x on tracing, visually identical;
+  // golden re-baselined). A #40 sketch override is the author's exact ink, so it
+  // traces UNCACHED to preserve sharp hand-drawn detail (and is rare / not perf-
+  // critical). The grid covers the trace bounds; RK4 midpoints just outside clamp.
+  const tfBase = fieldOverride
+    ? fieldOverride
+    : gridCacheField(buildTensorField(masterSeed, computeLattice(masterSeed)), bounds);
   // #63 profiling: wrap sample() to count/time field evaluation. Returns the
   // inner result untouched, so traced geometry is byte-identical.
   const p63 = prof;

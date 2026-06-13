@@ -265,6 +265,69 @@ export function buildTensorField(masterSeed: string, lattice: Lattice): TensorFi
   return { basis, sample };
 }
 
+// #b grid-cache. The analytic sample() above sums ~256 Gaussian bases (one exp
+// each) per call and is ~60% of generation (~448k calls/city). Precompute the
+// field on an M×M grid and bilinearly interpolate instead → ~3x on the road-
+// trace phase (~1.8x overall gen), measured max ~1.0° / mean ~0.004° angular
+// drift at M=256 (visually identical, 0 road-count delta — see
+// scripts/prototypes/gridField.ts).
+//
+// LINE-FIELD HAZARD: an eigenvector is an orientation (±v are the same line), so
+// interpolating eigenvectors directly cancels them at cell boundaries. Cache the
+// DOUBLED-ANGLE unit tensor (cos2θ, sin2θ) — recovered from the analytic major
+// eigenvector — interpolate that, then re-extract θ = ½·atan2(b,a) per sample.
+//
+// Deterministic across runs (integer indexing + float lerp), but NOT byte-
+// identical to the analytic field: the golden baseline encodes the gridded
+// result. Refs: Dagstuhl tensor-field reconstruction; arXiv 1907.11449.
+export const FIELD_GRID_M = 256;
+export function gridCacheField(
+  src: TensorField,
+  bounds: { minX: number; maxX: number; minZ: number; maxZ: number },
+  M: number = FIELD_GRID_M,
+): TensorField {
+  const A = new Float64Array(M * M);
+  const B = new Float64Array(M * M);
+  const dx = (bounds.maxX - bounds.minX) / (M - 1);
+  const dz = (bounds.maxZ - bounds.minZ) / (M - 1);
+  for (let j = 0; j < M; j++) {
+    for (let i = 0; i < M; i++) {
+      const v = src.sample(bounds.minX + i * dx, bounds.minZ + j * dz, true); // major eigenvector
+      if (v) {
+        const th2 = 2 * Math.atan2(v.z, v.x);
+        A[j * M + i] = Math.cos(th2);
+        B[j * M + i] = Math.sin(th2);
+      }
+    }
+  }
+  const maxI = M - 1;
+  const sample = (x: number, z: number, major: boolean): Vec2 | null => {
+    let gx = (x - bounds.minX) / dx;
+    let gz = (z - bounds.minZ) / dz;
+    gx = gx < 0 ? 0 : gx > maxI ? maxI : gx;
+    gz = gz < 0 ? 0 : gz > maxI ? maxI : gz;
+    const i0 = Math.floor(gx);
+    const j0 = Math.floor(gz);
+    const i1 = i0 < maxI ? i0 + 1 : i0;
+    const j1 = j0 < maxI ? j0 + 1 : j0;
+    const tx = gx - i0;
+    const tz = gz - j0;
+    const w00 = (1 - tx) * (1 - tz);
+    const w10 = tx * (1 - tz);
+    const w01 = (1 - tx) * tz;
+    const w11 = tx * tz;
+    const r0 = j0 * M;
+    const r1 = j1 * M;
+    const a = A[r0 + i0] * w00 + A[r0 + i1] * w10 + A[r1 + i0] * w01 + A[r1 + i1] * w11;
+    const b = B[r0 + i0] * w00 + B[r0 + i1] * w10 + B[r1 + i0] * w01 + B[r1 + i1] * w11;
+    if (a * a + b * b < 1e-12) return null;
+    let th = 0.5 * Math.atan2(b, a);
+    if (!major) th += Math.PI / 2;
+    return { x: Math.cos(th), z: Math.sin(th) };
+  };
+  return { basis: src.basis, sample };
+}
+
 // Align a freshly-sampled eigenvector to the previous step's direction — the
 // tensor has a π ambiguity, so without this a streamline would zig-zag at
 // saddles. Returns the sign-flipped direction (or null if degenerate).
