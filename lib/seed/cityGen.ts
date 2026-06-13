@@ -664,7 +664,9 @@ export function primeCityCaches(
 type Seg = { ax: number; az: number; bx: number; bz: number; hw: number };
 
 class RoadIndex {
-  private cells = new Map<string, Seg[]>();
+  // Packed integer cell keys (the GridStorage scheme, #63) — no per-insert/query
+  // `${i},${j}` string alloc. Byte-identical: same cells, same lookups.
+  private cells = new Map<number, Seg[]>();
   private cell = 40;
   constructor(roads: RoadLike[]) {
     for (const r of roads) {
@@ -676,7 +678,7 @@ class RoadIndex {
         const b = v[(i + 1) % v.length];
         const mx = (a.x + b.x) / 2;
         const mz = (a.z + b.z) / 2;
-        const k = `${Math.floor(mx / this.cell)},${Math.floor(mz / this.cell)}`;
+        const k = (Math.floor(mx / this.cell) + 2048) * 4096 + (Math.floor(mz / this.cell) + 2048);
         const seg: Seg = { ax: a.x, az: a.z, bx: b.x, bz: b.z, hw };
         const l = this.cells.get(k);
         if (l) l.push(seg);
@@ -691,8 +693,9 @@ class RoadIndex {
     let edge = Infinity;
     let ang = 0;
     for (let i = ci - 1; i <= ci + 1; i++) {
+      const rowBase = (i + 2048) * 4096 + 2048;
       for (let j = cj - 1; j <= cj + 1; j++) {
-        const l = this.cells.get(`${i},${j}`);
+        const l = this.cells.get(rowBase + j);
         if (!l) continue;
         for (const s of l) {
           const d = pointSegmentDistance(x, z, s.ax, s.az, s.bx, s.bz) - s.hw;
