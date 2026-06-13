@@ -4,32 +4,30 @@ import { useEffect, useState } from "react";
 import { useSceneStore } from "@/lib/state/sceneStore";
 import { getTimeline, getStats, type BootMark } from "@/lib/perf/bootTrace";
 
-// Cold-load + runtime perf overlay, gated behind ?perf (zero cost / not mounted
-// otherwise). Shows the boot timeline (time-to-first-star, worker gen, city
-// first frame) and live fps / DPR / draw-calls / triangles / long-task total —
-// the measurement tool for the device-quality work, usable in a real browser
-// since headless Chromium hangs on this box. Read-only; never feeds scene state.
+// Cold-load + runtime perf overlay — the detailed "Stats" display, shown when the
+// `perfStats` setting is on (Performance → Stats header switch; the ?perf URL just
+// sets it on boot). Shows the boot timeline (time-to-first-star, worker gen, city
+// first frame) and live fps / DPR / draw-calls / triangles / long-task total / last
+// gen. Read-only; never feeds scene state.
 export function PerfOverlay() {
-  // Single polled state object, written only inside the interval callback (never
-  // synchronously in the effect body — that trips React 19's set-state-in-effect
-  // rule). `on` starts false on both server and client, so no hydration mismatch;
-  // the overlay appears on the first ~400ms tick when ?perf is set.
+  const on = useSceneStore((s) => s.perfStats);
+  const perf = useSceneStore((s) => s.perf);
+  // Polled (interval-only setState, never synchronous in the effect body — React
+  // 19 set-state-in-effect rule). Only runs while `on`.
   const [poll, setPoll] = useState<{
-    on: boolean;
     timeline: BootMark[];
     stats: { dpr: number; longTasks: number; longTaskMs: number; lastGenMs: number; lastGenSource: string };
-  }>({ on: false, timeline: [], stats: { dpr: 0, longTasks: 0, longTaskMs: 0, lastGenMs: 0, lastGenSource: "" } });
-  const perf = useSceneStore((s) => s.perf);
+  }>({ timeline: [], stats: { dpr: 0, longTasks: 0, longTaskMs: 0, lastGenMs: 0, lastGenSource: "" } });
 
   useEffect(() => {
+    if (!on) return;
     const id = window.setInterval(() => {
-      const on = new URLSearchParams(window.location.search).has("perf");
-      setPoll({ on, timeline: getTimeline(), stats: getStats() });
+      setPoll({ timeline: getTimeline(), stats: getStats() });
     }, 400);
     return () => window.clearInterval(id);
-  }, []);
+  }, [on]);
 
-  const { on, timeline, stats } = poll;
+  const { timeline, stats } = poll;
   if (!on) return null;
 
   const fpsColor = perf.fps >= 55 ? "#6ee7b7" : perf.fps >= 35 ? "#fcd34d" : "#fb7185";

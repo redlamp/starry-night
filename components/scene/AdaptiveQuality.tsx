@@ -13,11 +13,10 @@ import { suggestTier, probeGpu } from "@/lib/perf/deviceTier";
 // when headroom returns it steps back up, and after a few flip-flops it locks
 // (the documented fix for the adaptive-DPR oscillation trap).
 //
-// GATED behind ?adaptive so it is DEFAULT-INERT (renders null) — safe to ship
-// while UNVERIFIED in-browser. Enable with ?adaptive and watch ?perf: on a
-// Retina iMac the DPR line should fall from 2.0 toward ~1.0 and fps climb to 60.
-// VERIFY ON REAL DEVICES BEFORE making this the default (see samples/perf-report.html).
-const ADAPTIVE = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("adaptive");
+// Driven by the `adaptive` setting (Performance panel toggle; the ?adaptive URL
+// just sets it on boot). DEFAULT-OFF (renders null). Enable it and watch the Stats
+// overlay: on a Retina iMac the DPR line should fall from 2.0 toward ~1.0 and fps
+// climb to 60. Still UNVERIFIED on a struggling device (see samples/perf-report.html).
 const DPR_FLOOR = 1;
 const DPR_STEP = 0.25;
 
@@ -27,18 +26,21 @@ const CEIL_DPR = typeof window !== "undefined" ? Math.min(2, window.devicePixelR
 
 export function AdaptiveQuality() {
   const setDpr = useThree((s) => s.setDpr);
+  const adaptive = useSceneStore((s) => s.adaptive);
   const cur = useRef(CEIL_DPR);
+  const fitted = useRef(false);
 
-  // Device-fit boot apply (once): pick the starting tier (its dprMax + star count)
-  // and a render RADIUS from the GPU/DPR/cores. Strong GPUs → tier high, radius 1
-  // (no change); weaker devices start at a smaller concentric crop so instance /
-  // vertex / memory / upload costs drop. The TIER (layout) is identical on every
-  // device — only the rendered radius differs — so the city is shared (cross-crop
-  // is a byte-identical subset). Gated by ?adaptive; verify on real hardware.
+  // Device-fit, once per session on first enable: pick the starting tier (its
+  // dprMax + star count) and a render RADIUS from the GPU/DPR/cores. Strong GPUs →
+  // tier high, radius 1 (no change); weaker devices start at a smaller concentric
+  // crop so instance/vertex/memory/upload costs drop. The TIER (layout) is identical
+  // on every device — only the rendered radius differs — so the city is shared
+  // (cross-crop is a byte-identical subset).
   // NB: the dynamic regression ceiling (CEIL_DPR) doesn't yet read the chosen
   // tier's dprMax — reconcile at the pairing pass.
   useEffect(() => {
-    if (!ADAPTIVE || typeof window === "undefined") return;
+    if (!adaptive || fitted.current || typeof window === "undefined") return;
+    fitted.current = true;
     const fit = suggestTier({
       renderer: probeGpu(),
       dpr: window.devicePixelRatio || 1,
@@ -48,9 +50,9 @@ export function AdaptiveQuality() {
     st.setQualityTier(fit.tier);
     st.setStars({ count: QUALITY_TIERS[fit.tier].starCount });
     st.setCityShapeScale(fit.radiusScale); // 1 on strong GPUs = no change/no re-gen
-  }, []);
+  }, [adaptive]);
 
-  if (!ADAPTIVE) return null;
+  if (!adaptive) return null;
   return (
     <PerformanceMonitor
       // Hysteresis band as a fraction of the display refresh rate (so it behaves

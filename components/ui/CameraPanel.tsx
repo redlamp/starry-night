@@ -607,11 +607,13 @@ export function CameraPanel() {
               action={<FpsBadgeToggle />}
             >
               <PerfReadout />
-              {/* AA / DPR / LOD as separate collapsible SubGroups (parity with the
-                  Streetlights / Traffic / Distance-LOD groups; user 2026-06-13). */}
+              {/* Adaptive + AA / DPR / LOD / Stats as collapsible SubGroups
+                  (parity with the other panels; user 2026-06-13). */}
+              <AdaptiveGroup />
               <AntiAliasingSection />
               <ResolutionSection />
               <LevelOfDetailSection />
+              <StatsGroup />
             </Section>
           </Accordion>
           {searching && matchedValues.length === 0 && (
@@ -2330,45 +2332,95 @@ function AtmosphereToggle() {
   );
 }
 
+// Quality tier select — the primary Performance control.
 function PerfReadout() {
-  const perf = useSceneStore((s) => s.perf);
   const qualityTier = useSceneStore((s) => s.qualityTier);
   const setQualityTier = useSceneStore((s) => s.setQualityTier);
   const setStars = useSceneStore((s) => s.setStars);
+  return (
+    <div className="flex items-center gap-2 text-xs">
+      <span className="text-foreground/70 w-14 shrink-0">quality</span>
+      <Select
+        value={qualityTier}
+        onValueChange={(v) => {
+          const tier = v as QualityTier;
+          setQualityTier(tier);
+          setStars({ count: QUALITY_TIERS[tier].starCount });
+        }}
+      >
+        <SelectTrigger
+          size="sm"
+          className="bg-background/50 text-foreground hover:bg-background/60 w-full"
+        >
+          <SelectValue placeholder="tier" />
+        </SelectTrigger>
+        <SelectContent>
+          {(Object.keys(QUALITY_TIERS) as QualityTier[]).map((t) => (
+            <SelectItem key={t} value={t}>
+              {QUALITY_TIERS[t].label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+// Adaptive quality (header toggle) — auto-fit tier + radius for this GPU on enable,
+// then dynamic DPR regression to hold framerate. Drives AdaptiveQuality (the
+// ?adaptive URL just sets it). Off by default; verify on real hardware first.
+function AdaptiveGroup() {
+  const adaptive = useSceneStore((s) => s.adaptive);
+  const setAdaptive = useSceneStore((s) => s.setAdaptive);
+  return (
+    <SubGroup
+      label="Adaptive quality"
+      action={
+        <Switch
+          checked={adaptive}
+          onCheckedChange={(v) => setAdaptive(v)}
+          title="Auto-pick the quality tier + render radius for this GPU, then step DPR down to hold framerate. Verify on real hardware."
+        />
+      }
+    >
+      <div className="text-foreground/40 text-[10px]">
+        Device-fit tier + radius on enable, then dynamic DPR to hold fps. Strong GPUs stay full.
+      </div>
+    </SubGroup>
+  );
+}
+
+// Stats — header switch shows the detailed on-screen overlay (PerfOverlay: boot
+// timeline, long tasks, last gen); the body is the live readout grid.
+function StatsGroup() {
+  const perf = useSceneStore((s) => s.perf);
+  const qualityTier = useSceneStore((s) => s.qualityTier);
   const dprCap = useSceneStore((s) => s.dprCap);
+  const perfStats = useSceneStore((s) => s.perfStats);
+  const setPerfStats = useSceneStore((s) => s.setPerfStats);
   const tierCfg = QUALITY_TIERS[qualityTier];
   const fpsColor =
     perf.fps >= 55 ? "text-emerald-300" : perf.fps >= 35 ? "text-amber-300" : "text-rose-400";
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-center gap-2 text-xs">
-        <span className="text-foreground/70 w-14 shrink-0">quality</span>
-        <Select
-          value={qualityTier}
-          onValueChange={(v) => {
-            const tier = v as QualityTier;
-            setQualityTier(tier);
-            setStars({ count: QUALITY_TIERS[tier].starCount });
-          }}
-        >
-          <SelectTrigger
-            size="sm"
-            className="bg-background/50 text-foreground hover:bg-background/60 w-full"
-          >
-            <SelectValue placeholder="tier" />
-          </SelectTrigger>
-          <SelectContent>
-            {(Object.keys(QUALITY_TIERS) as QualityTier[]).map((t) => (
-              <SelectItem key={t} value={t}>
-                {QUALITY_TIERS[t].label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+    <SubGroup
+      label="Stats"
+      action={
+        <Switch
+          checked={perfStats}
+          onCheckedChange={(v) => setPerfStats(v)}
+          title="Show the detailed on-screen overlay: boot timeline, main-thread long tasks, last gen time."
+        />
+      }
+    >
+      <div className="text-foreground/40 text-[10px]">
+        Header switch shows the detailed overlay (boot timeline · long tasks · last gen).
       </div>
       <div className="text-foreground/70 grid grid-cols-[5rem_1fr] gap-1 font-mono text-xs">
         <div>dpr cap</div>
-        <div className="tabular-nums">{dprCap ?? tierCfg.dprMax}{dprCap == null ? " (auto)" : ""}</div>
+        <div className="tabular-nums">
+          {dprCap ?? tierCfg.dprMax}
+          {dprCap == null ? " (auto)" : ""}
+        </div>
         <div>fps</div>
         <div className={`tabular-nums ${fpsColor}`}>{Math.round(perf.fps)}</div>
         <div>triangles</div>
@@ -2380,6 +2432,6 @@ function PerfReadout() {
         <div>textures</div>
         <div className="tabular-nums">{perf.textures}</div>
       </div>
-    </div>
+    </SubGroup>
   );
 }
