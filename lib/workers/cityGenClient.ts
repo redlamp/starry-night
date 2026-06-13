@@ -8,6 +8,7 @@
 // road lines) are re-broadcast to subscribers with the request's context, so a
 // scene overlay can draw the network tracing itself in while the worker runs.
 import type { CityBundle } from "@/lib/seed/cityGen";
+import { unpackBundle } from "@/lib/seed/bundleWire";
 import type { CityShapeSetting } from "@/lib/seed/cityShape";
 import type { CityTier } from "@/lib/seed/topology";
 import { activeCitySketch, sketchKey } from "@/lib/seed/citySketch";
@@ -59,7 +60,9 @@ function getWorker(): Worker | null {
         return;
       }
       pending.delete(msg.reqId);
-      if (msg.ok) p.resolve(msg.bundle);
+      // The worker posts the packed wire form (bundleWire.ts) — rebuild the
+      // CityBundle here so every caller sees the same runtime type as before.
+      if (msg.ok) p.resolve(unpackBundle(msg.bundle));
       else p.reject(new Error(msg.error));
     };
     worker.onerror = () => {
