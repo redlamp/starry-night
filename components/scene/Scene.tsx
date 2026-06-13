@@ -15,6 +15,7 @@ import { Beacons } from "./Beacons";
 import { CameraControls } from "./CameraControls";
 import { PerfMonitor } from "./PerfMonitor";
 import { AdaptiveQuality } from "./AdaptiveQuality";
+import { CityReveal } from "./CityReveal";
 import { TimeTicker } from "./TimeTicker";
 import { ProjectionBlender } from "./ProjectionBlender";
 import { FocalIndicator } from "./FocalIndicator";
@@ -115,8 +116,10 @@ export function Scene() {
           (#59 streamed "city sketches itself" lines) read as stray bright
           scribbles over the intro — removed; the worker stream + cityGenClient
           subscribe API stay for the road-reveal choreography to consume. */}
+      {/* CityReveal pre-warms shaders off the visible frame (compileAsync) and
+          reveals once compiled — removes the city-first-frame compile stall. */}
       {cityReady && (
-        <>
+        <CityReveal>
           <Roads masterSeed={masterSeed} />
           <InstancedCity masterSeed={masterSeed} />
           <Streetlights masterSeed={masterSeed} />
@@ -128,7 +131,7 @@ export function Scene() {
           <PopulationHeatmap masterSeed={masterSeed} />
           <TensorFieldOverlay masterSeed={masterSeed} />
           <TileCullOverlay masterSeed={masterSeed} />
-        </>
+        </CityReveal>
       )}
       <FocalIndicator />
     </Canvas>
