@@ -1226,6 +1226,12 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       }
       // cityPlanning visibility toggles only — preserve runtime readouts.
       patch.cityPlanning = { ...s.cityPlanning, ...DEFAULT_CITY_PLANNING_VIS };
+      // intro / starIntro are boot WAKE animations, not look settings — their hardcoded
+      // default is "not yet woken" (progress 0). On a live scene there's no remount to
+      // replay the reveal, so progress 0 leaves a black sky / dark city (stars vanish —
+      // the reported bug). Reset should land on the SETTLED look, so snap them fully woken.
+      patch.intro = { ...DEFAULT_INTRO, progress: 1 };
+      patch.starIntro = { ...DEFAULT_STAR_INTRO, progress: 1 };
       return patch;
     });
   },
@@ -1296,6 +1302,11 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       if (saved.cityPlanning !== undefined) {
         patch.cityPlanning = { ...s.cityPlanning, ...saved.cityPlanning };
       }
+      // Never leave the wake animations un-played on a live scene (same as Reset): a saved
+      // mid-wake progress would hide the stars / dark the city until a reload. On boot, the
+      // IntroTicker's mount replay overrides this, so the wake still runs at load.
+      patch.intro = { ...(patch.intro ?? s.intro), progress: 1, playing: false };
+      patch.starIntro = { ...(patch.starIntro ?? s.starIntro), progress: 1, playing: false };
       return patch;
     });
   },
