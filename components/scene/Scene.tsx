@@ -40,6 +40,10 @@ export function Scene() {
   const fog = useSceneStore((s) => s.fog);
   const qualityTier = useSceneStore((s) => s.qualityTier);
   const dprMax = QUALITY_TIERS[qualityTier].dprMax;
+  // MSAA (off by default) — a context-creation flag, so it can't change live; the
+  // `key` remounts the canvas (brief re-init) when it's toggled. DPR cap is live.
+  const antialias = useSceneStore((s) => s.antialias);
+  const dprCap = useSceneStore((s) => s.dprCap);
 
   // #44: warm the heavy city-generation cache off the mount-critical path. The
   // canvas + sky / stars / moon / ground mount immediately; the city-derived
@@ -50,13 +54,14 @@ export function Scene() {
 
   return (
     <Canvas
+      key={antialias ? "aa-on" : "aa-off"} // remount on MSAA change (context-creation flag)
       camera={{ position: intent.position, fov: intent.fov, near: 0.5, far: 12000 * CITY_SCALE }}
       gl={{
-        antialias: true,
+        antialias,
         toneMapping: THREE.ACESFilmicToneMapping,
         outputColorSpace: THREE.SRGBColorSpace,
       }}
-      dpr={[1, dprMax]}
+      dpr={dprCap ?? [1, dprMax]}
       style={{ touchAction: "none" }}
     >
       <CameraControls />

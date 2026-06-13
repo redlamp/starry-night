@@ -607,10 +607,11 @@ export function CameraPanel() {
               action={<FpsBadgeToggle />}
             >
               <PerfReadout />
-              {/* Anti-aliasing is a perf/quality trade — lives here (user 2026-06-07). */}
-              <div className="border-foreground/10 border-t pt-2">
-                <AntiAliasingSection />
-              </div>
+              {/* AA / DPR / LOD as separate collapsible SubGroups (parity with the
+                  Streetlights / Traffic / Distance-LOD groups; user 2026-06-13). */}
+              <AntiAliasingSection />
+              <ResolutionSection />
+              <LevelOfDetailSection />
             </Section>
           </Accordion>
           {searching && matchedValues.length === 0 && (
@@ -863,12 +864,26 @@ function StarsSection() {
   );
 }
 
+// AA and LOD are split into separate collapsible SubGroups (user 2026-06-13), to
+// match the Streetlights / Traffic / Distance-LOD groups. AA = hardware MSAA on
+// the header (off by default; reloads the canvas) + the window-shader edge slider.
 function AntiAliasingSection() {
+  const antialias = useSceneStore((s) => s.antialias);
+  const setAntialias = useSceneStore((s) => s.setAntialias);
   const wa = useSceneStore((s) => s.windowAA);
   const setWindowAA = useSceneStore((s) => s.setWindowAA);
   return (
-    <>
-      <div className="text-foreground/55 text-[10px] tracking-wide uppercase">Anti-alias / LOD</div>
+    <SubGroup
+      label="Anti-Aliasing (AA)"
+      action={
+        <Switch
+          checked={antialias}
+          onCheckedChange={(v) => setAntialias(v)}
+          title="Hardware MSAA. Off = faster (fill-rate scales with it × DPR²). Reloads the view when toggled."
+        />
+      }
+    >
+      <div className="text-foreground/40 text-[10px]">MSAA (header) reloads the view; edge AA is live.</div>
       <ValueSlider
         label="edge AA"
         value={wa.edge}
@@ -877,6 +892,67 @@ function AntiAliasingSection() {
         step={0.05}
         onChange={(edge) => setWindowAA({ edge })}
       />
+    </SubGroup>
+  );
+}
+
+// Render resolution (device-pixel-ratio) cap. Live — no reload. Cost ∝ DPR², so
+// this is the biggest fill-rate lever on HiDPI screens. Auto = the tier's range.
+function ResolutionSection() {
+  const dprCap = useSceneStore((s) => s.dprCap);
+  const setDprCap = useSceneStore((s) => s.setDprCap);
+  const opts = ["auto", "1", "1.25", "1.5", "2"] as const;
+  const labelOf = (v: string) => (v === "auto" ? "Auto (tier)" : `${v}×`);
+  return (
+    <SubGroup label="Resolution (DPR)">
+      <div className="flex items-center gap-2 text-xs">
+        <span
+          className="text-foreground/70 w-14 shrink-0"
+          title="Render pixel ratio. Lower = much faster (cost scales with DPR²). Applies instantly."
+        >
+          dpr
+        </span>
+        <Select
+          value={dprCap == null ? "auto" : String(dprCap)}
+          onValueChange={(v) => setDprCap(v === "auto" ? null : Number(v))}
+        >
+          <SelectTrigger
+            size="sm"
+            className="bg-background/50 text-foreground hover:bg-background/60 w-full"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {opts.map((v) => (
+              <SelectItem key={v} value={v}>
+                {labelOf(v)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </SubGroup>
+  );
+}
+
+// Level of Detail — currently the painted-window distance-wash (header toggle
+// gates it: off = full per-cell detail to the horizon). Named generally so more
+// LOD controls (e.g. the distance/tile-cull group) can move in later. Distinct
+// for now from the Distance-LOD group (LodGroup) under the city sections.
+function LevelOfDetailSection() {
+  const wa = useSceneStore((s) => s.windowAA);
+  const setWindowAA = useSceneStore((s) => s.setWindowAA);
+  return (
+    <SubGroup
+      label="Level of Detail (LOD)"
+      action={
+        <Switch
+          checked={wa.lodEnabled}
+          onCheckedChange={(v) => setWindowAA({ lodEnabled: v })}
+          title="Window distance-wash LOD. Off = full per-cell window detail everywhere (crisper far field, slightly more fragment cost)."
+        />
+      }
+    >
       <ValueSlider
         label="LOD near"
         value={wa.lodNear}
@@ -893,7 +969,7 @@ function AntiAliasingSection() {
         step={0.01}
         onChange={(lodRange) => setWindowAA({ lodRange })}
       />
-    </>
+    </SubGroup>
   );
 }
 
@@ -2269,6 +2345,7 @@ function PerfReadout() {
   const qualityTier = useSceneStore((s) => s.qualityTier);
   const setQualityTier = useSceneStore((s) => s.setQualityTier);
   const setStars = useSceneStore((s) => s.setStars);
+  const dprCap = useSceneStore((s) => s.dprCap);
   const tierCfg = QUALITY_TIERS[qualityTier];
   const fpsColor =
     perf.fps >= 55 ? "text-emerald-300" : perf.fps >= 35 ? "text-amber-300" : "text-rose-400";
@@ -2301,7 +2378,7 @@ function PerfReadout() {
       </div>
       <div className="text-foreground/70 grid grid-cols-[5rem_1fr] gap-1 font-mono text-xs">
         <div>dpr cap</div>
-        <div className="tabular-nums">{tierCfg.dprMax}</div>
+        <div className="tabular-nums">{dprCap ?? tierCfg.dprMax}{dprCap == null ? " (auto)" : ""}</div>
         <div>fps</div>
         <div className={`tabular-nums ${fpsColor}`}>{Math.round(perf.fps)}</div>
         <div>triangles</div>

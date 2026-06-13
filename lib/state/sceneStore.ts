@@ -161,6 +161,7 @@ export const DEFAULT_STARS = {
 //             full curtain look — opt-in because it reads as a neon tube).
 export const DEFAULT_WINDOW_AA = {
   edge: 1.1,
+  lodEnabled: true, // window distance-wash LOD; header toggle in the LOD group
   lodNear: 0.2,
   lodRange: 0.4,
   litBias: 0.7,
@@ -732,6 +733,15 @@ type SceneState = {
   masterSeed: string;
   lightingMode: LightingMode;
   qualityTier: QualityTier;
+  // Canvas MSAA. Off by default (perf): hardware multisampling is fill-rate cost
+  // that compounds with DPR. Cannot change live (WebGL context-creation flag) —
+  // Scene remounts the canvas on change. (user 2026-06-13)
+  antialias: boolean;
+  setAntialias: (v: boolean) => void;
+  // Manual device-pixel-ratio cap. null = auto (the quality tier's dprMax range).
+  // A number pins a fixed DPR. Live (renderer.setPixelRatio) — no reload.
+  dprCap: number | null;
+  setDprCap: (v: number | null) => void;
   paused: boolean;
   captureMode: boolean;
   setCaptureMode: (captureMode: boolean) => void;
@@ -988,6 +998,10 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   masterSeed: "starry-night",
   lightingMode: "classic",
   qualityTier: "high",
+  antialias: false, // off by default (user 2026-06-13)
+  setAntialias: (antialias) => set({ antialias }),
+  dprCap: null, // auto = use the quality tier's dprMax range
+  setDprCap: (dprCap) => set({ dprCap }),
   paused: false,
   captureMode: false,
   setCaptureMode: (captureMode) => set({ captureMode }),

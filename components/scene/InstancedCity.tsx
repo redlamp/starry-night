@@ -187,7 +187,9 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
       mat.uniforms.uOrthoBlend.value = s.projectionBlend;
       const wa = s.windowAA;
       mat.uniforms.uAaEdge.value = wa.edge;
-      mat.uniforms.uLodNear.value = wa.lodNear;
+      // LOD off → push the distance-wash threshold to infinity so `lod` stays 0
+      // everywhere (full per-cell window detail to the horizon).
+      mat.uniforms.uLodNear.value = wa.lodEnabled ? wa.lodNear : 1e9;
       mat.uniforms.uLodRange.value = wa.lodRange;
       mat.uniforms.uStagger.value = wa.stagger;
       mat.uniforms.uCurtainShare.value = wa.curtain;
