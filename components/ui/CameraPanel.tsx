@@ -216,7 +216,7 @@ const SETTINGS_SECTIONS: { value: string; label: string; keywords: string }[] = 
   {
     value: "orbit",
     label: "Orbit",
-    keywords: "elevation azimuth radius spin speed pause center focal auto rotate",
+    keywords: "elevation azimuth compass radius distance spin speed pause center focal auto rotate",
   },
   {
     value: "roads",
@@ -793,7 +793,7 @@ function OrbitSection() {
         stepperClass="w-32"
       />
       <ValueSlider
-        label="radius"
+        label="distance"
         value={orbit.radius}
         min={50}
         max={5000}
@@ -802,7 +802,7 @@ function OrbitSection() {
         stepperClass="w-32"
       />
       <ValueSlider
-        label="elev°"
+        label="elevation"
         value={orbit.elevationDeg}
         min={0.01}
         max={90}
@@ -811,7 +811,7 @@ function OrbitSection() {
         stepperClass="w-32"
       />
       <ValueSlider
-        label="azim°"
+        label="compass"
         value={orbit.azimuthDeg}
         min={0}
         max={360}
