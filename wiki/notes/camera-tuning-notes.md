@@ -60,7 +60,15 @@ Two ways to fix, decide next session:
   both unaffected. Truest to the old controller, but camera-controls ties its orbit
   pivot to the look point, so this needs a custom layer (or `setFocalOffset`).
 
-### 2. Orthographic mode — make it feel good (plan, 2026-06-13)
+### 2. Orthographic mode — make it feel good
+
+**Status (2026-06-13): implemented** — radius parked in ortho (`minDistance = orthoMinRadius`,
+~1.8× tier half-extent), 8° elevation floor + `allowUnderview` gate (`u` key), Focal-Y pin-scrub
+works in ortho (`pinScreenHit` projects via the parallel frustum), Distance slider hidden in ortho.
+**Fog: NOT changed** — verified FogTicker's d-anchored brackets keep fog pinned to the city for any
+radius, and ortho-zoom-not-affecting-fog is an intentional, documented decision (scale, not
+distance). **Remaining (refinement):** two-finger pivot-on-press anchoring in ortho — functional
+today via zoom-to-point + rotate-around-target; the press-point pivot is a touch nicety, untested.
 
 **How faked ortho works (verified in ProjectionBlender):** at blend = 1 it writes
 `makeOrthographic(±aspect·orthoSize, ±orthoSize, near, far)` using the REAL camera's `near`
