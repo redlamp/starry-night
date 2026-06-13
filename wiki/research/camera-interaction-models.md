@@ -20,8 +20,12 @@ Research to evaluate two questions on the drei `<CameraControls>` orbit bridge:
    `cursor:none` + pointer-capture + `movementY` → Focal Y, re-aim, restore on release). Lighter
    path first (no Pointer Lock overlay); switch to Pointer Lock if the bounded range hits screen
    edges. Perspective + indicator-on only; ortho/touch keep the slider. **Needs interactive test.**
-3. **Remove the LMB+RMB free-look chord?** → 🔜 **Held** until the pin-scrub is validated. Once it
-   feels right, free-look's job (raise Focal Y by looking up) is covered, so remove it then.
+3. **Remove the LMB+RMB free-look chord?** → ✅ **KEEP** (2026-06-13). The pin-scrub is validated
+   and liked, but free-look isn't fully redundant: it's the only gesture that rotates the camera
+   **in place** (look around from where you stand) — RMB *orbits* a pivot, pin-scrub only moves
+   Focal Y, LMB pans. As an optional power chord that doesn't interfere with the primary gestures,
+   undiscoverability is acceptable (it's a bonus path). Hardened the pin-scrub to bail if a second
+   button joins, so scrub + free-look can't both re-aim.
 4. **Clamp upward pitch deliberately (stars framing)?** → still open.
 
 **Also shipped this session (additive, independent of the fork):**

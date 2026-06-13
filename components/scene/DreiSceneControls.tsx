@@ -573,6 +573,12 @@ export function DreiSceneControls() {
         }
         return;
       }
+      // Only LMB drives the scrub — if another button joins (RMB → free-look), hand it off so
+      // the two don't both re-aim the camera.
+      if (e.buttons !== 1) {
+        finish(e.pointerId);
+        return;
+      }
       const c = controls.current;
       if (!c) return;
       c.getTarget(_tgt);
@@ -582,16 +588,17 @@ export function DreiSceneControls() {
       // (main frame) keeps the pin parked at the screen-focus %.
       void c.setLookAt(_camPos.x, _camPos.y, _camPos.z, _tgt.x, focalY, _tgt.z, false);
     };
-    const onUp = (e: PointerEvent) => {
+    const finish = (pointerId: number) => {
       if (!scrubbing) return;
       scrubbing = false;
       dragging.current = false;
       lastHover = false;
       dom.style.cursor = "";
-      dom.releasePointerCapture?.(e.pointerId);
+      dom.releasePointerCapture?.(pointerId);
       const c = controls.current;
       if (c) writeBack(c, syncingFromCamera);
     };
+    const onUp = (e: PointerEvent) => finish(e.pointerId);
     dom.addEventListener("pointerdown", onDown);
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
