@@ -20,18 +20,22 @@ export function ScreenYGuide() {
 
   return (
     <div className="pointer-events-none fixed inset-0 z-10" aria-hidden>
-      {/* Dimension line offset to the RIGHT of the pin (so the pin icon over the centre never
-          covers it). The group spans pin-X → offset-X horizontally and screen-top → pin
-          vertically; the extension caps run from the pin and the screen top out to the line. */}
-      <div className="absolute top-0 left-1/2 w-12" style={{ height: `${screenY}%` }}>
-        {/* vertical run, at the offset (right) edge */}
-        <div className="absolute top-0 right-0 h-full w-px bg-white/70" />
-        {/* extension caps: pin (bottom) and screen-top (top) → the dimension line */}
+      {/* Dimension line offset to the side of the pin. The group is shifted left so its left
+          edge sits under the pin icon: the extension caps span the pin-icon width (and screen
+          top) and overhang a touch past the vertical line + arrows, while the vertical line
+          itself stays clear to the right of the pin so it never overlaps the icon. */}
+      <div
+        className="absolute top-0 left-1/2 w-12 -translate-x-3"
+        style={{ height: `${screenY}%` }}
+      >
+        {/* vertical run, clear to the right of the pin (caps overhang it a touch) */}
+        <div className="absolute top-0 right-2 h-full w-px bg-white/70" />
+        {/* extension caps: across the pin-icon width (bottom) / screen top, out past the line */}
         <div className="absolute top-0 left-0 h-px w-full bg-white/70" />
         <div className="absolute bottom-0 left-0 h-px w-full bg-white/70" />
-        {/* arrowheads on the dimension line, pointing outward to each cap */}
+        {/* arrowheads on the vertical line, pointing outward to each cap */}
         <div
-          className="absolute top-0 right-0 h-0 w-0 translate-x-1/2"
+          className="absolute top-0 right-2 h-0 w-0 translate-x-1/2"
           style={{
             borderLeft: "4px solid transparent",
             borderRight: "4px solid transparent",
@@ -39,7 +43,7 @@ export function ScreenYGuide() {
           }}
         />
         <div
-          className="absolute right-0 bottom-0 h-0 w-0 translate-x-1/2"
+          className="absolute right-2 bottom-0 h-0 w-0 translate-x-1/2"
           style={{
             borderLeft: "4px solid transparent",
             borderRight: "4px solid transparent",
