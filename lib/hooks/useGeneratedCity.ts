@@ -6,6 +6,7 @@ import { sketchKey } from "@/lib/seed/citySketch";
 import { generateCityInWorker } from "@/lib/workers/cityGenClient";
 import { fingerprintCurrent } from "@/lib/seed/bundleFingerprint";
 import { getBundle, putBundle } from "@/lib/cache/bundleStore";
+import { mark, genCycleStart, genCycleEnd } from "@/lib/perf/bootTrace";
 import { useSceneStore } from "@/lib/state/sceneStore";
 import type { CityShapeSetting } from "@/lib/seed/cityShape";
 import type { CityTier } from "@/lib/seed/topology";
@@ -120,6 +121,7 @@ export function useGeneratedCity(
     let cancelled = false;
     let cancelFallback: (() => void) | null = null;
     const finish = () => {
+      mark("gen:ready"); // city available → consumers mount; cascade wakes it in
       warmedKeys.add(key);
       setState({ key, ready: true });
     };
@@ -135,6 +137,7 @@ export function useGeneratedCity(
       scheduleOffCritical(() => {
         if (cancelled) return;
         generateCity(seed, shape, scale); // warms cityGen's cache + the shared field
+        genCycleEnd("sync");
         finish();
       });
 
@@ -145,11 +148,15 @@ export function useGeneratedCity(
     // The fingerprint matches both the runtime cache keys (priming) and the stored
     // IndexedDB key. Every await re-checks `cancelled`, so a mid-flight tier/seed
     // switch can never prime a stale bundle.
+    mark("gen:start");
+    genCycleStart(); // per-cycle timer (fires every seed/shape/tier change)
     const fp = fingerprintCurrent(seed, shape, scale);
     void (async () => {
       const cached = await getBundle(fp); // (2)
       if (cancelled) return;
       if (cached) {
+        mark("gen:idb-hit"); // repeat visit — full bundle from IndexedDB, no gen
+        genCycleEnd("idb");
         primeFromBundle(cached);
         return;
       }
@@ -160,6 +167,8 @@ export function useGeneratedCity(
         try {
           const bundle = await viaWorker;
           if (cancelled) return;
+          mark("gen:worker-done"); // first-visit generation finished off-thread
+          genCycleEnd("worker");
           primeFromBundle(bundle);
           void putBundle(fp, bundle); // persist for repeat visits
         } catch {
