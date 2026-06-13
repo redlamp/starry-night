@@ -2,7 +2,9 @@
 
 import { PerformanceMonitor } from "@react-three/drei";
 import { useThree } from "@react-three/fiber";
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
+import { useSceneStore, QUALITY_TIERS } from "@/lib/state/sceneStore";
+import { suggestTier, probeGpu } from "@/lib/perf/deviceTier";
 
 // Dynamic DPR regression — the runtime safety net for the iMac problem (default
 // "high" tier = DPR 2 on a Retina panel → fill-rate bound, 15-30 fps, no auto-
@@ -26,6 +28,28 @@ const CEIL_DPR = typeof window !== "undefined" ? Math.min(2, window.devicePixelR
 export function AdaptiveQuality() {
   const setDpr = useThree((s) => s.setDpr);
   const cur = useRef(CEIL_DPR);
+
+  // Device-fit boot apply (once): pick the starting tier (its dprMax + star count)
+  // and a render RADIUS from the GPU/DPR/cores. Strong GPUs → tier high, radius 1
+  // (no change); weaker devices start at a smaller concentric crop so instance /
+  // vertex / memory / upload costs drop. The TIER (layout) is identical on every
+  // device — only the rendered radius differs — so the city is shared (cross-crop
+  // is a byte-identical subset). Gated by ?adaptive; verify on real hardware.
+  // NB: the dynamic regression ceiling (CEIL_DPR) doesn't yet read the chosen
+  // tier's dprMax — reconcile at the pairing pass.
+  useEffect(() => {
+    if (!ADAPTIVE || typeof window === "undefined") return;
+    const fit = suggestTier({
+      renderer: probeGpu(),
+      dpr: window.devicePixelRatio || 1,
+      cores: navigator.hardwareConcurrency || 0,
+    });
+    const st = useSceneStore.getState();
+    st.setQualityTier(fit.tier);
+    st.setStars({ count: QUALITY_TIERS[fit.tier].starCount });
+    st.setCityShapeScale(fit.radiusScale); // 1 on strong GPUs = no change/no re-gen
+  }, []);
+
   if (!ADAPTIVE) return null;
   return (
     <PerformanceMonitor

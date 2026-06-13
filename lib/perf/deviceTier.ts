@@ -41,29 +41,34 @@ export function classifyGpu(renderer: string | null): DeviceClass {
 
 // Suggested starting tier. The key lever is DPR: a hi-DPI panel (devicePixelRatio
 // >= 2) on anything but a clearly-discrete GPU should NOT render at DPR 2.
+// `radiusScale` is a cityShapeScale (1 = the full tier extent; <1 crops to a
+// concentric, byte-identical SUBSET — same roads/buildings, just less of them).
+// Strong GPUs get 1 (uncapped, full city); weaker devices render a smaller core
+// so instance/vertex/memory/upload costs drop. The TIER (layout) is the same on
+// every device — only the rendered radius differs — so the city is shared.
 export function suggestTier(opts: {
   renderer: string | null;
   dpr: number;
   cores: number;
-}): { tier: QualityTier; cls: DeviceClass; reason: string } {
+}): { tier: QualityTier; cls: DeviceClass; radiusScale: number; reason: string } {
   const cls = classifyGpu(opts.renderer);
   const hiDpi = opts.dpr >= 2;
   switch (cls) {
     case "mobile":
-      return { tier: "low", cls, reason: "mobile GPU — DPR 1, reduced stars (30 fps floor)" };
+      return { tier: "low", cls, radiusScale: 0.55, reason: "mobile GPU — DPR 1, ~0.55 radius, reduced stars (30 fps floor)" };
     case "discrete":
-      return { tier: "high", cls, reason: "discrete GPU — full DPR up to 2" };
+      return { tier: "high", cls, radiusScale: 1, reason: "discrete GPU — full DPR up to 2, full radius" };
     case "apple":
       return hiDpi
-        ? { tier: "med", cls, reason: "Apple GPU on a Retina panel — DPR ~1.25 to tame fill-rate" }
-        : { tier: "high", cls, reason: "Apple GPU, standard-DPI — full DPR" };
+        ? { tier: "med", cls, radiusScale: 0.85, reason: "Apple GPU on a Retina panel — DPR ~1.25, ~0.85 radius" }
+        : { tier: "high", cls, radiusScale: 1, reason: "Apple GPU, standard-DPI — full DPR + radius" };
     case "integrated":
       // Integrated GPUs (Iris Xe / UHD / Radeon Pro / Vega) are fill-rate weak —
-      // start conservative regardless of DPR; the dynamic monitor bumps up if there's headroom.
-      return { tier: "med", cls, reason: hiDpi ? "integrated GPU on hi-DPI — DPR ~1.25" : "integrated GPU — conservative DPR ~1.25" };
+      // start conservative; the dynamic monitor bumps DPR up if there's headroom.
+      return { tier: "med", cls, radiusScale: 0.7, reason: hiDpi ? "integrated GPU on hi-DPI — DPR ~1.25, ~0.7 radius" : "integrated GPU — DPR ~1.25, ~0.7 radius" };
     default:
       return hiDpi
-        ? { tier: "med", cls, reason: "unknown GPU on hi-DPI — conservative middle tier" }
-        : { tier: "high", cls, reason: "unknown GPU, standard-DPI" };
+        ? { tier: "med", cls, radiusScale: 0.85, reason: "unknown GPU on hi-DPI — conservative middle tier + radius" }
+        : { tier: "high", cls, radiusScale: 1, reason: "unknown GPU, standard-DPI — full DPR + radius" };
   }
 }
