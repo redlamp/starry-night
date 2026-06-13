@@ -464,7 +464,9 @@ type AnySettingEntry =
   | SettingEntry<"cropLock">
   | SettingEntry<"fpsHud">
   | SettingEntry<"fieldDeviation">
-  | SettingEntry<"densityProfile">;
+  | SettingEntry<"densityProfile">
+  | SettingEntry<"antialias">
+  | SettingEntry<"dprCap">;
 
 export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "cameraIntent", defaultValue: DEFAULT_INTENT, persist: true },
@@ -515,6 +517,9 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "fieldDeviation", defaultValue: 1.5, persist: true },
   // Population profile (#49) — gen input, persisted.
   { key: "densityProfile", defaultValue: DEFAULT_DENSITY_PROFILE, persist: true },
+  // Perf overrides (user 2026-06-13): MSAA off by default; dpr cap null = auto (tier).
+  { key: "antialias", defaultValue: false as const, persist: true },
+  { key: "dprCap", defaultValue: null as SceneState["dprCap"], persist: true },
 ];
 
 // cityPlanning visibility toggles — persisted separately because `cityPlanning`
@@ -558,6 +563,8 @@ type SavedConfig = {
   fpsHud?: boolean;
   fieldDeviation?: number;
   densityProfile?: DensityProfile;
+  antialias?: boolean;
+  dprCap?: number | null;
   // Only the layer-visibility toggles persist — topologyKind / arterialCount
   // are per-seed runtime readouts, not settings.
   cityPlanning?: {
