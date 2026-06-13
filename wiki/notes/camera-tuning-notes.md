@@ -7,19 +7,28 @@ tags:
 # Camera Tuning Notes (drei migration)
 
 Running list of open tuning issues / proposals for the drei camera bridge
-(`components/scene/DreiSceneControls.tsx`, behind `?controls=drei`). Companion to
-[[plan-drei-camera-migration]] and [[camera-controls-feature-matrix]]. On branch
-`feat/drei-camera-tuning`.
+(`components/scene/DreiSceneControls.tsx`). Companion to
+[[plan-drei-camera-migration]] and [[camera-controls-feature-matrix]].
 
-## Open decisions awaiting feedback (2026-06-13)
+**Shipped to `main` 2026-06-13 (`v2026.06.13`).** The bridge is now the **default
+for orbit** (hybrid — `?controls=legacy` forces the old controller; fly/still
+still fall back to it until ported). The `feat/drei-camera-tuning` branch is
+merged + pruned. See [[2026-06-13]] for the full arc.
 
-Research + recommendations in [[camera-interaction-models]] (Taylor to review). The fork
-that gates the rest: **is Focal Y the right model**, or should "looking up" be a bounded
-tilt gesture with Focal Y demoted to a slider? Downstream of that: build pin-drag-to-set-
-Focal-Y (desktop-only; drei won't auto-disable `<CameraControls>` so needs manual
-camera-freeze), remove the LMB+RMB free-look chord, and clamp upward pitch for stars
-framing. **Proceeded independently this session:** Shift+LMB rotate fallback + issue #80
-(see Done below).
+## Decisions resolved 2026-06-13
+
+Research + recommendations in [[camera-interaction-models]]. The fork that gated the
+rest — **is Focal Y the right model** — resolved by **keeping Focal Y** and building the
+**pin-scrub** (Option A: cursor-locked relative scrub, re-aim from the same camera
+position). Downstream:
+
+- **pin-drag-to-set-Focal-Y** — built (cursor-locked scrub; works in perspective + ortho).
+- **LMB+RMB free-look chord** — **kept** (not removed; pin-scrub hardened to bail when RMB joins).
+- **Shift+LMB rotate** fallback + issue #80 (always-mounted markers) — shipped.
+
+**Still open:** #4 deliberate upward-pitch clamp for stars framing; orbit↔fly swap
+verification (controller handoff); two-finger pivot-on-press in ortho; fly/still port to
+the bridge (then the old controller is cullable).
 
 ## Open issues
 
