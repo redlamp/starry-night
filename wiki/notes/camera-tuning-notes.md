@@ -60,13 +60,46 @@ Two ways to fix, decide next session:
   both unaffected. Truest to the old controller, but camera-controls ties its orbit
   pivot to the look point, so this needs a custom layer (or `setFocalOffset`).
 
-### 2. Ortho parity for the perspective-only gestures
+### 2. Orthographic mode — make it feel good (plan, 2026-06-13)
 
-Tagged `// ortho: solved later` in the bridge. Perspective has: RMB orbit pivot on
-the screen-centre ground point, two-finger tilt pivot on the press point, and
-pinch = zoom + truck around the anchor. Ortho still uses the simpler `zoomToPoint`
-/ rotate-around-target. Port the perspective behaviours to ortho once Focal Y +
-the model settle.
+**How faked ortho works (verified in ProjectionBlender):** at blend = 1 it writes
+`makeOrthographic(±aspect·orthoSize, ±orthoSize, near, far)` using the REAL camera's `near`
+(0.5) / `far` (12000·CITY_SCALE = 24000) at its REAL position — the camera never moves for the
+morph. So apparent zoom = `orthoSize`; the orbit **radius (camera distance) is decoupled from
+zoom**, but still sets where the camera sits in view-depth.
+
+**Clipping (root cause):** the ortho frustum uses the real camera's near/far at the real radius,
+so a SMALL radius + LARGE orthoSize parks the camera *among* the city — the near half of the
+scene falls behind the near plane / behind the camera and clips. (In perspective a small radius
+just reads as "zoomed in"; in ortho orthoSize zooms independently, so you can be wide-but-close.)
+→ **Fix:** in ortho keep radius ≥ (tier half-extent + apron + a tall-building margin) so the
+whole scene sits in front of the camera. Radius doesn't change ortho apparent size, so expand it
+freely and make it **non-user-facing in ortho** (auto-park, ~1.5–2× the tier half-extent). This
+is the "expand the distance" idea; it stops being "hard to navigate" because the user never
+touches distance in ortho — they zoom via orthoSize and rotate / tilt / pan.
+
+**Underview / ground-slice:** cameraY = focalY + radius·cos(polar); the existing
+`maxPolarAngle = acos(−focalY/radius)` already keeps cameraY ≥ 0, which at a healthy ortho radius
+means elevation ≳ 0 (no looking up from under). For a nicer default add a small **minimum
+elevation floor** (≈ 8–15°) so the ground always fills the lower frame instead of going edge-on.
+The intentional underview (later) = a flag that lifts the floor / polar clamp on purpose.
+
+**Distance vs zoom UX:** in ortho "Distance" (radius) is NOT the zoom — orthoSize is. Hide /
+auto-manage the Distance slider in ortho and expose a "Zoom" / "Size" control bound to orthoSize
+(the wheel already does this), so the two aren't conflated.
+
+**Fog coupling (flag):** FogTicker derives fog from camera→city distance (radius). With radius
+parked in ortho, zooming (orthoSize) won't change the fog — atmosphere stops responding to zoom.
+Decide: key ortho fog off `orthoSize` instead of radius.
+
+**Gesture parity (the old `// ortho: solved later` tags):** port RMB orbit-pivot, two-finger
+tilt pivot, and pinch zoom+truck anchoring to ortho (groundHit already builds the ortho-correct
+parallel ray). Extend the Focal-Y pin-scrub to ortho by hit-testing the pin with the faked-ortho
+parallel projection instead of `camera.project` (which takes the perspective branch → wrong spot
+in faked ortho). Screen Y + its guide already work in ortho (applyScreenFocus uses orthoSize).
+
+**Near/far:** sourced from camera.near/far (0.5 / 24000) — fine as long as radius stays in the
+safe band; only widen `far` if we ever park radius very large.
 
 ### 3. Two-finger touch refinement
 
