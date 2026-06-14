@@ -5,6 +5,7 @@ import {
   useSceneStore,
   DEFAULT_ORBIT,
   DEFAULT_ORTHO_SIZE,
+  DEFAULT_PERSP_RADIUS,
   type RenderGroup,
   type RenderMode,
 } from "@/lib/state/sceneStore";
@@ -209,32 +210,36 @@ export function tweenOrbitToDefault() {
 
 const PROJECTION_TWEEN_DURATION = 1.0;
 
+// Per-mode distance memory. DISTANCE is the "slack" value, decoupled from the zoom: in
+// perspective it's the hero-shot dolly (mouse-wheel); in orthographic it only sets
+// clip-safety (orthoSize fixes the apparent size, so radius parks far out — see
+// orthoMinRadius in DreiSceneControls). Seeded with the page-load defaults and updated to
+// the live radius whenever a mode is left, so toggling away and back restores the distance
+// that mode was last at.
+const rememberedRadius: Record<"perspective" | "orthographic", number> = {
+  perspective: DEFAULT_PERSP_RADIUS,
+  orthographic: DEFAULT_ORBIT.radius,
+};
+
 // The single in-flight projection tween. Killed before a new one starts so a
 // mid-tween reversal (toggling back before the swap finishes) animates cleanly
 // from the current blend instead of two tweens fighting over projectionBlend.
 let projTween: gsap.core.Tween | null = null;
 
-// Projection swap (perspective ⇄ orthographic) — shared by the Camera panel's
-// projection toggle and the `p` hotkey so both animate identically. Matches
-// framing at the lookAt distance so the swap stays visually continuous (ortho
-// frustum half-height = perspective tangent half-extent at d), then GSAP-blends
-// projectionBlend 0↔1 (ProjectionBlender lerps the matrices each frame). Works
-// in both directions and is interruptible mid-tween.
+// Projection swap (perspective ⇄ orthographic) — shared by the Camera panel's projection
+// toggle and the `p` hotkey so both animate identically. fov (perspective) and orthoSize
+// (ortho) are the user's SOVEREIGN zoom and are never rewritten on a toggle. DISTANCE is the
+// slack: it tweens to whatever the target mode last sat at (rememberedRadius) while
+// projectionBlend tweens 0↔1. The two views need NOT be K-matched — ProjectionBlender's
+// framing bridge interpolates the focal-plane half-height (perspK ↔ orthoSize) across the
+// morph, so the swap stays continuous even when perspective frames a different slice than
+// ortho. See camera-tuning-notes #2 (2026-06-14 framing-bridge rework). Interruptible.
 export function tweenProjectionTo(target: "perspective" | "orthographic") {
   const s = useSceneStore.getState();
   if (s.projection === target) return;
-  // fov (perspective) and orthoSize (ortho) are the user's sovereign zoom — never
-  // rewritten on a toggle (2026-06-14). DISTANCE is the slack, and it TWEENS between the
-  // two modes alongside the projection morph: perspective slides to the matched radius —
-  // it frames the SAME content the ortho size showed (K_persp = orthoSize ⇒
-  // radius = orthoSize/tan(fov/2)), which is also what keeps the morph continuous — and
-  // ortho slides back out to its clip-safe park distance (radius doesn't change ortho
-  // framing). Rounded so the Distance readout stays clean. See camera-tuning-notes #2.
-  const fovRad = (s.cameraIntent.fov * Math.PI) / 180;
-  const targetRadius =
-    target === "perspective"
-      ? Math.max(1, Math.round(s.orthoSize / Math.tan(fovRad / 2)))
-      : DEFAULT_ORBIT.radius;
+  // Remember where the mode we're leaving sat, then slide to the target mode's distance.
+  rememberedRadius[s.projection] = s.orbit.radius;
+  const targetRadius = rememberedRadius[target];
   s.setProjection(target);
   // Start from the LIVE blend + radius (mid-tween if interrupted), not a stale snapshot.
   projTween?.kill();

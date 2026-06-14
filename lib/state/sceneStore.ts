@@ -401,6 +401,14 @@ export const DEFAULT_FLY_SPEED = 14;
 export const DEFAULT_ORTHO_SIZE = 160 * CITY_SCALE;
 export const DEFAULT_PROJECTION = "orthographic" as const;
 
+// Perspective's default dolly (the hero-shot distance). 1500 × CITY_SCALE = 3000 at the
+// default tier. DISTANCE is the "slack" value: in perspective it sets the dolly, in
+// orthographic only clip-safety (orthoSize fixes apparent size, so ortho parks far out at
+// ~DEFAULT_ORBIT.radius). The projection toggle slides distance between the two; their
+// framing (K) need NOT match — ProjectionBlender bridges the gap across the morph. See
+// wiki/notes/camera-tuning-notes #2 (2026-06-14 framing-bridge rework).
+export const DEFAULT_PERSP_RADIUS = 1500 * CITY_SCALE;
+
 // ---------------------------------------------------------------------------
 // Settings registry
 // ---------------------------------------------------------------------------

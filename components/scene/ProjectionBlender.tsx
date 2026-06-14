@@ -58,14 +58,23 @@ export function ProjectionBlender() {
     }
 
     // Virtual eye distance E recedes from d (perspective) toward ∞ (ortho).
-    // halfH = the matched half-height at the focal plane; tan(fovV/2) = halfH/E.
     const d = Math.max(1, radius);
     const u = Math.max(1 - blend, 1e-4); // 1 = perspective … 0 = ortho
     const E = d / u;
     const dz = E - d; // how far the virtual eye sits behind the real camera
     const nearV = near + dz;
     const farV = far + dz;
-    const top = (nearV * orthoSize) / E;
+    // Framing BRIDGE: the half-height held at the focal plane is not a fixed orthoSize but
+    // a lerp from what PERSPECTIVE frames there (perspK = d·tan(fov/2), at blend 0) to what
+    // ORTHO frames there (orthoSize, at blend 1). This is what lets perspective distance and
+    // ortho size be authored independently (different K) while the morph stays continuous at
+    // BOTH ends: the focal-plane content grows/shrinks smoothly across the blend instead of
+    // popping the instant blend leaves 0. When the two views are already K-matched
+    // (d·tan(fov/2) == orthoSize) Hb is constant and this is byte-for-byte the old
+    // orthoSize-only matrix. (2026-06-14)
+    const perspK = d * Math.tan((fov * Math.PI) / 180 / 2);
+    const Hb = perspK + (orthoSize - perspK) * blend;
+    const top = (nearV * Hb) / E;
     const right = top * aspect;
     _persp.makePerspective(-right, right, top, -top, nearV, farV);
     // Shift view-space geometry back by dz so it's measured from the virtual eye.
