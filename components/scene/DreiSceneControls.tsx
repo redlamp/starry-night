@@ -51,7 +51,6 @@ const MAX_DIST = 5000 * CITY_SCALE;
 // 1.5 → parks ortho at ~4800 at the default tier (3200 × 1.5), the user's chosen ortho
 // distance (2026-06-14); still clip-safe (camera sits ~1600 past the scene's near edge).
 const ORTHO_RADIUS_FACTOR = 1.5;
-const ORTHO_ELEV_FLOOR_DEG = 0; // ortho: allow tilting fully to the horizon (parallel view) — the ground-framing ease in applyScreenFocus keeps the low-angle framing clean
 function orthoMinRadius(): number {
   const r = CITY_TIERS[useSceneStore.getState().citySize] + GROUND_APRON_M;
   return Math.min(r * ORTHO_RADIUS_FACTOR, MAX_DIST);
@@ -153,39 +152,54 @@ function panRig(c: CameraControlsImpl, dx: number, dz: number): void {
 // / orthoSize (ortho) so the screen % holds through zoom. Only writes on a real
 // change, so a resting camera can still rest.
 const _focalOff = new THREE.Vector3();
-// Ortho low-elevation ground framing. As the camera tilts toward the horizon the ground plane
-// (y = 0, lookAtY below the pin) sweeps up the frame and leaves below-ground void at the bottom.
-// Below ORTHO_GROUND_EASE_DEG, pull the pivot DOWN so the ground line settles near the bottom,
-// keeping real content across the top ORTHO_GROUND_CONTENT_CAP of the frame. The pull magnitude is
-// keyed to elevation (smoothstep — proportional to how parallel the view is, and only where the void
-// appears), then the APPLIED value is damped over time so a fast tilt eases in instead of tracking
-// 1:1 and lurching. Scaled by projectionBlend, so it's an ortho-only effect.
-const ORTHO_GROUND_EASE_DEG = 12;
-const ORTHO_GROUND_CONTENT_CAP = 0.95;
-const ORTHO_GROUND_DAMP = 6; // damped-follow rate for the pivot pull (≈0.2s time constant); higher = snappier
-let _groundCorr = 0; // smoothed pivot correction (≤ 0 = pulled down). Module-level; resets on reload.
+// Low-elevation ground framing (both projections). As the camera tilts toward the horizon the
+// ground sweeps up the frame — in ortho that leaves below-ground void at the bottom, in perspective
+// it just crowds the skyline. Below GROUND_EASE_DEG, pull the pivot DOWN so the ground settles low.
+// The two projections differ only in WHERE the ground sits: ortho is linear in lookAtY/orthoSize,
+// perspective is the foreshortened angle (distance + FOV). Their target pivots cross-fade by
+// projectionBlend, so the pull is continuous through a morph and reduces to the pure-ortho pull at
+// blend 1. The pull is a smoothstep in elevation (proportional to how parallel the view is), and the
+// APPLIED value is damped over time so a fast tilt eases in instead of tracking 1:1 and lurching.
+const GROUND_EASE_DEG = 12;
+const GROUND_CONTENT_CAP = 0.95; // both projections: keep real content across the top 95% of the frame at low elevation
+const GROUND_DAMP = 6; // damped-follow rate for the pivot pull (≈0.2s time constant); higher = snappier
+let _groundCorr = Number.NaN; // smoothed pivot correction (≤ 0 = pulled down); NaN → snap on the first frame so a fresh load lands already-framed (no spring), damps after. Module-level; resets on reload.
 function applyScreenFocus(c: CameraControlsImpl, camera: THREE.Camera, dt?: number): void {
   const s = useSceneStore.getState();
   const base = s.orbitPivotFromBottom;
   const blend = s.projectionBlend;
   // Elevation-keyed target pull (≤ 0): how far below the user's ScreenY to sit at this tilt.
   let corrTarget = 0;
-  if (blend > 0.0001) {
-    const elevDeg = 90 - c.polarAngle / DEG;
-    if (elevDeg < ORTHO_GROUND_EASE_DEG) {
-      // groundDrop = how far below the pin the ground line sits (frame fraction) at this tilt.
-      const groundDrop = (s.orbit.lookAtY * Math.cos(elevDeg * DEG)) / (2 * s.orthoSize);
-      const target = 1 - ORTHO_GROUND_CONTENT_CAP + groundDrop; // pivot that lands ground at the cap
-      if (target < base) {
-        const x = clamp((ORTHO_GROUND_EASE_DEG - elevDeg) / ORTHO_GROUND_EASE_DEG, 0, 1);
-        const k = x * x * (3 - 2 * x) * blend; // smoothstep, faded out toward perspective
-        corrTarget = (target - base) * k; // negative — only ever pulls the pin DOWN
-      }
+  const elevDeg = 90 - c.polarAngle / DEG;
+  if (elevDeg < GROUND_EASE_DEG) {
+    // Ortho: the ground line sits lookAtY·cos(θ)/(2·orthoSize) below the pin.
+    const dropOrtho = (s.orbit.lookAtY * Math.cos(elevDeg * DEG)) / (2 * s.orthoSize);
+    const targetOrtho = 1 - GROUND_CONTENT_CAP + dropOrtho;
+    // Perspective: the ground-below-pin sits at the foreshortened angle φ below the view axis.
+    const fovRad = (camera as THREE.PerspectiveCamera).fov * DEG;
+    const phi =
+      Math.atan2(
+        s.orbit.lookAtY + c.distance * Math.sin(elevDeg * DEG),
+        c.distance * Math.cos(elevDeg * DEG),
+      ) -
+      elevDeg * DEG;
+    const dropPersp = (0.5 * Math.tan(phi)) / Math.tan(fovRad / 2);
+    const targetPersp = 1 - GROUND_CONTENT_CAP + dropPersp;
+    // Cross-fade the two targets by projection; only ever pull DOWN (target below the user's ScreenY).
+    const targetPivot = targetOrtho * blend + targetPersp * (1 - blend);
+    if (targetPivot < base) {
+      const x = clamp((GROUND_EASE_DEG - elevDeg) / GROUND_EASE_DEG, 0, 1);
+      const k = x * x * (3 - 2 * x); // smoothstep in elevation
+      corrTarget = (targetPivot - base) * k; // negative — only ever pulls the pin DOWN
     }
   }
-  // Damp the applied pull over time (frame-rate independent) so the slide is smooth at any tilt
-  // speed. Per-frame callers pass dt; one-shot re-parks (post-zoom) omit it and reuse the last value.
-  if (dt && dt > 0) _groundCorr = THREE.MathUtils.damp(_groundCorr, corrTarget, ORTHO_GROUND_DAMP, dt);
+  // Damp the applied pull over time (frame-rate independent) so live tilts ease smoothly — but SNAP
+  // on the first frame (NaN) or a dt-less re-park, so a fresh load lands already-framed instead of
+  // springing the pivot in from 0.
+  _groundCorr =
+    Number.isFinite(_groundCorr) && dt && dt > 0
+      ? THREE.MathUtils.damp(_groundCorr, corrTarget, GROUND_DAMP, dt)
+      : corrTarget;
   const frac = base + _groundCorr - 0.5; // 0 = centre, < 0 below centre, > 0 above
   // Half-height the morph frames at the focal plane — the SAME bridge ProjectionBlender
   // uses (perspK at blend 0 → orthoSize at blend 1), so the parked pin tracks the framing
@@ -446,11 +460,22 @@ export function DreiSceneControls() {
     const qRadius = Number(q?.get("radius"));
     if (q?.has("radius") && Number.isFinite(qRadius) && qRadius > 0) s.setOrbit({ radius: qRadius });
 
+    const qElev = Number(q?.get("elev"));
+    if (q?.has("elev") && Number.isFinite(qElev)) s.setOrbit({ elevationDeg: qElev });
+
     if (q?.get("pinPlane") === "1") s.setShowPinPlane(true);
 
     const effectiveProjection = projectionOverride ?? s.projection;
     s.setProjectionBlend(effectiveProjection === "orthographic" ? 1 : 0);
+
+    if (q?.get("mode") === "orbit") s.setCameraMode("orbit"); // capture the interactive orbit rig
   }, []);
+
+  // THROWAWAY debug exposure (2026-06-14): reach the live camera / controls / store from a
+  // headless CDP Runtime.evaluate for geometry dumps. Remove with the URL override.
+  useEffect(() => {
+    if (typeof window !== "undefined") Object.assign(window, { __cam: { controls, camera, store: useSceneStore } });
+  }, [camera]);
 
   // Button map: LMB = pan (custom anchored pan below), RMB = rotate/tilt. Touch
   // keeps the Google model (1-finger pan / 2-finger pinch+twist).
@@ -1068,7 +1093,6 @@ export function DreiSceneControls() {
     // park the orbit pivot at the screen-focus position (focal offset; scales w/ zoom)
     applyScreenFocus(c, camera, dt);
 
-    const ortho = s.projection === "orthographic";
     const allowUnder = s.allowUnderview;
 
     // Distance band. Perspective: the fog-sane band (MIN_DIST). Ortho: hold the radius out
@@ -1081,21 +1105,30 @@ export function DreiSceneControls() {
     // enforce the park once the morph has essentially arrived (blend ≈ 1).
     c.minDistance = s.projectionBlend >= 0.999 ? orthoMinRadius() : MIN_DIST;
 
-    // Ground clamp for orbit elevation: let the camera drop BELOW the focal's level
-    // (negative elevation) but never below y=0. cameraY = focalY + radius·cos(polar) ≥ 0
-    // → maxPolar = acos(-focalY/radius), so a higher Focal Y allows more below-orbit.
-    // Recomputed live since Focal Y and radius both move (zoom / free-look / slider).
+    // Ground clamp for orbit elevation (BOTH projections): the ACTUAL eye must stay at/above y = 0,
+    // and may sit anywhere below Focal Y down to it. Triangulating from focalY + radius·cos(polar)
+    // alone bounds the ORBIT POINT — but the real eye is the orbit point PLUS the focal offset
+    // (ScreenY parking and the low-elevation ground pull both setFocalOffset, which physically
+    // shifts the camera), so that stops the orbit point on the ground while the eye is still up
+    // (the "looks high" at the limit). Measure the offset's world-Y contribution (actual − orbit)
+    // and fold it in: eyeY = focalY + offsetY + radius·cos(polar) ≥ 0 →
+    //   maxPolar = acos(-(focalY + offsetY)/radius). Recomputed live, so it tracks Focal Y, radius
+    // (zoom / morph tween), AND the focal offset; the persp↔ortho radius tween rides it safely too.
     c.getTarget(_tgt);
-    let maxPolar = Math.acos(clamp(-_tgt.y / Math.max(1, c.distance), -1, 1));
+    // Use the REAL eye (camera.position), NOT c.getPosition(): camera-controls' getPosition returns
+    // the pre-focal-offset orbit point (Y≈0 at the limit), but the focal offset (ScreenY + ground
+    // pull) physically shifts the rendered camera up ~137 — so measuring against getPosition read
+    // offsetY≈0 and the eye stayed high. offsetY = real eye − analytic orbit point.
+    const offsetY = camera.position.y - (_tgt.y + c.distance * Math.cos(c.polarAngle));
+    let maxPolar = Math.acos(clamp(-(_tgt.y + offsetY) / Math.max(1, c.distance), -1, 1));
     if (allowUnder) {
       // Intentional underview (the "explore later" gate): relax the ground clamp so the camera
       // can drop below the ground and look up at the world from underneath.
       maxPolar = Math.PI * 0.98;
-    } else if (ortho) {
-      // Ortho: cap at the horizon (elevation ≥ ORTHO_ELEV_FLOOR_DEG, now 0). The camera can tilt
-      // fully parallel; the ground-framing ease in applyScreenFocus pulls the pivot down at low
-      // elevation so the parallel view doesn't leave below-ground void at the bottom.
-      maxPolar = Math.min(maxPolar, (90 - ORTHO_ELEV_FLOOR_DEG) * DEG);
+    } else if (s.projection === "orthographic") {
+      // Ortho: floor at the horizon (no below-0 elevation). Perspective is the one that descends
+      // to the ground; ortho stays parallel-or-above.
+      maxPolar = Math.min(maxPolar, Math.PI / 2);
     }
     c.maxPolarAngle = maxPolar;
 
