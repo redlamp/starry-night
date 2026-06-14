@@ -102,17 +102,19 @@ export type OrbitConfig = {
   periodSec: number; // seconds per full revolution
 };
 
-// Tuned via the in-app Save/Copy values workflow (last 2026-05-31).
-// Radius scales with city width (CITY_SCALE); 1800s sweep (0.2°/s) at a gentle 9°
-// elevation. lookAtY (focal HEIGHT) is NOT scaled — building heights are fixed
-// across size tiers, so the skyline sits at the same Y regardless of extent.
+// Curated default framing (2026-06-14): a near-horizon, paused ("still") view of
+// the "starry-night" seed that shows a highway carving through the city — compass
+// 338°, elevation 2.5°, focal height 160. Radius scales with city width
+// (CITY_SCALE); 1800s sweep (0.2°/s) once un-paused. lookAtY (focal HEIGHT) is NOT
+// scaled — building heights are fixed across size tiers, so the skyline sits at the
+// same Y regardless of extent. (Pairs with orbitPaused defaulting true.)
 export const DEFAULT_ORBIT: OrbitConfig = {
   centerX: 0,
   centerZ: -120,
-  lookAtY: 240,
+  lookAtY: 160,
   radius: 2400 * CITY_SCALE,
-  azimuthDeg: 0,
-  elevationDeg: 6,
+  azimuthDeg: 338,
+  elevationDeg: 2.5,
   periodSec: 1800,
 };
 
@@ -498,7 +500,7 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "fog", defaultValue: DEFAULT_FOG, persist: true },
   { key: "haze", defaultValue: DEFAULT_HAZE, persist: true },
   { key: "flySpeed", defaultValue: DEFAULT_FLY_SPEED, persist: true },
-  { key: "orbitPaused", defaultValue: false as const, persist: true },
+  { key: "orbitPaused", defaultValue: true as const, persist: true },
   { key: "showFocalIndicator", defaultValue: false as const, persist: true },
   { key: "orbitPivotFromBottom", defaultValue: 0.37, persist: true },
   { key: "orbitZoomToPin", defaultValue: false as const, persist: false },
@@ -1138,7 +1140,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     })),
   focalDragging: false,
   setFocalDragging: (focalDragging) => set({ focalDragging }),
-  orbitPaused: false,
+  orbitPaused: true,
   setOrbitPaused: (orbitPaused) => set({ orbitPaused }),
   orbit: DEFAULT_ORBIT,
   setOrbit: (patch) => set((s) => ({ orbit: { ...s.orbit, ...patch } })),
