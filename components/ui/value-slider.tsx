@@ -1,7 +1,7 @@
 "use client";
 
 import type { CSSProperties } from "react";
-import { Slider } from "@/components/ui/slider";
+import { Slider, LoopingSlider } from "@/components/ui/slider";
 import {
   NumberField,
   NumberFieldScrubArea,
@@ -28,6 +28,8 @@ export function ValueSlider({
   stepperClass,
   origin,
   indicatorStyle,
+  loop = false,
+  format,
 }: {
   label: string;
   value: number;
@@ -44,32 +46,57 @@ export function ValueSlider({
   // (e.g. a sign-dependent colour) — see Slider's `origin`/`indicatorStyle`.
   origin?: number;
   indicatorStyle?: CSSProperties;
+  // When set, this is a cyclic value (e.g. a compass heading, 360° ≡ 0°): the steppers /
+  // label-scrub / arrow keys / typing WRAP modulo [min, max), and the track becomes a
+  // LoopingSlider (relative-drag spin that wraps past either edge) instead of base-ui's
+  // clamped absolute slider.
+  loop?: boolean;
+  // Number-field display formatting (decimal places, etc.). The slider track is
+  // unaffected — this only governs how the stepper renders the value, e.g.
+  // `{ maximumFractionDigits: 0 }` to show an integer for an integer-step control.
+  format?: Intl.NumberFormatOptions;
 }) {
+  const span = max - min;
+  const wrap = (v: number) => ((((v - min) % span) + span) % span) + min;
   return (
     <NumberField
       value={value}
-      min={min}
-      max={max}
+      min={loop ? undefined : min}
+      max={loop ? undefined : max}
       step={step}
+      format={format}
       onValueChange={(v) => {
-        if (v !== null) onChange(v);
+        if (v !== null) onChange(loop ? wrap(v) : v);
       }}
       className="flex-row items-center gap-2 text-xs"
     >
       <NumberFieldScrubArea>
         <span className={cn("text-foreground/70 block w-14 shrink-0", labelClass)}>{label}</span>
       </NumberFieldScrubArea>
-      <Slider
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onValueChange={(v) => onChange(typeof v === "number" ? v : v[0])}
-        onValueCommitted={onCommit}
-        className="flex-1"
-        origin={origin}
-        indicatorStyle={indicatorStyle}
-      />
+      {loop ? (
+        <LoopingSlider
+          min={min}
+          max={max}
+          step={step}
+          value={value}
+          onChange={onChange}
+          onCommit={onCommit}
+          className="flex-1"
+          indicatorStyle={indicatorStyle}
+        />
+      ) : (
+        <Slider
+          min={min}
+          max={max}
+          step={step}
+          value={value}
+          onValueChange={(v) => onChange(typeof v === "number" ? v : v[0])}
+          onValueCommitted={onCommit}
+          className="flex-1"
+          origin={origin}
+          indicatorStyle={indicatorStyle}
+        />
+      )}
       <NumberFieldGroup
         className={cn("bg-background/60 h-7 shrink-0", stepperClass ?? "w-[6.25rem]")}
       >

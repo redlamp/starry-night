@@ -6,7 +6,7 @@ import { CameraControls, Html, Line } from "@react-three/drei";
 import CameraControlsImpl from "camera-controls";
 import { MapPin } from "lucide-react";
 import * as THREE from "three";
-import { useSceneStore, type OrbitConfig } from "@/lib/state/sceneStore";
+import { useSceneStore, DEFAULT_INTENT, type OrbitConfig } from "@/lib/state/sceneStore";
 import { CITY_SCALE, CITY_CENTER, CITY_TIERS } from "@/lib/seed/topology";
 import { GROUND_APRON_M } from "@/components/scene/Ground";
 
@@ -48,8 +48,9 @@ const MAX_DIST = 5000 * CITY_SCALE;
 // radius parks the camera AMONG the city and clips its near half. So in ortho we hold the radius
 // out past the scene (≥ this × the tier half-extent), which is invisible (size = orthoSize) but
 // keeps the whole scene in front of the near plane. See wiki/notes/camera-tuning-notes #2.
-const ORTHO_RADIUS_FACTOR = 1.8;
-const ORTHO_ELEV_FLOOR_DEG = 8; // ortho: keep the view this far above the horizon (no accidental underview)
+// 1.5 → parks ortho at ~4800 at the default tier (3200 × 1.5), the user's chosen ortho
+// distance (2026-06-14); still clip-safe (camera sits ~1600 past the scene's near edge).
+const ORTHO_RADIUS_FACTOR = 1.5;
 function orthoMinRadius(): number {
   const r = CITY_TIERS[useSceneStore.getState().citySize] + GROUND_APRON_M;
   return Math.min(r * ORTHO_RADIUS_FACTOR, MAX_DIST);
@@ -151,13 +152,61 @@ function panRig(c: CameraControlsImpl, dx: number, dz: number): void {
 // / orthoSize (ortho) so the screen % holds through zoom. Only writes on a real
 // change, so a resting camera can still rest.
 const _focalOff = new THREE.Vector3();
-function applyScreenFocus(c: CameraControlsImpl, camera: THREE.Camera): void {
+// Low-elevation ground framing (both projections). As the camera tilts toward the horizon the
+// ground sweeps up the frame — in ortho that leaves below-ground void at the bottom, in perspective
+// it just crowds the skyline. Below GROUND_EASE_DEG, pull the pivot DOWN so the ground settles low.
+// The two projections differ only in WHERE the ground sits: ortho is linear in lookAtY/orthoSize,
+// perspective is the foreshortened angle (distance + FOV). Their target pivots cross-fade by
+// projectionBlend, so the pull is continuous through a morph and reduces to the pure-ortho pull at
+// blend 1. The pull is a smoothstep in elevation (proportional to how parallel the view is), and the
+// APPLIED value is damped over time so a fast tilt eases in instead of tracking 1:1 and lurching.
+const GROUND_EASE_DEG = 12;
+const GROUND_CONTENT_CAP = 0.95; // both projections: keep real content across the top 95% of the frame at low elevation
+const GROUND_DAMP = 6; // damped-follow rate for the pivot pull (≈0.2s time constant); higher = snappier
+let _groundCorr = Number.NaN; // smoothed pivot correction (≤ 0 = pulled down); NaN → snap on the first frame so a fresh load lands already-framed (no spring), damps after. Module-level; resets on reload.
+function applyScreenFocus(c: CameraControlsImpl, camera: THREE.Camera, dt?: number): void {
   const s = useSceneStore.getState();
-  const frac = s.orbitPivotFromBottom - 0.5; // 0 = centre, < 0 below centre, > 0 above
-  const offY =
-    s.projection === "orthographic"
-      ? frac * 2 * s.orthoSize
-      : frac * 2 * c.distance * Math.tan(((camera as THREE.PerspectiveCamera).fov * DEG) / 2);
+  const base = s.orbitPivotFromBottom;
+  const blend = s.projectionBlend;
+  // Elevation-keyed target pull (≤ 0): how far below the user's ScreenY to sit at this tilt.
+  let corrTarget = 0;
+  const elevDeg = 90 - c.polarAngle / DEG;
+  if (elevDeg < GROUND_EASE_DEG) {
+    // Ortho: the ground line sits lookAtY·cos(θ)/(2·orthoSize) below the pin.
+    const dropOrtho = (s.orbit.lookAtY * Math.cos(elevDeg * DEG)) / (2 * s.orthoSize);
+    const targetOrtho = 1 - GROUND_CONTENT_CAP + dropOrtho;
+    // Perspective: the ground-below-pin sits at the foreshortened angle φ below the view axis.
+    const fovRad = (camera as THREE.PerspectiveCamera).fov * DEG;
+    const phi =
+      Math.atan2(
+        s.orbit.lookAtY + c.distance * Math.sin(elevDeg * DEG),
+        c.distance * Math.cos(elevDeg * DEG),
+      ) -
+      elevDeg * DEG;
+    const dropPersp = (0.5 * Math.tan(phi)) / Math.tan(fovRad / 2);
+    const targetPersp = 1 - GROUND_CONTENT_CAP + dropPersp;
+    // Cross-fade the two targets by projection; only ever pull DOWN (target below the user's ScreenY).
+    const targetPivot = targetOrtho * blend + targetPersp * (1 - blend);
+    if (targetPivot < base) {
+      const x = clamp((GROUND_EASE_DEG - elevDeg) / GROUND_EASE_DEG, 0, 1);
+      const k = x * x * (3 - 2 * x); // smoothstep in elevation
+      corrTarget = (targetPivot - base) * k; // negative — only ever pulls the pin DOWN
+    }
+  }
+  // Damp the applied pull over time (frame-rate independent) so live tilts ease smoothly — but SNAP
+  // on the first frame (NaN) or a dt-less re-park, so a fresh load lands already-framed instead of
+  // springing the pivot in from 0.
+  _groundCorr =
+    Number.isFinite(_groundCorr) && dt && dt > 0
+      ? THREE.MathUtils.damp(_groundCorr, corrTarget, GROUND_DAMP, dt)
+      : corrTarget;
+  const frac = base + _groundCorr - 0.5; // 0 = centre, < 0 below centre, > 0 above
+  // Half-height the morph frames at the focal plane — the SAME bridge ProjectionBlender
+  // uses (perspK at blend 0 → orthoSize at blend 1), so the parked pin tracks the framing
+  // through a projection morph instead of popping when projection flips but blend hasn't.
+  const perspK = c.distance * Math.tan(((camera as THREE.PerspectiveCamera).fov * DEG) / 2);
+  const halfH = perspK + (s.orthoSize - perspK) * blend;
+  const offY = frac * 2 * halfH;
   if (Math.abs(offY - c.getFocalOffset(_focalOff).y) > 0.5) c.setFocalOffset(0, offY, 0, false);
 }
 
@@ -380,17 +429,53 @@ export function DreiSceneControls() {
   const dotElRef = useRef<HTMLDivElement>(null); // the ground dot's DOM node (recoloured below ground)
   const ringLineRef = useRef<ComponentRef<typeof Line>>(null); // the beacon ring Line (recoloured below)
 
-  // On entry to the new controls: start in PERSPECTIVE with a fixed ~25° lens
-  // (Google-like; zoom is dolly, not FOV). Pinned so a stale persisted projection
-  // / fov can't override it. `p` still toggles to ortho within the session.
+  // On entry: pin the perspective lens to the default fov (Google-like; zoom is dolly,
+  // not FOV), and HONOR the default / persisted projection (orthographic by default,
+  // 2026-06-14) rather than forcing perspective — so a fresh launch lands exactly
+  // where Reset does. Snap the transient projectionBlend to match the projection so
+  // there's no boot morph. `p` still toggles perspective↔ortho within the session.
   useEffect(() => {
     const s = useSceneStore.getState();
-    if (s.cameraIntent.fov !== 25) s.setCameraIntent({ fov: 25 });
-    if (s.projection !== "perspective") {
-      s.setProjection("perspective");
-      s.setProjectionBlend(0);
-    }
+    // THROWAWAY camera-tuning override (2026-06-14): dial the default framing from the
+    // URL to A/B perspective FOV against ortho size/distance without editing constants.
+    // Remove once the defaults are dialed in.
+    //   ?projection=perspective|orthographic  ?fov=N  ?orthoSize=N  ?radius=N
+    // Note: in ortho the live radius is auto-parked below, so ?radius mainly bites in
+    // perspective. Runs in orbit mode (interactive) — not in headless ?capture stills.
+    const q = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+    const qProjection = q?.get("projection");
+    const projectionOverride =
+      qProjection === "perspective" || qProjection === "orthographic" ? qProjection : null;
+    if (projectionOverride) s.setProjection(projectionOverride);
+
+    const qFov = Number(q?.get("fov"));
+    if (q?.has("fov") && Number.isFinite(qFov)) s.setCameraIntent({ fov: qFov });
+    else if (s.cameraIntent.fov !== DEFAULT_INTENT.fov)
+      s.setCameraIntent({ fov: DEFAULT_INTENT.fov });
+
+    const qOrthoSize = Number(q?.get("orthoSize"));
+    if (q?.has("orthoSize") && Number.isFinite(qOrthoSize) && qOrthoSize > 0)
+      s.setOrthoSize(qOrthoSize);
+
+    const qRadius = Number(q?.get("radius"));
+    if (q?.has("radius") && Number.isFinite(qRadius) && qRadius > 0) s.setOrbit({ radius: qRadius });
+
+    const qElev = Number(q?.get("elev"));
+    if (q?.has("elev") && Number.isFinite(qElev)) s.setOrbit({ elevationDeg: qElev });
+
+    if (q?.get("pinPlane") === "1") s.setShowPinPlane(true);
+
+    const effectiveProjection = projectionOverride ?? s.projection;
+    s.setProjectionBlend(effectiveProjection === "orthographic" ? 1 : 0);
+
+    if (q?.get("mode") === "orbit") s.setCameraMode("orbit"); // capture the interactive orbit rig
   }, []);
+
+  // THROWAWAY debug exposure (2026-06-14): reach the live camera / controls / store from a
+  // headless CDP Runtime.evaluate for geometry dumps. Remove with the URL override.
+  useEffect(() => {
+    if (typeof window !== "undefined") Object.assign(window, { __cam: { controls, camera, store: useSceneStore } });
+  }, [camera]);
 
   // Button map: LMB = pan (custom anchored pan below), RMB = rotate/tilt. Touch
   // keeps the Google model (1-finger pan / 2-finger pinch+twist).
@@ -1006,31 +1091,44 @@ export function DreiSceneControls() {
     }
 
     // park the orbit pivot at the screen-focus position (focal offset; scales w/ zoom)
-    applyScreenFocus(c, camera);
+    applyScreenFocus(c, camera, dt);
 
-    const ortho = s.projection === "orthographic";
     const allowUnder = s.allowUnderview;
 
     // Distance band. Perspective: the fog-sane band (MIN_DIST). Ortho: hold the radius out
     // past the scene so the faked-ortho near plane never clips the city's near half — invisible
     // since orthoSize sets the apparent size, and it makes the elevation clamp below resolve to
     // "above the horizon" naturally. (camera-controls clamps distance to [min,max] each update.)
-    c.minDistance = ortho ? orthoMinRadius() : MIN_DIST;
+    // Gated on the BLEND, not the projection flag: during a projection morph the distance tweens
+    // between the two modes' radii (tweenProjectionTo), and clamping to the ortho park mid-morph
+    // would yank the camera off the tweened radius and pop the perspective-side framing. Only
+    // enforce the park once the morph has essentially arrived (blend ≈ 1).
+    c.minDistance = s.projectionBlend >= 0.999 ? orthoMinRadius() : MIN_DIST;
 
-    // Ground clamp for orbit elevation: let the camera drop BELOW the focal's level
-    // (negative elevation) but never below y=0. cameraY = focalY + radius·cos(polar) ≥ 0
-    // → maxPolar = acos(-focalY/radius), so a higher Focal Y allows more below-orbit.
-    // Recomputed live since Focal Y and radius both move (zoom / free-look / slider).
+    // Ground clamp for orbit elevation (BOTH projections): the ACTUAL eye must stay at/above y = 0,
+    // and may sit anywhere below Focal Y down to it. Triangulating from focalY + radius·cos(polar)
+    // alone bounds the ORBIT POINT — but the real eye is the orbit point PLUS the focal offset
+    // (ScreenY parking and the low-elevation ground pull both setFocalOffset, which physically
+    // shifts the camera), so that stops the orbit point on the ground while the eye is still up
+    // (the "looks high" at the limit). Measure the offset's world-Y contribution (actual − orbit)
+    // and fold it in: eyeY = focalY + offsetY + radius·cos(polar) ≥ 0 →
+    //   maxPolar = acos(-(focalY + offsetY)/radius). Recomputed live, so it tracks Focal Y, radius
+    // (zoom / morph tween), AND the focal offset; the persp↔ortho radius tween rides it safely too.
     c.getTarget(_tgt);
-    let maxPolar = Math.acos(clamp(-_tgt.y / Math.max(1, c.distance), -1, 1));
+    // Use the REAL eye (camera.position), NOT c.getPosition(): camera-controls' getPosition returns
+    // the pre-focal-offset orbit point (Y≈0 at the limit), but the focal offset (ScreenY + ground
+    // pull) physically shifts the rendered camera up ~137 — so measuring against getPosition read
+    // offsetY≈0 and the eye stayed high. offsetY = real eye − analytic orbit point.
+    const offsetY = camera.position.y - (_tgt.y + c.distance * Math.cos(c.polarAngle));
+    let maxPolar = Math.acos(clamp(-(_tgt.y + offsetY) / Math.max(1, c.distance), -1, 1));
     if (allowUnder) {
       // Intentional underview (the "explore later" gate): relax the ground clamp so the camera
       // can drop below the ground and look up at the world from underneath.
       maxPolar = Math.PI * 0.98;
-    } else if (ortho) {
-      // Ortho: floor the elevation so the view never goes edge-on / dips under the horizon
-      // (the d-anchored clamp alone can sit ~2° under when Focal Y > 0).
-      maxPolar = Math.min(maxPolar, (90 - ORTHO_ELEV_FLOOR_DEG) * DEG);
+    } else if (s.projection === "orthographic") {
+      // Ortho: floor at the horizon (no below-0 elevation). Perspective is the one that descends
+      // to the ground; ortho stays parallel-or-above.
+      maxPolar = Math.min(maxPolar, Math.PI / 2);
     }
     c.maxPolarAngle = maxPolar;
 

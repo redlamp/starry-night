@@ -11,6 +11,8 @@ import {
 } from "react";
 import {
   useSceneStore,
+  DEFAULT_INTENT,
+  DEFAULT_PROJECTION,
   type Vec3,
   type QualityTier,
   QUALITY_TIERS,
@@ -36,6 +38,7 @@ import {
   CloudFog,
   Contrast,
   Copy,
+  Crosshair,
   Gauge,
   Home,
   Hotel,
@@ -45,13 +48,18 @@ import {
   MapPin,
   Moon,
   MoonStar,
+  MousePointer2,
   Orbit as OrbitIcon,
+  Pause,
+  Play,
+  Pointer,
   RadioTower,
   Rotate3d,
   RotateCcw,
   Route,
   RulerDimensionLine,
   Save,
+  ScanSearch,
   Search,
   Settings,
   Sparkles,
@@ -312,6 +320,7 @@ export function CameraPanel() {
     hasSavedConfig,
   } = useSceneStore();
   const orbitRestoreSet = useSceneStore((s) => s.orbitRestore !== null);
+  const showPinPlane = useSceneStore((s) => s.debug.showPinPlane);
 
   const [hidden, setHidden] = useState(true);
   const [savedExists, setSavedExists] = useState(() => hasSavedConfig());
@@ -362,9 +371,7 @@ export function CameraPanel() {
         title="Show settings (H)"
         aria-label="Show settings"
       >
-        <span aria-hidden="true" className="text-lg leading-none">
-          ⚙
-        </span>
+        <Settings className="size-5" />
       </button>
     );
   }
@@ -496,9 +503,10 @@ export function CameraPanel() {
                   variant="secondary"
                   size="sm"
                   title="Replay both wake-up sequences from progress = 0"
-                  className="h-6 bg-amber-300 px-2 text-xs text-black hover:bg-amber-300/90"
+                  className="bg-foreground/10 text-foreground/80 hover:bg-foreground/20 h-6 px-2 text-xs"
                   onClick={() => useSceneStore.getState().playAllIntros()}
                 >
+                  <RotateCcw className="size-3.5" />
                   replay
                 </Button>
               }
@@ -511,7 +519,7 @@ export function CameraPanel() {
               icon={Camera}
               label="Camera"
               hidden={!show("pose")}
-              action={<CameraPoseToggle />}
+              action={<CameraHeaderActions />}
             >
               <PoseSection flying={flying} />
               {/* Live readout — lives with the camera controls (user 2026-06-07). */}
@@ -560,6 +568,7 @@ export function CameraPanel() {
                   </div>
                 </TooltipProvider>
               </div>
+              {showPinPlane && <PinPlaneReadout />}
             </Section>
 
             <Section
@@ -567,7 +576,7 @@ export function CameraPanel() {
               icon={OrbitIcon}
               label="Orbit"
               hidden={!show("orbit")}
-              action={<OrbitStillToggle />}
+              action={<OrbitHeaderActions />}
             >
               <OrbitSection />
             </Section>
@@ -770,9 +779,6 @@ function OrbitSection() {
   const pivot = useSceneStore((s) => s.orbitPivotFromBottom);
   const setPivot = useSceneStore((s) => s.setOrbitPivotFromBottom);
   const setFocalAdjust = useSceneStore((s) => s.setFocalAdjust);
-  // In ortho the radius is auto-parked (zoom = orthoSize via the "size" control), so the
-  // Distance slider would be misleading — hide it there.
-  const isOrtho = useSceneStore((s) => s.projection === "orthographic");
   // Show the focal pin (and, for Screen Y, the guide line) WHILE a slider is being adjusted,
   // then revert on release: a slider drag ends precisely via onCommit (base-ui's
   // onValueCommitted); the timeout is only a fallback for non-drag inputs (stepper / typing /
@@ -800,21 +806,15 @@ function OrbitSection() {
   );
   return (
     <>
-      <div className="flex items-center justify-between gap-1.5">
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => tweenOrbitToDefault()}
-          title="Tween the orbit back to its default framing"
-          className="bg-purple-500/20 text-purple-200 hover:bg-purple-500/30"
-        >
-          Default Orbit
-        </Button>
-        <div className="flex flex-wrap items-center justify-end gap-1.5">
-          <FocalIndicatorToggle />
-          <ZoomModeToggle />
-        </div>
-      </div>
+      <Button
+        variant="secondary"
+        size="sm"
+        onClick={() => tweenOrbitToDefault()}
+        title="Tween the orbit back to its default framing"
+        className="self-start bg-purple-500/20 text-purple-200 hover:bg-purple-500/30"
+      >
+        Default Orbit
+      </Button>
       <ValueSlider
         label="Speed °/s"
         value={orbit.periodSec !== 0 ? Number((360 / orbit.periodSec).toFixed(1)) : 0}
@@ -824,17 +824,17 @@ function OrbitSection() {
         onChange={(dps) => setOrbit({ periodSec: dps !== 0 ? 360 / dps : 0 })}
         stepperClass="w-32"
       />
-      {!isOrtho && (
-        <ValueSlider
-          label="Distance"
-          value={orbit.radius}
-          min={50}
-          max={5000}
-          step={5}
-          onChange={(radius) => setOrbit({ radius })}
-          stepperClass="w-32"
-        />
-      )}
+      {/* Shown in ortho too: the radius doesn't drive ortho zoom (orthoSize does), but it
+          still moves the camera along the view axis — useful while debugging the camera. */}
+      <ValueSlider
+        label="Distance"
+        value={orbit.radius}
+        min={1}
+        max={5000}
+        step={5}
+        onChange={(radius) => setOrbit({ radius })}
+        stepperClass="w-32"
+      />
       <ValueSlider
         label="Elevation"
         value={orbit.elevationDeg}
@@ -850,6 +850,7 @@ function OrbitSection() {
         min={0}
         max={360}
         step={1}
+        loop
         onChange={(azimuthDeg) => setOrbit({ azimuthDeg })}
         stepperClass="w-32"
       />
@@ -1831,6 +1832,8 @@ function DebugSection() {
   const setShowTensorField = useSceneStore((s) => s.setShowTensorField);
   const setTileOverlay = useSceneStore((s) => s.setTileOverlay);
   const setTileFreeze = useSceneStore((s) => s.setTileFreeze);
+  const showPinPlane = useSceneStore((s) => s.debug.showPinPlane);
+  const setShowPinPlane = useSceneStore((s) => s.setShowPinPlane);
   const cityShape = useSceneStore((s) => s.cityShape);
   const setCityShape = useSceneStore((s) => s.setCityShape);
   const cityShapeScale = useSceneStore((s) => s.cityShapeScale);
@@ -1986,7 +1989,57 @@ function DebugSection() {
           culling switch itself lives in Roads → Distance LOD.
         </div>
       </SubGroup>
+
+      {/* Pin-plane framing aid (2026-06-14, throwaway): the plane through the focal
+          pin with the ortho view outlined on it — dial perspective fov/distance to
+          match the outline. */}
+      <SubGroup
+        label="Pin plane"
+        action={
+          <Switch
+            checked={showPinPlane}
+            onCheckedChange={setShowPinPlane}
+            title="Show the focal-pin plane + ortho view outline"
+          />
+        }
+      >
+        <div className="text-foreground/45 text-[11px] leading-snug">
+          On the plane through the focal pin (perpendicular to the view), two footprints: the
+          orthographic view in <span className="text-sky-300">sky-blue</span> and the perspective
+          view in <span className="text-amber-700">soil-brown</span>. Both honour Screen Y. Adjust
+          FOV / distance until the brown rect lands on the blue one — that&apos;s matched framing.
+        </div>
+      </SubGroup>
     </>
+  );
+}
+
+// K = visible half-height at the pin plane: ortho sets it directly (orthoSize),
+// perspective produces it via distance·tan(fov/2). Equal K ⇒ the two projections
+// frame the same content. Δ→0 (green) is the numeric proof that pairs with the
+// pin-plane overlay's rects coinciding. (2026-06-14, throwaway tuning aid.)
+function PinPlaneReadout() {
+  const orthoSize = useSceneStore((s) => s.orthoSize);
+  const radius = useSceneStore((s) => s.orbit.radius);
+  const fov = useSceneStore((s) => s.cameraIntent.fov);
+  const kPersp = radius * Math.tan((fov * Math.PI) / 180 / 2);
+  const delta = kPersp - orthoSize;
+  return (
+    <div className="border-foreground/10 mt-1 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 border-t pt-1.5 font-mono text-[11px]">
+      <div className="text-sky-300">K ortho (size)</div>
+      <div className="text-right tabular-nums">{fmt(orthoSize, 0)}</div>
+      <div className="text-amber-700">K persp (d·tan½fov)</div>
+      <div className="text-right tabular-nums">{fmt(kPersp, 0)}</div>
+      <div className="text-foreground/50">Δ</div>
+      <div
+        className={cn(
+          "text-right tabular-nums",
+          Math.abs(delta) < 1 ? "text-emerald-400" : "text-foreground/70",
+        )}
+      >
+        {fmt(delta, 0)}
+      </div>
+    </div>
   );
 }
 
@@ -2154,25 +2207,59 @@ function ProgressRow({ label, value }: { label: string; value: number }) {
   );
 }
 
-// Orbit section header action (user 2026-06-08): pause/resume the camera
-// auto-revolution, moved from the panel header. Label = the CURRENT state
-// ("orbit" revolving / "still" paused), same sizing as the other header
-// actions (CameraPoseToggle). Space still toggles it.
-function OrbitStillToggle() {
+// True when the primary pointer is coarse (touch). Client-only; defaults to false
+// (desktop / cursor) on first paint, then resolves after mount — avoids a hydration
+// mismatch. Guards (pointer: coarse) per the hover/pointer-safety convention.
+function useIsTouch() {
+  const [touch, setTouch] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(pointer: coarse)");
+    const update = () => setTouch(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+  return touch;
+}
+
+// Orbit section header actions (user 2026-06-14): the orbit controls live in the
+// section header now — transport (play/pause), the focal-point pin, and the wheel-zoom
+// target — each a compact icon button so all three sit beside the chevron. (The
+// pause/resume action moved to the header 2026-06-08; the other two followed here.)
+function OrbitHeaderActions() {
+  return (
+    <div className="flex items-center gap-1">
+      <ZoomTargetToggle />
+      <FocalPinToggle />
+      <OrbitPlayPauseToggle />
+    </div>
+  );
+}
+
+// Play/pause the camera auto-revolution. Transport convention: ⏸ while revolving
+// (click to pause), ▶ while paused (click to resume); highlighted while playing.
+// Space still toggles it.
+function OrbitPlayPauseToggle() {
   const orbitPaused = useSceneStore((s) => s.orbitPaused);
   const setOrbitPaused = useSceneStore((s) => s.setOrbitPaused);
+  const playing = !orbitPaused;
   return (
     <Button
       variant="secondary"
-      size="sm"
-      className="bg-foreground/10 text-foreground/80 hover:bg-foreground/20 h-6 px-2 text-xs"
+      size="icon-sm"
       title={
-        orbitPaused ? "Resume the orbit revolution (Space)" : "Pause the orbit revolution (Space)"
+        playing ? "Pause the orbit revolution (Space)" : "Resume the orbit revolution (Space)"
       }
-      aria-label={orbitPaused ? "Resume orbit revolution" : "Pause orbit revolution"}
+      aria-label={playing ? "Pause orbit revolution" : "Resume orbit revolution"}
+      aria-pressed={playing}
       onClick={() => setOrbitPaused(!orbitPaused)}
+      className={cn(
+        playing
+          ? "bg-amber-300 text-black hover:bg-amber-300/90"
+          : "bg-foreground/10 text-foreground/80 hover:bg-foreground/20",
+      )}
     >
-      {orbitPaused ? "still" : "orbit"}
+      {playing ? <Pause className="size-3.5" /> : <Play className="size-3.5" />}
     </Button>
   );
 }
@@ -2245,6 +2332,7 @@ function FovOrSizeSlider() {
         min={5}
         max={2000}
         step={1}
+        format={{ maximumFractionDigits: 0 }}
         onChange={setOrthoSize}
       />
     );
@@ -2254,8 +2342,9 @@ function FovOrSizeSlider() {
       label="fov"
       value={fov}
       min={5}
-      max={150}
+      max={90}
       step={1}
+      format={{ maximumFractionDigits: 0 }}
       onChange={(v) => setCameraIntent({ fov: v })}
     />
   );
@@ -2291,42 +2380,50 @@ function CopyButton() {
   );
 }
 
-function FocalIndicatorToggle() {
+// Focal-point pin (moved to the header 2026-06-14): a MapPin icon — the same glyph
+// the live readout uses for the focal-point row — highlighted sky-blue while shown.
+function FocalPinToggle() {
   const show = useSceneStore((s) => s.showFocalIndicator);
   const setShow = useSceneStore((s) => s.setShowFocalIndicator);
   return (
     <Button
       variant="secondary"
-      size="sm"
+      size="icon-sm"
       onClick={() => setShow(!show)}
-      title="Toggle the screen-space focal-point crosshair"
+      title={show ? "Hide the focal-point pin" : "Show the focal-point pin"}
+      aria-label={show ? "Hide focal-point pin" : "Show focal-point pin"}
+      aria-pressed={show}
       className={cn(
         show
-          ? "bg-sky-400 text-black hover:bg-sky-400"
+          ? "bg-amber-300 text-black hover:bg-amber-300/90"
           : "bg-foreground/10 text-foreground/80 hover:bg-foreground/20",
       )}
     >
-      focal point {show ? "[on]" : "[off]"}
+      <MapPin className="size-3.5" />
     </Button>
   );
 }
 
-function ZoomModeToggle() {
+// Wheel-zoom target (moved to the header 2026-06-14): a magnifying glass paired with
+// whatever zoom homes toward — the pin when zooming to the focal pin, otherwise the
+// pointer that drives it: an arrow cursor on desktop, a finger on touch. `z` toggles it.
+function ZoomTargetToggle() {
   const toPin = useSceneStore((s) => s.orbitZoomToPin);
   const setToPin = useSceneStore((s) => s.setOrbitZoomToPin);
+  const isTouch = useIsTouch();
+  const TargetIcon = toPin ? MapPin : isTouch ? Pointer : MousePointer2;
+  const targetLabel = toPin ? "the pin" : isTouch ? "your finger" : "the cursor";
   return (
     <Button
       variant="secondary"
       size="sm"
       onClick={() => setToPin(!toPin)}
-      title="Wheel-zoom target: toward the cursor (default) or toward the pin/focal (z)"
-      className={cn(
-        toPin
-          ? "bg-amber-400 text-black hover:bg-amber-400"
-          : "bg-foreground/10 text-foreground/80 hover:bg-foreground/20",
-      )}
+      title={`Wheel-zoom homes toward ${targetLabel} (z to toggle)`}
+      aria-label={`Wheel-zoom target: ${targetLabel}`}
+      className="bg-foreground/10 text-foreground/80 hover:bg-foreground/20 gap-0.5 px-1.5"
     >
-      zoom: {toPin ? "pin" : "cursor"}
+      <ScanSearch className="size-3.5" />
+      <TargetIcon className="size-3.5" />
     </Button>
   );
 }
@@ -2444,48 +2541,100 @@ function PerfDisplayToggle() {
   );
 }
 
-// Camera header action (user 2026-06-07): one-press toggle between the DEFAULT
-// orbit framing and the user's own ("free") pose. Pressing "default" snapshots
-// the current orbit (elevation / radius / orthoSize — azimuth is deliberately
-// left alone, same as Default Orbit, so nothing spins) and tweens to the
-// default framing; pressing "free" tweens back to the snapshot. Transient —
-// the snapshot is component state, never persisted.
+// Camera header actions (user 2026-06-14): a quick projection switch plus the
+// default/free pose toggle, side by side in the section header.
+function CameraHeaderActions() {
+  return (
+    <div className="flex items-center gap-1">
+      <CameraProjectionToggle />
+      <CameraPoseToggle />
+    </div>
+  );
+}
+
+// Quick projection switch: shows the CURRENT projection's icon — telescope =
+// perspective, box = orthographic — and tweens to the other on click (the same
+// morph as the body projection tabs). The tabs in the section body remain the
+// labelled control; this is the at-a-glance header shortcut.
+function CameraProjectionToggle() {
+  const projection = useSceneStore((s) => s.projection);
+  const isPersp = projection === "perspective";
+  return (
+    <Button
+      variant="secondary"
+      size="icon-sm"
+      className="bg-foreground/10 text-foreground/80 hover:bg-foreground/20"
+      title={isPersp ? "Switch to orthographic" : "Switch to perspective"}
+      aria-label={
+        isPersp ? "Switch to orthographic projection" : "Switch to perspective projection"
+      }
+      onClick={() => tweenProjectionTo(isPersp ? "orthographic" : "perspective")}
+    >
+      {isPersp ? <Telescope className="size-3.5" /> : <Box className="size-3.5" />}
+    </Button>
+  );
+}
+
+// One-press toggle between the DEFAULT orbit framing and the user's own ("free")
+// pose (user 2026-06-07). Pressing it from "free" snapshots the current orbit
+// (elevation / radius / orthoSize — azimuth is deliberately left alone, same as
+// Default Orbit, so nothing spins) and tweens to the default framing; pressing it
+// from "default" tweens back to the snapshot. Now a crosshair icon, highlighted
+// amber while in the free pose (user 2026-06-14). Snapshot is transient component
+// state, never persisted.
 function CameraPoseToggle() {
   const [freePose, setFreePose] = useState<{
     elevationDeg: number;
     radius: number;
     orthoSize: number;
+    projection: "perspective" | "orthographic";
+    fov: number;
   } | null>(null);
   const atDefault = freePose !== null;
   return (
     <Button
       variant="secondary"
-      size="sm"
-      className="bg-foreground/10 text-foreground/80 hover:bg-foreground/20 h-6 px-2 text-xs"
+      size="icon-sm"
+      className={cn(
+        atDefault
+          ? "bg-foreground/10 text-foreground/80 hover:bg-foreground/20"
+          : "bg-amber-300 text-black hover:bg-amber-300/90",
+      )}
       title={
         atDefault
           ? "Return to the pose you were at before snapping to default"
           : "Snap to the default orbit framing (remembers your current pose)"
       }
+      aria-label={atDefault ? "Return to your free pose" : "Snap to default orbit framing"}
+      aria-pressed={!atDefault}
       onClick={() => {
         const s = useSceneStore.getState();
         if (atDefault && freePose) {
+          // Return to the free pose: projection + FOV + framing, all as they were.
+          // tweenProjectionTo first so the orbit tween captures the matched orthoSize
+          // as its start and ramps to the snapshot value without a jump.
           if (s.cameraMode !== "orbit") s.setCameraMode("orbit");
+          if (s.projection !== freePose.projection) tweenProjectionTo(freePose.projection);
+          s.setCameraIntent({ fov: freePose.fov });
           tweenOrbitTowards(freePose.elevationDeg, freePose.radius, freePose.orthoSize);
           setFreePose(null);
         } else {
+          // Snap to the full page-load default: projection + FOV + framing (user
+          // 2026-06-14). Snapshot first so "free" can restore exactly what was here.
           setFreePose({
             elevationDeg: s.orbit.elevationDeg,
             radius: s.orbit.radius,
             orthoSize: s.orthoSize,
+            projection: s.projection,
+            fov: s.cameraIntent.fov,
           });
+          if (s.projection !== DEFAULT_PROJECTION) tweenProjectionTo(DEFAULT_PROJECTION);
+          s.setCameraIntent({ fov: DEFAULT_INTENT.fov });
           tweenOrbitToDefault();
         }
       }}
     >
-      {/* Label = the CURRENT mode (user 2026-06-07), not the action — the
-          title text explains what clicking does. */}
-      {atDefault ? "default" : "free"}
+      <Crosshair className="size-3.5" />
     </Button>
   );
 }
