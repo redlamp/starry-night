@@ -71,7 +71,7 @@ export const DEFAULT_INTENT: CameraIntent = {
   position: [3, 36, 720],
   lookAt: [-3.377, 36.474, -759.372],
   rotation: [2.9051946114622647, -0.005135430560327543, 3.140355522200459],
-  fov: 25, // narrow / low-distortion, matching Google Maps' 3D camera
+  fov: 20, // narrow / low-distortion, matching Google Maps' 3D camera
   orient: "lookAt",
 };
 
@@ -103,18 +103,18 @@ export type OrbitConfig = {
 };
 
 // Curated default framing (2026-06-14): a near-horizon, paused ("still") view of
-// the "starry-night" seed that shows a highway carving through the city — compass
-// 338°, elevation 2.5°, focal height 160. Radius scales with city width
+// the "starry-night" seed — compass 186°, elevation 2°, focal height 120 (user
+// 2026-06-14). Radius scales with city width
 // (CITY_SCALE); 1800s sweep (0.2°/s) once un-paused. lookAtY (focal HEIGHT) is NOT
 // scaled — building heights are fixed across size tiers, so the skyline sits at the
 // same Y regardless of extent. (Pairs with orbitPaused defaulting true.)
 export const DEFAULT_ORBIT: OrbitConfig = {
   centerX: 0,
   centerZ: -120,
-  lookAtY: 160,
+  lookAtY: 120,
   radius: 2400 * CITY_SCALE,
-  azimuthDeg: 338,
-  elevationDeg: 2.5,
+  azimuthDeg: 186,
+  elevationDeg: 2,
   periodSec: 1800,
 };
 
@@ -325,6 +325,10 @@ export const DEFAULT_DEBUG = {
   // frustum to the current pose so the camera can inspect eviction from outside.
   tileOverlay: false,
   tileFreeze: false,
+  // Pin-plane view (2026-06-14, throwaway camera-tuning aid): the plane through the
+  // focal pin, perpendicular to the view axis, with the ortho view's footprint
+  // outlined on it — adjust perspective fov/distance until the frame matches.
+  showPinPlane: false,
 };
 
 // Default wireframe stroke colour — a bright blue used where a group has no
@@ -394,7 +398,7 @@ export const DEFAULT_CITY_SHAPE_SCALE = 1.0;
 
 export const DEFAULT_FLY_SPEED = 14;
 // 360 at the 3 km default notch (half 1500); base scales with the size knob via CITY_SCALE.
-export const DEFAULT_ORTHO_SIZE = 180 * CITY_SCALE;
+export const DEFAULT_ORTHO_SIZE = 160 * CITY_SCALE;
 export const DEFAULT_PROJECTION = "orthographic" as const;
 
 // ---------------------------------------------------------------------------
@@ -503,7 +507,7 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "orbitPaused", defaultValue: true as const, persist: true },
   { key: "showFocalIndicator", defaultValue: false as const, persist: true },
   { key: "orbitPivotFromBottom", defaultValue: 0.37, persist: true },
-  { key: "orbitZoomToPin", defaultValue: false as const, persist: false },
+  { key: "orbitZoomToPin", defaultValue: true as const, persist: false },
   { key: "allowUnderview", defaultValue: false as const, persist: false },
   { key: "cameraMode", defaultValue: "orbit" as const, persist: true },
   { key: "orbitRestore", defaultValue: null as SceneState["orbitRestore"], persist: false },
@@ -984,6 +988,7 @@ type SceneState = {
   setShowTensorField: (v: boolean) => void;
   setTileOverlay: (v: boolean) => void;
   setTileFreeze: (v: boolean) => void;
+  setShowPinPlane: (v: boolean) => void;
   // Organic city footprint (#14) — gen input; changing it regenerates the city.
   cityShape: CityShapeSetting;
   setCityShape: (cityShape: CityShapeSetting) => void;
@@ -1111,7 +1116,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setFocalAdjust: (focalAdjust) => set({ focalAdjust }),
   orbitPivotFromBottom: 0.37,
   setOrbitPivotFromBottom: (orbitPivotFromBottom) => set({ orbitPivotFromBottom }),
-  orbitZoomToPin: false,
+  orbitZoomToPin: true,
   setOrbitZoomToPin: (orbitZoomToPin) => set({ orbitZoomToPin }),
   allowUnderview: false,
   setAllowUnderview: (allowUnderview) => set({ allowUnderview }),
@@ -1205,6 +1210,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setShowTensorField: (v) => set((s) => ({ debug: { ...s.debug, showTensorField: v } })),
   setTileOverlay: (v) => set((s) => ({ debug: { ...s.debug, tileOverlay: v } })),
   setTileFreeze: (v) => set((s) => ({ debug: { ...s.debug, tileFreeze: v } })),
+  setShowPinPlane: (v) => set((s) => ({ debug: { ...s.debug, showPinPlane: v } })),
   cityShape: DEFAULT_CITY_SHAPE,
   setCityShape: (cityShape) => set({ cityShape }),
   cityShapeScale: DEFAULT_CITY_SHAPE_SCALE,

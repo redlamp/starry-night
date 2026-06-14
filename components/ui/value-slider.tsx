@@ -29,6 +29,7 @@ export function ValueSlider({
   origin,
   indicatorStyle,
   loop = false,
+  format,
 }: {
   label: string;
   value: number;
@@ -50,6 +51,10 @@ export function ValueSlider({
   // LoopingSlider (relative-drag spin that wraps past either edge) instead of base-ui's
   // clamped absolute slider.
   loop?: boolean;
+  // Number-field display formatting (decimal places, etc.). The slider track is
+  // unaffected — this only governs how the stepper renders the value, e.g.
+  // `{ maximumFractionDigits: 0 }` to show an integer for an integer-step control.
+  format?: Intl.NumberFormatOptions;
 }) {
   const span = max - min;
   const wrap = (v: number) => ((((v - min) % span) + span) % span) + min;
@@ -59,6 +64,7 @@ export function ValueSlider({
       min={loop ? undefined : min}
       max={loop ? undefined : max}
       step={step}
+      format={format}
       onValueChange={(v) => {
         if (v !== null) onChange(loop ? wrap(v) : v);
       }}

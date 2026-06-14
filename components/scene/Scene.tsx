@@ -25,6 +25,7 @@ import { FocalIndicator } from "./FocalIndicator";
 import { IntroTicker } from "./IntroTicker";
 import { FogTicker } from "./FogTicker";
 import { FogBoundsMarkers } from "./FogBoundsMarkers";
+import { PinPlaneMarker } from "./PinPlaneMarker";
 import { GroundHaze } from "./GroundHaze";
 import { Roads } from "./Roads";
 import { DistrictShells } from "./DistrictShells";
@@ -100,6 +101,7 @@ export function Scene() {
         <IntroTicker cityReady={cityReady} />
         <FogTicker />
         <FogBoundsMarkers />
+        <PinPlaneMarker />
 
         {/* near/far/density args are placeholders — FogTicker re-derives them
           every frame around the camera→city-centre distance (city-anchored

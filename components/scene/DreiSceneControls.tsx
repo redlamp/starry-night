@@ -6,7 +6,7 @@ import { CameraControls, Html, Line } from "@react-three/drei";
 import CameraControlsImpl from "camera-controls";
 import { MapPin } from "lucide-react";
 import * as THREE from "three";
-import { useSceneStore, type OrbitConfig } from "@/lib/state/sceneStore";
+import { useSceneStore, DEFAULT_INTENT, type OrbitConfig } from "@/lib/state/sceneStore";
 import { CITY_SCALE, CITY_CENTER, CITY_TIERS } from "@/lib/seed/topology";
 import { GROUND_APRON_M } from "@/components/scene/Ground";
 
@@ -48,7 +48,9 @@ const MAX_DIST = 5000 * CITY_SCALE;
 // radius parks the camera AMONG the city and clips its near half. So in ortho we hold the radius
 // out past the scene (≥ this × the tier half-extent), which is invisible (size = orthoSize) but
 // keeps the whole scene in front of the near plane. See wiki/notes/camera-tuning-notes #2.
-const ORTHO_RADIUS_FACTOR = 1.8;
+// 1.5 → parks ortho at ~4800 at the default tier (3200 × 1.5), the user's chosen ortho
+// distance (2026-06-14); still clip-safe (camera sits ~1600 past the scene's near edge).
+const ORTHO_RADIUS_FACTOR = 1.5;
 const ORTHO_ELEV_FLOOR_DEG = 8; // ortho: keep the view this far above the horizon (no accidental underview)
 function orthoMinRadius(): number {
   const r = CITY_TIERS[useSceneStore.getState().citySize] + GROUND_APRON_M;
@@ -380,15 +382,41 @@ export function DreiSceneControls() {
   const dotElRef = useRef<HTMLDivElement>(null); // the ground dot's DOM node (recoloured below ground)
   const ringLineRef = useRef<ComponentRef<typeof Line>>(null); // the beacon ring Line (recoloured below)
 
-  // On entry: pin the perspective lens to a fixed ~25° (Google-like; zoom is dolly,
+  // On entry: pin the perspective lens to the default fov (Google-like; zoom is dolly,
   // not FOV), and HONOR the default / persisted projection (orthographic by default,
   // 2026-06-14) rather than forcing perspective — so a fresh launch lands exactly
   // where Reset does. Snap the transient projectionBlend to match the projection so
   // there's no boot morph. `p` still toggles perspective↔ortho within the session.
   useEffect(() => {
     const s = useSceneStore.getState();
-    if (s.cameraIntent.fov !== 25) s.setCameraIntent({ fov: 25 });
-    s.setProjectionBlend(s.projection === "orthographic" ? 1 : 0);
+    // THROWAWAY camera-tuning override (2026-06-14): dial the default framing from the
+    // URL to A/B perspective FOV against ortho size/distance without editing constants.
+    // Remove once the defaults are dialed in.
+    //   ?projection=perspective|orthographic  ?fov=N  ?orthoSize=N  ?radius=N
+    // Note: in ortho the live radius is auto-parked below, so ?radius mainly bites in
+    // perspective. Runs in orbit mode (interactive) — not in headless ?capture stills.
+    const q = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+    const qProjection = q?.get("projection");
+    const projectionOverride =
+      qProjection === "perspective" || qProjection === "orthographic" ? qProjection : null;
+    if (projectionOverride) s.setProjection(projectionOverride);
+
+    const qFov = Number(q?.get("fov"));
+    if (q?.has("fov") && Number.isFinite(qFov)) s.setCameraIntent({ fov: qFov });
+    else if (s.cameraIntent.fov !== DEFAULT_INTENT.fov)
+      s.setCameraIntent({ fov: DEFAULT_INTENT.fov });
+
+    const qOrthoSize = Number(q?.get("orthoSize"));
+    if (q?.has("orthoSize") && Number.isFinite(qOrthoSize) && qOrthoSize > 0)
+      s.setOrthoSize(qOrthoSize);
+
+    const qRadius = Number(q?.get("radius"));
+    if (q?.has("radius") && Number.isFinite(qRadius) && qRadius > 0) s.setOrbit({ radius: qRadius });
+
+    if (q?.get("pinPlane") === "1") s.setShowPinPlane(true);
+
+    const effectiveProjection = projectionOverride ?? s.projection;
+    s.setProjectionBlend(effectiveProjection === "orthographic" ? 1 : 0);
   }, []);
 
   // Button map: LMB = pan (custom anchored pan below), RMB = rotate/tilt. Touch

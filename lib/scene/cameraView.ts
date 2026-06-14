@@ -223,24 +223,33 @@ let projTween: gsap.core.Tween | null = null;
 export function tweenProjectionTo(target: "perspective" | "orthographic") {
   const s = useSceneStore.getState();
   if (s.projection === target) return;
-  const d = Math.max(1, s.orbit.radius);
+  // fov (perspective) and orthoSize (ortho) are the user's sovereign zoom — never
+  // rewritten on a toggle (2026-06-14). DISTANCE is the slack, and it TWEENS between the
+  // two modes alongside the projection morph: perspective slides to the matched radius —
+  // it frames the SAME content the ortho size showed (K_persp = orthoSize ⇒
+  // radius = orthoSize/tan(fov/2)), which is also what keeps the morph continuous — and
+  // ortho slides back out to its clip-safe park distance (radius doesn't change ortho
+  // framing). Rounded so the Distance readout stays clean. See camera-tuning-notes #2.
   const fovRad = (s.cameraIntent.fov * Math.PI) / 180;
-  if (target === "orthographic") {
-    s.setOrthoSize(d * Math.tan(fovRad / 2));
-  } else {
-    const matchedFov = (2 * Math.atan(s.orthoSize / d) * 180) / Math.PI;
-    s.setCameraIntent({ fov: matchedFov });
-  }
+  const targetRadius =
+    target === "perspective"
+      ? Math.max(1, Math.round(s.orthoSize / Math.tan(fovRad / 2)))
+      : DEFAULT_ORBIT.radius;
   s.setProjection(target);
-  // Start from the LIVE blend (mid-tween if interrupted), not a stale snapshot.
+  // Start from the LIVE blend + radius (mid-tween if interrupted), not a stale snapshot.
   projTween?.kill();
-  const proxy = { v: s.projectionBlend };
+  const proxy = { v: s.projectionBlend, r: s.orbit.radius };
   const to = target === "orthographic" ? 1 : 0;
   projTween = gsap.to(proxy, {
     v: to,
+    r: targetRadius,
     duration: PROJECTION_TWEEN_DURATION,
     ease: "power1.inOut",
-    onUpdate: () => useSceneStore.getState().setProjectionBlend(proxy.v),
+    onUpdate: () => {
+      const st = useSceneStore.getState();
+      st.setProjectionBlend(proxy.v);
+      st.setOrbit({ radius: proxy.r });
+    },
     onComplete: () => {
       projTween = null;
     },
