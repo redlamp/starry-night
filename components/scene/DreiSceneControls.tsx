@@ -380,16 +380,15 @@ export function DreiSceneControls() {
   const dotElRef = useRef<HTMLDivElement>(null); // the ground dot's DOM node (recoloured below ground)
   const ringLineRef = useRef<ComponentRef<typeof Line>>(null); // the beacon ring Line (recoloured below)
 
-  // On entry to the new controls: start in PERSPECTIVE with a fixed ~25° lens
-  // (Google-like; zoom is dolly, not FOV). Pinned so a stale persisted projection
-  // / fov can't override it. `p` still toggles to ortho within the session.
+  // On entry: pin the perspective lens to a fixed ~25° (Google-like; zoom is dolly,
+  // not FOV), and HONOR the default / persisted projection (orthographic by default,
+  // 2026-06-14) rather than forcing perspective — so a fresh launch lands exactly
+  // where Reset does. Snap the transient projectionBlend to match the projection so
+  // there's no boot morph. `p` still toggles perspective↔ortho within the session.
   useEffect(() => {
     const s = useSceneStore.getState();
     if (s.cameraIntent.fov !== 25) s.setCameraIntent({ fov: 25 });
-    if (s.projection !== "perspective") {
-      s.setProjection("perspective");
-      s.setProjectionBlend(0);
-    }
+    s.setProjectionBlend(s.projection === "orthographic" ? 1 : 0);
   }, []);
 
   // Button map: LMB = pan (custom anchored pan below), RMB = rotate/tilt. Touch
