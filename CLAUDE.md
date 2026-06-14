@@ -37,8 +37,9 @@ If a request conflicts with the PRD or a `decision-*.md` note, surface the confl
 ### Commit, merge, push
 
 - Default: do not commit — leave changes uncommitted and report what changed. Commit only on a user signal ("ship it", "commit it", "next", "move on", "yes, commit").
-- Merge, push, and any `--force` variant are blocked by `.claude/hooks/git-gate.sh`. When blocked, show the command you would run and wait for an unblock signal ("ship it", "next", "move on", explicit "yes, merge / push").
-- Never bundle "I shipped X" with "want me to push?" — separate lines, declined by default.
+- Merge & push run on the same kind of signal as commit — no preview-and-wait dance. A clear ship signal ("ship it", "ready to share", "push it", "merge to main / dev") authorizes the whole chain through push; take it end-to-end without re-confirming each step.
+- Only `--force` / `-f` is hard-gated by `.claude/hooks/git-gate.sh` (narrowed 2026-06-14 — it used to block merge/push too). Surface a force op, get explicit approval, then prefix that one command with `GIT_GATE_BYPASS=1`.
+- Pushing `main` deploys via Vercel (outward-facing), so don't push it without a signal that covers shipping ("ship / share / deploy / push" all do).
 
 ### End-of-turn structure
 

@@ -1,51 +1,35 @@
 #!/usr/bin/env bash
-# Blocks git merge / push and any --force variant. Local commits are reversible
-# (reset / amend / revert) so they pass through; CLAUDE.md still tells Claude
-# not to commit without a user signal. This hook is the safety net for the
-# irreversible operations only.
+# Gates git --force / -f variants only. Narrowed 2026-06-14: `git merge` and
+# `git push` used to be blocked here too, but that was more ceremony than safety
+# for a solo repo — they now run on a user signal (per CLAUDE.md) with no hard
+# block. Force / force-push stays gated because it can irreversibly rewrite
+# remote history; surface it and get explicit approval first.
 
 set -euo pipefail
 
 command=$(python -c "import json,sys; print(json.load(sys.stdin).get('tool_input',{}).get('command',''))")
 
-# One-off bypass: if the user said "ship it" / "yes, commit" / etc., Claude is
-# expected to prefix the gated command with GIT_GATE_BYPASS=1 so the hook lets
-# this single invocation through. Each gated action still needs its own
-# explicit approval — Claude does not get to stash this anywhere.
+# One-off bypass: once the user has explicitly approved a force operation, prefix
+# the command with GIT_GATE_BYPASS=1 so this single invocation passes.
 if echo "$command" | grep -Eq '(^|[[:space:]])GIT_GATE_BYPASS=1[[:space:]]'; then
   echo "{}"
   exit 0
 fi
 
-# Match the operations we want to gate. Word boundaries matter so we
-# don't trip on things like `git log --grep="commit"`.
-if echo "$command" | grep -Eq '(^|[[:space:]&|;])git[[:space:]]+(merge|push)([[:space:]]|$)'; then
-  cat <<'EOF'
-{
-  "hookSpecificOutput": {
-    "hookEventName": "PreToolUse",
-    "permissionDecision": "deny",
-    "permissionDecisionReason": "Blocked by git-gate. git merge / push require explicit user approval per CLAUDE.md. Show the command you would run and wait for the user to run it or to say 'ship it' / 'next' / 'move on' / 'yes, merge' / 'yes, push'."
-  }
-}
-EOF
-  exit 0
-fi
-
-# Force-push variants are extra dangerous. Block --force / -f on any git command.
+# Force / force-push variants are history-destroying. Block --force / -f on any git command.
 if echo "$command" | grep -Eq '^git[[:space:]].*([[:space:]]--force([[:space:]]|=|$)|[[:space:]]-f([[:space:]]|$))'; then
   cat <<'EOF'
 {
   "hookSpecificOutput": {
     "hookEventName": "PreToolUse",
     "permissionDecision": "deny",
-    "permissionDecisionReason": "Blocked by git-gate. Force-push / force operations require explicit user approval. Surface the command and wait."
+    "permissionDecisionReason": "Blocked by git-gate. Force / force-push can rewrite history irreversibly — surface the command and wait for explicit user approval ('yes, force'), then prefix with GIT_GATE_BYPASS=1."
   }
 }
 EOF
   exit 0
 fi
 
-# Everything else passes.
+# Everything else — including merge and push — passes.
 echo "{}"
 exit 0
