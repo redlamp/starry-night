@@ -850,6 +850,7 @@ function OrbitSection() {
         min={0}
         max={360}
         step={1}
+        loop
         onChange={(azimuthDeg) => setOrbit({ azimuthDeg })}
         stepperClass="w-32"
       />

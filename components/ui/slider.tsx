@@ -1,5 +1,5 @@
 import { Slider as SliderPrimitive } from "@base-ui/react/slider";
-import type { CSSProperties } from "react";
+import { useRef, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -48,7 +48,7 @@ function Slider({
       thumbAlignment="edge"
       {...props}
     >
-      <SliderPrimitive.Control className="relative flex w-full touch-none items-center select-none data-disabled:opacity-50 data-vertical:h-full data-vertical:min-h-40 data-vertical:w-auto data-vertical:flex-col">
+      <SliderPrimitive.Control className="relative flex w-full cursor-pointer touch-none items-center select-none data-disabled:opacity-50 data-vertical:h-full data-vertical:min-h-40 data-vertical:w-auto data-vertical:flex-col">
         <SliderPrimitive.Track
           data-slot="slider-track"
           style={trackStyle}
@@ -89,4 +89,99 @@ function Slider({
   );
 }
 
-export { Slider };
+// A looping variant for cyclic values (e.g. a compass heading, 360° ≡ 0°). A linear
+// base-ui Slider maps the pointer's ABSOLUTE position to a clamped range, so it can't
+// spin past its ends. This one drives off RELATIVE pointer deltas with pointer capture:
+// press the track to jump there, then drag to rotate continuously — the drag keeps
+// going past the track's edges (capture follows the pointer across the window) and the
+// thumb wraps around. Keyboard / both-direction nudging stays on the NumberField steppers.
+function LoopingSlider({
+  value,
+  min = 0,
+  max = 100,
+  step = 1,
+  className,
+  onChange,
+  onCommit,
+  indicatorStyle,
+}: {
+  value: number;
+  min?: number;
+  max?: number;
+  step?: number;
+  className?: string;
+  onChange: (v: number) => void;
+  onCommit?: () => void;
+  indicatorStyle?: CSSProperties;
+}) {
+  const span = max - min || 1;
+  const wrap = (v: number) => ((((v - min) % span) + span) % span) + min;
+  const trackRef = useRef<HTMLDivElement>(null);
+  // live drag state: last clientX, °/px sensitivity, and the unrounded accumulator
+  const drag = useRef<{ lastX: number; perPx: number; live: number } | null>(null);
+
+  const pct = ((wrap(value) - min) / span) * 100;
+  const emit = (live: number) => onChange(wrap(min + Math.round((live - min) / step) * step));
+
+  const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const track = trackRef.current;
+    if (!track) return;
+    const rect = track.getBoundingClientRect();
+    const w = rect.width || 1;
+    const live = wrap(min + ((e.clientX - rect.left) / w) * span); // jump to the press point
+    drag.current = { lastX: e.clientX, perPx: span / w, live };
+    e.currentTarget.setPointerCapture(e.pointerId);
+    e.preventDefault();
+    emit(live);
+  };
+  const onPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const d = drag.current;
+    if (!d) return;
+    d.live = wrap(d.live + (e.clientX - d.lastX) * d.perPx); // relative — keeps spinning past the edges
+    d.lastX = e.clientX;
+    emit(d.live);
+  };
+  const end = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!drag.current) return;
+    drag.current = null;
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    } catch {
+      /* capture already gone */
+    }
+    onCommit?.();
+  };
+
+  return (
+    <div
+      data-slot="slider"
+      className={cn(
+        "relative flex h-3 w-full cursor-pointer touch-none items-center select-none",
+        className,
+      )}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={end}
+      onPointerCancel={end}
+    >
+      <div
+        ref={trackRef}
+        data-slot="slider-track"
+        className="bg-muted relative h-1 w-full grow overflow-hidden rounded-full"
+      >
+        <div
+          data-slot="slider-range"
+          className="bg-primary pointer-events-none absolute inset-y-0 left-0"
+          style={{ width: `${pct}%`, ...indicatorStyle }}
+        />
+      </div>
+      <div
+        data-slot="slider-thumb"
+        className="border-ring pointer-events-none absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border bg-white"
+        style={{ left: `${pct}%` }}
+      />
+    </div>
+  );
+}
+
+export { Slider, LoopingSlider };
