@@ -67,6 +67,7 @@ import {
   Sun,
   Telescope,
   TowerControl,
+  Trash2,
   Undo2,
   Warehouse,
   type LucideIcon,
@@ -318,6 +319,7 @@ export function CameraPanel() {
     saveCurrentAsDefault,
     revertToSaved,
     hasSavedConfig,
+    clearSavedConfig,
   } = useSceneStore();
   const orbitRestoreSet = useSceneStore((s) => s.orbitRestore !== null);
   const showPinPlane = useSceneStore((s) => s.debug.showPinPlane);
@@ -677,8 +679,8 @@ export function CameraPanel() {
       </ScrollArea>
 
       {/* Sticky footer */}
-      <div className="border-foreground/10 flex shrink-0 items-center justify-between gap-2 border-t px-4 pt-3 pb-3">
-        <div className="flex items-center gap-1.5">
+      <div className="border-foreground/10 flex shrink-0 flex-wrap items-center gap-2 border-t px-4 pt-3 pb-3">
+        <div className="flex flex-wrap items-center gap-1.5">
           <Button
             variant="ghost"
             onClick={() => resetCamera()}
@@ -699,8 +701,22 @@ export function CameraPanel() {
               Revert
             </Button>
           )}
+          {savedExists && (
+            <Button
+              variant="ghost"
+              onClick={() => {
+                clearSavedConfig();
+                setSavedExists(false);
+              }}
+              title="Delete the saved default from this browser. Reloads will boot the built-in default."
+              className="text-foreground/55 hover:bg-foreground/10 hover:text-foreground/80"
+            >
+              <Trash2 className="size-4" />
+              Clear Saved
+            </Button>
+          )}
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5 ml-auto">
           <CopyButton />
           <Button
             onClick={() => {
@@ -778,6 +794,10 @@ function OrbitSection() {
   const setOrbit = useSceneStore((s) => s.setOrbit);
   const pivot = useSceneStore((s) => s.orbitPivotFromBottom);
   const setPivot = useSceneStore((s) => s.setOrbitPivotFromBottom);
+  const groundDamp = useSceneStore((s) => s.groundDamp);
+  const setGroundDamp = useSceneStore((s) => s.setGroundDamp);
+  const freezeGround = useSceneStore((s) => s.freezeGroundOnDrag);
+  const setFreezeGround = useSceneStore((s) => s.setFreezeGroundOnDrag);
   const setFocalAdjust = useSceneStore((s) => s.setFocalAdjust);
   // Show the focal pin (and, for Screen Y, the guide line) WHILE a slider is being adjusted,
   // then revert on release: a slider drag ends precisely via onCommit (base-ui's
@@ -855,6 +875,19 @@ function OrbitSection() {
         stepperClass="w-32"
       />
       <ValueSlider
+        label="Focal X"
+        value={orbit.centerX}
+        min={-5000}
+        max={5000}
+        step={5}
+        onChange={(centerX) => {
+          setOrbit({ centerX });
+          showFocalAdjust("focalY");
+        }}
+        onCommit={endFocalAdjust}
+        stepperClass="w-32"
+      />
+      <ValueSlider
         label="Focal Y"
         value={orbit.lookAtY}
         min={-1000}
@@ -872,6 +905,19 @@ function OrbitSection() {
         indicatorStyle={{ background: orbit.lookAtY >= 0 ? "#7dd3fc" : "#b5835a" }}
       />
       <ValueSlider
+        label="Focal Z"
+        value={orbit.centerZ}
+        min={-5000}
+        max={5000}
+        step={5}
+        onChange={(centerZ) => {
+          setOrbit({ centerZ });
+          showFocalAdjust("focalY");
+        }}
+        onCommit={endFocalAdjust}
+        stepperClass="w-32"
+      />
+      <ValueSlider
         label="Screen Y"
         // Screen Y is top-down: 0 = top of screen, 100 = bottom. The store holds
         // orbitPivotFromBottom (fraction UP from the bottom), so invert at the display layer.
@@ -886,6 +932,24 @@ function OrbitSection() {
         onCommit={endFocalAdjust}
         stepperClass="w-32"
       />
+      <ValueSlider
+        label="Ground Damp"
+        value={groundDamp}
+        min={1}
+        max={20}
+        step={0.5}
+        onChange={setGroundDamp}
+        stepperClass="w-32"
+      />
+      <label className="flex cursor-pointer items-center justify-between gap-2 text-xs">
+        <span className="text-foreground/70">freeze ground while dragging</span>
+        <Switch checked={freezeGround} onCheckedChange={setFreezeGround} />
+      </label>
+      <div className="text-foreground/45 text-[11px] leading-snug">
+        Near the horizon the orbit pivot eases downward so the skyline settles low with sky above.
+        Ground Damp sets how quickly it settles (higher = snappier); freeze holds it steady during a
+        drag and lets it settle on release so it doesn&apos;t fight the gesture.
+      </div>
     </>
   );
 }

@@ -103,7 +103,7 @@ export type OrbitConfig = {
 };
 
 // Curated default framing (2026-06-14): a near-horizon, paused ("still") view of
-// the "starry-night" seed — compass 186°, elevation 2°, focal height 120 (user
+// the "starry-night" seed — compass 190°, elevation 2°, focal height 120 (user
 // 2026-06-14). Radius scales with city width
 // (CITY_SCALE); 1800s sweep (0.2°/s) once un-paused. lookAtY (focal HEIGHT) is NOT
 // scaled — building heights are fixed across size tiers, so the skyline sits at the
@@ -113,7 +113,7 @@ export const DEFAULT_ORBIT: OrbitConfig = {
   centerZ: -120,
   lookAtY: 120,
   radius: 2400 * CITY_SCALE,
-  azimuthDeg: 186,
+  azimuthDeg: 190,
   elevationDeg: 2,
   periodSec: 1800,
 };
@@ -464,6 +464,8 @@ type AnySettingEntry =
   | SettingEntry<"orbitPaused">
   | SettingEntry<"showFocalIndicator">
   | SettingEntry<"orbitPivotFromBottom">
+  | SettingEntry<"groundDamp">
+  | SettingEntry<"freezeGroundOnDrag">
   | SettingEntry<"orbitZoomToPin">
   | SettingEntry<"allowUnderview">
   | SettingEntry<"cameraMode">
@@ -515,6 +517,8 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "orbitPaused", defaultValue: true as const, persist: true },
   { key: "showFocalIndicator", defaultValue: false as const, persist: true },
   { key: "orbitPivotFromBottom", defaultValue: 0.37, persist: true },
+  { key: "groundDamp", defaultValue: 6, persist: true },
+  { key: "freezeGroundOnDrag", defaultValue: true as const, persist: true },
   { key: "orbitZoomToPin", defaultValue: true as const, persist: false },
   { key: "allowUnderview", defaultValue: false as const, persist: false },
   { key: "cameraMode", defaultValue: "orbit" as const, persist: true },
@@ -755,6 +759,15 @@ function writeSavedConfig(snap: SavedConfig) {
   }
 }
 
+function removeSavedConfig() {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(SAVED_CONFIG_KEY);
+  } catch {
+    // localStorage may be unavailable
+  }
+}
+
 export type Perf = {
   fps: number;
   triangles: number;
@@ -888,6 +901,14 @@ type SceneState = {
   // (Google-Maps ~0.37). Drives the RMB pivot + the focal-marker raycast.
   orbitPivotFromBottom: number;
   setOrbitPivotFromBottom: (v: number) => void;
+  // Low-elevation ground framing (DreiSceneControls.applyScreenFocus). groundDamp = the
+  // damped-follow rate for the auto pivot pull near the horizon (higher = snappier; ~0.2s at 6).
+  // freezeGroundOnDrag holds that pull steady while a gesture is in progress and lets it settle on
+  // release, so the auto-framing doesn't fight a live drag.
+  groundDamp: number;
+  setGroundDamp: (v: number) => void;
+  freezeGroundOnDrag: boolean;
+  setFreezeGroundOnDrag: (v: boolean) => void;
   // Zoom mode: false = toward the cursor (default), true = toward the pin/focal.
   orbitZoomToPin: boolean;
   setOrbitZoomToPin: (v: boolean) => void;
@@ -1046,6 +1067,7 @@ type SceneState = {
   saveCurrentAsDefault: () => void;
   revertToSaved: () => void;
   hasSavedConfig: () => boolean;
+  clearSavedConfig: () => void;
   copyableConfig: () => Record<string, unknown>;
   snapIntentToLive: () => void;
   tweenCameraTo: (to: CameraIntent, durationMs?: number) => void;
@@ -1124,6 +1146,10 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setFocalAdjust: (focalAdjust) => set({ focalAdjust }),
   orbitPivotFromBottom: 0.37,
   setOrbitPivotFromBottom: (orbitPivotFromBottom) => set({ orbitPivotFromBottom }),
+  groundDamp: 6,
+  setGroundDamp: (groundDamp) => set({ groundDamp }),
+  freezeGroundOnDrag: true,
+  setFreezeGroundOnDrag: (freezeGroundOnDrag) => set({ freezeGroundOnDrag }),
   orbitZoomToPin: true,
   setOrbitZoomToPin: (orbitZoomToPin) => set({ orbitZoomToPin }),
   allowUnderview: false,
@@ -1367,6 +1393,9 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     });
   },
   hasSavedConfig: () => readSavedConfig() !== null,
+  // Delete the saved default from this browser. The live scene is left as-is (Reset returns it to
+  // the built-in default); reloads boot the built-in default once the snapshot is gone.
+  clearSavedConfig: () => removeSavedConfig(),
   copyableConfig: () => {
     const s = get();
     const out: Record<string, unknown> = {};
