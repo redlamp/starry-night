@@ -466,6 +466,10 @@ type AnySettingEntry =
   | SettingEntry<"orbitPivotFromBottom">
   | SettingEntry<"groundDamp">
   | SettingEntry<"freezeGroundOnDrag">
+  | SettingEntry<"groundFraming">
+  | SettingEntry<"rotateLowAngleGain">
+  | SettingEntry<"rotateSlowBelowDeg">
+  | SettingEntry<"tiltSpeed">
   | SettingEntry<"orbitZoomToPin">
   | SettingEntry<"allowUnderview">
   | SettingEntry<"cameraMode">
@@ -519,6 +523,10 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "orbitPivotFromBottom", defaultValue: 0.37, persist: true },
   { key: "groundDamp", defaultValue: 6, persist: true },
   { key: "freezeGroundOnDrag", defaultValue: true as const, persist: true },
+  { key: "groundFraming", defaultValue: false as const, persist: true },
+  { key: "rotateLowAngleGain", defaultValue: 0.35, persist: true },
+  { key: "rotateSlowBelowDeg", defaultValue: 20, persist: true },
+  { key: "tiltSpeed", defaultValue: 0.5, persist: true },
   { key: "orbitZoomToPin", defaultValue: true as const, persist: false },
   { key: "allowUnderview", defaultValue: false as const, persist: false },
   { key: "cameraMode", defaultValue: "orbit" as const, persist: true },
@@ -909,6 +917,22 @@ type SceneState = {
   setGroundDamp: (v: number) => void;
   freezeGroundOnDrag: boolean;
   setFreezeGroundOnDrag: (v: boolean) => void;
+  // Master toggle for the low-elevation ground pull (applyScreenFocus). false = Screen Y is held
+  // exactly where set at every angle; true = the pivot eases down near the horizon (groundDamp /
+  // freezeGroundOnDrag tune it). Off by default — it can fight rotate/tilt at grazing angles.
+  groundFraming: boolean;
+  setGroundFraming: (v: boolean) => void;
+  // Rotate/tilt speed limit at grazing / far-out views (DreiSceneControls.dragRotate).
+  // rotateLowAngleGain = the rate multiplier at the horizon (1 = no limit); the slowdown eases in
+  // (smoothstep) below rotateSlowBelowDeg elevation. Distance past the city tapers it further.
+  rotateLowAngleGain: number;
+  setRotateLowAngleGain: (v: number) => void;
+  rotateSlowBelowDeg: number;
+  setRotateSlowBelowDeg: (v: number) => void;
+  // Tilt sensitivity: vertical-drag pitch rate as a fraction of the legacy 2*pi/screen-height gain
+  // (1 = old behaviour). Lower = a more regulated, slower tilt, independent of rotation. (2026-06-16)
+  tiltSpeed: number;
+  setTiltSpeed: (v: number) => void;
   // Zoom mode: false = toward the cursor (default), true = toward the pin/focal.
   orbitZoomToPin: boolean;
   setOrbitZoomToPin: (v: boolean) => void;
@@ -1150,6 +1174,14 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setGroundDamp: (groundDamp) => set({ groundDamp }),
   freezeGroundOnDrag: true,
   setFreezeGroundOnDrag: (freezeGroundOnDrag) => set({ freezeGroundOnDrag }),
+  groundFraming: false,
+  setGroundFraming: (groundFraming) => set({ groundFraming }),
+  rotateLowAngleGain: 0.35,
+  setRotateLowAngleGain: (rotateLowAngleGain) => set({ rotateLowAngleGain }),
+  rotateSlowBelowDeg: 20,
+  setRotateSlowBelowDeg: (rotateSlowBelowDeg) => set({ rotateSlowBelowDeg }),
+  tiltSpeed: 0.5,
+  setTiltSpeed: (tiltSpeed) => set({ tiltSpeed }),
   orbitZoomToPin: true,
   setOrbitZoomToPin: (orbitZoomToPin) => set({ orbitZoomToPin }),
   allowUnderview: false,

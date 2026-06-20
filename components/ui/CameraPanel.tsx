@@ -798,6 +798,14 @@ function OrbitSection() {
   const setGroundDamp = useSceneStore((s) => s.setGroundDamp);
   const freezeGround = useSceneStore((s) => s.freezeGroundOnDrag);
   const setFreezeGround = useSceneStore((s) => s.setFreezeGroundOnDrag);
+  const groundFraming = useSceneStore((s) => s.groundFraming);
+  const setGroundFraming = useSceneStore((s) => s.setGroundFraming);
+  const rotateFloor = useSceneStore((s) => s.rotateLowAngleGain);
+  const setRotateFloor = useSceneStore((s) => s.setRotateLowAngleGain);
+  const rotateSlowBelow = useSceneStore((s) => s.rotateSlowBelowDeg);
+  const setRotateSlowBelow = useSceneStore((s) => s.setRotateSlowBelowDeg);
+  const tiltSpeed = useSceneStore((s) => s.tiltSpeed);
+  const setTiltSpeed = useSceneStore((s) => s.setTiltSpeed);
   const setFocalAdjust = useSceneStore((s) => s.setFocalAdjust);
   // Show the focal pin (and, for Screen Y, the guide line) WHILE a slider is being adjusted,
   // then revert on release: a slider drag ends precisely via onCommit (base-ui's
@@ -932,23 +940,63 @@ function OrbitSection() {
         onCommit={endFocalAdjust}
         stepperClass="w-32"
       />
+      <label className="flex cursor-pointer items-center justify-between gap-2 text-xs">
+        <span className="text-foreground/70">low-angle ground pull</span>
+        <Switch checked={groundFraming} onCheckedChange={setGroundFraming} />
+      </label>
+      {groundFraming && (
+        <>
+          <ValueSlider
+            label="Ground Damp"
+            value={groundDamp}
+            min={1}
+            max={20}
+            step={0.5}
+            onChange={setGroundDamp}
+            stepperClass="w-32"
+          />
+          <label className="flex cursor-pointer items-center justify-between gap-2 text-xs">
+            <span className="text-foreground/70">freeze ground while dragging</span>
+            <Switch checked={freezeGround} onCheckedChange={setFreezeGround} />
+          </label>
+        </>
+      )}
+      <div className="text-foreground/45 text-[11px] leading-snug">
+        When on, the orbit pivot eases downward near the horizon so the skyline settles low with sky
+        above (Ground Damp sets how fast; freeze holds it steady during a drag). Off keeps Screen Y
+        exactly where you set it at every angle.
+      </div>
       <ValueSlider
-        label="Ground Damp"
-        value={groundDamp}
-        min={1}
-        max={20}
-        step={0.5}
-        onChange={setGroundDamp}
+        label="Tilt speed"
+        value={tiltSpeed}
+        min={0.1}
+        max={1}
+        step={0.05}
+        onChange={setTiltSpeed}
         stepperClass="w-32"
       />
-      <label className="flex cursor-pointer items-center justify-between gap-2 text-xs">
-        <span className="text-foreground/70">freeze ground while dragging</span>
-        <Switch checked={freezeGround} onCheckedChange={setFreezeGround} />
-      </label>
+      <ValueSlider
+        label="Low-angle speed"
+        value={rotateFloor}
+        min={0.1}
+        max={1}
+        step={0.05}
+        onChange={setRotateFloor}
+        stepperClass="w-32"
+      />
+      <ValueSlider
+        label="Slow below °"
+        value={rotateSlowBelow}
+        min={2}
+        max={45}
+        step={1}
+        onChange={setRotateSlowBelow}
+        stepperClass="w-32"
+      />
       <div className="text-foreground/45 text-[11px] leading-snug">
-        Near the horizon the orbit pivot eases downward so the skyline settles low with sky above.
-        Ground Damp sets how quickly it settles (higher = snappier); freeze holds it steady during a
-        drag and lets it settle on release so it doesn&apos;t fight the gesture.
+        Tilt speed sets how fast a vertical drag pitches the view (lower = more regulated; 1 = the old
+        rate). Low-angle speed and Slow below ° additionally ease rotate + tilt down near the horizon
+        (1 = no limit), and distance past the city tapers them further.
       </div>
     </>
   );

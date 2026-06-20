@@ -67,6 +67,27 @@ const RESUME_DELAY = 0.4; // s after a gesture before the sweep restarts
 const RESUME_RAMP_SEC = 1; // s to ramp the sweep factor 0 → 1 (linear, to full speed)
 const DRAG_PX = 6; // press→drag threshold: a click/tap under this doesn't pause the sweep
 const FREE_LOOK_GAIN = 1; // free-look: 1 = drag tracks the focal (pin) plane 1:1; >1 = faster look
+// Rotate/tilt speed limit (user 2026-06-16): a grazing / far-out view turns the same drag into far
+// more on-screen motion. dragRotate tapers the azimuth + tilt rate by elevation (smoothstep to the
+// store's rotateLowAngleGain below rotateSlowBelowDeg) and by distance (mild 1/d past ROT_DIST_REF),
+// then hard-caps the per-event step as a backstop against fast flicks.
+const ROT_DIST_REF = 5000; // distance at/below which there is no distance taper (~default radius)
+const ROT_DIST_MIN_GAIN = 0.35; // floor for the distance taper (far out never slower than this share)
+const ROT_MAX_STEP = 0.2; // rad: per-event cap on azimuth + tilt (~11.5°), a backstop only
+// Tilt-vs-rotate axis gate (user 2026-06-16): a vertical "tilt" drag picks up horizontal delta from
+// the natural arc of a thumb, which the lever-arm azimuth turns into unwanted rotation. Accumulate
+// the gesture's recent direction (decayed) and gate AZIMUTH by how horizontal it is, so a mostly-
+// vertical drag stays pure tilt while a horizontal drag keeps the full turntable spin. Tilt is
+// dy-driven, so it already self-limits on horizontal drags. Reset at each gesture start.
+const ROT_AXIS_DECAY = 0.9; // recent-direction memory (~10-sample window); lower = more reactive
+const ROT_AXIS_GATE_LO = 0.4; // horizontal fraction at/below which azimuth is fully gated (pure tilt)
+const ROT_AXIS_GATE_HI = 0.7; // at/above this horizontal fraction, full azimuth
+let _rotAccX = 0; // decayed |dx| over the active drag
+let _rotAccY = 0; // decayed |dy| over the active drag
+function resetDragAxis(): void {
+  _rotAccX = 0;
+  _rotAccY = 0;
+}
 const TURNTABLE_MIN_R = 40; // px floor on press↔pin distance, so the press-relative spin can't blow up at the pin
 const GESTURE_LOCK_PX = 12; // two-finger: travel before locking to one of pinch/twist/tilt
 // Focal indicator: a ground beacon ring around the focal's ground point.
@@ -181,7 +202,7 @@ function applyScreenFocus(
   // Elevation-keyed target pull (≤ 0): how far below the user's ScreenY to sit at this tilt.
   let corrTarget = 0;
   const elevDeg = 90 - c.polarAngle / DEG;
-  if (elevDeg < GROUND_EASE_DEG) {
+  if (s.groundFraming && elevDeg < GROUND_EASE_DEG) {
     // Ortho: the ground line sits lookAtY·cos(θ)/(2·orthoSize) below the pin.
     const dropOrtho = (s.orbit.lookAtY * Math.cos(elevDeg * DEG)) / (2 * oeff);
     const targetOrtho = 1 - GROUND_CONTENT_CAP + dropOrtho;
@@ -395,8 +416,27 @@ function dragRotate(
   const vx = pointerX - pinX;
   const vy = pointerY - pinY;
   const r2 = Math.max(vx * vx + vy * vy, TURNTABLE_MIN_R * TURNTABLE_MIN_R);
-  const dAz = (vx * dy - vy * dx) / r2; // press-point-relative azimuth (lever arm; CCW above / CW below)
-  const dPolar = (-2 * Math.PI * dy) / Math.max(1, dom.clientHeight); // plain uniform tilt
+  let dAz = (vx * dy - vy * dx) / r2; // press-point-relative azimuth (lever arm; CCW above / CW below)
+  const st = useSceneStore.getState();
+  // Tilt is a regulated, slower action (user 2026-06-16): a gentler rate than rotation, scaled by the
+  // tiltSpeed knob (1 = the legacy 2*pi/height gain), so a vertical drag eases the pitch.
+  let dPolar = (-2 * Math.PI * st.tiltSpeed * dy) / Math.max(1, dom.clientHeight);
+  // Tilt/rotate axis gate: accumulate the gesture's recent direction (decayed) and gate AZIMUTH by
+  // how horizontal it is, so the natural arc of a vertical "tilt" drag does not bleed into rotation.
+  _rotAccX = _rotAccX * ROT_AXIS_DECAY + Math.abs(dx);
+  _rotAccY = _rotAccY * ROT_AXIS_DECAY + Math.abs(dy);
+  const horizFrac = _rotAccX / (_rotAccX + _rotAccY + 1e-6);
+  const xa = clamp((horizFrac - ROT_AXIS_GATE_LO) / (ROT_AXIS_GATE_HI - ROT_AXIS_GATE_LO), 0, 1);
+  dAz *= xa * xa * (3 - 2 * xa); // smoothstep: vertical drag → no azimuth, horizontal → full
+  // Speed limit at grazing / far-out views: taper by elevation (smoothstep to the store floor below
+  // the store threshold) and by distance (mild 1/d past ROT_DIST_REF), then hard-cap the step.
+  const elevDeg = 90 - c.polarAngle / DEG;
+  const xe = clamp(elevDeg / Math.max(1, st.rotateSlowBelowDeg), 0, 1);
+  const gElev = st.rotateLowAngleGain + (1 - st.rotateLowAngleGain) * (xe * xe * (3 - 2 * xe));
+  const gDist = clamp(ROT_DIST_REF / Math.max(ROT_DIST_REF, c.distance), ROT_DIST_MIN_GAIN, 1);
+  const gain = gElev * gDist;
+  dAz = clamp(dAz * gain, -ROT_MAX_STEP, ROT_MAX_STEP);
+  dPolar = clamp(dPolar * gain, -ROT_MAX_STEP, ROT_MAX_STEP);
   void c.rotate(dAz, dPolar, true); // eased
 }
 
@@ -592,6 +632,7 @@ export function DreiSceneControls() {
       rotating = true;
       lastX = e.clientX;
       lastY = e.clientY;
+      resetDragAxis(); // fresh tilt/rotate axis intent for this drag
       dom.setPointerCapture?.(e.pointerId);
     };
     const onMove = (e: PointerEvent) => {
@@ -921,6 +962,7 @@ export function DreiSceneControls() {
       if (n === 1) {
         lastX = e.clientX;
         lastY = e.clientY;
+        resetDragAxis(); // fresh tilt/rotate axis intent for this drag
       } else if (n === 2) {
         twoFingerStart();
       } else if (n === 3) {
@@ -989,6 +1031,7 @@ export function DreiSceneControls() {
         const r = [...pts.values()][0];
         lastX = r.x; // dropped 2 → 1: resume rotate from the remaining finger
         lastY = r.y;
+        resetDragAxis();
       }
     };
     dom.addEventListener("pointerdown", onDown);
@@ -1264,7 +1307,7 @@ export function DreiSceneControls() {
     // park the orbit pivot at the screen-focus position (focal offset; scales w/ zoom). Freeze the
     // low-elevation ground pull while a gesture is live (when enabled) so it settles on release
     // instead of fighting the drag.
-    applyScreenFocus(c, camera, dt, s.freezeGroundOnDrag && dragging.current);
+    applyScreenFocus(c, camera, dt, s.groundFraming && s.freezeGroundOnDrag && dragging.current);
 
     const allowUnder = s.allowUnderview;
 
