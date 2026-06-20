@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { ChevronDown } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
 import { Slider } from "@/components/ui/slider";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -62,12 +64,71 @@ export function LabSidebar({
   );
 }
 
-export function LabSection({ title, children }: { title: string; children: ReactNode }) {
+// A separated, uppercase-titled settings section. Opt into `collapsible` to make the header a
+// toggle (chevron); pass `storageKey` to remember the open/closed state across sessions.
+export function LabSection({
+  title,
+  children,
+  collapsible = false,
+  defaultOpen = true,
+  storageKey,
+}: {
+  title: string;
+  children: ReactNode;
+  collapsible?: boolean;
+  defaultOpen?: boolean;
+  storageKey?: string;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  // hydrate persisted open state after mount (first render stays default → no prerender mismatch)
+  useEffect(() => {
+    if (!collapsible || !storageKey) return;
+    try {
+      const v = window.localStorage.getItem(storageKey);
+      /* eslint-disable-next-line react-hooks/set-state-in-effect -- one-time hydrate of persisted open state */
+      if (v === "0" || v === "1") setOpen(v === "1");
+    } catch {
+      // default is fine
+    }
+  }, [collapsible, storageKey]);
+  const toggle = () =>
+    setOpen((o) => {
+      const next = !o;
+      if (storageKey) {
+        try {
+          window.localStorage.setItem(storageKey, next ? "1" : "0");
+        } catch {
+          // best effort
+        }
+      }
+      return next;
+    });
+
+  if (!collapsible) {
+    return (
+      <div className="flex flex-col gap-2.5">
+        <Separator className="bg-zinc-800" />
+        <h2 className="font-mono text-xs tracking-wider text-zinc-500 uppercase">{title}</h2>
+        {children}
+      </div>
+    );
+  }
   return (
     <div className="flex flex-col gap-2.5">
       <Separator className="bg-zinc-800" />
-      <h2 className="font-mono text-xs tracking-wider text-zinc-500 uppercase">{title}</h2>
-      {children}
+      <button
+        type="button"
+        onClick={toggle}
+        aria-expanded={open}
+        className="flex items-center justify-between gap-2 text-left transition-colors hover:text-zinc-300"
+      >
+        <h2 className="font-mono text-xs tracking-wider text-zinc-500 uppercase">{title}</h2>
+        <ChevronDown
+          className={cn("size-3.5 text-zinc-500 transition-transform", !open && "-rotate-90")}
+          aria-hidden
+        />
+      </button>
+      {open && <div className="flex flex-col gap-2.5">{children}</div>}
     </div>
   );
 }
