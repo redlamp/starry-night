@@ -14,4 +14,10 @@ export const cameraReadout: CamReadout = {
   parallel: false,
   frustumHh: 1000,
   blend: 0,
+  screenY: 0.37,
+  screenYBase: 0.37,
+  screenYLow: 0.18,
+  tilt: 1,
+  frameBelow: 12,
+  tiltBelow: 20,
 };
