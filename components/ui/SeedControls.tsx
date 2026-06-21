@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
  * `pointerType === "mouse"` so a touch tap (which also emits synthetic mouse
  * events) doesn't wedge the hover flag and block the auto-collapse.
  */
-const COLLAPSE_MS = 4000;
+const COLLAPSE_MS = 5000; // matches the chrome idle-fade (useIdle IDLE_FADE_MS)
 
 export function SeedControls() {
   const seed = useSceneStore((s) => s.masterSeed);
