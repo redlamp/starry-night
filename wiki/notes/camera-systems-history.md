@@ -94,6 +94,26 @@ the feel before the controller refactor. Mechanics the lab proved that should fo
 into `DreiSceneControls` are listed under "Lab internals worth porting" in
 [[camera-lab-test-plan]].
 
+### Era H - rotate/tilt overhaul attempt (2026-06-21, REVERTED)
+
+A foray to fix the lever-arm's "inverted at low elevation" rotate + the "oval orbit tilts the
+camera" gripes: **grab-to-rotate** (raycast a world handle, servo azimuth to track the cursor) ->
+"trash" (zig-zags on circular gestures, since tracking screen-X can't spin from a circle); then a
+**turntable azimuth (no axis-gate) + radial/tangential tilt-gate** -> rotate felt better but a
+straight up/down began to orbit (a vertical drag beside the pin IS circling it). **All reverted to
+`c330fe8`** (the Era F lever-arm + axis-gate). The rotate-vs-tilt conflict and the lessons (synthetic
+CDP tests measure geometry, not feel; coordinate-tracking is wrong for rotational gestures) are
+written up in [[camera-rotate-tilt-foray]].
+
+### Era I - controls cheat-sheet + focal-height remap (2026-06-21)
+
+The in-app controls guide became a real control surface, and free-look was retired in favour of Focal Height:
+
+- **Free-look dropped on mouse.** `LMB+RMB` and `Ctrl/⌘+LMB` now drive **Focal Height** (height-only re-aim from a fixed eye), mirroring Move's `RMB / Shift+LMB` pair. The mouse free-look effect was removed; `Ctrl/⌘+LMB` is no longer unbound. The 3-finger touch free-look handler stays in code but is off the cheat-sheet.
+- **Focal-Y scrub fights fixed.** (1) The eye-above-ground clamp is relaxed while a scrub is live (`focalScrubbing` ref) - the scrub pivots from a fixed eye and can't push the camera underground, so the clamp only fought it (the "fight near Focal Y = 0"). (2) The low-angle ground pull (`applyScreenFocus`) **freezes** during a scrub (`_corrFrozen`) and eases back on release, so it stops chasing the per-event tilt of a `setLookAt(…,false)` re-aim (the "jerky at low angle"). Rotate keeps its direct, settle-on-release tracking.
+- **Controls guide overhaul** (`ControlsGuide.tsx`): ~135% larger; "Pan"->"Move"; Focal Height shows the LMB+RMB glyph + the `⌘/Ctrl + LMB` twin; the real lucide `MapPin` (sky-blue `#7dd3fc`) replaces a hand-drawn pin; hotkeys became live **switches** (Auto-Orbit, Ortho/Perspective, Show Pin, Zoom, Settings) wired to store state, with keycaps hidden on touch. Touch hand glyphs redrawn (index left; index+middle, middle larger, for Move; thumb+index for pinch).
+- **Settings panel `hidden` lifted to the store** (`panelHidden`) so the guide's Settings switch and the `H` key share it. The focal **MapPin** now renders behind the panels (`zIndexRange` 100->15).
+
 ## 2. Current state (working tree)
 
 - **Two controllers, hybrid**: `DreiSceneControls` owns **orbit**; legacy `CameraControls.tsx` runs **fly / still** (or all modes under `?controls=legacy`).
@@ -109,9 +129,9 @@ into `DreiSceneControls` are listed under "Lab internals worth porting" in
 | Input | Action |
 |---|---|
 | LMB-drag (no modifier, off pin) | Rotate + tilt (lever-arm turntable; axis-gated; tilt speed-scaled) |
-| LMB on focal pin | Scrub Focal Y (cursor-locked; perspective + pin shown) |
+| LMB on focal pin | Scrub Focal Y (cursor-locked; pin shown) |
 | Shift+LMB / RMB | Pan (ground-anchored) |
-| Ctrl+LMB (Win) / Cmd+LMB (mac) / LMB+RMB | Free-look (look around in place) |
+| LMB+RMB / Ctrl+LMB (Win) / Cmd+LMB (mac) | **Focal Height** (height-only re-aim from a fixed eye) |
 | Wheel | Zoom toward the cursor |
 | Double-click | Full reset (pose + framing + projection, lands paused) |
 | Space | Pause / resume auto-revolution |
@@ -121,8 +141,9 @@ into `DreiSceneControls` are listed under "Lab internals worth porting" in
 | Input | Action |
 |---|---|
 | 1-finger drag | Rotate + tilt (same lever-arm turntable) |
+| 1-finger on pin | Scrub Focal Y |
 | 2-finger | Pan (midpoint) + pinch zoom (locks pan-vs-pinch past 12 px) |
-| 3-finger drag | Free-look |
+| 3-finger drag | Free-look (still in code; dropped from the cheat-sheet 2026-06-21) |
 | Double-tap | Full reset |
 
 ## 4. Parallels to known systems
@@ -131,4 +152,4 @@ into `DreiSceneControls` are listed under "Lab internals worth porting" in
 - **Blender / Maya turntable**: spherical orbit around a focal target, elevation clamped 0-90 (never flips), gimbal-guarded. The lever-arm twist (grab far = slower wide arc) is a refinement beyond standard DCC turntables.
 - **FPS / UE5 fly**: WASD + hold-drag look, horizon-locked (no roll), wheel = speed. Desktop-only; pinch-to-fly dropped.
 - **CAD / engineering ortho**: faked-ortho morph + parked radius + receding-eye model ("ortho == perspective with the eye at infinity"); the Screen-Y dimension-line guide is a deliberate CAD-drawing idiom.
-- **Free-look**: LMB+RMB / Ctrl-drag / 3-finger rotates around the camera's own position - the FPS "look around without moving", distinct from orbit-around-target.
+- **Free-look** *(retired on mouse 2026-06-21)*: previously LMB+RMB / Ctrl-drag rotated around the camera's own position (the FPS "look around without moving"); those chords now drive Focal Height. 3-finger touch free-look remains in code but is off the cheat-sheet.
