@@ -30,7 +30,8 @@ import { DreiConfigControls } from "./DreiConfigControls";
 import { FlyRig } from "./FlyRig";
 import { LabMapControls } from "./LabMapControls";
 import { ProjectionRig } from "./ProjectionRig";
-import { CameraDiagram, type CamReadout } from "./CameraDiagram";
+import { CameraDiagram, type CamReadout } from "@/components/scene/CameraDiagram";
+import { ControlsGuide } from "@/components/ui/ControlsGuide";
 import { SurveyPanel } from "./SurveyPanel";
 import { useLabFeedback } from "./useLabFeedback";
 
@@ -691,6 +692,7 @@ export function CameraLab() {
             onFps={writeFps}
           />
         </Canvas>
+        <ControlsGuide />
       </div>
     </main>
   );

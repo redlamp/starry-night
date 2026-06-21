@@ -10,7 +10,7 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { MapControls } from "@react-three/drei";
 import { MOUSE, PerspectiveCamera, Vector3 } from "three";
 import type { LabTuning } from "./tuning";
-import type { CamReadout } from "./CameraDiagram";
+import type { CamReadout } from "@/components/scene/CameraDiagram";
 import { snapFocalY } from "./labProjection";
 
 const DEG = Math.PI / 180;

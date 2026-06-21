@@ -27,7 +27,7 @@ import { useThree, useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import type CameraControlsImpl from "camera-controls";
 import { parkFocal, clampPolarToGround, cameraHalfHeight } from "./labProjection";
-import type { CamReadout } from "./CameraDiagram";
+import type { CamReadout } from "@/components/scene/CameraDiagram";
 
 const DEG = Math.PI / 180;
 const K_MIN = 0.003; // virtual-eye factor at full ortho (k = d/E); ~0.17% residual foreshortening, visually parallel

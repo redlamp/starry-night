@@ -1,5 +1,7 @@
 "use client";
 
+import { cn } from "@/lib/utils";
+
 // Live side-view (elevation) schematic of the camera rig: an abstracted cross-section in the
 // vertical plane that contains the camera and the focal point. It shows how the three things the
 // orbit controls juggle actually relate —
@@ -10,6 +12,10 @@
 //   • the GROUND, and the camera's clearance above it (the clamp that stops the eye going under).
 // It is a read-only mirror of the live pose — watch it while you drag to see why a grazing, far-out
 // view turns a small drag into a big move, or how ortho keeps rays parallel.
+//
+// Shared by the camera lab (CameraLab → LabHud) and the real app (CameraSideView overlay, behind the
+// Orbit → "side-view diagram" toggle). The container position is a `className` so each host can place
+// it (the app stacks it above the seed bar); omit it for the lab's default bottom-left corner.
 
 const DEG = Math.PI / 180;
 const W = 248;
@@ -33,6 +39,7 @@ export function CameraDiagram({
   mode,
   show,
   onToggleProjection,
+  className,
 }: {
   data: CamReadout;
   mode: string;
@@ -40,6 +47,8 @@ export function CameraDiagram({
   // when provided, the projection label becomes a tap target that flips persp ↔ ortho (the
   // mobile-friendly equivalent of the P key); omitted when the method is perspective-locked
   onToggleProjection?: () => void;
+  // container position / stacking; defaults to the bottom-left corner (the lab's placement)
+  className?: string;
 }) {
   if (!show) return null;
 
@@ -55,7 +64,12 @@ export function CameraDiagram({
     );
 
   return (
-    <div className="pointer-events-none absolute bottom-3 left-3 z-10 w-[248px] overflow-hidden rounded-lg border border-zinc-700/70 bg-black/55 backdrop-blur">
+    <div
+      className={cn(
+        "pointer-events-none absolute w-[248px] overflow-hidden rounded-lg border border-zinc-700/70 bg-black/55 backdrop-blur",
+        className ?? "bottom-3 left-3 z-10",
+      )}
+    >
       <div className="flex items-center justify-between px-2.5 pt-1.5 pb-1">
         <span className="font-mono text-[10px] tracking-wider text-zinc-400 uppercase">side view</span>
         {onToggleProjection ? (

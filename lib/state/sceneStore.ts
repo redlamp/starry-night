@@ -111,7 +111,7 @@ export type OrbitConfig = {
 export const DEFAULT_ORBIT: OrbitConfig = {
   centerX: 0,
   centerZ: -120,
-  lookAtY: 120,
+  lookAtY: 0, // default aim at ground level (focal Y 0); was 120 / mid-skyline — 2026-06-21
   radius: 2400 * CITY_SCALE,
   azimuthDeg: 190,
   elevationDeg: 2,
@@ -470,6 +470,7 @@ type AnySettingEntry =
   | SettingEntry<"rotateLowAngleGain">
   | SettingEntry<"rotateSlowBelowDeg">
   | SettingEntry<"tiltSpeed">
+  | SettingEntry<"showSideView">
   | SettingEntry<"orbitZoomToPin">
   | SettingEntry<"allowUnderview">
   | SettingEntry<"cameraMode">
@@ -527,6 +528,9 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "rotateLowAngleGain", defaultValue: 0.35, persist: true },
   { key: "rotateSlowBelowDeg", defaultValue: 20, persist: true },
   { key: "tiltSpeed", defaultValue: 0.5, persist: true },
+  // Side-view diagram overlay — a transient inspection aid (like the debug view modes), so it
+  // resets off on reload and stays out of Saved / Copied configs.
+  { key: "showSideView", defaultValue: false as const, persist: false },
   { key: "orbitZoomToPin", defaultValue: true as const, persist: false },
   { key: "allowUnderview", defaultValue: false as const, persist: false },
   { key: "cameraMode", defaultValue: "orbit" as const, persist: true },
@@ -922,6 +926,11 @@ type SceneState = {
   // freezeGroundOnDrag tune it). Off by default — it can fight rotate/tilt at grazing angles.
   groundFraming: boolean;
   setGroundFraming: (v: boolean) => void;
+  // Side-view diagram overlay (CameraSideView): a live elevation cross-section of the rig — camera,
+  // view frustum (cone ↔ slab), elevation angle, focal + plumb, ground line, clearance. Display-only
+  // inspection aid; not persisted (resets off on reload). See components/scene/CameraDiagram.tsx.
+  showSideView: boolean;
+  setShowSideView: (v: boolean) => void;
   // Rotate/tilt speed limit at grazing / far-out views (DreiSceneControls.dragRotate).
   // rotateLowAngleGain = the rate multiplier at the horizon (1 = no limit); the slowdown eases in
   // (smoothstep) below rotateSlowBelowDeg elevation. Distance past the city tapers it further.
@@ -1176,6 +1185,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setFreezeGroundOnDrag: (freezeGroundOnDrag) => set({ freezeGroundOnDrag }),
   groundFraming: false,
   setGroundFraming: (groundFraming) => set({ groundFraming }),
+  showSideView: false,
+  setShowSideView: (showSideView) => set({ showSideView }),
   rotateLowAngleGain: 0.35,
   setRotateLowAngleGain: (rotateLowAngleGain) => set({ rotateLowAngleGain }),
   rotateSlowBelowDeg: 20,

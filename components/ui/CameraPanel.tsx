@@ -806,6 +806,8 @@ function OrbitSection() {
   const setRotateSlowBelow = useSceneStore((s) => s.setRotateSlowBelowDeg);
   const tiltSpeed = useSceneStore((s) => s.tiltSpeed);
   const setTiltSpeed = useSceneStore((s) => s.setTiltSpeed);
+  const showSideView = useSceneStore((s) => s.showSideView);
+  const setShowSideView = useSceneStore((s) => s.setShowSideView);
   const setFocalAdjust = useSceneStore((s) => s.setFocalAdjust);
   // Show the focal pin (and, for Screen Y, the guide line) WHILE a slider is being adjusted,
   // then revert on release: a slider drag ends precisely via onCommit (base-ui's
@@ -843,6 +845,12 @@ function OrbitSection() {
       >
         Default Orbit
       </Button>
+      <label className="flex cursor-pointer items-center justify-between gap-2 text-xs">
+        <span className="text-foreground/70" title="Live elevation cross-section of the camera rig, bottom-left">
+          side-view diagram
+        </span>
+        <Switch checked={showSideView} onCheckedChange={setShowSideView} />
+      </label>
       <ValueSlider
         label="Speed °/s"
         value={orbit.periodSec !== 0 ? Number((360 / orbit.periodSec).toFixed(1)) : 0}

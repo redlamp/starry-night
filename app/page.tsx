@@ -5,6 +5,8 @@ import { FpsHud } from "@/components/ui/FpsHud";
 import { PerfOverlay } from "@/components/ui/PerfOverlay";
 import { CaptureBoot } from "@/components/scene/CaptureBoot";
 import { ViewHotkeys } from "@/components/scene/ViewHotkeys";
+import { CameraSideView } from "@/components/scene/CameraSideView";
+import { ControlsGuide } from "@/components/ui/ControlsGuide";
 
 export default function Page() {
   return (
@@ -17,6 +19,8 @@ export default function Page() {
         <SeedControls />
         <FpsHud />
         <PerfOverlay />
+        <CameraSideView />
+        <ControlsGuide />
       </div>
     </main>
   );
