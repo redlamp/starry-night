@@ -464,9 +464,8 @@ type AnySettingEntry =
   | SettingEntry<"orbitPaused">
   | SettingEntry<"showFocalIndicator">
   | SettingEntry<"orbitPivotFromBottom">
-  | SettingEntry<"groundDamp">
-  | SettingEntry<"freezeGroundOnDrag">
   | SettingEntry<"groundFraming">
+  | SettingEntry<"groundFrameLow">
   | SettingEntry<"rotateLowAngleGain">
   | SettingEntry<"rotateSlowBelowDeg">
   | SettingEntry<"tiltSpeed">
@@ -522,9 +521,8 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "orbitPaused", defaultValue: true as const, persist: true },
   { key: "showFocalIndicator", defaultValue: false as const, persist: true },
   { key: "orbitPivotFromBottom", defaultValue: 0.37, persist: true },
-  { key: "groundDamp", defaultValue: 6, persist: true },
-  { key: "freezeGroundOnDrag", defaultValue: true as const, persist: true },
-  { key: "groundFraming", defaultValue: false as const, persist: true },
+  { key: "groundFraming", defaultValue: true as const, persist: true },
+  { key: "groundFrameLow", defaultValue: 0.18, persist: true },
   { key: "rotateLowAngleGain", defaultValue: 0.35, persist: true },
   { key: "rotateSlowBelowDeg", defaultValue: 20, persist: true },
   { key: "tiltSpeed", defaultValue: 0.5, persist: true },
@@ -913,19 +911,16 @@ type SceneState = {
   // (Google-Maps ~0.37). Drives the RMB pivot + the focal-marker raycast.
   orbitPivotFromBottom: number;
   setOrbitPivotFromBottom: (v: number) => void;
-  // Low-elevation ground framing (DreiSceneControls.applyScreenFocus). groundDamp = the
-  // damped-follow rate for the auto pivot pull near the horizon (higher = snappier; ~0.2s at 6).
-  // freezeGroundOnDrag holds that pull steady while a gesture is in progress and lets it settle on
-  // release, so the auto-framing doesn't fight a live drag.
-  groundDamp: number;
-  setGroundDamp: (v: number) => void;
-  freezeGroundOnDrag: boolean;
-  setFreezeGroundOnDrag: (v: boolean) => void;
   // Master toggle for the low-elevation ground pull (applyScreenFocus). false = Screen Y is held
-  // exactly where set at every angle; true = the pivot eases down near the horizon (groundDamp /
-  // freezeGroundOnDrag tune it). Off by default — it can fight rotate/tilt at grazing angles.
+  // exactly where set at every angle; true = the pivot eases down near the horizon, tracking the tilt
+  // LIVE (groundFrameLow sets how low it settles). On by default.
   groundFraming: boolean;
   setGroundFraming: (v: boolean) => void;
+  // Low-angle frame: the fraction up from the bottom the ground/skyline line eases to at grazing
+  // angles (applyScreenFocus). Focal-Y-INDEPENDENT — a balanced city + sky frame (~0.18). Lower =
+  // skyline sits lower / more sky; higher = more foreground.
+  groundFrameLow: number;
+  setGroundFrameLow: (v: number) => void;
   // Side-view diagram overlay (CameraSideView): a live elevation cross-section of the rig — camera,
   // view frustum (cone ↔ slab), elevation angle, focal + plumb, ground line, clearance. Display-only
   // inspection aid; not persisted (resets off on reload). See components/scene/CameraDiagram.tsx.
@@ -1179,12 +1174,10 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setFocalAdjust: (focalAdjust) => set({ focalAdjust }),
   orbitPivotFromBottom: 0.37,
   setOrbitPivotFromBottom: (orbitPivotFromBottom) => set({ orbitPivotFromBottom }),
-  groundDamp: 6,
-  setGroundDamp: (groundDamp) => set({ groundDamp }),
-  freezeGroundOnDrag: true,
-  setFreezeGroundOnDrag: (freezeGroundOnDrag) => set({ freezeGroundOnDrag }),
-  groundFraming: false,
+  groundFraming: true,
   setGroundFraming: (groundFraming) => set({ groundFraming }),
+  groundFrameLow: 0.18,
+  setGroundFrameLow: (groundFrameLow) => set({ groundFrameLow }),
   showSideView: false,
   setShowSideView: (showSideView) => set({ showSideView }),
   rotateLowAngleGain: 0.35,

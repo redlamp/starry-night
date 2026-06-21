@@ -62,16 +62,34 @@ function orthoMinRadius(): number {
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 const round1 = (n: number) => Math.round(n * 10) / 10; // 1 decimal place
 
-// Sticky detent at Focal Y = 0 (ground), for the pin scrub — ported from the camera lab
-// (labProjection.snapFocalY, 2026-06-21). Within ENTER of 0 it snaps to exactly 0; once snapped it
-// HOLDS at 0 until dragged past EXIT (> ENTER), so 0 is easy to land on and feels snug, and
-// deliberate to leave. Thresholds scale with the orbit distance so the detent is a roughly constant
-// on-screen size at any zoom. Applied to BOTH the mouse and touch pin scrubs.
-function snapFocalY(raw: number, wasSnapped: boolean, dist: number): { y: number; snapped: boolean } {
-  const enter = Math.max(6, dist * 0.006);
-  const exit = Math.max(16, dist * 0.013);
-  if (wasSnapped) return Math.abs(raw) > exit ? { y: raw, snapped: false } : { y: 0, snapped: true };
-  return Math.abs(raw) < enter ? { y: 0, snapped: true } : { y: raw, snapped: false };
+// Ground detent at Focal Y = 0, for the pin scrub + free-look aim. A CONTINUOUS soft deadband: within
+// ±band of 0 the focal sits at EXACTLY 0 (snug on the ground); past the band the applied value ramps
+// smoothly OUT of 0 (raw, less the band width) instead of lurching.
+//   The old version (labProjection.snapFocalY) used hysteresis (enter < exit) and HELD the output at 0
+// while the raw drag kept accumulating — so crossing the threshold snapped the focal by the whole band
+// at once, in both directions. That discontinuity was the "jarring" snap (user 2026-06-21). The
+// deadband keeps the land-on-ground feel without the jump. `scale` is the projection-correct
+// focal-plane world scale (focalScrubScale), so the detent is a constant on-screen size at any zoom /
+// projection — NOT the ortho park radius. Applied to the mouse + touch pin scrubs and the free-look.
+function snapFocalY(raw: number, scale: number): number {
+  const band = Math.max(10, scale * 0.008);
+  const mag = Math.abs(raw);
+  return mag <= band ? 0 : Math.sign(raw) * (mag - band);
+}
+
+// Projection-correct "effective distance" for the focal-Y scrub speed + its ground detent size. In
+// perspective the orbit distance sets the on-screen scale, so speed ∝ distance keeps a constant feel
+// across zoom. In ORTHO the orbit radius is a fixed park value (held far out for near-plane safety)
+// with nothing to do with on-screen scale — that's orthoSize — so driving the scrub by c.distance made
+// it race (~2.4×) and ignore ortho zoom (user 2026-06-21). Map orthoSize back to the equivalent
+// perspective distance (same focal-plane world height) so both projections feel identical. Mirrors
+// freeLookAim's wppY; perspective is returned unchanged.
+function focalScrubScale(c: CameraControlsImpl): number {
+  const st = useSceneStore.getState();
+  if (st.projection !== "orthographic") return c.distance;
+  const cam = c.camera as THREE.PerspectiveCamera;
+  const tanHalfFov = Math.tan(((cam.fov * Math.PI) / 180) / 2) || 0.4663;
+  return (st.orthoSize * orbitFramingFactor(cam.aspect)) / tanHalfFov;
 }
 
 // Auto-revolution resume: after a control gesture, hold the sweep off briefly,
@@ -114,7 +132,7 @@ const COLOR_BELOW = "#b5835a"; // focal indicator colour below ground (soil)
 // — so we hide the cursor and read movementY instead (see wiki/research/camera-interaction-models).
 const FOCAL_Y_MIN = -1000; // matches the Focal Y slider range (CameraPanel)
 const FOCAL_Y_MAX = 1000;
-const FOCAL_SCRUB_K = 0.0018; // Focal-Y units per pixel, ×distance (consistent feel across zoom)
+const FOCAL_SCRUB_K = 0.0018; // Focal-Y units per pixel, ×focalScrubScale (projection-correct feel)
 const PIN_HIT_HALF_W = 16; // pin grab hit box, screen px (centred on the projected focal)
 const PIN_HIT_TOP = 34; // px above the focal screen point — the pin icon body extends up
 const PIN_HIT_BOT = 8; // px below the tip
@@ -195,19 +213,22 @@ const _focalOff = new THREE.Vector3();
 // perspective is the foreshortened angle (distance + FOV). Their target pivots cross-fade by
 // projectionBlend, so the pull is continuous through a morph and reduces to the pure-ortho pull at
 // blend 1. The pull is a smoothstep in elevation (proportional to how parallel the view is), and the
-// APPLIED value is damped over time so a fast tilt eases in instead of tracking 1:1 and lurching.
-const GROUND_EASE_DEG = 12;
-const GROUND_CONTENT_CAP = 0.95; // both projections: keep real content across the top 95% of the frame at low elevation
-// The damped-follow rate (≈0.2s at the default 6) is the store's `groundDamp` — a live slider in the
-// Orbit panel; `freezeGroundOnDrag` holds the pull steady during a gesture. Both read inside
-// applyScreenFocus from useSceneStore.getState().
-let _groundCorr = Number.NaN; // smoothed pivot correction (≤ 0 = pulled down); NaN → snap on the first frame so a fresh load lands already-framed (no spring), damps after. Module-level; resets on reload.
-function applyScreenFocus(
-  c: CameraControlsImpl,
-  camera: THREE.Camera,
-  dt?: number,
-  freeze?: boolean,
-): void {
+// value is applied DIRECTLY (a pure function of the current elevation) — no per-gesture freeze and no
+// post-release damp, so it tracks the tilt as a continuous gradient WHILE dragging and is already
+// settled the instant the drag ends. (The earlier freeze-then-damp left a "catch-up" tween after
+// release that felt gross; corrTarget is smooth because polarAngle is — camera-controls eases the
+// rotation — so direct tracking can't jitter.)
+// Single low-angle easing curve (user 2026-06-21): one smoothstep in elevation — 0 above lowAngleDeg,
+// 1 at/below the horizon — that drives BOTH the tilt throttle (dragRotate) and the Screen-Y ground
+// pull (here), so the framing and the tilt-slowdown ease in lockstep instead of on two separate
+// thresholds (the old GROUND_EASE_DEG 12° for Screen-Y vs rotateSlowBelowDeg 20° for tilt). The shared
+// threshold is rotateSlowBelowDeg.
+function lowAngleT(elevDeg: number, lowAngleDeg: number): number {
+  const x = clamp((lowAngleDeg - elevDeg) / Math.max(1, lowAngleDeg), 0, 1);
+  return x * x * (3 - 2 * x); // smoothstep
+}
+let _screenYNow = 0.37; // current eased pivot (fraction from bottom), exposed to the side-view Scr-Y gauge
+function applyScreenFocus(c: CameraControlsImpl, camera: THREE.Camera): void {
   const s = useSceneStore.getState();
   const base = s.orbitPivotFromBottom;
   const blend = s.projectionBlend;
@@ -217,10 +238,17 @@ function applyScreenFocus(
   // Elevation-keyed target pull (≤ 0): how far below the user's ScreenY to sit at this tilt.
   let corrTarget = 0;
   const elevDeg = 90 - c.polarAngle / DEG;
-  if (s.groundFraming && elevDeg < GROUND_EASE_DEG) {
+  const t = s.groundFraming ? lowAngleT(elevDeg, s.rotateSlowBelowDeg) : 0; // shared low-angle curve
+  if (t > 0) {
+    // The ground/skyline line eases to `lowTarget` (fraction up from the bottom) at full low angle —
+    // a balanced city + sky frame, INDEPENDENT of focal Y. `drop` then RAISES the pivot for a focal
+    // ABOVE ground so the below-ground void at the bottom stays capped. (Was a fixed 1−CONTENT_CAP =
+    // 0.05, which degenerated to "skyline jammed at the bottom / ~90% sky" at focal Y = 0, since both
+    // drop terms scale with lookAtY and vanish there.)
+    const lowTarget = s.groundFrameLow;
     // Ortho: the ground line sits lookAtY·cos(θ)/(2·orthoSize) below the pin.
     const dropOrtho = (s.orbit.lookAtY * Math.cos(elevDeg * DEG)) / (2 * oeff);
-    const targetOrtho = 1 - GROUND_CONTENT_CAP + dropOrtho;
+    const targetOrtho = lowTarget + dropOrtho;
     // Perspective: the ground-below-pin sits at the foreshortened angle φ below the view axis.
     const fovRad = (camera as THREE.PerspectiveCamera).fov * DEG;
     const phi =
@@ -230,28 +258,15 @@ function applyScreenFocus(
       ) -
       elevDeg * DEG;
     const dropPersp = (0.5 * Math.tan(phi)) / Math.tan(fovRad / 2);
-    const targetPersp = 1 - GROUND_CONTENT_CAP + dropPersp;
+    const targetPersp = lowTarget + dropPersp;
     // Cross-fade the two targets by projection; only ever pull DOWN (target below the user's ScreenY).
     const targetPivot = targetOrtho * blend + targetPersp * (1 - blend);
     if (targetPivot < base) {
-      const x = clamp((GROUND_EASE_DEG - elevDeg) / GROUND_EASE_DEG, 0, 1);
-      const k = x * x * (3 - 2 * x); // smoothstep in elevation
-      corrTarget = (targetPivot - base) * k; // negative — only ever pulls the pin DOWN
+      corrTarget = (targetPivot - base) * t; // negative — only ever pulls the pin DOWN; eased by the shared curve
     }
   }
-  // Damp the applied pull over time (frame-rate independent) so live tilts ease smoothly — but SNAP
-  // on the first frame (NaN) or a dt-less re-park, so a fresh load lands already-framed instead of
-  // springing the pivot in from 0. While `freeze` (a gesture is in progress and freezeGroundOnDrag
-  // is on), HOLD the current pull so the auto-framing doesn't fight the drag; it damps to the new
-  // target once the gesture releases and `freeze` clears.
-  if (freeze && Number.isFinite(_groundCorr)) {
-    // frozen: hold _groundCorr as-is for the duration of the drag
-  } else if (Number.isFinite(_groundCorr) && dt && dt > 0) {
-    _groundCorr = THREE.MathUtils.damp(_groundCorr, corrTarget, s.groundDamp, dt);
-  } else {
-    _groundCorr = corrTarget;
-  }
-  const frac = base + _groundCorr - 0.5; // 0 = centre, < 0 below centre, > 0 above
+  const frac = base + corrTarget - 0.5; // 0 = centre, < 0 below centre, > 0 above (direct, no damp)
+  _screenYNow = base + corrTarget; // expose the eased pivot for the side-view Scr-Y gauge
   // Half-height the morph frames at the focal plane — the SAME bridge ProjectionBlender
   // uses (perspK at blend 0 → orthoSize at blend 1), so the parked pin tracks the framing
   // through a projection morph instead of popping when projection flips but blend hasn't.
@@ -278,14 +293,30 @@ function liftAboveGround(c: CameraControlsImpl): void {
 // it parked at the screen-focus position. Distance held = "mode B".
 const _quat = new THREE.Quaternion();
 const _look = new THREE.Vector3();
+// Free-look accumulator: the RAW (un-snapped) look direction + the gesture's fixed focal distance,
+// held across the gesture so the Focal-Y=0 detent can stick without freezing the pitch — the applied
+// target Y is snapped while the raw direction keeps accumulating the drag. resetFreeLook() re-seeds at
+// the start of each free-look gesture (mouse LMB+RMB / Ctrl-drag engage, touch 3-finger start).
+const _flDir = new THREE.Vector3();
+let _flActive = false;
+let _flDist = 0;
+function resetFreeLook(): void {
+  _flActive = false;
+}
 function freeLookAim(c: CameraControlsImpl, dx: number, dy: number, viewH: number): void {
   markCameraActivity("look");
   c.getPosition(_camPos);
-  c.getTarget(_tgt);
-  _camFwd.subVectors(_tgt, _camPos);
-  const d = _camFwd.length();
-  if (d < 1e-3) return;
-  _camFwd.multiplyScalar(1 / d); // unit view direction
+  // Seed the raw direction + distance once per gesture; thereafter accumulate into _flDir (re-deriving
+  // from the snapped target each frame would freeze the pitch at the detent).
+  if (!_flActive) {
+    c.getTarget(_tgt);
+    _flDir.subVectors(_tgt, _camPos);
+    _flDist = _flDir.length();
+    if (_flDist < 1e-3) return;
+    _flDir.multiplyScalar(1 / _flDist);
+    _flActive = true;
+  }
+  const d = _flDist;
   // Screen-proportional look rate (user 2026-06-16): one drag pixel rotates the view by the angle
   // subtending one pixel of the focal (pin) plane, so the scene tracks the cursor 1:1 at the
   // current zoom instead of a fixed angular speed that raced the focal Y at large radius / wide
@@ -300,20 +331,24 @@ function freeLookAim(c: CameraControlsImpl, dx: number, dy: number, viewH: numbe
       : (2 * d * Math.tan(((cam.fov * Math.PI) / 180) / 2)) / H;
   const rate = (wppY / d) * FREE_LOOK_GAIN;
   _quat.setFromAxisAngle(_UP, -dx * rate); // yaw around world up
-  _camFwd.applyQuaternion(_quat);
-  _camRight.crossVectors(_camFwd, _UP).normalize(); // camera right
+  _flDir.applyQuaternion(_quat);
+  _camRight.crossVectors(_flDir, _UP).normalize(); // camera right
   _quat.setFromAxisAngle(_camRight, -dy * rate); // pitch
-  _look.copy(_camFwd).applyQuaternion(_quat);
-  if (Math.abs(_look.y) < 0.996) _camFwd.copy(_look); // clamp short of vertical (no flip)
-  // re-aim from the SAME position at distance d → rotate in place; the new target's Y
-  // becomes Focal Y. setLookAt keeps the position and re-derives the orbit.
+  _look.copy(_flDir).applyQuaternion(_quat);
+  if (Math.abs(_look.y) < 0.996) _flDir.copy(_look); // clamp short of vertical (no flip)
+  // Continuous ground detent at Focal Y = 0: the focal rides distance d along the ray, so its height
+  // is _camPos.y + dir.y·d. The deadband eases the applied height onto the ground line and out of it
+  // without a snap-jump; the raw horizontal aim is preserved so the pitch keeps accumulating.
+  const rawY = _camPos.y + _flDir.y * d;
+  const targetY = snapFocalY(rawY, focalScrubScale(c));
+  // re-aim from the SAME position at distance d → rotate in place; the new target's Y becomes Focal Y.
   void c.setLookAt(
     _camPos.x,
     _camPos.y,
     _camPos.z,
-    _camPos.x + _camFwd.x * d,
-    _camPos.y + _camFwd.y * d,
-    _camPos.z + _camFwd.z * d,
+    _camPos.x + _flDir.x * d,
+    targetY,
+    _camPos.z + _flDir.z * d,
     false,
   );
 }
@@ -449,8 +484,9 @@ function dragRotate(
   // Speed limit at grazing / far-out views: taper by elevation (smoothstep to the store floor below
   // the store threshold) and by distance (mild 1/d past ROT_DIST_REF), then hard-cap the step.
   const elevDeg = 90 - c.polarAngle / DEG;
-  const xe = clamp(elevDeg / Math.max(1, st.rotateSlowBelowDeg), 0, 1);
-  const gElev = st.rotateLowAngleGain + (1 - st.rotateLowAngleGain) * (xe * xe * (3 - 2 * xe));
+  // Shared low-angle curve (also drives the Screen-Y ground pull) — tilt eases 1 → rotateLowAngleGain
+  // as the view nears the horizon, in lockstep with the framing.
+  const gElev = 1 + (st.rotateLowAngleGain - 1) * lowAngleT(elevDeg, st.rotateSlowBelowDeg);
   const gDist = clamp(ROT_DIST_REF / Math.max(ROT_DIST_REF, c.distance), ROT_DIST_MIN_GAIN, 1);
   const gain = gElev * gDist;
   dAz = clamp(dAz * gain, -ROT_MAX_STEP, ROT_MAX_STEP);
@@ -781,7 +817,6 @@ export function DreiSceneControls() {
     const A = CameraControlsImpl.ACTION;
     let scrubbing = false;
     let focalY = 0; // raw dragged Focal Y (pre-detent accumulator)
-    let focalY0Snapped = false; // sticky-0 detent state across the gesture
     let lastHover = false;
     const onDown = (e: PointerEvent) => {
       if (e.pointerType !== "mouse" || e.button !== 0 || e.shiftKey || e.ctrlKey || e.metaKey) return;
@@ -796,7 +831,6 @@ export function DreiSceneControls() {
       dragging.current = true; // hold the auto-revolution sweep + drive live writeBack
       panning.current = false; // pan must not co-own this press
       focalY = _tgt.y;
-      focalY0Snapped = false;
       dom.style.cursor = "none";
       dom.setPointerCapture?.(e.pointerId);
       c.mouseButtons.left = A.NONE; // suppress the LMB rotate while scrubbing the pin
@@ -829,13 +863,13 @@ export function DreiSceneControls() {
       if (!c) return;
       c.getTarget(_tgt);
       c.getPosition(_camPos);
-      focalY = clamp(focalY - e.movementY * c.distance * FOCAL_SCRUB_K, FOCAL_Y_MIN, FOCAL_Y_MAX);
-      const det = snapFocalY(focalY, focalY0Snapped, c.distance); // sticky detent at Focal Y = 0
-      focalY0Snapped = det.snapped;
+      const scale = focalScrubScale(c); // projection-correct (the ortho radius is a park value, not zoom)
+      focalY = clamp(focalY - e.movementY * scale * FOCAL_SCRUB_K, FOCAL_Y_MIN, FOCAL_Y_MAX);
+      const targetY = snapFocalY(focalY, scale); // continuous ground detent at Focal Y = 0 (no snap-jump)
       markCameraActivity("focalY");
       // re-aim at the new Focal Y from the SAME camera position → the view tilts; applyScreenFocus
       // (main frame) keeps the pin parked at the screen-focus %.
-      void c.setLookAt(_camPos.x, _camPos.y, _camPos.z, _tgt.x, det.y, _tgt.z, false);
+      void c.setLookAt(_camPos.x, _camPos.y, _camPos.z, _tgt.x, targetY, _tgt.z, false);
     };
     const finish = (pointerId: number) => {
       if (!scrubbing) return;
@@ -884,6 +918,7 @@ export function DreiSceneControls() {
       const c = controls.current;
       if (!c) return;
       active = true;
+      resetFreeLook(); // re-seed the look accumulator for this gesture
       panning.current = false; // kill the custom LMB pan
       c.mouseButtons.left = A.NONE; // kill camera-controls rotate (now on LMB; recomputed each move)
       const st = useSceneStore.getState();
@@ -962,7 +997,6 @@ export function DreiSceneControls() {
     let scrub = false;
     let scrubLastY = 0;
     let scrubFocalY = 0; // raw dragged Focal Y (pre-detent accumulator)
-    let scrubSnapped = false; // sticky-0 detent state for the touch scrub
     const mid = (a: { x: number; y: number }[]) => {
       let x = 0;
       let y = 0;
@@ -981,6 +1015,7 @@ export function DreiSceneControls() {
       g2 = null; // undetermined until pan / pinch leads past GESTURE_LOCK_PX
     };
     const threeFingerStart = () => {
+      resetFreeLook(); // re-seed the look accumulator for the 3-finger free-look
       const m = mid([...pts.values()]);
       last3X = m.x;
       last3Y = m.y;
@@ -1003,7 +1038,6 @@ export function DreiSceneControls() {
             scrub = true;
             scrubLastY = e.clientY;
             scrubFocalY = _tgt.y;
-            scrubSnapped = false;
             dragging.current = true; // pause the sweep + drive writeBack while scrubbing
           }
         }
@@ -1026,16 +1060,16 @@ export function DreiSceneControls() {
           // from the same camera position so the view tilts; applyScreenFocus keeps the pin parked.
           c.getTarget(_tgt);
           c.getPosition(_camPos);
+          const scale = focalScrubScale(c); // projection-correct (the ortho radius is a park value, not zoom)
           scrubFocalY = clamp(
-            scrubFocalY - (e.clientY - scrubLastY) * c.distance * FOCAL_SCRUB_K,
+            scrubFocalY - (e.clientY - scrubLastY) * scale * FOCAL_SCRUB_K,
             FOCAL_Y_MIN,
             FOCAL_Y_MAX,
           );
           scrubLastY = e.clientY;
-          const det = snapFocalY(scrubFocalY, scrubSnapped, c.distance); // sticky detent at Focal Y = 0
-          scrubSnapped = det.snapped;
+          const targetY = snapFocalY(scrubFocalY, scale); // continuous ground detent at Focal Y = 0 (no snap-jump)
           markCameraActivity("focalY");
-          void c.setLookAt(_camPos.x, _camPos.y, _camPos.z, _tgt.x, det.y, _tgt.z, false);
+          void c.setLookAt(_camPos.x, _camPos.y, _camPos.z, _tgt.x, targetY, _tgt.z, false);
         } else {
           // 1-finger → press-point-relative orbit + uniform tilt (smoothed).
           dragRotate(c, camera, dom, e.clientX - lastX, e.clientY - lastY, e.clientX, e.clientY);
@@ -1376,7 +1410,7 @@ export function DreiSceneControls() {
     // park the orbit pivot at the screen-focus position (focal offset; scales w/ zoom). Freeze the
     // low-elevation ground pull while a gesture is live (when enabled) so it settles on release
     // instead of fighting the drag.
-    applyScreenFocus(c, camera, dt, s.groundFraming && s.freezeGroundOnDrag && dragging.current);
+    applyScreenFocus(c, camera);
 
     const allowUnder = s.allowUnderview;
 
@@ -1405,16 +1439,17 @@ export function DreiSceneControls() {
     // pull) physically shifts the rendered camera up ~137 — so measuring against getPosition read
     // offsetY≈0 and the eye stayed high. offsetY = real eye − analytic orbit point.
     const offsetY = camera.position.y - (_tgt.y + c.distance * Math.cos(c.polarAngle));
-    let maxPolar = Math.acos(clamp(-(_tgt.y + offsetY) / Math.max(1, c.distance), -1, 1));
-    if (allowUnder) {
-      // Intentional underview (the "explore later" gate): relax the ground clamp so the camera
-      // can drop below the ground and look up at the world from underneath.
-      maxPolar = Math.PI * 0.98;
-    } else if (s.projection === "orthographic") {
-      // Ortho: floor at the horizon (no below-0 elevation). Perspective is the one that descends
-      // to the ground; ortho stays parallel-or-above.
-      maxPolar = Math.min(maxPolar, Math.PI / 2);
-    }
+    // Ground floor for the EYE. Perspective: eye ≥ 0 (just above the plane). ORTHO: the parallel slab
+    // spans eye ± frustumHalfHeight (oeff), so eye = oeff would jam the ground to the very bottom (and
+    // push the pin off-screen). Instead leave a controlled void gap below the ground = the low-angle
+    // Screen Y (groundFrameLow): eye ≥ oeff·(1−2·gap) rests the ground that fraction up from the bottom
+    // with some void below it (OK at the horizon — user 2026-06-21), while keeping the eye ≥ 0 (above
+    // ground, no underside). A higher Focal Y still raises the eye → the tilt can go more negative.
+    // Blended so a projection morph tweens to the plain eye ≥ 0 perspective floor.
+    const oeff = s.orthoSize * orbitFramingFactor((camera as THREE.PerspectiveCamera).aspect);
+    const eyeFloor = s.projectionBlend * Math.max(0, oeff * (1 - 2 * s.groundFrameLow));
+    let maxPolar = Math.acos(clamp((eyeFloor - (_tgt.y + offsetY)) / Math.max(1, c.distance), -1, 1));
+    if (allowUnder) maxPolar = Math.PI * 0.98;
     c.maxPolarAngle = maxPolar;
 
     // Side-view diagram readout (display-only; the CameraSideView overlay paints it). A cheap
@@ -1434,6 +1469,18 @@ export function DreiSceneControls() {
       cameraReadout.blend = blend;
       cameraReadout.parallel = blend >= 0.5;
       cameraReadout.frustumHh = perspHh + (orthoHh - perspHh) * blend;
+      // Low-angle framing + tilt-throttle gauges: current eased Screen Y (+ its norm/low endpoints)
+      // and the live rotate/tilt speed multiplier, both keyed to the current elevation.
+      const elevG = 90 - c.polarAngle / DEG;
+      const gElev = 1 + (s.rotateLowAngleGain - 1) * lowAngleT(elevG, s.rotateSlowBelowDeg);
+      const gDist = clamp(ROT_DIST_REF / Math.max(ROT_DIST_REF, c.distance), ROT_DIST_MIN_GAIN, 1);
+      cameraReadout.tilt = gElev * gDist;
+      cameraReadout.screenY = _screenYNow;
+      cameraReadout.screenYBase = s.orbitPivotFromBottom;
+      cameraReadout.screenYLow = s.groundFrameLow;
+      // Framing + tilt now share ONE threshold (rotateSlowBelowDeg), so both gauges key off it.
+      cameraReadout.frameBelow = s.rotateSlowBelowDeg;
+      cameraReadout.tiltBelow = s.rotateSlowBelowDeg;
     }
 
     // (Focal markers update in a dedicated priority -1 useFrame above, so the Html pin

@@ -27,6 +27,7 @@ import { CITY_SHAPES, type CityShapeSetting } from "@/lib/seed/cityShape";
 import { CITY_TIER_ORDER } from "@/lib/seed/topology";
 import { TIER_LABELS, tierKm } from "@/components/ui/cityTiers";
 import { cn, isTypingTarget } from "@/lib/utils";
+import { useIdle } from "@/lib/useIdle";
 import {
   Box,
   Bug,
@@ -332,6 +333,7 @@ export function CameraPanel() {
   // Panel never renders during SSR (starts hidden), so reading localStorage in
   // the initializer can't cause a hydration mismatch.
   const [panelWidth, setPanelWidth] = useState<number>(readStoredPanelWidth);
+  const idle = useIdle(); // fade the gear button when the user goes idle (screensaver feel)
 
   const onResizeDown = (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -369,7 +371,10 @@ export function CameraPanel() {
     return (
       <button
         onClick={() => setHidden(false)}
-        className="bg-popover/70 text-foreground/85 border-foreground/10 active:bg-foreground/5 pointer-events-auto fixed top-3 right-3 z-30 flex size-11 items-center justify-center rounded-full border shadow-lg backdrop-blur-md"
+        className={cn(
+          "bg-popover/70 text-foreground/85 border-foreground/10 active:bg-foreground/5 fixed top-3 right-3 z-20 flex size-11 items-center justify-center rounded-full border shadow-lg backdrop-blur-md transition-opacity duration-700",
+          idle ? "pointer-events-none opacity-0" : "pointer-events-auto opacity-100",
+        )}
         title="Show settings (H)"
         aria-label="Show settings"
       >
@@ -395,7 +400,7 @@ export function CameraPanel() {
 
   return (
     <div
-      className="border-foreground/10 bg-popover/70 text-foreground pointer-events-auto fixed top-0 right-0 bottom-0 z-20 flex h-dvh max-h-dvh max-w-full flex-col border-l shadow-2xl backdrop-blur-md"
+      className="border-foreground/10 bg-popover/70 text-foreground pointer-events-auto fixed top-0 right-0 bottom-0 z-40 flex h-dvh max-h-dvh max-w-full flex-col border-l shadow-2xl backdrop-blur-md"
       style={{ width: panelWidth }}
     >
       {/* Grab the left edge to resize; double-click resets to the default width. */}
@@ -794,12 +799,10 @@ function OrbitSection() {
   const setOrbit = useSceneStore((s) => s.setOrbit);
   const pivot = useSceneStore((s) => s.orbitPivotFromBottom);
   const setPivot = useSceneStore((s) => s.setOrbitPivotFromBottom);
-  const groundDamp = useSceneStore((s) => s.groundDamp);
-  const setGroundDamp = useSceneStore((s) => s.setGroundDamp);
-  const freezeGround = useSceneStore((s) => s.freezeGroundOnDrag);
-  const setFreezeGround = useSceneStore((s) => s.setFreezeGroundOnDrag);
   const groundFraming = useSceneStore((s) => s.groundFraming);
   const setGroundFraming = useSceneStore((s) => s.setGroundFraming);
+  const groundFrameLow = useSceneStore((s) => s.groundFrameLow);
+  const setGroundFrameLow = useSceneStore((s) => s.setGroundFrameLow);
   const rotateFloor = useSceneStore((s) => s.rotateLowAngleGain);
   const setRotateFloor = useSceneStore((s) => s.setRotateLowAngleGain);
   const rotateSlowBelow = useSceneStore((s) => s.rotateSlowBelowDeg);
@@ -891,19 +894,6 @@ function OrbitSection() {
         stepperClass="w-32"
       />
       <ValueSlider
-        label="Focal X"
-        value={orbit.centerX}
-        min={-5000}
-        max={5000}
-        step={5}
-        onChange={(centerX) => {
-          setOrbit({ centerX });
-          showFocalAdjust("focalY");
-        }}
-        onCommit={endFocalAdjust}
-        stepperClass="w-32"
-      />
-      <ValueSlider
         label="Focal Y"
         value={orbit.lookAtY}
         min={-1000}
@@ -921,6 +911,19 @@ function OrbitSection() {
         indicatorStyle={{ background: orbit.lookAtY >= 0 ? "#7dd3fc" : "#b5835a" }}
       />
       <ValueSlider
+        label="Focal X"
+        value={orbit.centerX}
+        min={-5000}
+        max={5000}
+        step={5}
+        onChange={(centerX) => {
+          setOrbit({ centerX });
+          showFocalAdjust("focalY");
+        }}
+        onCommit={endFocalAdjust}
+        stepperClass="w-32"
+      />
+      <ValueSlider
         label="Focal Z"
         value={orbit.centerZ}
         min={-5000}
@@ -933,46 +936,29 @@ function OrbitSection() {
         onCommit={endFocalAdjust}
         stepperClass="w-32"
       />
-      <ValueSlider
+      <RangeSlider
         label="Screen Y"
-        // Screen Y is top-down: 0 = top of screen, 100 = bottom. The store holds
-        // orbitPivotFromBottom (fraction UP from the bottom), so invert at the display layer.
-        value={Math.round((1 - pivot) * 100)}
+        // Screen Y is top-down (0 = top, 100 = bottom); the store holds fractions UP from the bottom,
+        // so invert. Left thumb = resting Screen Y (orbitPivotFromBottom); right thumb = the low-angle
+        // Screen Y it eases DOWN to near the horizon (groundFrameLow), used when the ground pull is on.
+        value={[Math.round((1 - pivot) * 100), Math.round((1 - groundFrameLow) * 100)]}
         min={0}
-        max={100}
+        max={96}
         step={1}
-        onChange={(pct) => {
-          setPivot(1 - pct / 100);
+        onChange={([rest, low]) => {
+          setPivot(1 - rest / 100);
+          setGroundFrameLow(1 - low / 100);
           showFocalAdjust("screenY");
         }}
-        onCommit={endFocalAdjust}
-        stepperClass="w-32"
       />
       <label className="flex cursor-pointer items-center justify-between gap-2 text-xs">
         <span className="text-foreground/70">low-angle ground pull</span>
         <Switch checked={groundFraming} onCheckedChange={setGroundFraming} />
       </label>
-      {groundFraming && (
-        <>
-          <ValueSlider
-            label="Ground Damp"
-            value={groundDamp}
-            min={1}
-            max={20}
-            step={0.5}
-            onChange={setGroundDamp}
-            stepperClass="w-32"
-          />
-          <label className="flex cursor-pointer items-center justify-between gap-2 text-xs">
-            <span className="text-foreground/70">freeze ground while dragging</span>
-            <Switch checked={freezeGround} onCheckedChange={setFreezeGround} />
-          </label>
-        </>
-      )}
       <div className="text-foreground/45 text-[11px] leading-snug">
-        When on, the orbit pivot eases downward near the horizon so the skyline settles low with sky
-        above (Ground Damp sets how fast; freeze holds it steady during a drag). Off keeps Screen Y
-        exactly where you set it at every angle.
+        Screen Y is where the focal sits on screen (0 top, 100 bottom). The left thumb is its resting
+        spot; with the ground pull on, near the horizon it eases DOWN to the right thumb so the skyline
+        settles low with sky above (tracking the tilt live). Off holds the resting spot at every angle.
       </div>
       <ValueSlider
         label="Tilt speed"
