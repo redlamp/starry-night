@@ -89,6 +89,11 @@ folding the winner back into the real `DreiSceneControls`.
 
 The lab proved a few mechanics the real controller doesn't have yet, or has differently:
 
+> **Port status (2026-06-21):** the Focal-Y = 0 sticky detent, the touch 1-finger-on-pin Focal Y, the
+> side-view diagram (Orbit → "side-view diagram"), and default Focal Y = 0 are now IN THE APP, plus a
+> new in-app controls cheat-sheet (the "?" panel). The **near-horizon pan limit is still the open
+> gap** (the app keeps the grazing "jump"). Full auditable record: [[camera-lab-to-app-port]].
+
 - **Receding-eye projection morph on ONE camera** (`ProjectionRig.tsx`): a naive
   element-wise persp/ortho matrix lerp *snaps* at the end (clip-w stays perspective-
   dominated until t~=0.999 for large world depths). The receding-eye build (keep the

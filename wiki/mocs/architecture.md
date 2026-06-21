@@ -17,6 +17,8 @@ reference notes that describe how the running system behaves.
   repo's history (eras A–G), current control mappings, and parallels to known systems
 - [[camera-lab-test-plan]] — the `/camera-lab` testbed: the seven methods, test tasks,
   rating dimensions, and the lab internals worth porting into the real controller
+- [[camera-lab-to-app-port]] — auditable record of which lab mechanics have moved into the real
+  controller (side-view diagram, Focal-Y detent, touch pin-scrub, default focal-Y) and the one gap left
 - [[camera-controls-feature-matrix]] — behavior-by-behavior migration matrix
 - [[plan-drei-camera-migration]] — the drei `<CameraControls>` migration plan
 
