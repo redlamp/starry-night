@@ -11,6 +11,9 @@ import { cameraActivity, type CameraAction } from "@/lib/scene/cameraActivity";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { useIdle } from "@/lib/useIdle";
+import { Switch } from "@/components/ui/switch";
+import { toggleProjection } from "@/lib/scene/cameraView";
+import { MapPin } from "lucide-react";
 
 // In-app controls cheat-sheet. A small, NON-MODAL card anchored bottom-right (no scrim — it STAYS UP
 // while you test the gestures; dismiss with the ✕, the "?" button, or Esc — a click on the scene does
@@ -23,44 +26,46 @@ import { useIdle } from "@/lib/useIdle";
 type Mode = "mouse" | "touch";
 type Item = { icon: string; motion?: "ud" | "all"; badge?: string; label: string; sub?: string };
 
-// Look-around uses Ctrl on Windows/Linux, ⌘ on macOS — resolve to the user's platform so the hint
-// shows the one key they actually press (not both). navigator only exists client-side; the panel
-// content isn't rendered during SSR (closed by default), so this module-eval value is correct by the
-// time it can appear.
+// Focal Height's one-button twin uses Ctrl on Windows/Linux, ⌘ on macOS — resolve to the user's
+// platform so the hint shows the one key they actually press. navigator only exists client-side; the
+// panel content isn't rendered during SSR (closed by default), so this module-eval value is correct.
 const IS_MAC =
   typeof navigator !== "undefined" &&
   /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent || "");
-const LOOK_MOD = IS_MAC ? "⌘" : "Ctrl";
+const MOD = IS_MAC ? "⌘" : "Ctrl";
 
 const MOUSE_ITEMS: Item[] = [
   { icon: "mouse-left", motion: "all", label: "Rotate & Tilt" },
-  { icon: "mouse-right", motion: "all", label: "Pan", sub: "or Shift + left" },
-  { icon: "mouse-wheel", label: "Zoom", sub: "z: cursor ↔ pin" },
-  { icon: "mouse-both", motion: "all", label: "Look Around", sub: `or ${LOOK_MOD} + left` },
-  { icon: "mouse-left", motion: "ud", label: "Focal Height", sub: "on the pin · pin shown (i)" },
+  { icon: "mouse-right", motion: "all", label: "Move", sub: "Shift + LMB" },
+  { icon: "mouse-wheel", motion: "ud", label: "Zoom", sub: "z: cursor ↔ pin" },
+  { icon: "mouse-both", motion: "ud", label: "Focal Height", sub: `${MOD} + LMB` },
   { icon: "mouse-left", badge: "×2", label: "Reset", sub: "double-click" },
 ];
 const TOUCH_ITEMS: Item[] = [
   { icon: "finger-1", motion: "all", label: "Rotate & Tilt" },
-  { icon: "finger-2", motion: "all", label: "Pan" },
+  { icon: "finger-2", motion: "all", label: "Move" },
   { icon: "pinch", label: "Zoom", sub: "pinch in / out" },
-  { icon: "finger-3", motion: "all", label: "Look Around" },
-  { icon: "finger-1", motion: "ud", label: "Focal Height", sub: "on the pin · pin shown" },
+  { icon: "pin", motion: "ud", label: "Focal Height", sub: "drag the pin" },
   { icon: "finger-1", badge: "×2", label: "Reset", sub: "double-tap" },
 ];
-const KEYS: [string, string][] = [
-  ["P", "projection"],
-  ["Space", "pause"],
-  ["i", "pin"],
-  ["z", "zoom"],
-  ["H", "panel"],
+
+// Toggle rows under the gestures: the keyboard shortcut (desktop only) + label + a live Switch wired
+// to the SAME store state the key flips, so the card doubles as a control surface. On touch the keycap
+// is hidden (no keyboard) but the label + switch stay. Keys mirror the app's real shortcuts.
+type HotkeyId = "autoOrbit" | "projection" | "showPin" | "zoom" | "settings";
+const HOTKEYS: { k: string; label: string; icon?: string; id: HotkeyId }[] = [
+  { k: "Space", label: "Auto-Orbit", id: "autoOrbit" },
+  { k: "P", label: "Ortho / Perspective", id: "projection" },
+  { k: "I", label: "Show Pin", icon: "pin", id: "showPin" },
+  { k: "Z", label: "Zoom", id: "zoom" },
+  { k: "H", label: "Settings", id: "settings" },
 ];
 
 // which row each live action maps to (label-matched, so the highlight lands in either tab)
 const ACTION_LABEL: Record<CameraAction, string> = {
   rotate: "Rotate & Tilt",
   focalY: "Focal Height",
-  pan: "Pan",
+  pan: "Move",
   look: "Look Around",
   zoom: "Zoom",
   reset: "Reset",
@@ -68,17 +73,22 @@ const ACTION_LABEL: Record<CameraAction, string> = {
 
 function Glyph({ icon, motion, badge }: { icon: string; motion?: "ud" | "all"; badge?: string }) {
   return (
-    <span className="flex w-14 shrink-0 items-center justify-start gap-1">
-      <img src={asset(`/controls/${icon}.svg`)} alt="" className="h-7 w-auto" draggable={false} />
+    <span className="flex w-20 shrink-0 items-center justify-start gap-1.5">
+      {icon === "pin" ? (
+        // the actual scene pin — lucide MapPin in the same sky-blue (#7dd3fc = sky-300) it renders at
+        <MapPin className="h-9 w-auto text-sky-300" strokeWidth={2.5} />
+      ) : (
+        <img src={asset(`/controls/${icon}.svg`)} alt="" className="h-10 w-auto" draggable={false} />
+      )}
       {motion && (
         <img
           src={asset(`/controls/motion-${motion}.svg`)}
           alt=""
-          className="h-6 w-6"
+          className="h-8 w-8"
           draggable={false}
         />
       )}
-      {badge && <span className="text-base font-bold text-amber-500">{badge}</span>}
+      {badge && <span className="text-xl font-bold text-amber-500">{badge}</span>}
     </span>
   );
 }
@@ -92,17 +102,61 @@ function Rows({ items, active }: { items: Item[]; active: string | null }) {
           <div
             key={i}
             className={cn(
-              "flex h-9 items-center gap-2 rounded px-1 transition-colors",
+              "flex h-12 items-center gap-3 rounded px-1.5 transition-colors",
               on ? "bg-amber-500/15" : "hover:bg-foreground/5",
             )}
           >
             <Glyph icon={it.icon} motion={it.motion} badge={it.badge} />
             <div className="min-w-0">
-              <div className={cn("text-xs", on ? "font-medium text-amber-300" : "text-foreground/90")}>
+              <div
+                className={cn("text-base", on ? "font-medium text-amber-300" : "text-foreground/90")}
+              >
                 {it.label}
               </div>
-              {it.sub && <div className="text-foreground/45 text-[10px] leading-tight">{it.sub}</div>}
+              {it.sub && <div className="text-foreground/45 text-xs leading-tight">{it.sub}</div>}
             </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// Live toggle switches for the camera shortcuts — each reads + writes the SAME store state its key
+// flips, so the card doubles as a control surface (essential on touch, which has no keyboard).
+function HotkeyToggles({ showKeys }: { showKeys: boolean }) {
+  const orbitPaused = useSceneStore((s) => s.orbitPaused);
+  const setOrbitPaused = useSceneStore((s) => s.setOrbitPaused);
+  const isOrtho = useSceneStore((s) => s.projection === "orthographic");
+  const showPin = useSceneStore((s) => s.showFocalIndicator);
+  const setShowPin = useSceneStore((s) => s.setShowFocalIndicator);
+  const zoomToPin = useSceneStore((s) => s.orbitZoomToPin);
+  const setZoomToPin = useSceneStore((s) => s.setOrbitZoomToPin);
+  const panelHidden = useSceneStore((s) => s.panelHidden);
+  const setPanelHidden = useSceneStore((s) => s.setPanelHidden);
+
+  const state: Record<HotkeyId, { on: boolean; toggle: (v: boolean) => void }> = {
+    autoOrbit: { on: !orbitPaused, toggle: (v) => setOrbitPaused(!v) },
+    projection: { on: isOrtho, toggle: () => toggleProjection() },
+    showPin: { on: showPin, toggle: (v) => setShowPin(v) },
+    zoom: { on: zoomToPin, toggle: (v) => setZoomToPin(v) },
+    settings: { on: !panelHidden, toggle: (v) => setPanelHidden(!v) },
+  };
+
+  return (
+    <div className="border-foreground/10 mt-2.5 flex flex-col gap-2 border-t pt-2.5">
+      {HOTKEYS.map((hk) => {
+        const s = state[hk.id];
+        return (
+          <div key={hk.id} className="flex items-center gap-2">
+            {showKeys && (
+              <kbd className="inline-flex min-w-[3rem] justify-center rounded bg-amber-400 px-1.5 py-0.5 font-mono text-xs font-semibold text-black">
+                {hk.k}
+              </kbd>
+            )}
+            <span className="text-foreground/70 text-sm">{hk.label}</span>
+            {hk.icon === "pin" && <MapPin className="h-5 w-auto text-sky-300" strokeWidth={2.5} />}
+            <Switch checked={s.on} onCheckedChange={s.toggle} size="sm" className="ml-auto" />
           </div>
         );
       })}
@@ -167,48 +221,36 @@ export function ControlsGuide() {
           ref={cardRef}
           role="dialog"
           aria-label="Camera controls"
-          className="border-foreground/10 bg-popover/95 text-foreground pointer-events-auto fixed right-3 bottom-16 z-30 flex max-h-[75dvh] w-60 flex-col overflow-y-auto rounded-lg border p-2.5 shadow-xl backdrop-blur-md"
+          className="border-foreground/10 bg-popover/70 text-foreground pointer-events-auto fixed right-3 bottom-16 z-30 flex max-h-[75dvh] w-80 flex-col overflow-y-auto rounded-lg border p-3 shadow-2xl backdrop-blur-md"
         >
-          <div className="mb-1.5 flex items-center justify-between">
-            <span className="text-foreground/80 text-xs font-semibold tracking-wide">Controls</span>
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-foreground/80 text-sm font-semibold tracking-wide">Controls</span>
             <button
               onClick={() => setOpen(false)}
               aria-label="Close"
-              className="text-foreground/50 hover:text-foreground text-sm leading-none"
+              className="text-foreground/50 hover:text-foreground text-base leading-none"
             >
               ✕
             </button>
           </div>
           <Tabs value={mode} onValueChange={(v) => setMode(v as Mode)}>
-            <TabsList className="mb-1.5 w-full">
+            <TabsList className="mb-2 w-full">
               <TabsTrigger
                 value="mouse"
-                className="flex-1 data-[state=active]:bg-amber-500 data-[state=active]:text-black"
+                className="flex-1 text-sm data-[state=active]:bg-amber-500 data-[state=active]:text-black"
               >
                 Mouse
               </TabsTrigger>
               <TabsTrigger
                 value="touch"
-                className="flex-1 data-[state=active]:bg-amber-500 data-[state=active]:text-black"
+                className="flex-1 text-sm data-[state=active]:bg-amber-500 data-[state=active]:text-black"
               >
                 Touch
               </TabsTrigger>
             </TabsList>
           </Tabs>
           <Rows items={mode === "mouse" ? MOUSE_ITEMS : TOUCH_ITEMS} active={activeLabel} />
-          <div className="border-foreground/10 mt-2 flex flex-wrap gap-1 border-t pt-2">
-            {KEYS.map(([k, v]) => (
-              <span
-                key={k}
-                className="bg-foreground/5 inline-flex items-center gap-1 rounded px-1 py-0.5 text-[10px]"
-              >
-                <kbd className="bg-foreground/10 text-foreground/80 rounded px-1 font-mono text-[9px]">
-                  {k}
-                </kbd>
-                <span className="text-foreground/50">{v}</span>
-              </span>
-            ))}
-          </div>
+          <HotkeyToggles showKeys={mode === "mouse"} />
         </div>
       )}
       <button

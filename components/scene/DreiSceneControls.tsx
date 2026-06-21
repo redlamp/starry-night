@@ -133,6 +133,7 @@ const COLOR_BELOW = "#b5835a"; // focal indicator colour below ground (soil)
 const FOCAL_Y_MIN = -1000; // matches the Focal Y slider range (CameraPanel)
 const FOCAL_Y_MAX = 1000;
 const FOCAL_SCRUB_K = 0.0018; // Focal-Y units per pixel, ×focalScrubScale (projection-correct feel)
+const SCRUB_SMOOTH = 0.35; // per-event ease on the pin-scrub: smooths choppy mouse deltas, stops dead on release (no post-drag tween)
 const PIN_HIT_HALF_W = 16; // pin grab hit box, screen px (centred on the projected focal)
 const PIN_HIT_TOP = 34; // px above the focal screen point — the pin icon body extends up
 const PIN_HIT_BOT = 8; // px below the tip
@@ -199,6 +200,57 @@ function panRig(c: CameraControlsImpl, dx: number, dz: number): void {
   );
 }
 
+// Near-horizon pan limit (ported from camera-lab CustomOrbitControls.doPan, 2026-06-21). A
+// cursor-locked ground pan at a grazing angle maps one drag pixel to an enormous (or, across the
+// horizon, sign-flipped) ground delta — the pan teleports across the whole map. Cap the step to
+// PAN_CAP_MULT × the equivalent screen-plane pan (kills the teleport), then taper the rate toward the
+// horizon (floor so it still creeps, never rockets). Used by the drag pans (mouse + touch); NOT the
+// zoom re-pin, which wants the exact ground lock. Needs an INCREMENTAL (prev→curr) ground delta.
+const PAN_CAP_MULT = 6; // max ground step as a multiple of the screen-plane pan for the same pixels
+const PAN_TAPER_DEG = 12; // elevation below which the pan rate eases off
+const PAN_TAPER_FLOOR = 0.2; // pan rate at 0° elevation (fraction) — a creep, never a rocket
+function panHalfHeight(c: CameraControlsImpl, camera: THREE.Camera): number {
+  const s = useSceneStore.getState();
+  const cam = camera as THREE.PerspectiveCamera;
+  const oeff = s.orthoSize * orbitFramingFactor(cam.aspect);
+  const perspK = c.distance * Math.tan((cam.fov * DEG) / 2);
+  return perspK + (oeff - perspK) * s.projectionBlend; // focal-plane half-height (persp↔ortho by blend)
+}
+function panWithLimit(
+  c: CameraControlsImpl,
+  camera: THREE.Camera,
+  dom: HTMLCanvasElement,
+  dx: number,
+  dz: number,
+  pixel: number,
+): void {
+  // Only the INTO-SCREEN axis warps: at a grazing angle, perspective foreshortening along the camera's
+  // view vector maps one pixel to an enormous ground distance (the teleport). The SIDEWAYS axis (across
+  // the view) isn't foreshortened, so it pans 1:1 at full default speed (user 2026-06-21). Decompose
+  // the ground delta into the camera's horizontal forward (fwd) + sideways (side), cap + taper ONLY
+  // fwd toward the horizon, leave side untouched, recombine.
+  camera.getWorldDirection(_camFwd);
+  let fx = _camFwd.x;
+  let fz = _camFwd.z;
+  const fl = Math.hypot(fx, fz);
+  if (fl < 1e-4) {
+    panRig(c, dx, dz); // looking ~straight down: no foreshortening axis, pan as-is
+    return;
+  }
+  fx /= fl;
+  fz /= fl;
+  let fwd = dx * fx + dz * fz; // into-screen component (the one that warps)
+  const side = dz * fx - dx * fz; // sideways component (= delta · right, right = (-fz, fx)) — left full
+  const wpp = (2 * panHalfHeight(c, camera)) / Math.max(1, dom.clientHeight);
+  const cap = PAN_CAP_MULT * wpp * pixel;
+  if (cap > 0 && Math.abs(fwd) > cap) fwd = Math.sign(fwd) * cap; // cap the grazing teleport
+  const elev = 90 - c.polarAngle / DEG;
+  const xe = clamp(elev / PAN_TAPER_DEG, 0, 1);
+  const gain = PAN_TAPER_FLOOR + (1 - PAN_TAPER_FLOOR) * (xe * xe * (3 - 2 * xe)); // taper fwd toward horizon
+  fwd *= gain;
+  panRig(c, fwd * fx - side * fz, fwd * fz + side * fx); // recombine: limited forward + full sideways
+}
+
 // Park the orbit pivot (the pin) at the SCREEN FOCUS position — a fraction up from
 // the bottom of the screen — via camera-controls' focal offset. The camera still
 // orbits the pivot, but the pivot renders off-centre, so rotating around it keeps it
@@ -228,7 +280,15 @@ function lowAngleT(elevDeg: number, lowAngleDeg: number): number {
   return x * x * (3 - 2 * x); // smoothstep
 }
 let _screenYNow = 0.37; // current eased pivot (fraction from bottom), exposed to the side-view Scr-Y gauge
-function applyScreenFocus(c: CameraControlsImpl, camera: THREE.Camera): void {
+// The low-angle ground pull is normally applied DIRECTLY (it tracks the tilt smoothly because
+// camera-controls eases the rotation). A Focal-Y scrub breaks that: it re-aims with setLookAt(…,false),
+// so the polar — and the pull that keys off it — JUMPS per pointer event, jerky at low angle where the
+// pull is strong (and the pin's screen anchor wanders mid-scrub). So freeze the pull while scrubbing
+// (the scrub owns the aim; the framing shouldn't chase the per-event tilt), then ease it back to live
+// on release so the pin doesn't pop. Rotate never freezes, so it keeps its instant tracking. (2026-06-21)
+let _corrNow = 0; // the applied pull offset: held during a focal scrub, eased on release, else direct
+let _corrFrozen: number | null = null; // value captured + held across a scrub; null = not scrubbing
+function applyScreenFocus(c: CameraControlsImpl, camera: THREE.Camera, freeze: boolean): void {
   const s = useSceneStore.getState();
   const base = s.orbitPivotFromBottom;
   const blend = s.projectionBlend;
@@ -265,8 +325,21 @@ function applyScreenFocus(c: CameraControlsImpl, camera: THREE.Camera): void {
       corrTarget = (targetPivot - base) * t; // negative — only ever pulls the pin DOWN; eased by the shared curve
     }
   }
-  const frac = base + corrTarget - 0.5; // 0 = centre, < 0 below centre, > 0 above (direct, no damp)
-  _screenYNow = base + corrTarget; // expose the eased pivot for the side-view Scr-Y gauge
+  // Freeze the pull during a focal scrub; ease back to live for a few frames after release; else direct.
+  if (freeze) {
+    if (_corrFrozen === null) _corrFrozen = _corrNow; // capture the live value at scrub start
+    _corrNow = _corrFrozen; // hold steady — don't chase the per-event tilt
+  } else if (_corrFrozen !== null) {
+    _corrNow += (corrTarget - _corrNow) * 0.5; // settle back to live (~5 frames) so the pin doesn't pop
+    if (Math.abs(corrTarget - _corrNow) < 0.003) {
+      _corrNow = corrTarget;
+      _corrFrozen = null;
+    }
+  } else {
+    _corrNow = corrTarget; // direct — rotate keeps its instant, settled-on-release tracking
+  }
+  const frac = base + _corrNow - 0.5; // 0 = centre, < 0 below centre, > 0 above
+  _screenYNow = base + _corrNow; // expose the applied pivot for the side-view Scr-Y gauge
   // Half-height the morph frames at the focal plane — the SAME bridge ProjectionBlender
   // uses (perspK at blend 0 → orthoSize at blend 1), so the parked pin tracks the framing
   // through a projection morph instead of popping when projection flips but blend hasn't.
@@ -516,7 +589,7 @@ function zoomToPoint(
   // dollyTo / orthoSize only set goals. Re-park the pivot for the new distance/size and
   // flush — so the dolly AND the focal-offset shift are both baked into the camera before
   // we re-pin the cursor's ground point (otherwise the offset change drifts it next frame).
-  applyScreenFocus(c, camera);
+  applyScreenFocus(c, camera, false);
   c.update(0);
   if (had && groundHit(camera, dom, sx, sy, 0, _hit)) {
     _delta.subVectors(_anchor, _hit);
@@ -574,6 +647,7 @@ export function DreiSceneControls() {
   const camera = useThree((s) => s.camera);
   const dragging = useRef(false);
   const panning = useRef(false); // mouse LMB ground-anchored pan
+  const focalScrubbing = useRef(false); // a Focal-Y scrub (pin / LMB+RMB / 1-finger) is live
   const seeded = useRef(false);
   const lastWrite = useRef(0);
   const wheelFrames = useRef(0); // brief "controlling" window after a wheel tick
@@ -733,7 +807,7 @@ export function DreiSceneControls() {
           s.setOrthoSize(clamp(s.orthoSize * factor, ORTHO_SIZE_MIN, ORTHO_SIZE_MAX));
         } else {
           void c.dollyTo(c.distance * factor, false);
-          applyScreenFocus(c, camera); // re-park the pin for the new distance NOW (no hiccup)
+          applyScreenFocus(c, camera, false); // re-park the pin for the new distance NOW (no hiccup)
           c.update(0);
         }
       } else {
@@ -754,21 +828,23 @@ export function DreiSceneControls() {
   useEffect(() => {
     if (mode !== "orbit") return;
     const dom = gl.domElement;
+    let lastPanX = 0; // incremental pan baseline (re-lock prev→curr, so the cap/taper port works)
+    let lastPanY = 0;
     const onCtx = (e: Event) => e.preventDefault();
     const onDown = (e: PointerEvent) => {
       if (e.pointerType !== "mouse") return;
-      if ((e.buttons & 0b11) === 0b11) return; // both buttons → free-look owns it
+      if ((e.buttons & 0b11) === 0b11) return; // both buttons → Focal Height owns it
       if (!(e.button === 2 || (e.button === 0 && e.shiftKey))) return; // RMB or Shift+LMB
-      const c = controls.current;
-      if (!c) return;
-      if (!groundHit(camera, dom, e.clientX, e.clientY, 0, _anchor)) return;
+      if (!controls.current) return;
+      lastPanX = e.clientX; // seed the incremental baseline
+      lastPanY = e.clientY;
       panning.current = true; // the drag-threshold tracker handles pause + readback
       dom.setPointerCapture?.(e.pointerId);
     };
     const onMove = (e: PointerEvent) => {
       if (!panning.current) return;
       if ((e.buttons & 0b11) === 0b11) {
-        panning.current = false; // both buttons down → free-look owns the gesture
+        panning.current = false; // both buttons down → Focal Height owns the gesture
         return;
       }
       if ((e.buttons & 0b11) === 0b01 && !e.shiftKey) {
@@ -777,10 +853,18 @@ export function DreiSceneControls() {
       }
       const c = controls.current;
       if (!c) return;
-      if (!groundHit(camera, dom, e.clientX, e.clientY, 0, _hit)) return;
-      _delta.subVectors(_anchor, _hit); // world shift to bring the anchor back under cursor
-      markCameraActivity("pan");
-      panRig(c, _delta.x, _delta.z); // clamped to the ground disc → no rocketing off-map
+      // Incremental: re-lock the ground between the PREVIOUS and CURRENT cursor, then apply the
+      // near-horizon cap + taper so a grazing pan creeps instead of teleporting across the map.
+      if (
+        groundHit(camera, dom, lastPanX, lastPanY, 0, _anchor) &&
+        groundHit(camera, dom, e.clientX, e.clientY, 0, _hit)
+      ) {
+        _delta.subVectors(_anchor, _hit);
+        markCameraActivity("pan");
+        panWithLimit(c, camera, dom, _delta.x, _delta.z, Math.hypot(e.clientX - lastPanX, e.clientY - lastPanY));
+      }
+      lastPanX = e.clientX;
+      lastPanY = e.clientY;
     };
     const onUp = (e: PointerEvent) => {
       if (!panning.current) return;
@@ -816,7 +900,8 @@ export function DreiSceneControls() {
     const dom = gl.domElement;
     const A = CameraControlsImpl.ACTION;
     let scrubbing = false;
-    let focalY = 0; // raw dragged Focal Y (pre-detent accumulator)
+    let focalY = 0; // raw dragged Focal Y target (accumulates movementY)
+    let appliedY = 0; // eased Focal Y actually applied (smooths choppy per-event deltas)
     let lastHover = false;
     const onDown = (e: PointerEvent) => {
       if (e.pointerType !== "mouse" || e.button !== 0 || e.shiftKey || e.ctrlKey || e.metaKey) return;
@@ -829,8 +914,10 @@ export function DreiSceneControls() {
       e.preventDefault();
       scrubbing = true;
       dragging.current = true; // hold the auto-revolution sweep + drive live writeBack
+      focalScrubbing.current = true; // relax the ground clamp so the in-place re-aim isn't fought
       panning.current = false; // pan must not co-own this press
       focalY = _tgt.y;
+      appliedY = _tgt.y;
       dom.style.cursor = "none";
       dom.setPointerCapture?.(e.pointerId);
       c.mouseButtons.left = A.NONE; // suppress the LMB rotate while scrubbing the pin
@@ -853,8 +940,8 @@ export function DreiSceneControls() {
         }
         return;
       }
-      // Only LMB drives the scrub — if another button joins (RMB → free-look), hand it off so
-      // the two don't both re-aim the camera.
+      // Only LMB drives the scrub — if another button joins (RMB → two-button Focal Height), hand it
+      // off so the two don't both re-aim the camera.
       if (e.buttons !== 1) {
         finish(e.pointerId);
         return;
@@ -865,7 +952,8 @@ export function DreiSceneControls() {
       c.getPosition(_camPos);
       const scale = focalScrubScale(c); // projection-correct (the ortho radius is a park value, not zoom)
       focalY = clamp(focalY - e.movementY * scale * FOCAL_SCRUB_K, FOCAL_Y_MIN, FOCAL_Y_MAX);
-      const targetY = snapFocalY(focalY, scale); // continuous ground detent at Focal Y = 0 (no snap-jump)
+      appliedY += (focalY - appliedY) * SCRUB_SMOOTH; // ease toward the dragged target → glides, not steps
+      const targetY = snapFocalY(appliedY, scale); // continuous ground detent at Focal Y = 0 (no snap-jump)
       markCameraActivity("focalY");
       // re-aim at the new Focal Y from the SAME camera position → the view tilts; applyScreenFocus
       // (main frame) keeps the pin parked at the screen-focus %.
@@ -875,6 +963,7 @@ export function DreiSceneControls() {
       if (!scrubbing) return;
       scrubbing = false;
       dragging.current = false;
+      focalScrubbing.current = false;
       lastHover = false;
       dom.style.cursor = "";
       dom.releasePointerCapture?.(pointerId);
@@ -898,62 +987,77 @@ export function DreiSceneControls() {
     };
   }, [mode, gl, camera]);
 
-  // Free-look (hold LMB + RMB): look around IN PLACE. While both are held it suppresses
-  // the custom pan + camera-controls rotate, shows the focal pin, and re-aims via
-  // freeLookAim; on release it commits the new aim and restores the prior pin state.
+  // Focal Height (hold LMB + RMB, or Ctrl/⌘ + LMB): adjust Focal Y by a vertical drag ANYWHERE — no
+  // need to grab the small pin. The two-button chord and its one-button modifier twin (Ctrl on
+  // Windows/Linux, ⌘ on macOS — the trackpad-friendly form, mirroring Shift+LMB = Move) are the same
+  // gesture. Height-only: the camera POSITION is fixed and only the aim tilts (so the rig can't be
+  // pushed through the ground), reusing the pin-scrub's exact ease (SCRUB_SMOOTH) + ground detent so
+  // they feel identical. Auto-shows the pin while held, restores it after. (user 2026-06-21)
   useEffect(() => {
     if (mode !== "orbit") return;
     const dom = gl.domElement;
     const A = CameraControlsImpl.ACTION;
-    const BOTH = 0b11; // LMB(1) | RMB(2)
-    // Engage on LMB+RMB, or Ctrl/Cmd + LMB — the trackpad / one-button twin (Cmd on macOS, where
-    // Ctrl-click is a right-click; Ctrl on Windows). Mirrors Shift+LMB = pan. (user 2026-06-16)
-    const isFreeLook = (e: PointerEvent) =>
-      (e.buttons & BOTH) === BOTH || ((e.buttons & 0b01) === 0b01 && (e.ctrlKey || e.metaKey));
+    const isFocal = (e: PointerEvent) =>
+      (e.buttons & 0b11) === 0b11 || // LMB + RMB chord
+      ((e.buttons & 0b11) === 0b01 && (e.ctrlKey || e.metaKey)); // Ctrl/⌘ + LMB twin (RMB up)
     let active = false;
-    let lastX = 0;
-    let lastY = 0;
+    let focalY = 0; // raw dragged target (accumulates movementY)
+    let appliedY = 0; // eased applied value — smooths choppy per-event deltas (matches the pin scrub)
     let priorPin = false;
-    const engage = (e: PointerEvent) => {
+    const engage = () => {
       const c = controls.current;
       if (!c) return;
       active = true;
-      resetFreeLook(); // re-seed the look accumulator for this gesture
-      panning.current = false; // kill the custom LMB pan
-      c.mouseButtons.left = A.NONE; // kill camera-controls rotate (now on LMB; recomputed each move)
+      panning.current = false; // both buttons → the custom pan must not co-own this
+      dragging.current = true; // hold the auto-revolution sweep + drive live writeBack
+      focalScrubbing.current = true; // relax the ground clamp so the in-place re-aim isn't fought
+      c.mouseButtons.left = A.NONE; // keep camera-controls rotate off
+      c.getTarget(_tgt);
+      focalY = _tgt.y;
+      appliedY = _tgt.y;
       const st = useSceneStore.getState();
       priorPin = st.showFocalIndicator;
       if (!priorPin) st.setShowFocalIndicator(true);
-      lastX = e.clientX;
-      lastY = e.clientY;
     };
     const disengage = () => {
       if (!active) return;
       active = false;
+      dragging.current = false;
+      focalScrubbing.current = false;
       const c = controls.current;
-      if (c) c.mouseButtons.left = A.NONE; // keep camera-controls' LMB rotate off (the custom turntable owns it)
+      if (c) c.mouseButtons.left = A.NONE;
       if (!priorPin) useSceneStore.getState().setShowFocalIndicator(false);
-      if (c) writeBack(c, syncingFromCamera); // commit the new aim
+      if (c) writeBack(c, syncingFromCamera); // commit the new Focal Y
     };
     const onDown = (e: PointerEvent) => {
       if (e.pointerType !== "mouse") return;
-      if (!active && isFreeLook(e)) engage(e);
+      if (!active && isFocal(e)) {
+        e.preventDefault();
+        engage();
+      }
     };
     const onMove = (e: PointerEvent) => {
       if (e.pointerType !== "mouse") return;
       if (!active) {
-        if (isFreeLook(e)) engage(e);
+        if (isFocal(e)) engage();
         return;
       }
-      if (!isFreeLook(e)) {
-        disengage();
+      if (!isFocal(e)) {
+        disengage(); // a button released → commit + hand back
         return;
       }
       const c = controls.current;
       if (!c) return;
-      freeLookAim(c, e.clientX - lastX, e.clientY - lastY, dom.clientHeight);
-      lastX = e.clientX;
-      lastY = e.clientY;
+      c.getTarget(_tgt);
+      c.getPosition(_camPos);
+      const scale = focalScrubScale(c); // projection-correct (the ortho radius is a park value, not zoom)
+      focalY = clamp(focalY - e.movementY * scale * FOCAL_SCRUB_K, FOCAL_Y_MIN, FOCAL_Y_MAX);
+      appliedY += (focalY - appliedY) * SCRUB_SMOOTH; // ease toward the dragged target → glides, not steps
+      const targetY = snapFocalY(appliedY, scale); // continuous ground detent at Focal Y = 0 (no snap-jump)
+      markCameraActivity("focalY");
+      // re-aim at the new Focal Y from the SAME camera position → the view tilts; applyScreenFocus
+      // (main frame) keeps the pin parked at the screen-focus %.
+      void c.setLookAt(_camPos.x, _camPos.y, _camPos.z, _tgt.x, targetY, _tgt.z, false);
     };
     const onUp = () => {
       if (active) disengage();
@@ -1039,10 +1143,12 @@ export function DreiSceneControls() {
             scrubLastY = e.clientY;
             scrubFocalY = _tgt.y;
             dragging.current = true; // pause the sweep + drive writeBack while scrubbing
+            focalScrubbing.current = true; // relax the ground clamp so the in-place re-aim isn't fought
           }
         }
       } else if (n === 2) {
         scrub = false; // a second finger → pan / pinch owns the gesture
+        focalScrubbing.current = false;
         twoFingerStart();
       } else if (n === 3) {
         threeFingerStart();
@@ -1104,7 +1210,7 @@ export function DreiSceneControls() {
           ) {
             _delta.subVectors(_anchor, _hit);
             markCameraActivity("pan");
-            panRig(c, _delta.x, _delta.z); // clamped to the ground disc
+            panWithLimit(c, camera, dom, _delta.x, _delta.z, Math.hypot(m.x - lastMidX, m.y - lastMidY));
           }
           lastMidX = m.x;
           lastMidY = m.y;
@@ -1131,7 +1237,10 @@ export function DreiSceneControls() {
         lastY = r.y;
         resetDragAxis();
       }
-      if (pts.size === 0) scrub = false; // all fingers up → end any pin scrub
+      if (pts.size === 0) {
+        scrub = false; // all fingers up → end any pin scrub
+        focalScrubbing.current = false;
+      }
     };
     dom.addEventListener("pointerdown", onDown);
     dom.addEventListener("pointermove", onMove);
@@ -1407,10 +1516,10 @@ export function DreiSceneControls() {
       seeded.current = true;
     }
 
-    // park the orbit pivot at the screen-focus position (focal offset; scales w/ zoom). Freeze the
-    // low-elevation ground pull while a gesture is live (when enabled) so it settles on release
-    // instead of fighting the drag.
-    applyScreenFocus(c, camera);
+    // park the orbit pivot at the screen-focus position (focal offset; scales w/ zoom). The
+    // low-elevation ground pull freezes while a Focal-Y scrub is live (focalScrubbing) so it can't
+    // chase the per-event tilt, then eases back on release. (See applyScreenFocus.)
+    applyScreenFocus(c, camera, focalScrubbing.current);
 
     const allowUnder = s.allowUnderview;
 
@@ -1449,7 +1558,12 @@ export function DreiSceneControls() {
     const oeff = s.orthoSize * orbitFramingFactor((camera as THREE.PerspectiveCamera).aspect);
     const eyeFloor = s.projectionBlend * Math.max(0, oeff * (1 - 2 * s.groundFrameLow));
     let maxPolar = Math.acos(clamp((eyeFloor - (_tgt.y + offsetY)) / Math.max(1, c.distance), -1, 1));
-    if (allowUnder) maxPolar = Math.PI * 0.98;
+    // A Focal-Y scrub re-aims from a FIXED orbit point (it can't push the camera underground), so the
+    // ground clamp has nothing to protect against — but when it binds it MOVES the orbit point and
+    // fights the in-place re-aim, worst right at Focal Y = 0 where the clamp sits at its limit. Relax
+    // it while scrubbing; the live clamp resumes on release (the orbit point never left the ground, so
+    // there's nothing to snap back). (user 2026-06-21 — the "fight near Focal Y = 0")
+    if (allowUnder || focalScrubbing.current) maxPolar = Math.PI * 0.98;
     c.maxPolarAngle = maxPolar;
 
     // Side-view diagram readout (display-only; the CameraSideView overlay paints it). A cheap
@@ -1562,7 +1676,7 @@ export function DreiSceneControls() {
         {/* pointer-events via style, NOT the pointerEvents prop: drei ignores
             that prop in its non-transform branch, so the marker would capture
             the wheel and create a zoom dead-zone right over the focal point. */}
-        <Html center style={{ pointerEvents: "none" }} zIndexRange={[100, 0]}>
+        <Html center style={{ pointerEvents: "none" }} zIndexRange={[15, 0]}>
           <div
             ref={dotElRef}
             style={{
@@ -1578,7 +1692,7 @@ export function DreiSceneControls() {
       </group>
       {/* map pin (DOM → always on top); tip anchored on the focal point */}
       <group ref={pinRef}>
-        <Html center={false} style={{ pointerEvents: "none" }} zIndexRange={[100, 0]}>
+        <Html center={false} style={{ pointerEvents: "none" }} zIndexRange={[15, 0]}>
           <div
             ref={pinIconRef}
             style={{

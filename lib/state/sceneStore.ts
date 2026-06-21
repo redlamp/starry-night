@@ -103,17 +103,17 @@ export type OrbitConfig = {
 };
 
 // Curated default framing (2026-06-14): a near-horizon, paused ("still") view of
-// the "starry-night" seed — compass 190°, elevation 2°, focal height 120 (user
-// 2026-06-14). Radius scales with city width
+// the "starry-night" seed — compass 187°, elevation 2°, focal at the origin (focal
+// X/Y/Z = 0) (user 2026-06-21). Radius scales with city width
 // (CITY_SCALE); 1800s sweep (0.2°/s) once un-paused. lookAtY (focal HEIGHT) is NOT
 // scaled — building heights are fixed across size tiers, so the skyline sits at the
 // same Y regardless of extent. (Pairs with orbitPaused defaulting true.)
 export const DEFAULT_ORBIT: OrbitConfig = {
   centerX: 0,
-  centerZ: -120,
+  centerZ: 0, // focal at the origin (user 2026-06-21; was -120)
   lookAtY: 0, // default aim at ground level (focal Y 0); was 120 / mid-skyline — 2026-06-21
   radius: 2400 * CITY_SCALE,
-  azimuthDeg: 190,
+  azimuthDeg: 187,
   elevationDeg: 2,
   periodSec: 1800,
 };
@@ -522,7 +522,7 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "showFocalIndicator", defaultValue: false as const, persist: true },
   { key: "orbitPivotFromBottom", defaultValue: 0.37, persist: true },
   { key: "groundFraming", defaultValue: true as const, persist: true },
-  { key: "groundFrameLow", defaultValue: 0.18, persist: true },
+  { key: "groundFrameLow", defaultValue: 0.07, persist: true },
   { key: "rotateLowAngleGain", defaultValue: 0.35, persist: true },
   { key: "rotateSlowBelowDeg", defaultValue: 20, persist: true },
   { key: "tiltSpeed", defaultValue: 0.5, persist: true },
@@ -990,6 +990,11 @@ type SceneState = {
   // the focal Y. Used to brighten the focal indicator while editing.
   focalDragging: boolean;
   setFocalDragging: (v: boolean) => void;
+  // Settings (Camera) panel visibility. Transient (not persisted) so it always boots hidden, like the
+  // old local useState — lifted to the store so the ControlsGuide "Settings" switch + the H key can
+  // both drive it. (user 2026-06-21)
+  panelHidden: boolean;
+  setPanelHidden: (v: boolean) => void;
   // Orbit auto-revolution pause. Toggled with Space in orbit mode; useFrame
   // skips advancing the sweep while true. Manual drag still works.
   orbitPaused: boolean;
@@ -1176,7 +1181,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setOrbitPivotFromBottom: (orbitPivotFromBottom) => set({ orbitPivotFromBottom }),
   groundFraming: true,
   setGroundFraming: (groundFraming) => set({ groundFraming }),
-  groundFrameLow: 0.18,
+  groundFrameLow: 0.07,
   setGroundFrameLow: (groundFrameLow) => set({ groundFrameLow }),
   showSideView: false,
   setShowSideView: (showSideView) => set({ showSideView }),
@@ -1215,6 +1220,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     })),
   focalDragging: false,
   setFocalDragging: (focalDragging) => set({ focalDragging }),
+  panelHidden: true,
+  setPanelHidden: (panelHidden) => set({ panelHidden }),
   orbitPaused: true,
   setOrbitPaused: (orbitPaused) => set({ orbitPaused }),
   orbit: DEFAULT_ORBIT,

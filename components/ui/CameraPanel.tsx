@@ -325,7 +325,8 @@ export function CameraPanel() {
   const orbitRestoreSet = useSceneStore((s) => s.orbitRestore !== null);
   const showPinPlane = useSceneStore((s) => s.debug.showPinPlane);
 
-  const [hidden, setHidden] = useState(true);
+  const hidden = useSceneStore((s) => s.panelHidden);
+  const setHidden = useSceneStore((s) => s.setPanelHidden);
   const [savedExists, setSavedExists] = useState(() => hasSavedConfig());
   const [query, setQuery] = useState("");
   const [openSections, setOpenSections] = useState<string[]>([]);
@@ -359,7 +360,10 @@ export function CameraPanel() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (isTypingTarget(e)) return; // don't toggle the panel while typing in search
-      if (e.key === "h" || e.key === "H") setHidden((v) => !v);
+      if (e.key === "h" || e.key === "H") {
+        const s = useSceneStore.getState();
+        s.setPanelHidden(!s.panelHidden);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -873,6 +877,7 @@ function OrbitSection() {
         step={5}
         onChange={(radius) => setOrbit({ radius })}
         stepperClass="w-32"
+        format={{ maximumFractionDigits: 1 }} // cap the readout to XXXX.X (radius is often a float, e.g. the ortho park value)
       />
       <ValueSlider
         label="Elevation"
