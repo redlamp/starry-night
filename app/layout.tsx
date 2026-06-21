@@ -11,6 +11,22 @@ export const metadata: Metadata = {
   description: "A modernized homage to the After Dark Starry Night screensaver.",
 };
 
+// three r184 deprecated THREE.Clock (it warns in its constructor), but @react-three/fiber 9.6.1
+// still does `new THREE.Clock()` for state.clock on every Canvas root — so the deprecation spams
+// the console on every mount / HMR / navigation. It's a benign upstream notice (R3F will move to
+// THREE.Timer). Drop just that one message, before hydration so the first Canvas is covered too.
+// Remove once R3F is on THREE.Timer.
+const silenceClockDeprecation = `
+(function(){try{
+  var w=console.warn;
+  console.warn=function(){
+    var a=arguments[0];
+    if(typeof a==="string"&&a.indexOf("Clock: This module has been deprecated")!==-1)return;
+    return w.apply(console,arguments);
+  };
+}catch(e){}})();
+`;
+
 // Runs before React hydrates; reads the persisted theme from localStorage and
 // stamps the class on <html> so the first paint is correct (no light-flash on
 // dark theme, no double-class hydration mismatch with the runtime hook).
@@ -36,6 +52,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             before hydration — a raw <script> JSX node throws a Next 16 / React
             19 client-render warning ("scripts inside React components are never
             executed when rendering on the client") and pops the dev overlay. */}
+        <Script
+          id="silence-clock-deprecation"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{ __html: silenceClockDeprecation }}
+        />
         <Script
           id="theme-bootstrap"
           strategy="beforeInteractive"

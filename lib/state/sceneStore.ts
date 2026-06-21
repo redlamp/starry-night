@@ -103,17 +103,17 @@ export type OrbitConfig = {
 };
 
 // Curated default framing (2026-06-14): a near-horizon, paused ("still") view of
-// the "starry-night" seed — compass 186°, elevation 2°, focal height 120 (user
-// 2026-06-14). Radius scales with city width
+// the "starry-night" seed — compass 187°, elevation 2°, focal at the origin (focal
+// X/Y/Z = 0) (user 2026-06-21). Radius scales with city width
 // (CITY_SCALE); 1800s sweep (0.2°/s) once un-paused. lookAtY (focal HEIGHT) is NOT
 // scaled — building heights are fixed across size tiers, so the skyline sits at the
 // same Y regardless of extent. (Pairs with orbitPaused defaulting true.)
 export const DEFAULT_ORBIT: OrbitConfig = {
   centerX: 0,
-  centerZ: -120,
-  lookAtY: 120,
+  centerZ: 0, // focal at the origin (user 2026-06-21; was -120)
+  lookAtY: 0, // default aim at ground level (focal Y 0); was 120 / mid-skyline — 2026-06-21
   radius: 2400 * CITY_SCALE,
-  azimuthDeg: 186,
+  azimuthDeg: 187,
   elevationDeg: 2,
   periodSec: 1800,
 };
@@ -464,6 +464,12 @@ type AnySettingEntry =
   | SettingEntry<"orbitPaused">
   | SettingEntry<"showFocalIndicator">
   | SettingEntry<"orbitPivotFromBottom">
+  | SettingEntry<"groundFraming">
+  | SettingEntry<"groundFrameLow">
+  | SettingEntry<"rotateLowAngleGain">
+  | SettingEntry<"rotateSlowBelowDeg">
+  | SettingEntry<"tiltSpeed">
+  | SettingEntry<"showSideView">
   | SettingEntry<"orbitZoomToPin">
   | SettingEntry<"allowUnderview">
   | SettingEntry<"cameraMode">
@@ -515,6 +521,14 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "orbitPaused", defaultValue: true as const, persist: true },
   { key: "showFocalIndicator", defaultValue: false as const, persist: true },
   { key: "orbitPivotFromBottom", defaultValue: 0.37, persist: true },
+  { key: "groundFraming", defaultValue: true as const, persist: true },
+  { key: "groundFrameLow", defaultValue: 0.07, persist: true },
+  { key: "rotateLowAngleGain", defaultValue: 0.35, persist: true },
+  { key: "rotateSlowBelowDeg", defaultValue: 20, persist: true },
+  { key: "tiltSpeed", defaultValue: 0.5, persist: true },
+  // Side-view diagram overlay — a transient inspection aid (like the debug view modes), so it
+  // resets off on reload and stays out of Saved / Copied configs.
+  { key: "showSideView", defaultValue: false as const, persist: false },
   { key: "orbitZoomToPin", defaultValue: true as const, persist: false },
   { key: "allowUnderview", defaultValue: false as const, persist: false },
   { key: "cameraMode", defaultValue: "orbit" as const, persist: true },
@@ -755,6 +769,15 @@ function writeSavedConfig(snap: SavedConfig) {
   }
 }
 
+function removeSavedConfig() {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(SAVED_CONFIG_KEY);
+  } catch {
+    // localStorage may be unavailable
+  }
+}
+
 export type Perf = {
   fps: number;
   triangles: number;
@@ -888,6 +911,32 @@ type SceneState = {
   // (Google-Maps ~0.37). Drives the RMB pivot + the focal-marker raycast.
   orbitPivotFromBottom: number;
   setOrbitPivotFromBottom: (v: number) => void;
+  // Master toggle for the low-elevation ground pull (applyScreenFocus). false = Screen Y is held
+  // exactly where set at every angle; true = the pivot eases down near the horizon, tracking the tilt
+  // LIVE (groundFrameLow sets how low it settles). On by default.
+  groundFraming: boolean;
+  setGroundFraming: (v: boolean) => void;
+  // Low-angle frame: the fraction up from the bottom the ground/skyline line eases to at grazing
+  // angles (applyScreenFocus). Focal-Y-INDEPENDENT — a balanced city + sky frame (~0.18). Lower =
+  // skyline sits lower / more sky; higher = more foreground.
+  groundFrameLow: number;
+  setGroundFrameLow: (v: number) => void;
+  // Side-view diagram overlay (CameraSideView): a live elevation cross-section of the rig — camera,
+  // view frustum (cone ↔ slab), elevation angle, focal + plumb, ground line, clearance. Display-only
+  // inspection aid; not persisted (resets off on reload). See components/scene/CameraDiagram.tsx.
+  showSideView: boolean;
+  setShowSideView: (v: boolean) => void;
+  // Rotate/tilt speed limit at grazing / far-out views (DreiSceneControls.dragRotate).
+  // rotateLowAngleGain = the rate multiplier at the horizon (1 = no limit); the slowdown eases in
+  // (smoothstep) below rotateSlowBelowDeg elevation. Distance past the city tapers it further.
+  rotateLowAngleGain: number;
+  setRotateLowAngleGain: (v: number) => void;
+  rotateSlowBelowDeg: number;
+  setRotateSlowBelowDeg: (v: number) => void;
+  // Tilt sensitivity: vertical-drag pitch rate as a fraction of the legacy 2*pi/screen-height gain
+  // (1 = old behaviour). Lower = a more regulated, slower tilt, independent of rotation. (2026-06-16)
+  tiltSpeed: number;
+  setTiltSpeed: (v: number) => void;
   // Zoom mode: false = toward the cursor (default), true = toward the pin/focal.
   orbitZoomToPin: boolean;
   setOrbitZoomToPin: (v: boolean) => void;
@@ -941,6 +990,11 @@ type SceneState = {
   // the focal Y. Used to brighten the focal indicator while editing.
   focalDragging: boolean;
   setFocalDragging: (v: boolean) => void;
+  // Settings (Camera) panel visibility. Transient (not persisted) so it always boots hidden, like the
+  // old local useState — lifted to the store so the ControlsGuide "Settings" switch + the H key can
+  // both drive it. (user 2026-06-21)
+  panelHidden: boolean;
+  setPanelHidden: (v: boolean) => void;
   // Orbit auto-revolution pause. Toggled with Space in orbit mode; useFrame
   // skips advancing the sweep while true. Manual drag still works.
   orbitPaused: boolean;
@@ -1046,6 +1100,7 @@ type SceneState = {
   saveCurrentAsDefault: () => void;
   revertToSaved: () => void;
   hasSavedConfig: () => boolean;
+  clearSavedConfig: () => void;
   copyableConfig: () => Record<string, unknown>;
   snapIntentToLive: () => void;
   tweenCameraTo: (to: CameraIntent, durationMs?: number) => void;
@@ -1124,6 +1179,18 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setFocalAdjust: (focalAdjust) => set({ focalAdjust }),
   orbitPivotFromBottom: 0.37,
   setOrbitPivotFromBottom: (orbitPivotFromBottom) => set({ orbitPivotFromBottom }),
+  groundFraming: true,
+  setGroundFraming: (groundFraming) => set({ groundFraming }),
+  groundFrameLow: 0.07,
+  setGroundFrameLow: (groundFrameLow) => set({ groundFrameLow }),
+  showSideView: false,
+  setShowSideView: (showSideView) => set({ showSideView }),
+  rotateLowAngleGain: 0.35,
+  setRotateLowAngleGain: (rotateLowAngleGain) => set({ rotateLowAngleGain }),
+  rotateSlowBelowDeg: 20,
+  setRotateSlowBelowDeg: (rotateSlowBelowDeg) => set({ rotateSlowBelowDeg }),
+  tiltSpeed: 0.5,
+  setTiltSpeed: (tiltSpeed) => set({ tiltSpeed }),
   orbitZoomToPin: true,
   setOrbitZoomToPin: (orbitZoomToPin) => set({ orbitZoomToPin }),
   allowUnderview: false,
@@ -1153,6 +1220,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     })),
   focalDragging: false,
   setFocalDragging: (focalDragging) => set({ focalDragging }),
+  panelHidden: true,
+  setPanelHidden: (panelHidden) => set({ panelHidden }),
   orbitPaused: true,
   setOrbitPaused: (orbitPaused) => set({ orbitPaused }),
   orbit: DEFAULT_ORBIT,
@@ -1367,6 +1436,9 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     });
   },
   hasSavedConfig: () => readSavedConfig() !== null,
+  // Delete the saved default from this browser. The live scene is left as-is (Reset returns it to
+  // the built-in default); reloads boot the built-in default once the snapshot is gone.
+  clearSavedConfig: () => removeSavedConfig(),
   copyableConfig: () => {
     const s = get();
     const out: Record<string, unknown> = {};

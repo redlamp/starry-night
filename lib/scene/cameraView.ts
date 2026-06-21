@@ -6,6 +6,8 @@ import {
   DEFAULT_ORBIT,
   DEFAULT_ORTHO_SIZE,
   DEFAULT_PERSP_RADIUS,
+  DEFAULT_INTENT,
+  DEFAULT_PROJECTION,
   type RenderGroup,
   type RenderMode,
 } from "@/lib/state/sceneStore";
@@ -203,9 +205,86 @@ export function tweenOrbitToDefault() {
   const s = useSceneStore.getState();
   s.setOrbitRestore(null);
   if (s.cameraMode !== "orbit") s.setCameraMode("orbit");
-  s.setOrbitPaused(false);
+  s.setOrbitPaused(true); // default orbit is the still / paused framing — auto-orbit is off by default
   s.setOrbit({ lookAtY: DEFAULT_ORBIT.lookAtY, periodSec: DEFAULT_ORBIT.periodSec });
   tweenOrbitTowards(DEFAULT_ORBIT.elevationDeg, DEFAULT_ORBIT.radius, DEFAULT_ORTHO_SIZE);
+}
+
+// The single in-flight projection tween (perspective ⇄ ortho blend). Killed before a new one
+// starts — and by the home reset — so a mid-tween reversal animates from the current blend instead
+// of two tweens fighting over projectionBlend / radius.
+let projTween: gsap.core.Tween | null = null;
+
+let homeTween: gsap.core.Tween | null = null;
+
+// Double-click / double-tap reset: tween the FULL camera home in ONE motion — orientation (azimuth
+// shortest-way + elevation), position (orbit centre + focal height), framing (radius / orthoSize /
+// fov) AND projection (morph back to the default) all together. Lands paused (auto-orbit is off by
+// default). (user 2026-06-16)
+const HOME_TWEEN_SEC = 1.6;
+
+export function tweenOrbitToHome() {
+  const s = useSceneStore.getState();
+  s.setOrbitRestore(null);
+  if (s.cameraMode !== "orbit") s.setCameraMode("orbit");
+  s.setOrbitPaused(true); // reset lands in the still default — auto-orbit stays off
+  s.setOrbit({ periodSec: DEFAULT_ORBIT.periodSec });
+  // Reset projection too (user 2026-06-16): flip the flag now and morph projectionBlend within the
+  // home tween. Kill any in-flight projection tween so the two don't fight over blend / radius —
+  // the home tween then owns radius and lands it on the DEFAULT projection's default distance.
+  projTween?.kill();
+  if (s.projection !== DEFAULT_PROJECTION) s.setProjection(DEFAULT_PROJECTION);
+  const targetRadius =
+    DEFAULT_PROJECTION === "orthographic" ? DEFAULT_ORBIT.radius : DEFAULT_PERSP_RADIUS;
+  const targetBlend = DEFAULT_PROJECTION === "orthographic" ? 1 : 0;
+  const o = s.orbit;
+  // Shortest-way azimuth delta so the reset never spins the long way round.
+  const dAz = ((((DEFAULT_ORBIT.azimuthDeg - o.azimuthDeg) % 360) + 540) % 360) - 180;
+  const p = {
+    az: o.azimuthDeg,
+    el: o.elevationDeg,
+    r: o.radius,
+    os: s.orthoSize,
+    ly: o.lookAtY,
+    fov: s.cameraIntent.fov,
+    tip: s.topDownTip,
+    cx: o.centerX,
+    cz: o.centerZ,
+    blend: s.projectionBlend,
+  };
+  homeTween?.kill();
+  homeTween = gsap.to(p, {
+    az: o.azimuthDeg + dAz,
+    el: DEFAULT_ORBIT.elevationDeg,
+    r: targetRadius,
+    os: DEFAULT_ORTHO_SIZE,
+    ly: DEFAULT_ORBIT.lookAtY,
+    fov: DEFAULT_INTENT.fov,
+    tip: 0,
+    cx: DEFAULT_ORBIT.centerX,
+    cz: DEFAULT_ORBIT.centerZ,
+    blend: targetBlend,
+    duration: HOME_TWEEN_SEC,
+    ease: "power2.inOut",
+    onUpdate: () => {
+      const st = useSceneStore.getState();
+      st.setOrbit({
+        azimuthDeg: (((p.az % 360) + 360) % 360),
+        elevationDeg: p.el,
+        radius: p.r,
+        lookAtY: p.ly,
+        centerX: p.cx,
+        centerZ: p.cz,
+      });
+      st.setOrthoSize(p.os);
+      st.setCameraIntent({ fov: p.fov });
+      st.setTopDownTip(p.tip);
+      st.setProjectionBlend(p.blend);
+    },
+    onComplete: () => {
+      homeTween = null;
+    },
+  });
 }
 
 const PROJECTION_TWEEN_DURATION = 1.0;
@@ -220,11 +299,6 @@ const rememberedRadius: Record<"perspective" | "orthographic", number> = {
   perspective: DEFAULT_PERSP_RADIUS,
   orthographic: DEFAULT_ORBIT.radius,
 };
-
-// The single in-flight projection tween. Killed before a new one starts so a
-// mid-tween reversal (toggling back before the swap finishes) animates cleanly
-// from the current blend instead of two tweens fighting over projectionBlend.
-let projTween: gsap.core.Tween | null = null;
 
 // Projection swap (perspective ⇄ orthographic) — shared by the Camera panel's projection
 // toggle and the `p` hotkey so both animate identically. fov (perspective) and orthoSize

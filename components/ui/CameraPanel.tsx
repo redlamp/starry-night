@@ -27,6 +27,7 @@ import { CITY_SHAPES, type CityShapeSetting } from "@/lib/seed/cityShape";
 import { CITY_TIER_ORDER } from "@/lib/seed/topology";
 import { TIER_LABELS, tierKm } from "@/components/ui/cityTiers";
 import { cn, isTypingTarget } from "@/lib/utils";
+import { useIdle } from "@/lib/useIdle";
 import {
   Box,
   Bug,
@@ -67,6 +68,7 @@ import {
   Sun,
   Telescope,
   TowerControl,
+  Trash2,
   Undo2,
   Warehouse,
   type LucideIcon,
@@ -318,11 +320,13 @@ export function CameraPanel() {
     saveCurrentAsDefault,
     revertToSaved,
     hasSavedConfig,
+    clearSavedConfig,
   } = useSceneStore();
   const orbitRestoreSet = useSceneStore((s) => s.orbitRestore !== null);
   const showPinPlane = useSceneStore((s) => s.debug.showPinPlane);
 
-  const [hidden, setHidden] = useState(true);
+  const hidden = useSceneStore((s) => s.panelHidden);
+  const setHidden = useSceneStore((s) => s.setPanelHidden);
   const [savedExists, setSavedExists] = useState(() => hasSavedConfig());
   const [query, setQuery] = useState("");
   const [openSections, setOpenSections] = useState<string[]>([]);
@@ -330,6 +334,7 @@ export function CameraPanel() {
   // Panel never renders during SSR (starts hidden), so reading localStorage in
   // the initializer can't cause a hydration mismatch.
   const [panelWidth, setPanelWidth] = useState<number>(readStoredPanelWidth);
+  const idle = useIdle(); // fade the gear button when the user goes idle (screensaver feel)
 
   const onResizeDown = (e: React.PointerEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -355,7 +360,10 @@ export function CameraPanel() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (isTypingTarget(e)) return; // don't toggle the panel while typing in search
-      if (e.key === "h" || e.key === "H") setHidden((v) => !v);
+      if (e.key === "h" || e.key === "H") {
+        const s = useSceneStore.getState();
+        s.setPanelHidden(!s.panelHidden);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -367,7 +375,10 @@ export function CameraPanel() {
     return (
       <button
         onClick={() => setHidden(false)}
-        className="bg-popover/70 text-foreground/85 border-foreground/10 active:bg-foreground/5 pointer-events-auto fixed top-3 right-3 z-30 flex size-11 items-center justify-center rounded-full border shadow-lg backdrop-blur-md"
+        className={cn(
+          "bg-popover/70 text-foreground/85 border-foreground/10 active:bg-foreground/5 fixed top-3 right-3 z-20 flex size-11 items-center justify-center rounded-full border shadow-lg backdrop-blur-md transition-opacity duration-700",
+          idle ? "pointer-events-none opacity-0" : "pointer-events-auto opacity-100",
+        )}
         title="Show settings (H)"
         aria-label="Show settings"
       >
@@ -393,7 +404,7 @@ export function CameraPanel() {
 
   return (
     <div
-      className="border-foreground/10 bg-popover/70 text-foreground pointer-events-auto fixed top-0 right-0 bottom-0 z-20 flex h-dvh max-h-dvh max-w-full flex-col border-l shadow-2xl backdrop-blur-md"
+      className="border-foreground/10 bg-popover/70 text-foreground pointer-events-auto fixed top-0 right-0 bottom-0 z-40 flex h-dvh max-h-dvh max-w-full flex-col border-l shadow-2xl backdrop-blur-md"
       style={{ width: panelWidth }}
     >
       {/* Grab the left edge to resize; double-click resets to the default width. */}
@@ -677,8 +688,8 @@ export function CameraPanel() {
       </ScrollArea>
 
       {/* Sticky footer */}
-      <div className="border-foreground/10 flex shrink-0 items-center justify-between gap-2 border-t px-4 pt-3 pb-3">
-        <div className="flex items-center gap-1.5">
+      <div className="border-foreground/10 flex shrink-0 flex-wrap items-center gap-2 border-t px-4 pt-3 pb-3">
+        <div className="flex flex-wrap items-center gap-1.5">
           <Button
             variant="ghost"
             onClick={() => resetCamera()}
@@ -699,8 +710,22 @@ export function CameraPanel() {
               Revert
             </Button>
           )}
+          {savedExists && (
+            <Button
+              variant="ghost"
+              onClick={() => {
+                clearSavedConfig();
+                setSavedExists(false);
+              }}
+              title="Delete the saved default from this browser. Reloads will boot the built-in default."
+              className="text-foreground/55 hover:bg-foreground/10 hover:text-foreground/80"
+            >
+              <Trash2 className="size-4" />
+              Clear Saved
+            </Button>
+          )}
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5 ml-auto">
           <CopyButton />
           <Button
             onClick={() => {
@@ -778,6 +803,18 @@ function OrbitSection() {
   const setOrbit = useSceneStore((s) => s.setOrbit);
   const pivot = useSceneStore((s) => s.orbitPivotFromBottom);
   const setPivot = useSceneStore((s) => s.setOrbitPivotFromBottom);
+  const groundFraming = useSceneStore((s) => s.groundFraming);
+  const setGroundFraming = useSceneStore((s) => s.setGroundFraming);
+  const groundFrameLow = useSceneStore((s) => s.groundFrameLow);
+  const setGroundFrameLow = useSceneStore((s) => s.setGroundFrameLow);
+  const rotateFloor = useSceneStore((s) => s.rotateLowAngleGain);
+  const setRotateFloor = useSceneStore((s) => s.setRotateLowAngleGain);
+  const rotateSlowBelow = useSceneStore((s) => s.rotateSlowBelowDeg);
+  const setRotateSlowBelow = useSceneStore((s) => s.setRotateSlowBelowDeg);
+  const tiltSpeed = useSceneStore((s) => s.tiltSpeed);
+  const setTiltSpeed = useSceneStore((s) => s.setTiltSpeed);
+  const showSideView = useSceneStore((s) => s.showSideView);
+  const setShowSideView = useSceneStore((s) => s.setShowSideView);
   const setFocalAdjust = useSceneStore((s) => s.setFocalAdjust);
   // Show the focal pin (and, for Screen Y, the guide line) WHILE a slider is being adjusted,
   // then revert on release: a slider drag ends precisely via onCommit (base-ui's
@@ -815,6 +852,12 @@ function OrbitSection() {
       >
         Default Orbit
       </Button>
+      <label className="flex cursor-pointer items-center justify-between gap-2 text-xs">
+        <span className="text-foreground/70" title="Live elevation cross-section of the camera rig, bottom-left">
+          side-view diagram
+        </span>
+        <Switch checked={showSideView} onCheckedChange={setShowSideView} />
+      </label>
       <ValueSlider
         label="Speed °/s"
         value={orbit.periodSec !== 0 ? Number((360 / orbit.periodSec).toFixed(1)) : 0}
@@ -834,6 +877,7 @@ function OrbitSection() {
         step={5}
         onChange={(radius) => setOrbit({ radius })}
         stepperClass="w-32"
+        format={{ maximumFractionDigits: 1 }} // cap the readout to XXXX.X (radius is often a float, e.g. the ortho park value)
       />
       <ValueSlider
         label="Elevation"
@@ -872,20 +916,87 @@ function OrbitSection() {
         indicatorStyle={{ background: orbit.lookAtY >= 0 ? "#7dd3fc" : "#b5835a" }}
       />
       <ValueSlider
-        label="Screen Y"
-        // Screen Y is top-down: 0 = top of screen, 100 = bottom. The store holds
-        // orbitPivotFromBottom (fraction UP from the bottom), so invert at the display layer.
-        value={Math.round((1 - pivot) * 100)}
-        min={0}
-        max={100}
-        step={1}
-        onChange={(pct) => {
-          setPivot(1 - pct / 100);
-          showFocalAdjust("screenY");
+        label="Focal X"
+        value={orbit.centerX}
+        min={-5000}
+        max={5000}
+        step={5}
+        onChange={(centerX) => {
+          setOrbit({ centerX });
+          showFocalAdjust("focalY");
         }}
         onCommit={endFocalAdjust}
         stepperClass="w-32"
       />
+      <ValueSlider
+        label="Focal Z"
+        value={orbit.centerZ}
+        min={-5000}
+        max={5000}
+        step={5}
+        onChange={(centerZ) => {
+          setOrbit({ centerZ });
+          showFocalAdjust("focalY");
+        }}
+        onCommit={endFocalAdjust}
+        stepperClass="w-32"
+      />
+      <RangeSlider
+        label="Screen Y"
+        // Screen Y is top-down (0 = top, 100 = bottom); the store holds fractions UP from the bottom,
+        // so invert. Left thumb = resting Screen Y (orbitPivotFromBottom); right thumb = the low-angle
+        // Screen Y it eases DOWN to near the horizon (groundFrameLow), used when the ground pull is on.
+        value={[Math.round((1 - pivot) * 100), Math.round((1 - groundFrameLow) * 100)]}
+        min={0}
+        max={96}
+        step={1}
+        onChange={([rest, low]) => {
+          setPivot(1 - rest / 100);
+          setGroundFrameLow(1 - low / 100);
+          showFocalAdjust("screenY");
+        }}
+      />
+      <label className="flex cursor-pointer items-center justify-between gap-2 text-xs">
+        <span className="text-foreground/70">low-angle ground pull</span>
+        <Switch checked={groundFraming} onCheckedChange={setGroundFraming} />
+      </label>
+      <div className="text-foreground/45 text-[11px] leading-snug">
+        Screen Y is where the focal sits on screen (0 top, 100 bottom). The left thumb is its resting
+        spot; with the ground pull on, near the horizon it eases DOWN to the right thumb so the skyline
+        settles low with sky above (tracking the tilt live). Off holds the resting spot at every angle.
+      </div>
+      <ValueSlider
+        label="Tilt speed"
+        value={tiltSpeed}
+        min={0.1}
+        max={1}
+        step={0.05}
+        onChange={setTiltSpeed}
+        stepperClass="w-32"
+      />
+      <ValueSlider
+        label="Low-angle speed"
+        value={rotateFloor}
+        min={0.1}
+        max={1}
+        step={0.05}
+        onChange={setRotateFloor}
+        stepperClass="w-32"
+      />
+      <ValueSlider
+        label="Slow below °"
+        value={rotateSlowBelow}
+        min={2}
+        max={45}
+        step={1}
+        onChange={setRotateSlowBelow}
+        stepperClass="w-32"
+      />
+      <div className="text-foreground/45 text-[11px] leading-snug">
+        Tilt speed sets how fast a vertical drag pitches the view (lower = more regulated; 1 = the old
+        rate). Low-angle speed and Slow below ° additionally ease rotate + tilt down near the horizon
+        (1 = no limit), and distance past the city tapers them further.
+      </div>
     </>
   );
 }

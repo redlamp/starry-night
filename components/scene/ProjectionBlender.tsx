@@ -3,6 +3,7 @@
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { useSceneStore } from "@/lib/state/sceneStore";
+import { orbitFramingFactor } from "@/lib/scene/aspectFraming";
 
 // Keeps a single PerspectiveCamera under the hood but overrides its projection
 // matrix each frame when projectionBlend > 0. The swap is driven by a RECEDING
@@ -32,26 +33,28 @@ export function ProjectionBlender() {
 
   useFrame(() => {
     if (!(camera as THREE.Camera & { isPerspectiveCamera?: boolean }).isPerspectiveCamera) return;
-    // Always rebuild the pure perspective matrix first, so when a blend ends at
-    // 0 the camera doesn't keep rendering with the last-computed override.
-    camera.fov = fov;
+    // Narrow screens widen the framing so the skyline sits low with starry sky above — a portrait
+    // frame otherwise shows only the city's tall centre. 1× landscape, up to ~1.5× at a phone;
+    // still/orbit only (top-down/fly self-frame). f drives BOTH the ortho half-height (oeff) and the
+    // perspective fov (fovEff) — and the morph's ortho end — so both projections + the morph between
+    // them widen together. applyScreenFocus / pinScreenHit / groundHit read camera.fov + the live
+    // matrix, so they pick up fovEff for free. See aspectFraming. (2026-06-14)
+    const aspect = size.width / Math.max(1, size.height);
+    const f = orbitFramingFactor(aspect);
+    const fovRad = (fov * Math.PI) / 180;
+    // Always rebuild the pure perspective matrix first, so when a blend ends at 0 the camera
+    // doesn't keep rendering with the last-computed override.
+    camera.fov = f === 1 ? fov : (Math.atan(f * Math.tan(fovRad / 2)) * 2 * 180) / Math.PI;
     camera.updateProjectionMatrix();
     if (blend <= 0.0001) return; // pure perspective
 
-    const aspect = size.width / Math.max(1, size.height);
     const near = camera.near;
     const far = camera.far;
+    const oeff = orthoSize * f;
 
     if (blend >= 0.9999) {
       // Pure orthographic — exact, and avoids the huge virtual-eye numbers.
-      _ortho.makeOrthographic(
-        -aspect * orthoSize,
-        aspect * orthoSize,
-        orthoSize,
-        -orthoSize,
-        near,
-        far,
-      );
+      _ortho.makeOrthographic(-aspect * oeff, aspect * oeff, oeff, -oeff, near, far);
       camera.projectionMatrix.copy(_ortho);
       camera.projectionMatrixInverse.copy(_ortho).invert();
       return;
@@ -72,8 +75,8 @@ export function ProjectionBlender() {
     // popping the instant blend leaves 0. When the two views are already K-matched
     // (d·tan(fov/2) == orthoSize) Hb is constant and this is byte-for-byte the old
     // orthoSize-only matrix. (2026-06-14)
-    const perspK = d * Math.tan((fov * Math.PI) / 180 / 2);
-    const Hb = perspK + (orthoSize - perspK) * blend;
+    const perspK = d * Math.tan(fovRad / 2) * f; // aspect-widened perspective end
+    const Hb = perspK + (oeff - perspK) * blend; // both ends widened by f → morph stays consistent
     const top = (nearV * Hb) / E;
     const right = top * aspect;
     _persp.makePerspective(-right, right, top, -top, nearV, farV);
