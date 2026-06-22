@@ -10,6 +10,7 @@ import { shootingStarVertexShader, shootingStarFragmentShader } from "@/lib/shad
 import { starFieldVertexShader, starFieldFragmentShader } from "@/lib/shaders/starField";
 import { skyGradientVertexShader, skyGradientFragmentShader } from "@/lib/shaders/skyGradient";
 import { fogBoundsVertexShader, fogBoundsFragmentShader } from "@/lib/shaders/fogBounds";
+import { moonVertexShader, moonFragmentShader } from "@/lib/shaders/moon";
 
 // Minimal stand-in for three's injected vertex prelude.
 const VERTEX_PRELUDE = `
@@ -38,6 +39,8 @@ const CASES: Array<[string, string, string]> = [
   ["skyGradient.fragment", FRAGMENT_PRELUDE, skyGradientFragmentShader],
   ["fogBounds.vertex", VERTEX_PRELUDE, fogBoundsVertexShader],
   ["fogBounds.fragment", FRAGMENT_PRELUDE, fogBoundsFragmentShader],
+  ["moon.vertex", VERTEX_PRELUDE, moonVertexShader],
+  ["moon.fragment", FRAGMENT_PRELUDE, moonFragmentShader],
 ];
 
 let failed = 0;

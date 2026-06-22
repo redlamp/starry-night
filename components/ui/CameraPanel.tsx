@@ -1610,6 +1610,34 @@ function MoonSection() {
         step={0.001}
         onChange={(radiusRatio) => setMoon({ radiusRatio })}
       />
+      {/* Phase: auto from the real date, or scrub the synodic cycle manually
+          (0 = new, 0.5 = full) for testing/art-direction. */}
+      <div className="flex items-center gap-2 text-xs">
+        <span className="text-foreground/70 w-14 shrink-0">phase</span>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => setMoon({ phaseAuto: !moon.phaseAuto })}
+          title="Illuminated fraction from the real date vs. manual scrub"
+          className={cn(
+            moon.phaseAuto
+              ? "bg-indigo-400 text-black hover:bg-indigo-400"
+              : "bg-foreground/10 text-foreground hover:bg-foreground/20",
+          )}
+        >
+          {moon.phaseAuto ? "auto (date)" : "manual"}
+        </Button>
+      </div>
+      {!moon.phaseAuto && (
+        <ValueSlider
+          label="cycle"
+          value={moon.phaseManual}
+          min={0}
+          max={1}
+          step={0.01}
+          onChange={(phaseManual) => setMoon({ phaseManual })}
+        />
+      )}
       <div className="text-foreground/55 pt-1 text-[10px] tracking-wide uppercase">Halo</div>
       <ValueSlider
         label="size×"

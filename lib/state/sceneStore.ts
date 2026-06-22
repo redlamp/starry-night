@@ -127,8 +127,16 @@ export const DEFAULT_ORBIT: OrbitConfig = {
 export const DEFAULT_MOON = {
   azimuthDeg: 20,
   elevationDeg: 1,
-  distance: 4500 * CITY_SCALE,
+  // Sits on the star shell so the moon hugs the celestial sphere. Tracks the star
+  // radius default (was 4500·CITY_SCALE, stale after stars.radius → 3200·CITY_SCALE,
+  // which left the moon floating beyond the star dome).
+  distance: 3200 * CITY_SCALE,
   radiusRatio: 0.02,
+  // Phase: by default the illuminated fraction tracks the real date (sampled once at
+  // mount — see lib/moon/phase.ts). Turn auto off to scrub the phase manually for
+  // testing/art-direction (phaseManual = synodic position 0..1; 0 = new, 0.5 = full).
+  phaseAuto: true,
+  phaseManual: 0.25,
 };
 // `factor` is the star base size in px (mean, before the per-star long-tail).
 // Previously a vestigial drei value (200) that nothing read; now wired to
@@ -847,6 +855,8 @@ type SceneState = {
     elevationDeg: number; // angle above horizon, 0 = horizon, 90 = zenith
     distance: number; // radial distance from city centre; default tracks stars.radius
     radiusRatio: number; // moon radius as a fraction of stars.radius
+    phaseAuto: boolean; // true = illuminated fraction from the real date
+    phaseManual: number; // synodic cycle position 0..1 (0 new, 0.5 full) when not auto
   };
   setMoon: (patch: Partial<SceneState["moon"]>) => void;
   moonHalo: {
