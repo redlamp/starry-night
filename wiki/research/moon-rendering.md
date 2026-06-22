@@ -162,16 +162,26 @@ domain (credit NASA SVS). <https://svs.gsfc.nasa.gov/4720>
 
 ## 6. Implementation plan (staged)
 
-**Phase 0 — lock + distance fix (small, high value):** parent moon + (future) light + halo +
-stars into one rotating sky group at world origin; anchor to the fixed centre not the orbit
-pivot; reconcile `moon.distance` to track `stars.radius`. Fixes the drift + the stale-distance bug.
+**Status (shipped `v2026.06.22`, merges `2f4a7d5`/`0adde6f`):** Phase 0 ✅, Phase 1 ✅, plus a
+**stylized pivot** ✅ (the photoreal texture/Lommel-Seeliger smoothness didn't fit). Phase 2 (location
++ horizon reddening) is the remaining work.
 
-**Phase 1 — phase + lit rendering (the core "our moon"):** lit sphere (Lambert first cut →
-Lommel-Seeliger shader) + NASA 1K albedo; one directional light whose direction is set in view
-space from the phase angle; phase from date (synodic approx or SunCalc); suppress limb darkening;
-opposition emissive boost near full.
+**Phase 0 — lock + distance fix ✅:** anchored the moon to the sky dome at world origin (not the
+orbit pivot — fixes the pan drift); `moon.distance` default reconciled to the star-shell radius.
+(Did the minimal anchor-to-origin rather than a full rotating sky group; revisit the group if
+diurnal rotation is ever added.)
 
-**Phase 2 — realism touches + location:** earthshine fill (built in Phase 1, then *removed* —
+**Phase 1 — phase + lit rendering ✅:** date-driven phase (`lib/moon/phase.ts`, synodic, sampled
+once at mount; manual scrub control), view-space `uSunDir` (no scene light → no city spill),
+opposition brightness near full.
+
+**Stylized pivot ✅ (supersedes the photoreal Phase 1 look):** dropped the NASA albedo for a flat
+warm tone; sharp graphic terminator with a **crisp / 1-bit dither / cel toggle** (`uTermStyle` +
+`uSharpness`, default dither @ 0.88); **halo biased to the lit limb** (`uSunDir` in the halo
+shader — resolves the halo→phase issue); **pure-black dark side** (earthshine removed); size 0.01.
+Lommel-Seeliger replaced by the flat lit term (no limb darkening still holds).
+
+**Phase 2 — realism touches + location (remaining):** earthshine fill (built in Phase 1, then *removed* —
 the user chose a pure-black dark side for the stylized look; revisit as an optional toggle if
 wanted); horizon reddening by elevation; **halo→phase fix** (done in the stylized pass: the halo
 biases to the lit limb via `uSunDir`); **location feature** — a
