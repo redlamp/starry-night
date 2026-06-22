@@ -1554,6 +1554,8 @@ function WindowProfilesSection() {
   );
 }
 
+const MOON_TERM_STYLES = ["crisp", "dither", "cel"] as const;
+
 function MoonSection() {
   const moon = useSceneStore((s) => s.moon);
   const setMoon = useSceneStore((s) => s.setMoon);
@@ -1638,6 +1640,21 @@ function MoonSection() {
           onChange={(phaseManual) => setMoon({ phaseManual })}
         />
       )}
+      {/* Stylized terminator: crisp 2-tone / 1-bit dither / cel steps + edge sharpness. */}
+      <ModeSelect
+        label="edge"
+        value={moon.terminatorStyle}
+        modes={MOON_TERM_STYLES}
+        onChange={(v) => setMoon({ terminatorStyle: v as typeof moon.terminatorStyle })}
+      />
+      <ValueSlider
+        label="sharp"
+        value={moon.edgeSharpness}
+        min={0}
+        max={1}
+        step={0.02}
+        onChange={(edgeSharpness) => setMoon({ edgeSharpness })}
+      />
       <div className="text-foreground/55 pt-1 text-[10px] tracking-wide uppercase">Halo</div>
       <ValueSlider
         label="size×"

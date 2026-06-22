@@ -1,55 +1,54 @@
-// Moon body shader — a lit sphere using the LOMMEL-SEELIGER reflectance law
-// (reflectance ∝ μ₀/(μ₀+μ)), NOT Lambert. The literature (Hapke 1963; Jensen et al.
-// 2001; Fairbairn 2005) is firm that the full moon shows NO limb darkening — it's
-// flat-bright to the edge — which Lambert's N·L can't do. L-S keeps the lit disc
-// uniform and the phase/terminator fall out of the sun direction. The "sun" is a
-// uniform DIRECTION (uSunDir, in view space), not a scene light, so it can't spill
-// onto the city and we get the exact reflectance we want. Colours are authored in
-// DISPLAY space and written raw (same convention as the moonHalo + cityInstanced
+// Moon body shader — STYLIZED (not photoreal). A flat-toned lit disc with a sharp,
+// graphic terminator, to fit the low-poly / dithered-homage aesthetic. The lit value
+// comes from one sun-direction dot (uSunDir, view space, encodes the phase); a
+// uTermStyle uniform then maps it three ways: crisp 2-tone, 1-bit ordered dither, or
+// cel steps. No limb darkening falls out for free (the lit hemisphere is flat). The
+// "sun" is a uniform direction (not a scene light → no spill onto the city). Colours
+// are DISPLAY-space, written raw (same convention as the halo / cityInstanced
 // shaders). See wiki/research/moon-rendering.md §3.
 
 export const moonVertexShader = /* glsl */ `
   varying vec3 vNormalView;   // surface normal in view space
-  varying vec3 vViewDir;      // direction to camera in view space
-  varying vec2 vUv;
-
   void main() {
-    vUv = uv;
-    vec4 mv = modelViewMatrix * vec4(position, 1.0);
     vNormalView = normalize(normalMatrix * normal);
-    vViewDir = normalize(-mv.xyz); // camera sits at the origin of view space
-    gl_Position = projectionMatrix * mv;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }
 `;
 
 export const moonFragmentShader = /* glsl */ `
   precision mediump float;
 
-  uniform vec3 uSunDir;       // moon → sun, VIEW space, normalized (encodes the phase)
-  uniform vec3 uColor;        // base albedo tint (display space)
-  uniform float uBrightness;  // overall lit scale (carries the opposition surge near full)
-  uniform float uEarthshine;  // faint dark-side fill (grows as the crescent thins)
+  uniform vec3 uSunDir;      // moon → sun, VIEW space, normalized (encodes the phase)
+  uniform vec3 uColor;       // flat lit tone (display space)
+  uniform float uBrightness; // lit scale (carries the opposition surge near full)
+  uniform int uTermStyle;    // 0 = crisp 2-tone, 1 = ordered dither, 2 = cel steps
+  uniform float uSharpness;  // 0..1 terminator edge crispness (higher = sharper)
 
   varying vec3 vNormalView;
-  varying vec3 vViewDir;
-  varying vec2 vUv;
+
+  // Array-free ordered (Bayer) dither thresholds, recursive 2 → 4. Returns [0,1).
+  float bayer2(vec2 a) { a = floor(a); return fract(a.x * 0.5 + a.y * a.y * 0.75); }
+  float bayer4(vec2 a) { return bayer2(0.5 * a) * 0.25 + bayer2(a); }
 
   void main() {
     vec3 N = normalize(vNormalView);
-    vec3 L = normalize(uSunDir);
-    vec3 V = normalize(vViewDir);
+    float mu0 = dot(N, normalize(uSunDir)); // cos incidence; terminator at mu0 = 0
+    float edge = mix(0.30, 0.015, clamp(uSharpness, 0.0, 1.0));
+    float s = smoothstep(-edge, edge, mu0);  // soft lit fraction 0..1
 
-    float mu0 = max(dot(N, L), 0.0);   // cos incidence (sun)
-    float mu  = max(dot(N, V), 0.0);   // cos emission (viewer)
-    // Lommel-Seeliger: flat across the lit disc, bright to the limb (no limb darkening),
-    // dark at the terminator where mu0 → 0.
-    float ls = (mu0 + mu) > 0.001 ? mu0 / (mu0 + mu) : 0.0;
+    float lit = s; // crisp 2-tone (a thin AA edge from the smoothstep)
+    if (uTermStyle == 1) {
+      // 1-bit ordered dither across the band; threshold biased into (0,1) so a
+      // fully-dark or fully-lit cell never strays a pixel (glsl-ordered-dither note).
+      float th = bayer4(gl_FragCoord.xy) * 0.96 + 0.02;
+      lit = step(th, s);
+    } else if (uTermStyle == 2) {
+      lit = floor(clamp(s, 0.0, 0.999) * 3.0) / 2.0; // cel: 0, 0.5, 1
+    }
 
-    // Earthshine: the unlit hemisphere glows faintly (Earth-reflected light) — the
-    // "old moon in the new moon's arms." Strongest where the sun barely misses.
-    float darkSide = 1.0 - smoothstep(0.0, 0.04, mu0);
-
-    vec3 col = uColor * (uBrightness * ls + uEarthshine * darkSide);
+    // Unlit side reads pure black (no earthshine) — the lit dithered shape carries
+    // the moon against the sky.
+    vec3 col = uColor * uBrightness * lit;
     gl_FragColor = vec4(col, 1.0);
   }
 `;

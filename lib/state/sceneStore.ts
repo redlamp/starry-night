@@ -131,12 +131,16 @@ export const DEFAULT_MOON = {
   // radius default (was 4500·CITY_SCALE, stale after stars.radius → 3200·CITY_SCALE,
   // which left the moon floating beyond the star dome).
   distance: 3200 * CITY_SCALE,
-  radiusRatio: 0.02,
+  radiusRatio: 0.01,
   // Phase: by default the illuminated fraction tracks the real date (sampled once at
   // mount — see lib/moon/phase.ts). Turn auto off to scrub the phase manually for
   // testing/art-direction (phaseManual = synodic position 0..1; 0 = new, 0.5 = full).
   phaseAuto: true,
   phaseManual: 0.25,
+  // Stylized terminator look: "crisp" 2-tone, "dither" (1-bit ordered), or "cel"
+  // steps. edgeSharpness 0..1 tightens the lit/dark transition (higher = sharper).
+  terminatorStyle: "dither" as "crisp" | "dither" | "cel",
+  edgeSharpness: 0.88,
 };
 // `factor` is the star base size in px (mean, before the per-star long-tail).
 // Previously a vestigial drei value (200) that nothing read; now wired to
@@ -857,6 +861,8 @@ type SceneState = {
     radiusRatio: number; // moon radius as a fraction of stars.radius
     phaseAuto: boolean; // true = illuminated fraction from the real date
     phaseManual: number; // synodic cycle position 0..1 (0 new, 0.5 full) when not auto
+    terminatorStyle: "crisp" | "dither" | "cel"; // stylized lit/dark edge look
+    edgeSharpness: number; // 0..1, tightens the terminator transition
   };
   setMoon: (patch: Partial<SceneState["moon"]>) => void;
   moonHalo: {

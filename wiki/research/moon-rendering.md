@@ -171,8 +171,10 @@ Lommel-Seeliger shader) + NASA 1K albedo; one directional light whose direction 
 space from the phase angle; phase from date (synodic approx or SunCalc); suppress limb darkening;
 opposition emissive boost near full.
 
-**Phase 2 — realism touches + location:** earthshine fill (grows as crescent thins; *done in
-Phase 1*); horizon reddening by elevation; **halo→phase fix** (below); **location feature** — a
+**Phase 2 — realism touches + location:** earthshine fill (built in Phase 1, then *removed* —
+the user chose a pure-black dark side for the stylized look; revisit as an optional toggle if
+wanted); horizon reddening by elevation; **halo→phase fix** (done in the stylized pass: the halo
+biases to the lit limb via `uSunDir`); **location feature** — a
 "place"/latitude control that rotates the disc + maria by `χ − q` (or the stylized `90°−|φ|` +
 `sign(φ)`) to imply where you're viewing from; optional arc-altitude cue.
 
