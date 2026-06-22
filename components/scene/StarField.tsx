@@ -66,6 +66,23 @@ function sampleBrightness(u: number): number {
  * below.
  */
 export function StarField({ masterSeed, count, radius, depth, size = 1.5 }: Props) {
+  // Live twinkle uniforms — stable objects the material points at, so the sliders
+  // can retune scintillation (depth + period range) without rebuilding the
+  // (expensive) geometry/material. Periods are stored in ms, fed in seconds.
+  const twinkle = useSceneStore((s) => s.stars.twinkle);
+  const twinkleMinMs = useSceneStore((s) => s.stars.twinkleMinMs);
+  const twinkleMaxMs = useSceneStore((s) => s.stars.twinkleMaxMs);
+  const uTwinkle = useMemo(() => ({ value: twinkle }), []); // eslint-disable-line react-hooks/exhaustive-deps
+  const uTwPeriodMin = useMemo(() => ({ value: twinkleMinMs / 1000 }), []); // eslint-disable-line react-hooks/exhaustive-deps
+  const uTwPeriodMax = useMemo(() => ({ value: twinkleMaxMs / 1000 }), []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    uTwinkle.value = twinkle;
+  }, [twinkle, uTwinkle]);
+  useEffect(() => {
+    uTwPeriodMin.value = twinkleMinMs / 1000;
+    uTwPeriodMax.value = twinkleMaxMs / 1000;
+  }, [twinkleMinMs, twinkleMaxMs, uTwPeriodMin, uTwPeriodMax]);
+
   const { geometry, material } = useMemo(() => {
     const rng = deriveSeed(masterSeed, "stars");
 
@@ -124,7 +141,7 @@ export function StarField({ masterSeed, count, radius, depth, size = 1.5 }: Prop
 
       const phase = rng();
       phases[i] = phase;
-      freqs[i] = 0.4 + rng() * 1.0;
+      freqs[i] = rng(); // 0..1 — placed inside the live period range in-shader
       // Twinkle amplitude (#26): scintillation is ELEVATION-driven — strong
       // through the thick air near the horizon, near-steady at zenith —
       // scaled by brightness so it reads on the stars you can actually see.
@@ -174,7 +191,7 @@ export function StarField({ masterSeed, count, radius, depth, size = 1.5 }: Prop
     geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
     geo.setAttribute("aSize", new THREE.BufferAttribute(sizes, 1));
     geo.setAttribute("aPhase", new THREE.BufferAttribute(phases, 1));
-    geo.setAttribute("aFreq", new THREE.BufferAttribute(freqs, 1));
+    geo.setAttribute("aFreqRand", new THREE.BufferAttribute(freqs, 1));
     geo.setAttribute("aTwinkle", new THREE.BufferAttribute(twinkles, 1));
     geo.setAttribute("aSparkleSeed", new THREE.BufferAttribute(sparkleSeeds, 1));
     geo.setAttribute("aColor", new THREE.BufferAttribute(colors, 3));
@@ -192,6 +209,9 @@ export function StarField({ masterSeed, count, radius, depth, size = 1.5 }: Prop
         },
         uStarIntroProgress: sharedStarIntroProgress,
         uStarIntroMode: sharedStarIntroMode,
+        uTwinkle,
+        uTwPeriodMin,
+        uTwPeriodMax,
       },
       transparent: true,
       depthWrite: false,
@@ -201,7 +221,7 @@ export function StarField({ masterSeed, count, radius, depth, size = 1.5 }: Prop
     mat.name = "starField"; // so a shader error names its material
 
     return { geometry: geo, material: mat };
-  }, [masterSeed, count, radius, depth, size]);
+  }, [masterSeed, count, radius, depth, size, uTwinkle, uTwPeriodMin, uTwPeriodMax]);
 
   useEffect(() => {
     return () => {

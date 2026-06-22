@@ -1,11 +1,11 @@
 // Star field shader — single Points cloud with per-star size + per-star
-// twinkle phase. Twinkle uses (uTime, aPhase, aFreq) so it stays deterministic
+// twinkle phase. Twinkle uses (uTime, aPhase, aFreqRand) so it stays deterministic
 // across viewers as long as masterSeed matches.
 
 export const starFieldVertexShader = /* glsl */ `
   attribute float aSize;       // base size in pixels at depth = 1 unit
   attribute float aPhase;      // 0..1 - random phase offset per star
-  attribute float aFreq;       // ~0.4..1.4 - per-star twinkle frequency
+  attribute float aFreqRand;   // 0..1 - per-star position inside the live period range
   attribute float aTwinkle;    // 0..1 - twinkle amplitude (brightness-weighted)
   attribute float aSparkleSeed;// 0..1 - seed for occasional impulse sparkle
   attribute vec3 aColor;       // RGB stellar-class colour, desaturated for dim
@@ -18,6 +18,9 @@ export const starFieldVertexShader = /* glsl */ `
   uniform float uPixelRatio;
   uniform float uStarIntroProgress;
   uniform int uStarIntroMode;
+  uniform float uTwinkle;       // global twinkle multiplier (0 = steady, 1 = default)
+  uniform float uTwPeriodMin;   // twinkle sine period range, seconds (per-star lerp by aFreqRand)
+  uniform float uTwPeriodMax;
 
   varying float vBrightness;
   varying float vWake;
@@ -41,12 +44,20 @@ export const starFieldVertexShader = /* glsl */ `
     float d = -mv.z;
     gl_PointSize = aSize * uPixelRatio * (300.0 / max(d, 1.0));
 
-    // Twinkle = sine wave 0.3..1.0 swing, amplitude per-star (aTwinkle).
-    // Deeper than the original 0.5 floor so the scintillation actually reads
-    // (it was technically present but near-invisible). Bright stars modulate
-    // strongly; dim stars stay nearer steady.
-    float t = sin(uTime * aFreq + aPhase * 6.2831853);
-    float baseTwinkle = mix(1.0, 0.3 + 0.7 * (0.5 + 0.5 * t), aTwinkle);
+    // Twinkle = per-star sine dipping the brightness toward a floor. depth =
+    // per-star amplitude (aTwinkle) scaled by the global uTwinkle slider, so it
+    // ranges from dead-steady (uTwinkle 0) through the default look (1) to deep
+    // blinking (the trough can undershoot 0 → star winks fully off) at higher
+    // settings. osc is the 0..1 swing; brightness = 1 at the peak, 1 - 0.9*depth
+    // at the trough.
+    // Per-star period in seconds, placed inside the live [min,max] range by its
+    // baked random; angular frequency = 2pi / period. Lower period = faster twinkle.
+    float period = mix(uTwPeriodMin, uTwPeriodMax, aFreqRand);
+    float ang = 6.2831853 / max(period, 0.05);
+    float t = sin(uTime * ang + aPhase * 6.2831853);
+    float osc = 0.5 + 0.5 * t;
+    float depth = aTwinkle * uTwinkle;
+    float baseTwinkle = 1.0 - depth * 0.9 * (1.0 - osc);
 
     // Occasional sparkle: every ~2.5s bucket, roll a per-star hash. If it
     // crosses the threshold the star briefly spikes; exp-decay across the
@@ -57,7 +68,7 @@ export const starFieldVertexShader = /* glsl */ `
     float bucketAge = fract(uTime / bucketLen + aSparkleSeed * 97.0);
     float roll = hash11(bucket * 13.7 + aSparkleSeed * 41.0);
     float eligible = step(0.5, aTwinkle);
-    float sparkle = eligible * step(0.97, roll) * exp(-bucketAge * 9.0) * 1.6;
+    float sparkle = eligible * step(0.97, roll) * exp(-bucketAge * 9.0) * 1.6 * uTwinkle;
 
     // Base intensity carries the 2.512x/magnitude flux ratio (#26): faint
     // stars dim in LIGHT, not just point size - the field reads mostly-faint

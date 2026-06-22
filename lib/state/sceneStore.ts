@@ -134,10 +134,20 @@ export const DEFAULT_MOON = {
 // Previously a vestigial drei value (200) that nothing read; now wired to
 // StarField's size prop. Legacy large values are migrated on load.
 export const DEFAULT_STARS = {
-  radius: 4500 * CITY_SCALE,
+  radius: 3200 * CITY_SCALE,
   depth: 360 * CITY_SCALE,
   count: 24000,
   factor: 50,
+  // Global twinkle multiplier (scales per-star scintillation depth + sparkle
+  // rate). 0 = dead steady, 1 = default, up to 3 = dramatic blinking. Fed to the
+  // starField shader's uTwinkle uniform.
+  twinkle: 1.5,
+  // Twinkle sine PERIOD range, in ms (slider bounds 100..6000). Each star gets a
+  // random period uniformly in [min, max] — wide spread = some brisk flickers, some
+  // slow shimmers. Lower = faster twinkle. Fed to the shader as period uniforms; a
+  // per-star 0..1 random (aFreqRand) places each star inside the live range.
+  twinkleMinMs: 600,
+  twinkleMaxMs: 4000,
   // #26 meteors: min/max seconds between streaks + master toggle. Each fired
   // streak rolls the NEXT gap uniformly in [min, max] (seeded rng chain in
   // ShootingStars — deterministic per masterSeed).
@@ -1351,12 +1361,16 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       }
       // cityPlanning visibility toggles only — preserve runtime readouts.
       patch.cityPlanning = { ...s.cityPlanning, ...DEFAULT_CITY_PLANNING_VIS };
-      // intro / starIntro are boot WAKE animations, not look settings — their hardcoded
-      // default is "not yet woken" (progress 0). On a live scene there's no remount to
-      // replay the reveal, so progress 0 leaves a black sky / dark city (stars vanish —
-      // the reported bug). Reset should land on the SETTLED look, so snap them fully woken.
-      patch.intro = { ...DEFAULT_INTRO, progress: 1 };
-      patch.starIntro = { ...DEFAULT_STAR_INTRO, progress: 1 };
+      // intro / starIntro are boot WAKE animations, not look settings. Reset should
+      // REPLAY the wake like a fresh boot: snap to black (progress 0) and play, so the
+      // sky and city fade out then gradually return. progress:0 + playing:true is the
+      // playIntro/playStarIntro contract — on a live scene (cityReady true) the
+      // IntroTicker frame loop stamps a fresh start-time on the playing edge and
+      // re-cascades the city; the star block animates regardless of cityReady. (An
+      // earlier fix snapped these to progress:1 to avoid a black sky that never woke —
+      // but that landed on the settled look; replaying the wake is the desired feel.)
+      patch.intro = { ...DEFAULT_INTRO, progress: 0, playing: true };
+      patch.starIntro = { ...DEFAULT_STAR_INTRO, progress: 0, playing: true };
       return patch;
     });
   },
