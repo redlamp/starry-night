@@ -137,22 +137,22 @@ export const DEFAULT_STARS = {
   radius: 3200 * CITY_SCALE,
   depth: 360 * CITY_SCALE,
   count: 24000,
-  factor: 50,
-  // Global twinkle multiplier (scales per-star scintillation depth + sparkle
-  // rate). 0 = dead steady, 1 = default, up to 3 = dramatic blinking. Fed to the
-  // starField shader's uTwinkle uniform.
+  factor: 36,
+  // Twinkle AMPLITUDE (the σ scale of the log-normal scintillation; see
+  // wiki/research/star-twinkle-scintillation.md). 0 = dead steady, 1 ≈ σ 0.1 at
+  // zenith, up to 3 = dramatic. The shader scales this by (sec z)^1.5, so horizon
+  // stars twinkle far harder. Fed to the starField shader's uTwinkle uniform.
   twinkle: 1.5,
-  // Twinkle sine PERIOD range, in ms (slider bounds 100..6000). Each star gets a
-  // random period uniformly in [min, max] — wide spread = some brisk flickers, some
-  // slow shimmers. Lower = faster twinkle. Fed to the shader as period uniforms; a
-  // per-star 0..1 random (aFreqRand) places each star inside the live range.
-  twinkleMinMs: 600,
-  twinkleMaxMs: 4000,
-  // Twinkle waveform — the curve each star's brightness follows over its period.
-  // "sine" undulates smoothly (felt too regular); "triangle" = linear ramps;
-  // "noise" = aperiodic time value-noise (realistic scintillation); "flicker" =
-  // noise biased bright with occasional sharp dips. Fed to the shader's uTwWave.
-  twinkleWave: "noise" as "sine" | "triangle" | "noise" | "flicker",
+  // Per-star noise TIMESCALE range, in ms (slider bounds 100..6000). Each star draws
+  // a random base period in [min, max]; the shader sums octaves (2.3×, 4.7× faster)
+  // on top, so the visible flicker is brisker than these numbers alone. Lower =
+  // faster. Real scintillation is fast/broadband, so the default sits low.
+  twinkleMinMs: 150,
+  twinkleMaxMs: 1200,
+  // Chromatic-flash strength (0 = none). The red/green/blue shimmer of low, bright
+  // stars (atmospheric dispersion + per-channel decorrelated scintillation), gated
+  // in-shader to low altitude × bright stars and bounded by each star's own colour.
+  twinkleChroma: 0.5,
   // #26 meteors: min/max seconds between streaks + master toggle. Each fired
   // streak rolls the NEXT gap uniformly in [min, max] (seeded rng chain in
   // ShootingStars — deterministic per masterSeed).

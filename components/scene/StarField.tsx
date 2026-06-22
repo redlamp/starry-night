@@ -8,14 +8,6 @@ import { sharedTime } from "@/lib/shaders/sharedTime";
 import { sharedStarIntroProgress, sharedStarIntroMode } from "@/lib/shaders/sharedIntro";
 import { starFieldVertexShader, starFieldFragmentShader } from "@/lib/shaders/starField";
 
-// Twinkle waveform → shader uTwWave int. Keep in sync with the shader's branch.
-const TWINKLE_WAVE_IDX: Record<string, number> = {
-  sine: 0,
-  triangle: 1,
-  noise: 2,
-  flicker: 3,
-};
-
 type Props = {
   masterSeed: string;
   count: number;
@@ -75,17 +67,16 @@ function sampleBrightness(u: number): number {
  */
 export function StarField({ masterSeed, count, radius, depth, size = 1.5 }: Props) {
   // Live twinkle uniforms — stable objects the material points at, so the sliders
-  // can retune scintillation (depth + period range) without rebuilding the
-  // (expensive) geometry/material. Periods are stored in ms, fed in seconds.
+  // can retune scintillation (amplitude, period range, chroma) without rebuilding
+  // the (expensive) geometry/material. Periods are stored in ms, fed in seconds.
   const twinkle = useSceneStore((s) => s.stars.twinkle);
   const twinkleMinMs = useSceneStore((s) => s.stars.twinkleMinMs);
   const twinkleMaxMs = useSceneStore((s) => s.stars.twinkleMaxMs);
-  const twinkleWave = useSceneStore((s) => s.stars.twinkleWave);
-  const waveIdx = TWINKLE_WAVE_IDX[twinkleWave] ?? 2;
+  const twinkleChroma = useSceneStore((s) => s.stars.twinkleChroma);
   const uTwinkle = useMemo(() => ({ value: twinkle }), []); // eslint-disable-line react-hooks/exhaustive-deps
   const uTwPeriodMin = useMemo(() => ({ value: twinkleMinMs / 1000 }), []); // eslint-disable-line react-hooks/exhaustive-deps
   const uTwPeriodMax = useMemo(() => ({ value: twinkleMaxMs / 1000 }), []); // eslint-disable-line react-hooks/exhaustive-deps
-  const uTwWave = useMemo(() => ({ value: waveIdx }), []); // eslint-disable-line react-hooks/exhaustive-deps
+  const uTwChroma = useMemo(() => ({ value: twinkleChroma }), []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     uTwinkle.value = twinkle;
   }, [twinkle, uTwinkle]);
@@ -94,8 +85,8 @@ export function StarField({ masterSeed, count, radius, depth, size = 1.5 }: Prop
     uTwPeriodMax.value = twinkleMaxMs / 1000;
   }, [twinkleMinMs, twinkleMaxMs, uTwPeriodMin, uTwPeriodMax]);
   useEffect(() => {
-    uTwWave.value = waveIdx;
-  }, [waveIdx, uTwWave]);
+    uTwChroma.value = twinkleChroma;
+  }, [twinkleChroma, uTwChroma]);
 
   const { geometry, material } = useMemo(() => {
     const rng = deriveSeed(masterSeed, "stars");
@@ -156,13 +147,11 @@ export function StarField({ masterSeed, count, radius, depth, size = 1.5 }: Prop
       const phase = rng();
       phases[i] = phase;
       freqs[i] = rng(); // 0..1 — placed inside the live period range in-shader
-      // Twinkle amplitude (#26): scintillation is ELEVATION-driven — strong
-      // through the thick air near the horizon, near-steady at zenith —
-      // scaled by brightness so it reads on the stars you can actually see.
-      // Floors raised (elevation 0.35→0.55, base 0.15→0.35) so even faint /
-      // high-altitude stars visibly shimmer, not just the bright horizon few.
-      const elevation = 0.55 + 0.45 * Math.pow(1 - heightNorm, 1.3);
-      twinkles[i] = (0.35 + s * 0.65) * elevation;
+      // Per-star base scintillation susceptibility. The ELEVATION (airmass) law now
+      // lives in the shader (σ ∝ (sec z)^1.5 from the star's altitude), so this is
+      // just a near-constant base with a mild brightness lift for visibility; the
+      // shader multiplies it by the airmass term.
+      twinkles[i] = 0.8 + 0.2 * s;
       sparkleSeeds[i] = rng();
 
       const [cr, cg, cb] = pickStarColor(rng(), s);
@@ -226,7 +215,7 @@ export function StarField({ masterSeed, count, radius, depth, size = 1.5 }: Prop
         uTwinkle,
         uTwPeriodMin,
         uTwPeriodMax,
-        uTwWave,
+        uTwChroma,
       },
       transparent: true,
       depthWrite: false,
@@ -236,7 +225,7 @@ export function StarField({ masterSeed, count, radius, depth, size = 1.5 }: Prop
     mat.name = "starField"; // so a shader error names its material
 
     return { geometry: geo, material: mat };
-  }, [masterSeed, count, radius, depth, size, uTwinkle, uTwPeriodMin, uTwPeriodMax, uTwWave]);
+  }, [masterSeed, count, radius, depth, size, uTwinkle, uTwPeriodMin, uTwPeriodMax, uTwChroma]);
 
   useEffect(() => {
     return () => {

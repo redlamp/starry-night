@@ -1006,8 +1006,6 @@ function OrbitSection() {
   );
 }
 
-const TWINKLE_WAVES = ["sine", "triangle", "noise", "flicker"] as const;
-
 function StarsSection() {
   const stars = useSceneStore((s) => s.stars);
   const setStars = useSceneStore((s) => s.setStars);
@@ -1045,7 +1043,8 @@ function StarsSection() {
         step={100}
         onChange={(count) => setStars({ count })}
       />
-      {/* Global twinkle depth: 0 = dead steady, 1 = default, 3 = dramatic blinking. */}
+      {/* Twinkle amplitude (σ of the log-normal scintillation). 0 = steady; the shader
+          scales it by (sec z)^1.5 so horizon stars twinkle harder than the zenith. */}
       <ValueSlider
         label="twinkle"
         value={stars.twinkle}
@@ -1054,8 +1053,8 @@ function StarsSection() {
         step={0.05}
         onChange={(twinkle) => setStars({ twinkle })}
       />
-      {/* Twinkle PERIOD range, ms (100..6000). Each star draws a random period in
-          this window — lower = faster flicker, wider = more varied. */}
+      {/* Per-star noise timescale range, ms. Lower = faster flicker; the shader adds
+          faster octaves on top, so visible flicker is brisker than these numbers. */}
       <RangeSlider
         label="rate ms"
         value={[stars.twinkleMinMs, stars.twinkleMaxMs]}
@@ -1064,12 +1063,14 @@ function StarsSection() {
         step={50}
         onChange={([twinkleMinMs, twinkleMaxMs]) => setStars({ twinkleMinMs, twinkleMaxMs })}
       />
-      {/* Twinkle waveform: sine (smooth), triangle, noise (realistic), flicker (sharp dips). */}
-      <ModeSelect
-        label="wave"
-        value={stars.twinkleWave}
-        modes={TWINKLE_WAVES}
-        onChange={(v) => setStars({ twinkleWave: v as typeof stars.twinkleWave })}
+      {/* Chromatic flash: red/green/blue shimmer, auto-gated to low + bright stars. */}
+      <ValueSlider
+        label="chroma"
+        value={stars.twinkleChroma}
+        min={0}
+        max={1}
+        step={0.05}
+        onChange={(twinkleChroma) => setStars({ twinkleChroma })}
       />
       {/* #26 meteors: toggle + min/max seconds between streaks. Each fired
           streak rolls the next gap uniformly inside this range. */}
