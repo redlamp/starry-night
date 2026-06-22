@@ -77,6 +77,11 @@ import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { RangeSlider, ValueSlider } from "@/components/ui/value-slider";
+import {
+  NumberField,
+  NumberFieldGroup,
+  NumberFieldInput,
+} from "@/components/ui/number-field";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -1001,6 +1006,8 @@ function OrbitSection() {
   );
 }
 
+const TWINKLE_WAVES = ["sine", "triangle", "noise", "flicker"] as const;
+
 function StarsSection() {
   const stars = useSceneStore((s) => s.stars);
   const setStars = useSceneStore((s) => s.setStars);
@@ -1038,6 +1045,32 @@ function StarsSection() {
         step={100}
         onChange={(count) => setStars({ count })}
       />
+      {/* Global twinkle depth: 0 = dead steady, 1 = default, 3 = dramatic blinking. */}
+      <ValueSlider
+        label="twinkle"
+        value={stars.twinkle}
+        min={0}
+        max={3}
+        step={0.05}
+        onChange={(twinkle) => setStars({ twinkle })}
+      />
+      {/* Twinkle PERIOD range, ms (100..6000). Each star draws a random period in
+          this window — lower = faster flicker, wider = more varied. */}
+      <RangeSlider
+        label="rate ms"
+        value={[stars.twinkleMinMs, stars.twinkleMaxMs]}
+        min={100}
+        max={6000}
+        step={50}
+        onChange={([twinkleMinMs, twinkleMaxMs]) => setStars({ twinkleMinMs, twinkleMaxMs })}
+      />
+      {/* Twinkle waveform: sine (smooth), triangle, noise (realistic), flicker (sharp dips). */}
+      <ModeSelect
+        label="wave"
+        value={stars.twinkleWave}
+        modes={TWINKLE_WAVES}
+        onChange={(v) => setStars({ twinkleWave: v as typeof stars.twinkleWave })}
+      />
       {/* #26 meteors: toggle + min/max seconds between streaks. Each fired
           streak rolls the next gap uniformly inside this range. */}
       <div className="flex items-center gap-2 text-xs">
@@ -1058,28 +1091,32 @@ function StarsSection() {
           }}
           className="flex-1"
         />
-        <input
-          type="number"
-          step={1}
+        <NumberField
           value={stars.shootingMin}
-          onChange={(e) => {
-            const v = Math.max(0.01, parseFloat(e.target.value) || 0.01);
-            setStars({ shootingMin: Math.min(v, stars.shootingMax) });
-          }}
-          aria-label="Min seconds between meteors"
-          className="border-foreground/15 bg-background/60 text-foreground w-13 rounded border px-1.5 py-0.5 tabular-nums"
-        />
-        <input
-          type="number"
+          min={0.01}
+          max={stars.shootingMax}
           step={1}
-          value={stars.shootingMax}
-          onChange={(e) => {
-            const v = Math.max(0.01, parseFloat(e.target.value) || 0.01);
-            setStars({ shootingMax: Math.max(v, stars.shootingMin) });
+          onValueChange={(v) => {
+            if (v !== null) setStars({ shootingMin: Math.min(v, stars.shootingMax) });
           }}
-          aria-label="Max seconds between meteors"
-          className="border-foreground/15 bg-background/60 text-foreground w-13 rounded border px-1.5 py-0.5 tabular-nums"
-        />
+        >
+          <NumberFieldGroup className="bg-background/60 h-7 w-13 shrink-0">
+            <NumberFieldInput className="text-xs" aria-label="Min seconds between meteors" />
+          </NumberFieldGroup>
+        </NumberField>
+        <NumberField
+          value={stars.shootingMax}
+          min={stars.shootingMin}
+          max={180}
+          step={1}
+          onValueChange={(v) => {
+            if (v !== null) setStars({ shootingMax: Math.max(v, stars.shootingMin) });
+          }}
+        >
+          <NumberFieldGroup className="bg-background/60 h-7 w-13 shrink-0">
+            <NumberFieldInput className="text-xs" aria-label="Max seconds between meteors" />
+          </NumberFieldGroup>
+        </NumberField>
       </div>
     </>
   );
@@ -2282,14 +2319,16 @@ function ModeSelect<T extends string>({
   value,
   modes,
   onChange,
+  label = "mode",
 }: {
   value: T;
   modes: readonly T[];
   onChange: (v: string) => void;
+  label?: string;
 }) {
   return (
     <div className="flex items-center gap-2 text-xs">
-      <span className="text-foreground/70 w-14 shrink-0">mode</span>
+      <span className="text-foreground/70 w-14 shrink-0">{label}</span>
       <Select value={value} onValueChange={(v) => v && onChange(v)}>
         <SelectTrigger
           size="sm"
