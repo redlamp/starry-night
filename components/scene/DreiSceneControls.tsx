@@ -1477,25 +1477,36 @@ export function DreiSceneControls() {
     if (!c || mode !== "orbit") return;
     if (!(pinRef.current || ringRef.current || plumbRef.current || dotRef.current)) return;
     c.getTarget(_focal);
-    // below ground → recolour every focal asset earthy brown (sky-blue above) and flip
-    // the pin (pivoting on its tip). A clear "looking into the soil" cue.
-    const below = _focal.y < 0;
-    const col = below ? COLOR_BELOW : COLOR_ABOVE;
+    // ALWAYS keep the two <Html>-bearing groups (pin, dot) parked on the focal — drei
+    // projects <Html> from its parent group's matrix, so it must be current the frame
+    // visibility flips on, else the pin flashes at the world origin (#80). Cheap (vector
+    // copies + a matrix), so it's fine to run every frame even while hidden.
     if (pinRef.current) {
       pinRef.current.position.copy(_focal);
       pinRef.current.updateMatrixWorld();
-      if (pinIconRef.current) {
-        pinIconRef.current.style.transform = below
-          ? "translate(-50%, -100%) scaleY(-1)"
-          : "translate(-50%, -100%)";
-        pinIconRef.current.style.color = col;
-      }
     }
     if (dotRef.current) {
       dotRef.current.position.set(_focal.x, 0, _focal.z);
       dotRef.current.updateMatrixWorld();
-      if (dotElRef.current) dotElRef.current.style.background = col;
     }
+    // The rest only renders when the indicator is on. Plain 3D objects (ring, plumbline)
+    // have no Html-mount lag, so they place correctly the frame they're shown — no need to
+    // rebuild the plumbline geometry or write DOM styles while hidden (#80 "no measurable
+    // cost" for an always-mounted overlay).
+    const showNow =
+      useSceneStore.getState().showFocalIndicator || useSceneStore.getState().focalAdjust !== "";
+    if (!showNow) return;
+    // below ground → recolour every focal asset earthy brown (sky-blue above) and flip
+    // the pin (pivoting on its tip). A clear "looking into the soil" cue.
+    const below = _focal.y < 0;
+    const col = below ? COLOR_BELOW : COLOR_ABOVE;
+    if (pinIconRef.current) {
+      pinIconRef.current.style.transform = below
+        ? "translate(-50%, -100%) scaleY(-1)"
+        : "translate(-50%, -100%)";
+      pinIconRef.current.style.color = col;
+    }
+    if (dotElRef.current) dotElRef.current.style.background = col;
     if (ringRef.current) ringRef.current.position.set(_focal.x, RING_Y, _focal.z);
     if (ringLineRef.current) ringLineRef.current.material.color.set(col);
     if (plumbRef.current) {
