@@ -1006,6 +1006,8 @@ function OrbitSection() {
   );
 }
 
+const TWINKLE_WAVES = ["sine", "triangle", "noise", "flicker"] as const;
+
 function StarsSection() {
   const stars = useSceneStore((s) => s.stars);
   const setStars = useSceneStore((s) => s.setStars);
@@ -1052,7 +1054,7 @@ function StarsSection() {
         step={0.05}
         onChange={(twinkle) => setStars({ twinkle })}
       />
-      {/* Twinkle sine PERIOD range, ms (100..6000). Each star draws a random period in
+      {/* Twinkle PERIOD range, ms (100..6000). Each star draws a random period in
           this window — lower = faster flicker, wider = more varied. */}
       <RangeSlider
         label="rate ms"
@@ -1061,6 +1063,13 @@ function StarsSection() {
         max={6000}
         step={50}
         onChange={([twinkleMinMs, twinkleMaxMs]) => setStars({ twinkleMinMs, twinkleMaxMs })}
+      />
+      {/* Twinkle waveform: sine (smooth), triangle, noise (realistic), flicker (sharp dips). */}
+      <ModeSelect
+        label="wave"
+        value={stars.twinkleWave}
+        modes={TWINKLE_WAVES}
+        onChange={(v) => setStars({ twinkleWave: v as typeof stars.twinkleWave })}
       />
       {/* #26 meteors: toggle + min/max seconds between streaks. Each fired
           streak rolls the next gap uniformly inside this range. */}
@@ -2310,14 +2319,16 @@ function ModeSelect<T extends string>({
   value,
   modes,
   onChange,
+  label = "mode",
 }: {
   value: T;
   modes: readonly T[];
   onChange: (v: string) => void;
+  label?: string;
 }) {
   return (
     <div className="flex items-center gap-2 text-xs">
-      <span className="text-foreground/70 w-14 shrink-0">mode</span>
+      <span className="text-foreground/70 w-14 shrink-0">{label}</span>
       <Select value={value} onValueChange={(v) => v && onChange(v)}>
         <SelectTrigger
           size="sm"

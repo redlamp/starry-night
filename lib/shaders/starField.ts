@@ -19,8 +19,9 @@ export const starFieldVertexShader = /* glsl */ `
   uniform float uStarIntroProgress;
   uniform int uStarIntroMode;
   uniform float uTwinkle;       // global twinkle multiplier (0 = steady, 1 = default)
-  uniform float uTwPeriodMin;   // twinkle sine period range, seconds (per-star lerp by aFreqRand)
+  uniform float uTwPeriodMin;   // twinkle period range, seconds (per-star lerp by aFreqRand)
   uniform float uTwPeriodMax;
+  uniform int uTwWave;          // twinkle curve: 0 sine, 1 triangle, 2 noise, 3 flicker
 
   varying float vBrightness;
   varying float vWake;
@@ -51,11 +52,33 @@ export const starFieldVertexShader = /* glsl */ `
     // settings. osc is the 0..1 swing; brightness = 1 at the peak, 1 - 0.9*depth
     // at the trough.
     // Per-star period in seconds, placed inside the live [min,max] range by its
-    // baked random; angular frequency = 2pi / period. Lower period = faster twinkle.
+    // baked random. cyc = elapsed cycles (+ per-star phase); osc is the 0..1
+    // brightness curve over the cycle, selected by uTwWave. A single sine read as
+    // smooth synchronised undulation, so the noise curves break the regularity.
     float period = mix(uTwPeriodMin, uTwPeriodMax, aFreqRand);
-    float ang = 6.2831853 / max(period, 0.05);
-    float t = sin(uTime * ang + aPhase * 6.2831853);
-    float osc = 0.5 + 0.5 * t;
+    float cyc = uTime / max(period, 0.05) + aPhase;
+    float osc;
+    if (uTwWave == 0) {
+      osc = 0.5 + 0.5 * sin(cyc * 6.2831853);        // sine — smooth
+    } else if (uTwWave == 1) {
+      osc = abs(2.0 * fract(cyc) - 1.0);             // triangle — linear ramps
+    } else {
+      // value noise in time: smooth-interp between per-cycle random levels, two
+      // octaves for irregularity. Aperiodic-feeling scintillation, not a pulse.
+      float seed = aSparkleSeed * 131.0;
+      float i0 = floor(cyc);
+      float f0 = fract(cyc);
+      float u0 = f0 * f0 * (3.0 - 2.0 * f0);
+      float n1 = mix(hash11(i0 + seed), hash11(i0 + 1.0 + seed), u0);
+      float c2 = cyc * 2.0;
+      float i1 = floor(c2);
+      float f1 = fract(c2);
+      float u1 = f1 * f1 * (3.0 - 2.0 * f1);
+      float n2 = mix(hash11(i1 + seed + 7.0), hash11(i1 + 1.0 + seed + 7.0), u1);
+      float n = n1 * 0.65 + n2 * 0.35;
+      // flicker (3): bias bright with occasional sharp dips; noise (2): raw.
+      osc = (uTwWave == 3) ? (1.0 - pow(1.0 - n, 4.0)) : n;
+    }
     float depth = aTwinkle * uTwinkle;
     float baseTwinkle = 1.0 - depth * 0.9 * (1.0 - osc);
 

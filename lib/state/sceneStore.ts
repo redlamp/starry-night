@@ -148,6 +148,11 @@ export const DEFAULT_STARS = {
   // per-star 0..1 random (aFreqRand) places each star inside the live range.
   twinkleMinMs: 600,
   twinkleMaxMs: 4000,
+  // Twinkle waveform — the curve each star's brightness follows over its period.
+  // "sine" undulates smoothly (felt too regular); "triangle" = linear ramps;
+  // "noise" = aperiodic time value-noise (realistic scintillation); "flicker" =
+  // noise biased bright with occasional sharp dips. Fed to the shader's uTwWave.
+  twinkleWave: "noise" as "sine" | "triangle" | "noise" | "flicker",
   // #26 meteors: min/max seconds between streaks + master toggle. Each fired
   // streak rolls the NEXT gap uniformly in [min, max] (seeded rng chain in
   // ShootingStars — deterministic per masterSeed).

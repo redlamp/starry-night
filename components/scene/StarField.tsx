@@ -8,6 +8,14 @@ import { sharedTime } from "@/lib/shaders/sharedTime";
 import { sharedStarIntroProgress, sharedStarIntroMode } from "@/lib/shaders/sharedIntro";
 import { starFieldVertexShader, starFieldFragmentShader } from "@/lib/shaders/starField";
 
+// Twinkle waveform → shader uTwWave int. Keep in sync with the shader's branch.
+const TWINKLE_WAVE_IDX: Record<string, number> = {
+  sine: 0,
+  triangle: 1,
+  noise: 2,
+  flicker: 3,
+};
+
 type Props = {
   masterSeed: string;
   count: number;
@@ -72,9 +80,12 @@ export function StarField({ masterSeed, count, radius, depth, size = 1.5 }: Prop
   const twinkle = useSceneStore((s) => s.stars.twinkle);
   const twinkleMinMs = useSceneStore((s) => s.stars.twinkleMinMs);
   const twinkleMaxMs = useSceneStore((s) => s.stars.twinkleMaxMs);
+  const twinkleWave = useSceneStore((s) => s.stars.twinkleWave);
+  const waveIdx = TWINKLE_WAVE_IDX[twinkleWave] ?? 2;
   const uTwinkle = useMemo(() => ({ value: twinkle }), []); // eslint-disable-line react-hooks/exhaustive-deps
   const uTwPeriodMin = useMemo(() => ({ value: twinkleMinMs / 1000 }), []); // eslint-disable-line react-hooks/exhaustive-deps
   const uTwPeriodMax = useMemo(() => ({ value: twinkleMaxMs / 1000 }), []); // eslint-disable-line react-hooks/exhaustive-deps
+  const uTwWave = useMemo(() => ({ value: waveIdx }), []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     uTwinkle.value = twinkle;
   }, [twinkle, uTwinkle]);
@@ -82,6 +93,9 @@ export function StarField({ masterSeed, count, radius, depth, size = 1.5 }: Prop
     uTwPeriodMin.value = twinkleMinMs / 1000;
     uTwPeriodMax.value = twinkleMaxMs / 1000;
   }, [twinkleMinMs, twinkleMaxMs, uTwPeriodMin, uTwPeriodMax]);
+  useEffect(() => {
+    uTwWave.value = waveIdx;
+  }, [waveIdx, uTwWave]);
 
   const { geometry, material } = useMemo(() => {
     const rng = deriveSeed(masterSeed, "stars");
@@ -212,6 +226,7 @@ export function StarField({ masterSeed, count, radius, depth, size = 1.5 }: Prop
         uTwinkle,
         uTwPeriodMin,
         uTwPeriodMax,
+        uTwWave,
       },
       transparent: true,
       depthWrite: false,
@@ -221,7 +236,7 @@ export function StarField({ masterSeed, count, radius, depth, size = 1.5 }: Prop
     mat.name = "starField"; // so a shader error names its material
 
     return { geometry: geo, material: mat };
-  }, [masterSeed, count, radius, depth, size, uTwinkle, uTwPeriodMin, uTwPeriodMax]);
+  }, [masterSeed, count, radius, depth, size, uTwinkle, uTwPeriodMin, uTwPeriodMax, uTwWave]);
 
   useEffect(() => {
     return () => {
