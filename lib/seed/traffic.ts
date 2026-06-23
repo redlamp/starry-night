@@ -100,33 +100,34 @@ function busyness(pop: number): number {
   return BUSY_FLOOR + (1 - BUSY_FLOOR) * Math.min(1, Math.pow(pop / BUSY_REF, BUSY_GAMMA));
 }
 
-export function buildTraffic(
+type Tier = "highway" | "arterial" | "minor";
+
+type RawSeg = {
+  ax: number;
+  az: number;
+  bx: number;
+  bz: number;
+  len: number;
+  cfg: TierCfg;
+  mult: number;
+};
+
+// Shared macro-segment builder — the SAME chunking + population-busyness logic
+// buildTraffic uses to place cars, factored out so the traffic-density debug
+// overlay can compute each segment's EXPECTED density from the identical inputs
+// (no behavioural change to buildTraffic — it calls this and proceeds as before).
+function buildTrafficSegments(
   masterSeed: string,
-  density = 1,
-  tierMul: { highway: number; arterial: number; minor: number } = {
-    highway: 1,
-    arterial: 1,
-    minor: 1,
-  },
-  shape: CityShapeSetting = "square",
-  shapeScale = 1,
-  popCoupling = 1, // 0 = uniform (old look), 1 = fully population-driven
-): TrafficData {
-  const rng = seedrandom(`${masterSeed}::traffic`);
+  tierMul: { highway: number; arterial: number; minor: number },
+  shape: CityShapeSetting,
+  shapeScale: number,
+  popCoupling: number,
+): RawSeg[] {
   const city = generateCity(masterSeed, shape, shapeScale);
   const pop = popCoupling > 0 ? buildPopulationField(masterSeed, shape, shapeScale) : null;
 
-  type Seg = {
-    ax: number;
-    az: number;
-    bx: number;
-    bz: number;
-    len: number;
-    cfg: TierCfg;
-    mult: number;
-  };
-  const segs: Seg[] = [];
-  const collect = (verts: Vert[], tier: "highway" | "arterial" | "minor") => {
+  const segs: RawSeg[] = [];
+  const collect = (verts: Vert[], tier: Tier) => {
     const cfg = tierCfg(tier);
     const baseMult = tierMul[tier];
     if (verts.length < 2) return;
@@ -155,6 +156,82 @@ export function buildTraffic(
   for (const h of city.topology.highways) collect(h.vertices, "highway");
   for (const a of city.arterials) collect(a.vertices, "arterial");
   for (const s of city.streets) collect(s.vertices, "minor");
+  return segs;
+}
+
+// One macro-segment's EXPECTED car count (pre-MAX_CARS-cap) — the intended
+// density. Mirrors buildTraffic's `expected` line exactly.
+function segExpected(s: RawSeg, density: number): number {
+  return s.len * s.cfg.carsPerM * density * s.mult * s.cfg.lanes;
+}
+
+export type TrafficDensitySeg = {
+  ax: number;
+  az: number;
+  bx: number;
+  bz: number;
+  density: number; // 0..1, normalised across all segments (relative to p99)
+  raw: number; // raw EXPECTED car count for the segment (pre-cap)
+};
+
+export type TrafficDensityField = {
+  segments: TrafficDensitySeg[];
+  maxRaw: number; // the p99 raw density used to normalise (debug readout)
+};
+
+// Per-segment EXPECTED traffic density for the debug overlay (#78). Uses the
+// SAME macro-segments + per-tier cfg + population-busyness multiplier as
+// buildTraffic, and the SAME `len × carsPerM × density × busyness × lanes`
+// formula — but reports the EXPECTED count BEFORE the MAX_CARS cap and the rng
+// rounding, so the intended distribution is legible. Normalised against a high
+// percentile (p99, like the population field) so one busy downtown chord can't
+// crush the rest of the ramp toward the cool end. Pure derivation, no rng.
+export function buildTrafficDensity(
+  masterSeed: string,
+  density = 1,
+  tierMul: { highway: number; arterial: number; minor: number } = {
+    highway: 1,
+    arterial: 1,
+    minor: 1,
+  },
+  shape: CityShapeSetting = "square",
+  shapeScale = 1,
+  popCoupling = 1,
+): TrafficDensityField {
+  const segs = buildTrafficSegments(masterSeed, tierMul, shape, shapeScale, popCoupling);
+  const raws = segs.map((s) => segExpected(s, density));
+  // Per-metre intensity (count / length) drives the COLOUR — otherwise a long
+  // highway chord always out-colours a short busy downtown block purely on
+  // length. Normalise that against p99 so the ramp reads the road hierarchy.
+  const perM = segs.map((s, i) => (s.len > 0 ? raws[i] / s.len : 0));
+  const sorted = [...perM].sort((a, b) => a - b);
+  const p99 = sorted.length ? sorted[Math.floor(sorted.length * 0.99)] || 0 : 0;
+  const norm = p99 > 0 ? p99 : 1;
+  const segments: TrafficDensitySeg[] = segs.map((s, i) => ({
+    ax: s.ax,
+    az: s.az,
+    bx: s.bx,
+    bz: s.bz,
+    density: Math.min(1, perM[i] / norm),
+    raw: raws[i],
+  }));
+  return { segments, maxRaw: p99 };
+}
+
+export function buildTraffic(
+  masterSeed: string,
+  density = 1,
+  tierMul: { highway: number; arterial: number; minor: number } = {
+    highway: 1,
+    arterial: 1,
+    minor: 1,
+  },
+  shape: CityShapeSetting = "square",
+  shapeScale = 1,
+  popCoupling = 1, // 0 = uniform (old look), 1 = fully population-driven
+): TrafficData {
+  const rng = seedrandom(`${masterSeed}::traffic`);
+  const segs = buildTrafficSegments(masterSeed, { ...tierMul }, shape, shapeScale, popCoupling);
 
   // First pass: count cars (proportional to segment length × tier density), so
   // the typed arrays are sized exactly. Fractional expectation resolves via rng.
