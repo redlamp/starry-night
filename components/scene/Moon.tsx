@@ -144,7 +144,9 @@ export function Moon() {
     // scales with the illuminated fraction (thin crescent barely glows, full blooms);
     // the lit-side bias lives in the halo shader (uSunDir).
     if (haloRef.current) {
-      haloRef.current.lookAt(camera.position);
+      // The moon is drawn by the STAR camera, which sits at the world origin (#65),
+      // so the halo billboard faces the origin, not the orbiting main camera.
+      haloRef.current.lookAt(0, 0, 0);
       const haloSize = moonRadius * haloCfg.radiusMul * 2;
       haloRef.current.scale.set(haloSize, haloSize, 1);
       haloMaterial.uniforms.uInnerRadius.value = haloCfg.innerRadius;
