@@ -79,7 +79,7 @@ function tierCfg(tier: "highway" | "arterial" | "minor"): TierCfg {
     case "arterial":
       return { carsPerM: 0.012, speed: 14, laneHalf: 3.0, laneWidth: 3.2, lanes: 2, size: 5.5 };
     default:
-      return { carsPerM: 0.005, speed: 8, laneHalf: 2.5, laneWidth: 0, lanes: 1, size: 4 }; // minor
+      return { carsPerM: 0.008, speed: 8, laneHalf: 2.5, laneWidth: 0, lanes: 1, size: 4 }; // minor
   }
 }
 
@@ -156,15 +156,29 @@ export function buildTraffic(
   for (const a of city.arterials) collect(a.vertices, "arterial");
   for (const s of city.streets) collect(s.vertices, "minor");
 
-  // First pass: count cars (proportional to segment length × tier density), so
-  // the typed arrays are sized exactly. Fractional expectation resolves via rng.
+  // First pass: expected cars per segment (∝ length × tier density × population
+  // busyness × lanes). Computed for ALL segments up front so the MAX_CARS budget is
+  // shared FAIRLY: if the total expectation overflows the cap, scale every segment
+  // down by the same factor. The old loop truncated `n = max(0, MAX_CARS − total)`
+  // in collection order (highways → arterials → streets), so whatever came last was
+  // starved to zero — always streets, and arterials too once their multiplier was
+  // cranked (#78). Proportional scaling keeps each tier's share, so cars land on
+  // every road, thinned together rather than dropped wholesale.
+  const expected: number[] = [];
+  let expSum = 0;
+  for (const s of segs) {
+    const e = s.len * s.cfg.carsPerM * density * s.mult * s.cfg.lanes;
+    expected.push(e);
+    expSum += e;
+  }
+  const budgetScale = expSum > MAX_CARS ? MAX_CARS / expSum : 1;
   const perSeg: number[] = [];
   let total = 0;
-  for (const s of segs) {
-    const expected = s.len * s.cfg.carsPerM * density * s.mult * s.cfg.lanes;
-    let n = Math.floor(expected);
-    if (rng() < expected - n) n += 1;
-    if (total + n > MAX_CARS) n = Math.max(0, MAX_CARS - total);
+  for (let i = 0; i < segs.length; i++) {
+    const e = expected[i] * budgetScale;
+    let n = Math.floor(e);
+    if (rng() < e - n) n += 1;
+    if (total + n > MAX_CARS) n = Math.max(0, MAX_CARS - total); // backstop only (rng rounding)
     perSeg.push(n);
     total += n;
   }
