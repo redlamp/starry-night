@@ -202,3 +202,25 @@ chosen latitude, position stays art-directed** ("art-directed + location flavor"
 date+location ephemeris). Location is chosen via a **curated place picker** (evocative places → representative latitudes →
 distinct moon orientations; a raw latitude is the underlying value). Still to pick during build:
 Lommel-Seeliger custom shader vs `meshLambert` quick cut.
+
+## Moon ↔ star render-pass alignment (#65, 2026-06-23)
+
+User report: the moon doesn't move across the sky in lockstep with the stars during orbit. Root
+cause: **they render in different passes with different cameras.** The stars render in `StarPass`
+with a private `starCamera` (parked at world ORIGIN, copies only the main camera's quaternion, fixed
+`STAR_FOV=60`), while the **moon renders in the MAIN scene** with the main camera (which orbits the
+city at the main fov/projection). So the moon carries the main camera's parallax + framing and sweeps
+at a different rate than the star skybox.
+
+**Fix (greenlit):** render the moon **in the star pass** — portal `<Moon/>` into `StarPass`'s
+`starScene` so it's drawn by `starCamera` alongside the stars. Then the moon shares the stars' exact
+sweep (origin camera, quaternion-copied) and locks to the skybox. Notes:
+- The moon is a far dome body (distance ≈ star-shell radius); drawn in pass 1 it sits behind the city
+  (pass 3) as before — same visual depth order, now sweep-locked.
+- Phase still works: `uSunDir` is view-space and `starCamera` copies the main quaternion, so the
+  view-space orientation is identical. The halo `lookAt(camera)` can keep using the main camera
+  (quaternion matches; tiny position parallax at 6400 m is negligible) or be pointed at the star
+  camera for exactness.
+- The stars-vs-CITY sweep mismatch (the original #65) is **accepted** (perspective fine, ortho ok);
+  this change targets the moon-vs-stars alignment specifically.
+
