@@ -271,7 +271,7 @@ export const DEFAULT_FOG = {
   mode: "linear" as const,
   color: "#0b0d14",
   near: 1.25,
-  far: 2,
+  far: 4, // far edge at 4× the focal distance (user 2026-06-23; was 2 = closer fog)
   // exp² mode: fog AMOUNT at the city centre (0..0.9) — FogTicker solves the
   // actual three.js density from it per frame, so it's camera-independent.
   density: 0.45,
