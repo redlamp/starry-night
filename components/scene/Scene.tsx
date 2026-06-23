@@ -30,6 +30,7 @@ import { GroundHaze } from "./GroundHaze";
 import { Roads } from "./Roads";
 import { DistrictShells } from "./DistrictShells";
 import { PopulationHeatmap } from "./PopulationHeatmap";
+import { TrafficDensityOverlay } from "./TrafficDensityOverlay";
 import { TensorFieldOverlay } from "./TensorFieldOverlay";
 import { TileCullOverlay } from "./TileCullOverlay";
 import { Traffic } from "./Traffic";
@@ -158,6 +159,7 @@ export function Scene() {
               off). Highway/arterial/street tier tinting now lives in <Roads/>. */}
             <DistrictShells masterSeed={masterSeed} />
             <PopulationHeatmap masterSeed={masterSeed} />
+            <TrafficDensityOverlay masterSeed={masterSeed} />
             <TensorFieldOverlay masterSeed={masterSeed} />
             <TileCullOverlay masterSeed={masterSeed} />
           </CityReveal>

@@ -77,11 +77,7 @@ import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { RangeSlider, ValueSlider } from "@/components/ui/value-slider";
-import {
-  NumberField,
-  NumberFieldGroup,
-  NumberFieldInput,
-} from "@/components/ui/number-field";
+import { NumberField, NumberFieldGroup, NumberFieldInput } from "@/components/ui/number-field";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -730,7 +726,7 @@ export function CameraPanel() {
             </Button>
           )}
         </div>
-        <div className="flex flex-wrap items-center gap-1.5 ml-auto">
+        <div className="ml-auto flex flex-wrap items-center gap-1.5">
           <CopyButton />
           <Button
             onClick={() => {
@@ -858,7 +854,10 @@ function OrbitSection() {
         Default Orbit
       </Button>
       <label className="flex cursor-pointer items-center justify-between gap-2 text-xs">
-        <span className="text-foreground/70" title="Live elevation cross-section of the camera rig, bottom-left">
+        <span
+          className="text-foreground/70"
+          title="Live elevation cross-section of the camera rig, bottom-left"
+        >
           side-view diagram
         </span>
         <Switch checked={showSideView} onCheckedChange={setShowSideView} />
@@ -966,9 +965,10 @@ function OrbitSection() {
         <Switch checked={groundFraming} onCheckedChange={setGroundFraming} />
       </label>
       <div className="text-foreground/45 text-[11px] leading-snug">
-        Screen Y is where the focal sits on screen (0 top, 100 bottom). The left thumb is its resting
-        spot; with the ground pull on, near the horizon it eases DOWN to the right thumb so the skyline
-        settles low with sky above (tracking the tilt live). Off holds the resting spot at every angle.
+        Screen Y is where the focal sits on screen (0 top, 100 bottom). The left thumb is its
+        resting spot; with the ground pull on, near the horizon it eases DOWN to the right thumb so
+        the skyline settles low with sky above (tracking the tilt live). Off holds the resting spot
+        at every angle.
       </div>
       <ValueSlider
         label="Tilt speed"
@@ -998,9 +998,9 @@ function OrbitSection() {
         stepperClass="w-32"
       />
       <div className="text-foreground/45 text-[11px] leading-snug">
-        Tilt speed sets how fast a vertical drag pitches the view (lower = more regulated; 1 = the old
-        rate). Low-angle speed and Slow below ° additionally ease rotate + tilt down near the horizon
-        (1 = no limit), and distance past the city tapers them further.
+        Tilt speed sets how fast a vertical drag pitches the view (lower = more regulated; 1 = the
+        old rate). Low-angle speed and Slow below ° additionally ease rotate + tilt down near the
+        horizon (1 = no limit), and distance past the city tapers them further.
       </div>
     </>
   );
@@ -1142,7 +1142,9 @@ function AntiAliasingSection() {
         />
       }
     >
-      <div className="text-foreground/40 text-[10px]">MSAA (header) reloads the view; edge AA is live.</div>
+      <div className="text-foreground/40 text-[10px]">
+        MSAA (header) reloads the view; edge AA is live.
+      </div>
       <ValueSlider
         label="edge AA"
         value={wa.edge}
@@ -1232,7 +1234,10 @@ function LevelOfDetailSection() {
         onChange={(lodRange) => setWindowAA({ lodRange })}
       />
       <div className="mt-1 flex items-center justify-between gap-2 border-t border-white/10 pt-2 text-xs">
-        <span className="text-foreground/70" title="Distance attenuation + per-tile culling on / off">
+        <span
+          className="text-foreground/70"
+          title="Distance attenuation + per-tile culling on / off"
+        >
           distance culling
         </span>
         <Switch checked={distEnabled} onCheckedChange={(v) => setLod({ enabled: v })} />
@@ -2290,6 +2295,10 @@ function StreetlightsGroup() {
 function TrafficGroup() {
   const traffic = useSceneStore((s) => s.traffic);
   const setTraffic = useSceneStore((s) => s.setTraffic);
+  // Debug overlay (#78): colour the roads by their EXPECTED traffic density
+  // (population heat ramp, cool→warm). Mirrors the population-heat toggle.
+  const showTrafficDensity = useSceneStore((s) => s.cityPlanning.showTrafficDensity);
+  const setCityPlanning = useSceneStore((s) => s.setCityPlanning);
   return (
     <SubGroup
       label="Traffic"
@@ -2301,6 +2310,17 @@ function TrafficGroup() {
         />
       }
     >
+      <label className="flex cursor-pointer items-center justify-between gap-2 text-xs">
+        <span className="text-foreground/70" title="Colour roads by expected traffic density">
+          density debug
+        </span>
+        <Switch
+          checked={showTrafficDensity}
+          onCheckedChange={(v) => setCityPlanning({ showTrafficDensity: v })}
+          title="Colour roads by expected traffic density (cool = quiet, warm = busy)"
+          aria-label="Toggle traffic-density debug overlay"
+        />
+      </label>
       <ValueSlider
         label="density"
         value={traffic.density}
@@ -2443,9 +2463,7 @@ function OrbitPlayPauseToggle() {
     <Button
       variant="secondary"
       size="icon-sm"
-      title={
-        playing ? "Pause the orbit revolution (Space)" : "Resume the orbit revolution (Space)"
-      }
+      title={playing ? "Pause the orbit revolution (Space)" : "Resume the orbit revolution (Space)"}
       aria-label={playing ? "Pause orbit revolution" : "Resume orbit revolution"}
       aria-pressed={playing}
       onClick={() => setOrbitPaused(!orbitPaused)}
@@ -2928,7 +2946,8 @@ function StatsGroup() {
   return (
     <SubGroup label="Stats">
       <div className="text-foreground/40 text-[10px]">
-        Live readout. Set the header to “stats” for the floating overlay (+ boot timeline · long tasks).
+        Live readout. Set the header to “stats” for the floating overlay (+ boot timeline · long
+        tasks).
       </div>
       <div className="text-foreground/70 grid grid-cols-[5rem_1fr] gap-1 font-mono text-xs">
         <div>dpr cap</div>

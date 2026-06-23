@@ -315,6 +315,7 @@ export const DEFAULT_CITY_PLANNING_VIS = {
   showArterials: false,
   showStreets: false,
   showPopulationHeat: false,
+  showTrafficDensity: false,
 };
 
 // ---------------------------------------------------------------------------
@@ -645,6 +646,8 @@ type SavedConfig = {
     showStreets: boolean;
     // Optional so configs saved before the Population panel still load.
     showPopulationHeat?: boolean;
+    // Optional so configs saved before the traffic-density overlay still load.
+    showTrafficDensity?: boolean;
   };
 };
 
@@ -1059,6 +1062,7 @@ type SceneState = {
     showArterials: boolean;
     showStreets: boolean;
     showPopulationHeat: boolean;
+    showTrafficDensity: boolean;
     topologyKind: TopologyKind | null;
     highwayCount: number;
     arterialCount: number;
@@ -1273,6 +1277,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     showArterials: false,
     showStreets: false,
     showPopulationHeat: false,
+    showTrafficDensity: false,
     topologyKind: null,
     highwayCount: 0,
     arterialCount: 0,
@@ -1442,6 +1447,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         showArterials: s.cityPlanning.showArterials,
         showStreets: s.cityPlanning.showStreets,
         showPopulationHeat: s.cityPlanning.showPopulationHeat,
+        showTrafficDensity: s.cityPlanning.showTrafficDensity,
       };
     }
     writeSavedConfig(snap as SavedConfig);
@@ -1493,6 +1499,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         showArterials: s.cityPlanning.showArterials,
         showStreets: s.cityPlanning.showStreets,
         showPopulationHeat: s.cityPlanning.showPopulationHeat,
+        showTrafficDensity: s.cityPlanning.showTrafficDensity,
       };
     }
     return out;
