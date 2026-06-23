@@ -171,6 +171,7 @@ export function Traffic({ masterSeed }: { masterSeed: string }) {
     state.camera.getWorldDirection(_viewDir);
     u.uViewDir.value.copy(_viewDir);
     u.uIntroCenter.value.set(s.orbit.centerX, 0, s.orbit.centerZ);
+    u.uSizeScale.value = SIZE_SCALE * (s.traffic.lightSize ?? 1); // live car-light size knob
     // Distance LOD (#52) — live, render-only; shares the streetlights' settings.
     const lod = s.lod;
     u.uLodEnabled.value = lod.enabled ? 1 : 0;

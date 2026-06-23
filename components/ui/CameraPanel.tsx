@@ -2334,6 +2334,15 @@ function TrafficGroup() {
         step={0.1}
         onChange={(minor) => setTraffic({ minor })}
       />
+      {/* Global car-light size (street cars are the smallest tier; raise to enlarge all). */}
+      <ValueSlider
+        label="light size"
+        value={traffic.lightSize}
+        min={0.3}
+        max={3}
+        step={0.05}
+        onChange={(lightSize) => setTraffic({ lightSize })}
+      />
     </SubGroup>
   );
 }

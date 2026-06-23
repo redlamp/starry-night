@@ -377,6 +377,10 @@ export const DEFAULT_TRAFFIC = {
   arterial: 2,
   minor: 1,
   popCoupling: 1,
+  // Global car-light size multiplier (×SIZE_SCALE in the traffic shader). Street
+  // cars are the smallest tier (size 4 vs arterial 5.5 / highway 7); raise this to
+  // make all car lights bigger. Live uniform — no regen.
+  lightSize: 1,
 };
 
 // Streetlights along the road network. On by default; toggled from the Roads panel.
