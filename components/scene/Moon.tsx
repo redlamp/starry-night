@@ -7,6 +7,7 @@ import { useSceneStore } from "@/lib/state/sceneStore";
 import { moonHaloVertexShader, moonHaloFragmentShader } from "@/lib/shaders/moonHalo";
 import { moonVertexShader, moonFragmentShader } from "@/lib/shaders/moon";
 import { moonPhase, cyclePositionFromDate } from "@/lib/moon/phase";
+import { STAR_FOV } from "./StarPass";
 
 // Moon as a celestial body on the sky dome, LOCKED to the star field.
 // Sliders express where it sits in the sky, not its world coords:
@@ -88,6 +89,16 @@ export function Moon() {
           uSharpness: { value: 0.7 },
         },
         fog: false,
+        // Render the moon IN FRONT of the stars (#65): it's the nearest body, so no
+        // stars should show through it (esp. the dark side). The moon shares the star
+        // pass to stay locked to them, but as an opaque object it would draw BEFORE
+        // the additive stars and let them paint over it. Mark it transparent (joins
+        // the late queue) + a high renderOrder so it draws AFTER the stars, and
+        // depthTest off so the star shell (same radius) can't occlude it — alpha 1 +
+        // normal blending then covers the stars under the disc.
+        transparent: true,
+        depthWrite: false,
+        depthTest: false,
       }),
     [],
   );
@@ -139,12 +150,24 @@ export function Moon() {
       moon.distance * Math.sin(elevation),
       horizontalRadius * Math.cos(azimuth),
     );
+    // Scale-compensate for the star camera's wide STAR_FOV (#65 v3): the moon is drawn
+    // by the star camera (fov STAR_FOV), so without this it reads far too small vs the
+    // main camera's narrower fov. Scaling the mesh by tan(STAR_FOV/2)/tan(mainFov/2)
+    // restores the apparent size it had in the main scene. Halo is a child, so it
+    // scales in step. (Constant per frame; fov is pinned.)
+    const pcam = camera as THREE.PerspectiveCamera;
+    if (pcam.isPerspectiveCamera && pcam.fov > 0) {
+      const f = Math.tan(STAR_FOV * 0.5 * DEG2RAD) / Math.tan(pcam.fov * 0.5 * DEG2RAD);
+      meshRef.current.scale.setScalar(f);
+    }
 
     // Halo billboard: face camera + size/uniforms from store each frame. Intensity
     // scales with the illuminated fraction (thin crescent barely glows, full blooms);
     // the lit-side bias lives in the halo shader (uSunDir).
     if (haloRef.current) {
-      haloRef.current.lookAt(camera.position);
+      // The moon is drawn by the STAR camera, which sits at the world origin (#65),
+      // so the halo billboard faces the origin, not the orbiting main camera.
+      haloRef.current.lookAt(0, 0, 0);
       const haloSize = moonRadius * haloCfg.radiusMul * 2;
       haloRef.current.scale.set(haloSize, haloSize, 1);
       haloMaterial.uniforms.uInnerRadius.value = haloCfg.innerRadius;
@@ -167,9 +190,11 @@ export function Moon() {
   // Debug "moon" group (Slice B): Hidden drops the moon + halo; Wireframe
   // renders the lunar sphere as edges (halo billboard left as-is).
   return (
-    <mesh ref={meshRef} material={bodyMaterial} visible={moonMode !== "hidden"}>
+    // renderOrder: stars draw ~0; halo (10) glows over them; the moon body (20) draws
+    // last and covers the stars under its disc (#65).
+    <mesh ref={meshRef} material={bodyMaterial} renderOrder={20} visible={moonMode !== "hidden"}>
       <sphereGeometry args={[moonRadius, 48, 48]} />
-      <mesh ref={haloRef} material={haloMaterial} renderOrder={-1}>
+      <mesh ref={haloRef} material={haloMaterial} renderOrder={10}>
         <planeGeometry args={[1, 1]} />
       </mesh>
     </mesh>

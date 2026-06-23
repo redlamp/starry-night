@@ -129,9 +129,12 @@ export function Scene() {
           {/* #26: rare tapering streak (~every 40s), homage to the original's
             shooting stars. Shader-clocked, deterministic per seed. */}
           <ShootingStars masterSeed={masterSeed} radius={stars.radius} />
+          {/* Moon lives INSIDE the star pass (#65) so it's drawn by the same star
+            camera as the stars and sweeps locked to the skybox — it used to render in
+            the main scene (main camera) and drifted relative to the stars on orbit. */}
+          <Moon />
         </StarPass>
 
-        <Moon />
         <Ground />
         {/* City-derived layers: held back until the seeded generation cache is warm
           (#44) so the first mount frame paints the sky/ground without the ~200ms
