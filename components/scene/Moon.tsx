@@ -7,6 +7,7 @@ import { useSceneStore } from "@/lib/state/sceneStore";
 import { moonHaloVertexShader, moonHaloFragmentShader } from "@/lib/shaders/moonHalo";
 import { moonVertexShader, moonFragmentShader } from "@/lib/shaders/moon";
 import { moonPhase, cyclePositionFromDate } from "@/lib/moon/phase";
+import { STAR_FOV } from "./StarPass";
 
 // Moon as a celestial body on the sky dome, LOCKED to the star field.
 // Sliders express where it sits in the sky, not its world coords:
@@ -139,6 +140,16 @@ export function Moon() {
       moon.distance * Math.sin(elevation),
       horizontalRadius * Math.cos(azimuth),
     );
+    // Scale-compensate for the star camera's wide STAR_FOV (#65 v3): the moon is drawn
+    // by the star camera (fov STAR_FOV), so without this it reads far too small vs the
+    // main camera's narrower fov. Scaling the mesh by tan(STAR_FOV/2)/tan(mainFov/2)
+    // restores the apparent size it had in the main scene. Halo is a child, so it
+    // scales in step. (Constant per frame; fov is pinned.)
+    const pcam = camera as THREE.PerspectiveCamera;
+    if (pcam.isPerspectiveCamera && pcam.fov > 0) {
+      const f = Math.tan(STAR_FOV * 0.5 * DEG2RAD) / Math.tan(pcam.fov * 0.5 * DEG2RAD);
+      meshRef.current.scale.setScalar(f);
+    }
 
     // Halo billboard: face camera + size/uniforms from store each frame. Intensity
     // scales with the illuminated fraction (thin crescent barely glows, full blooms);

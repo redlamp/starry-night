@@ -126,7 +126,10 @@ export const DEFAULT_ORBIT: OrbitConfig = {
 // panel for live tuning.
 export const DEFAULT_MOON = {
   azimuthDeg: 20,
-  elevationDeg: 1,
+  // Raised off the horizon (#65 v3): the moon renders in the star pass, which the
+  // ground/horizon (main pass) draws over, so a near-0 elevation sank it. 18° sits it
+  // clearly in the sky. Lower it for a horizon moon (accepts partial ground occlusion).
+  elevationDeg: 18,
   // Sits on the star shell so the moon hugs the celestial sphere. Tracks the star
   // radius default (was 4500·CITY_SCALE, stale after stars.radius → 3200·CITY_SCALE,
   // which left the moon floating beyond the star dome).
