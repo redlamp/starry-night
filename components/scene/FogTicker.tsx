@@ -3,14 +3,18 @@
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { useSceneStore } from "@/lib/state/sceneStore";
-import { CITY_CENTER } from "@/lib/seed/topology";
 
-// City-anchored fog (2026-06-06). Three's fog is eye-distance — with absolute
-// near/far the camera's own movement decided how much of the city drowned
-// (orbit out past `far` and the whole skyline vanished). This ticker re-derives
-// the brackets every frame around d = |camera → CITY_CENTER| so the gradient is
-// pinned to the city: the near side stays clear, the far side fades, and no
-// camera path can consume the silhouettes.
+// Focal-anchored fog (2026-06-06; re-anchored 2026-06-23 for #54). Three's fog is
+// eye-distance — with absolute near/far the camera's own movement decided how much
+// of the city drowned. This ticker re-derives the brackets every frame around
+// d = |camera → FOCAL POINT| (the orbit target — what the camera is framing) so the
+// gradient is pinned to whatever you're looking at: the near side stays clear, the
+// far side fades, and no camera path can consume the silhouettes.
+//
+// It used to anchor on the fixed CITY_CENTER, which broke for off-centre subjects:
+// orbiting a skyscraper cluster outside the centre from near the centre made d (the
+// small centre distance) far too short, so `far` fell in front of the cluster and
+// fogged it out (#54). The focal point is the orbit target, so it tracks the subject.
 //
 // Ortho note: "ortho" here is a projection-matrix morph — the camera never
 // physically moves and fog depth is still measured from the real camera. So an
@@ -18,7 +22,7 @@ import { CITY_CENTER } from "@/lib/seed/topology";
 // and these brackets keep the fog identical — which is the correct reading of
 // a scale change that isn't a distance change. Perspective zoom (radius ↑)
 // changes d and the brackets track it 1:1.
-const _centre = new THREE.Vector3();
+const _focal = new THREE.Vector3();
 
 export function FogTicker() {
   const scene = useThree((s) => s.scene);
@@ -28,8 +32,10 @@ export function FogTicker() {
     const fog = scene.fog;
     if (!fog) return;
     const s = useSceneStore.getState();
-    _centre.set(CITY_CENTER.x, 0, CITY_CENTER.z);
-    const d = Math.max(1, camera.position.distanceTo(_centre));
+    // Focal point = the orbit target (what the camera frames), not the fixed city
+    // centre — so fog calibrates to the subject distance, off-centre or not (#54).
+    _focal.set(s.orbit.centerX, s.orbit.lookAtY, s.orbit.centerZ);
+    const d = Math.max(1, camera.position.distanceTo(_focal));
 
     if ((fog as THREE.Fog).isFog) {
       // near/far are positions on the camera→centre axis: 0 = camera,
