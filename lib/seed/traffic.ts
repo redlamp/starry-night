@@ -207,12 +207,19 @@ export function buildTrafficDensity(
   const sorted = [...perM].sort((a, b) => a - b);
   const p99 = sorted.length ? sorted[Math.floor(sorted.length * 0.99)] || 0 : 0;
   const norm = p99 > 0 ? p99 : 1;
+  // Gamma-spread the normalised intensity (#78): highways carry ~7.5x a city
+  // street's per-metre density, so a LINEAR ramp crushes every non-highway road
+  // into the near-black bottom of the inferno ramp (arterials + streets read as one
+  // flat purple). The road tiers are roughly MULTIPLICATIVE, so a sub-1 gamma lifts
+  // the mid/low band into the visible ramp: busy arterials → orange, city streets →
+  // magenta, suburban → dim purple, highways still top out yellow.
+  const GAMMA = 0.45;
   const segments: TrafficDensitySeg[] = segs.map((s, i) => ({
     ax: s.ax,
     az: s.az,
     bx: s.bx,
     bz: s.bz,
-    density: Math.min(1, perM[i] / norm),
+    density: Math.pow(Math.min(1, perM[i] / norm), GAMMA),
     raw: raws[i],
   }));
   return { segments, maxRaw: p99 };
