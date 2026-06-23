@@ -36,7 +36,10 @@ export const QUALITY_TIERS: Record<
 > = {
   low: { label: "Low", dprMax: 1, starCount: 4000 },
   med: { label: "Medium", dprMax: 1.25, starCount: 8000 },
-  high: { label: "High", dprMax: 2, starCount: 16000 },
+  // starCount matches DEFAULT_STARS.count (24000) so the default-tier boot and an
+  // explicit "high" pick land on the same starfield (was 16000 — a mismatch that
+  // dropped 8k stars the first time anything touched the tier; #53).
+  high: { label: "High", dprMax: 2, starCount: 24000 },
   ultra: { label: "Ultra", dprMax: 3, starCount: 24000 },
 };
 
@@ -470,6 +473,8 @@ type SettingEntry<K extends keyof SceneState> = {
 
 // A discriminated union so the registry is typed without needing `any`.
 type AnySettingEntry =
+  | SettingEntry<"qualityTier">
+  | SettingEntry<"qualityUserSet">
   | SettingEntry<"cameraIntent">
   | SettingEntry<"orbit">
   | SettingEntry<"moon">
@@ -521,6 +526,11 @@ type AnySettingEntry =
   | SettingEntry<"perfStats">;
 
 export const SETTINGS_REGISTRY: AnySettingEntry[] = [
+  // Quality tier persists so a user's pick (or a saved config's tier) survives
+  // reload; its presence in a SavedConfig is also the signal that suppresses the
+  // boot device-fit (#53). qualityUserSet is transient — a fresh tab re-fits.
+  { key: "qualityTier", defaultValue: "high" as QualityTier, persist: true },
+  { key: "qualityUserSet", defaultValue: false as const, persist: false },
   { key: "cameraIntent", defaultValue: DEFAULT_INTENT, persist: true },
   { key: "orbit", defaultValue: DEFAULT_ORBIT, persist: true },
   { key: "moon", defaultValue: DEFAULT_MOON, persist: true },
@@ -596,6 +606,9 @@ const CITY_PLANNING_VIS_PERSIST = true;
 const SAVED_CONFIG_KEY = "starry-night.savedConfig";
 
 type SavedConfig = {
+  // Optional so configs saved before #53 still load (an absent tier means the
+  // boot device-fit is free to run).
+  qualityTier?: QualityTier;
   cameraIntent: CameraIntent;
   orbit: OrbitConfig;
   moon: typeof DEFAULT_MOON;
@@ -805,6 +818,13 @@ function removeSavedConfig() {
   }
 }
 
+// True when the persisted config carries a quality tier — i.e. the user has Saved
+// a config since #53. The boot device-fit (applyDeviceFit) treats that as "the
+// user has a tier already; don't auto-override it". (#53)
+export function hasSavedQualityTier(): boolean {
+  return readSavedConfig()?.qualityTier != null;
+}
+
 export type Perf = {
   fps: number;
   triangles: number;
@@ -817,6 +837,14 @@ type SceneState = {
   masterSeed: string;
   lightingMode: LightingMode;
   qualityTier: QualityTier;
+  // True once the tier has been chosen by the USER — the Performance tier select,
+  // or the ?quality= URL param. The boot device-fit (applyDeviceFit) and the
+  // runtime AdaptiveQuality monitor both back off when this is set, so an explicit
+  // pick is never overridden by auto-tuning. Transient (persist:false): a saved
+  // tier survives reload on its own (qualityTier is persisted), and a fresh tab
+  // with no ?quality= should always re-fit the current device. (#53)
+  qualityUserSet: boolean;
+  setQualityUserSet: (v: boolean) => void;
   // Canvas MSAA. Off by default (perf): hardware multisampling is fill-rate cost
   // that compounds with DPR. Cannot change live (WebGL context-creation flag) —
   // Scene remounts the canvas on change. (user 2026-06-13)
@@ -1142,6 +1170,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   masterSeed: "starry-night",
   lightingMode: "classic",
   qualityTier: "high",
+  qualityUserSet: false,
+  setQualityUserSet: (qualityUserSet) => set({ qualityUserSet }),
   antialias: false, // off by default (user 2026-06-13)
   setAntialias: (antialias) => set({ antialias }),
   dprCap: null, // auto = use the quality tier's dprMax range

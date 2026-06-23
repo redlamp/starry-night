@@ -4,53 +4,56 @@ import { PerformanceMonitor } from "@react-three/drei";
 import { useThree } from "@react-three/fiber";
 import { useEffect, useRef } from "react";
 import { useSceneStore, QUALITY_TIERS } from "@/lib/state/sceneStore";
-import { suggestTier, probeGpu } from "@/lib/perf/deviceTier";
 
-// Dynamic DPR regression — the runtime safety net for the iMac problem (default
-// "high" tier = DPR 2 on a Retina panel → fill-rate bound, 15-30 fps, no auto-
+// Dynamic quality regression — the runtime safety net for the iMac/phone problem
+// (a tier whose dprMax is too tall for the live GPU → fill-rate bound, no auto-
 // downshift). drei <PerformanceMonitor> tracks average fps against a hysteresis
 // band scaled to the refresh rate; when fps sags it steps the renderer DPR down,
 // when headroom returns it steps back up, and after a few flip-flops it locks
 // (the documented fix for the adaptive-DPR oscillation trap).
 //
-// Driven by the `adaptive` setting (Performance panel toggle; the ?adaptive URL
-// just sets it on boot). DEFAULT-OFF (renders null). Enable it and watch the Stats
-// overlay: on a Retina iMac the DPR line should fall from 2.0 toward ~1.0 and fps
-// climb to 60. Still UNVERIFIED on a struggling device (see samples/perf-report.html).
+// Two knobs, in order: DPR first (cheapest, fully render-only), then — once DPR
+// has bottomed out at the floor and fps is STILL sagging — the city render RADIUS
+// (cityShapeScale, a concentric byte-identical crop). Separate hysteresis from
+// the DPR ramp so the two don't fight. The boot device-fit (applyDeviceFit, #53)
+// already picked the starting tier + radius; this only reacts to live fps.
+//
+// Driven by the `adaptive` setting (Performance panel toggle; ?adaptive sets it on
+// boot). DEFAULT-OFF (renders null). When the user has explicitly picked a tier
+// (qualityUserSet), the crop ramp is suppressed — DPR still rides (it never alters
+// the tier, only resolution) but the rendered city extent is left exactly as set.
+//
+// Determinism: DPR + crop are render-only and never feed the seeded generator
+// (cross-crop is a byte-identical subset), so fps → quality is safe.
 const DPR_FLOOR = 1;
 const DPR_STEP = 0.25;
 
-// devicePixelRatio is stable for the session — read it as a plain value (not a
-// ref accessed during render). Capped at 2: rendering above 2x is rarely worth it.
-const CEIL_DPR = typeof window !== "undefined" ? Math.min(2, window.devicePixelRatio || 1) : 1.5;
+// Runtime crop ramp (the second knob, below the DPR floor). Steps the city render
+// radius down on sustained low fps once DPR can't drop further, and back up on
+// headroom. Bounds keep it from cropping the city to a useless nub.
+const CROP_STEP = 0.1;
+const CROP_FLOOR = 0.45;
+const CROP_CEIL = 1;
 
 export function AdaptiveQuality() {
   const setDpr = useThree((s) => s.setDpr);
   const adaptive = useSceneStore((s) => s.adaptive);
-  const cur = useRef(CEIL_DPR);
-  const fitted = useRef(false);
+  const qualityTier = useSceneStore((s) => s.qualityTier);
+  const qualityUserSet = useSceneStore((s) => s.qualityUserSet);
 
-  // Device-fit, once per session on first enable: pick the starting tier (its
-  // dprMax + star count) and a render RADIUS from the GPU/DPR/cores. Strong GPUs →
-  // tier high, radius 1 (no change); weaker devices start at a smaller concentric
-  // crop so instance/vertex/memory/upload costs drop. The TIER (layout) is identical
-  // on every device — only the rendered radius differs — so the city is shared
-  // (cross-crop is a byte-identical subset).
-  // NB: the dynamic regression ceiling (CEIL_DPR) doesn't yet read the chosen
-  // tier's dprMax — reconcile at the pairing pass.
+  // CEIL_DPR now honours the chosen tier's dprMax (the long-standing TODO): the
+  // runtime ramp may climb back up to the device pixel ratio, but never past what
+  // the active tier allows. Recomputed whenever the tier changes.
+  const ceilDpr = useRef(1);
+  const cur = useRef(1);
   useEffect(() => {
-    if (!adaptive || fitted.current || typeof window === "undefined") return;
-    fitted.current = true;
-    const fit = suggestTier({
-      renderer: probeGpu(),
-      dpr: window.devicePixelRatio || 1,
-      cores: navigator.hardwareConcurrency || 0,
-    });
-    const st = useSceneStore.getState();
-    st.setQualityTier(fit.tier);
-    st.setStars({ count: QUALITY_TIERS[fit.tier].starCount });
-    st.setCityShapeScale(fit.radiusScale); // 1 on strong GPUs = no change/no re-gen
-  }, [adaptive]);
+    const devicePR = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
+    ceilDpr.current = Math.min(devicePR, QUALITY_TIERS[qualityTier].dprMax);
+    // Re-clamp the live DPR to the new ceiling and seed the ramp from it.
+    cur.current = Math.min(cur.current || ceilDpr.current, ceilDpr.current);
+    cur.current = Math.max(cur.current, DPR_FLOOR);
+    if (adaptive) setDpr(cur.current);
+  }, [qualityTier, adaptive, setDpr]);
 
   if (!adaptive) return null;
   return (
@@ -60,18 +63,40 @@ export function AdaptiveQuality() {
       bounds={(rr) => [Math.round(rr * 0.75), Math.round(rr * 0.95)]}
       flipflops={3}
       onDecline={() => {
-        cur.current = Math.max(DPR_FLOOR, cur.current - DPR_STEP);
-        setDpr(cur.current);
+        if (cur.current > DPR_FLOOR) {
+          // First knob: drop DPR.
+          cur.current = Math.max(DPR_FLOOR, cur.current - DPR_STEP);
+          setDpr(cur.current);
+        } else if (!qualityUserSet) {
+          // DPR floored and still sagging → second knob: crop the render radius
+          // (skipped when the user has locked the tier).
+          stepCrop(-CROP_STEP);
+        }
       }}
       onIncline={() => {
-        cur.current = Math.min(CEIL_DPR, cur.current + DPR_STEP);
-        setDpr(cur.current);
+        const st = useSceneStore.getState();
+        if (!qualityUserSet && st.cityShapeScale < CROP_CEIL && cur.current >= ceilDpr.current) {
+          // Restore the radius first (it's the bigger visual win) before climbing
+          // DPR past where it already sits.
+          stepCrop(CROP_STEP);
+        } else if (cur.current < ceilDpr.current) {
+          cur.current = Math.min(ceilDpr.current, cur.current + DPR_STEP);
+          setDpr(cur.current);
+        }
       }}
       onFallback={() => {
         // Kept flip-flopping → stop hunting and rest at a conservative value.
-        cur.current = Math.max(DPR_FLOOR, Math.min(cur.current, CEIL_DPR - DPR_STEP));
+        cur.current = Math.max(DPR_FLOOR, Math.min(cur.current, ceilDpr.current - DPR_STEP));
         setDpr(cur.current);
       }}
     />
   );
+}
+
+// Step the city render radius (cityShapeScale) by `delta`, clamped to the runtime
+// crop band. Render-only — a concentric, byte-identical subset of the same city.
+function stepCrop(delta: number) {
+  const st = useSceneStore.getState();
+  const next = Math.min(CROP_CEIL, Math.max(CROP_FLOOR, st.cityShapeScale + delta));
+  if (next !== st.cityShapeScale) st.setCityShapeScale(next);
 }

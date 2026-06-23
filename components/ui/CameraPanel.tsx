@@ -77,11 +77,7 @@ import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { RangeSlider, ValueSlider } from "@/components/ui/value-slider";
-import {
-  NumberField,
-  NumberFieldGroup,
-  NumberFieldInput,
-} from "@/components/ui/number-field";
+import { NumberField, NumberFieldGroup, NumberFieldInput } from "@/components/ui/number-field";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -113,6 +109,7 @@ import {
   RoadHighlightAction,
 } from "@/components/ui/RoadsPanel";
 import { readTileCull, TILE_LAYERS } from "@/lib/scene/tileCullDebug";
+import { getLastDeviceFit } from "@/lib/perf/applyDeviceFit";
 import {
   setCameraTab,
   currentCameraTab,
@@ -730,7 +727,7 @@ export function CameraPanel() {
             </Button>
           )}
         </div>
-        <div className="flex flex-wrap items-center gap-1.5 ml-auto">
+        <div className="ml-auto flex flex-wrap items-center gap-1.5">
           <CopyButton />
           <Button
             onClick={() => {
@@ -858,7 +855,10 @@ function OrbitSection() {
         Default Orbit
       </Button>
       <label className="flex cursor-pointer items-center justify-between gap-2 text-xs">
-        <span className="text-foreground/70" title="Live elevation cross-section of the camera rig, bottom-left">
+        <span
+          className="text-foreground/70"
+          title="Live elevation cross-section of the camera rig, bottom-left"
+        >
           side-view diagram
         </span>
         <Switch checked={showSideView} onCheckedChange={setShowSideView} />
@@ -966,9 +966,10 @@ function OrbitSection() {
         <Switch checked={groundFraming} onCheckedChange={setGroundFraming} />
       </label>
       <div className="text-foreground/45 text-[11px] leading-snug">
-        Screen Y is where the focal sits on screen (0 top, 100 bottom). The left thumb is its resting
-        spot; with the ground pull on, near the horizon it eases DOWN to the right thumb so the skyline
-        settles low with sky above (tracking the tilt live). Off holds the resting spot at every angle.
+        Screen Y is where the focal sits on screen (0 top, 100 bottom). The left thumb is its
+        resting spot; with the ground pull on, near the horizon it eases DOWN to the right thumb so
+        the skyline settles low with sky above (tracking the tilt live). Off holds the resting spot
+        at every angle.
       </div>
       <ValueSlider
         label="Tilt speed"
@@ -998,9 +999,9 @@ function OrbitSection() {
         stepperClass="w-32"
       />
       <div className="text-foreground/45 text-[11px] leading-snug">
-        Tilt speed sets how fast a vertical drag pitches the view (lower = more regulated; 1 = the old
-        rate). Low-angle speed and Slow below ° additionally ease rotate + tilt down near the horizon
-        (1 = no limit), and distance past the city tapers them further.
+        Tilt speed sets how fast a vertical drag pitches the view (lower = more regulated; 1 = the
+        old rate). Low-angle speed and Slow below ° additionally ease rotate + tilt down near the
+        horizon (1 = no limit), and distance past the city tapers them further.
       </div>
     </>
   );
@@ -1142,7 +1143,9 @@ function AntiAliasingSection() {
         />
       }
     >
-      <div className="text-foreground/40 text-[10px]">MSAA (header) reloads the view; edge AA is live.</div>
+      <div className="text-foreground/40 text-[10px]">
+        MSAA (header) reloads the view; edge AA is live.
+      </div>
       <ValueSlider
         label="edge AA"
         value={wa.edge}
@@ -1232,7 +1235,10 @@ function LevelOfDetailSection() {
         onChange={(lodRange) => setWindowAA({ lodRange })}
       />
       <div className="mt-1 flex items-center justify-between gap-2 border-t border-white/10 pt-2 text-xs">
-        <span className="text-foreground/70" title="Distance attenuation + per-tile culling on / off">
+        <span
+          className="text-foreground/70"
+          title="Distance attenuation + per-tile culling on / off"
+        >
           distance culling
         </span>
         <Switch checked={distEnabled} onCheckedChange={(v) => setLod({ enabled: v })} />
@@ -2443,9 +2449,7 @@ function OrbitPlayPauseToggle() {
     <Button
       variant="secondary"
       size="icon-sm"
-      title={
-        playing ? "Pause the orbit revolution (Space)" : "Resume the orbit revolution (Space)"
-      }
+      title={playing ? "Pause the orbit revolution (Space)" : "Resume the orbit revolution (Space)"}
       aria-label={playing ? "Pause orbit revolution" : "Resume orbit revolution"}
       aria-pressed={playing}
       onClick={() => setOrbitPaused(!orbitPaused)}
@@ -2861,6 +2865,7 @@ function PerfReadout() {
   const qualityTier = useSceneStore((s) => s.qualityTier);
   const setQualityTier = useSceneStore((s) => s.setQualityTier);
   const setStars = useSceneStore((s) => s.setStars);
+  const setQualityUserSet = useSceneStore((s) => s.setQualityUserSet);
   return (
     <div className="flex items-center gap-2 text-xs">
       <span className="text-foreground/70 w-14 shrink-0">quality</span>
@@ -2870,6 +2875,9 @@ function PerfReadout() {
           const tier = v as QualityTier;
           setQualityTier(tier);
           setStars({ count: QUALITY_TIERS[tier].starCount });
+          // The user picked a tier — lock auto-tuning off (boot fit + runtime
+          // AdaptiveQuality both back off once this is set). (#53)
+          setQualityUserSet(true);
         }}
       >
         <SelectTrigger
@@ -2896,6 +2904,11 @@ function PerfReadout() {
 function AdaptiveGroup() {
   const adaptive = useSceneStore((s) => s.adaptive);
   const setAdaptive = useSceneStore((s) => s.setAdaptive);
+  const qualityUserSet = useSceneStore((s) => s.qualityUserSet);
+  // The boot device-fit (#53) runs in CaptureBoot, which mounts before this
+  // panel, so its result is available by the time the panel reads it. Snapshot
+  // it once on mount for the class + reason readout.
+  const [fit] = useState(() => getLastDeviceFit());
   return (
     <SubGroup
       label="Adaptive quality"
@@ -2903,13 +2916,25 @@ function AdaptiveGroup() {
         <Switch
           checked={adaptive}
           onCheckedChange={(v) => setAdaptive(v)}
-          title="Auto-pick the quality tier + render radius for this GPU, then step DPR down to hold framerate. Verify on real hardware."
+          title="Step DPR down at runtime to hold framerate, and crop the render radius if DPR bottoms out. Verify on real hardware."
         />
       }
     >
       <div className="text-foreground/40 text-[10px]">
-        Device-fit tier + radius on enable, then dynamic DPR to hold fps. Strong GPUs stay full.
+        Boot device-fit picks the starting tier + radius for this GPU; the runtime monitor then
+        steps DPR to hold fps. Strong GPUs stay full. Picking a tier locks both off.
       </div>
+      {fit?.applied && (
+        <div className="text-foreground/55 text-[10px] leading-snug">
+          Device fit: <span className="text-foreground/80">{fit.cls}</span> → tier{" "}
+          <span className="text-foreground/80">{fit.tier}</span>. {fit.reason}
+        </div>
+      )}
+      {qualityUserSet && (
+        <div className="text-[10px] text-amber-300/70">
+          Tier locked by your pick — auto-fit off.
+        </div>
+      )}
     </SubGroup>
   );
 }
@@ -2928,7 +2953,8 @@ function StatsGroup() {
   return (
     <SubGroup label="Stats">
       <div className="text-foreground/40 text-[10px]">
-        Live readout. Set the header to “stats” for the floating overlay (+ boot timeline · long tasks).
+        Live readout. Set the header to “stats” for the floating overlay (+ boot timeline · long
+        tasks).
       </div>
       <div className="text-foreground/70 grid grid-cols-[5rem_1fr] gap-1 font-mono text-xs">
         <div>dpr cap</div>

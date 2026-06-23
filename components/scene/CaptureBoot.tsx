@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useSceneStore, QUALITY_TIERS, type QualityTier } from "@/lib/state/sceneStore";
 import { CITY_SHAPES, type CityShapeSetting } from "@/lib/seed/cityShape";
 import { readTileCull } from "@/lib/scene/tileCullDebug";
+import { applyDeviceFit } from "@/lib/perf/applyDeviceFit";
 
 /**
  * Reads URL params and hash on mount + keeps URL hash in sync with the seed.
@@ -12,7 +13,8 @@ import { readTileCull } from "@/lib/scene/tileCullDebug";
  *   ?capture=1           — hides UI, forces still mode (used by capture script)
  *   ?intro=instant       — collapse the wake cascade to ~1s and hold windows ON
  *                          (headless stills otherwise catch a dark, waking city)
- *   ?quality=low|med|high|ultra — sets initial quality tier (DPR cap + star count)
+ *   ?quality=low|med|high|ultra — sets + LOCKS the quality tier (DPR cap + star
+ *                          count); suppresses the boot device-fit (#53)
  *   ?shape=auto|square|circle|blob|coastline — forces the city footprint shape
  *   #seed=<masterSeed>   — shareable URL hash for the live app (preferred for users)
  *
@@ -29,11 +31,20 @@ export function CaptureBoot() {
     const state = useSceneStore.getState();
     const initial = querySeed ?? hashSeed;
     if (initial) state.setSeed(initial);
-    if (queryQuality && queryQuality in QUALITY_TIERS) {
+    const hasQueryQuality = !!queryQuality && queryQuality in QUALITY_TIERS;
+    if (hasQueryQuality) {
       const tier = queryQuality as QualityTier;
       state.setQualityTier(tier);
       state.setStars({ count: QUALITY_TIERS[tier].starCount });
+      // An explicit ?quality= is a user choice — lock it so boot device-fit and
+      // the runtime AdaptiveQuality monitor leave the tier alone. (#53)
+      state.setQualityUserSet(true);
     }
+    // Device-adaptive starting quality (#53). One-shot, guarded internally: it
+    // no-ops when ?quality= is present, a tier was Saved, or the user already
+    // picked a tier — so an explicit choice always wins. Capture mode skips it
+    // so headless stills render at the deterministic default tier.
+    if (!capture) applyDeviceFit({ hasQueryQuality });
     if (capture) {
       state.setCaptureMode(true);
       // resetCamera now lands in orbit; force still afterwards so the headless
