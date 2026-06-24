@@ -63,23 +63,31 @@ const MIN_SEG = 6; // drop a macro-segment shorter than this (m)
 // the gentle tensor curvature means a chord barely deviates from the road.
 const CHUNK = 55;
 
+// A car light is a light, not a vehicle — its apparent size must depend ONLY on how
+// far it is from the camera (the distance LOD term in the shader), never on the road
+// tier it sits on (#78). A highway headlight and a side-street headlight at the same
+// distance read identically. So every car gets the same base point size regardless of
+// tier; only a small per-car jitter (±15%) survives for natural variation. (Previously
+// this was per-tier — highway 7 / arterial 5.5 / minor 4 — which fattened big-road
+// lights and was the reported bug.)
+const CAR_LIGHT_SIZE = 5;
+
 type TierCfg = {
   carsPerM: number;
   speed: number;
   laneHalf: number; // offset (m) from centreline to the innermost lane (median gap)
   laneWidth: number; // spacing (m) between adjacent lanes within one direction
   lanes: number; // lanes per direction
-  size: number;
 };
 
 function tierCfg(tier: "highway" | "arterial" | "minor"): TierCfg {
   switch (tier) {
     case "highway":
-      return { carsPerM: 0.02, speed: 24, laneHalf: 4.0, laneWidth: 4.0, lanes: 3, size: 7 };
+      return { carsPerM: 0.02, speed: 24, laneHalf: 4.0, laneWidth: 4.0, lanes: 3 };
     case "arterial":
-      return { carsPerM: 0.012, speed: 14, laneHalf: 3.0, laneWidth: 3.2, lanes: 2, size: 5.5 };
+      return { carsPerM: 0.012, speed: 14, laneHalf: 3.0, laneWidth: 3.2, lanes: 2 };
     default:
-      return { carsPerM: 0.008, speed: 8, laneHalf: 2.5, laneWidth: 0, lanes: 1, size: 4 }; // minor
+      return { carsPerM: 0.008, speed: 8, laneHalf: 2.5, laneWidth: 0, lanes: 1 }; // minor
   }
 }
 
@@ -318,7 +326,7 @@ export function buildTraffic(
       aTail[c * 3 + 2] = tail[2];
       aHead[c] = dir > 0 ? 1 : 0;
       aReveal[c] = rng(); // intro reveal time — drives the density ramp
-      aSize[c] = s.cfg.size * (0.85 + rng() * 0.3);
+      aSize[c] = CAR_LIGHT_SIZE * (0.85 + rng() * 0.3); // tier-independent (#78)
       const r1 = Math.hypot(sx, sz + 120);
       const r2 = Math.hypot(ex, ez + 120);
       if (r1 > maxRadius) maxRadius = r1;
