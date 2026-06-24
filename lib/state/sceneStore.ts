@@ -126,10 +126,12 @@ export const DEFAULT_ORBIT: OrbitConfig = {
 // panel for live tuning.
 export const DEFAULT_MOON = {
   azimuthDeg: 20,
-  // Raised off the horizon (#65 v3): the moon renders in the star pass, which the
-  // ground/horizon (main pass) draws over, so a near-0 elevation sank it. 18° sits it
-  // clearly in the sky. Lower it for a horizon moon (accepts partial ground occlusion).
-  elevationDeg: 18,
+  // Raised off the horizon (#65 v3) so the ground/horizon (main pass) doesn't draw
+  // over it. Lowered 18° → 12° (2026-06-24): the star camera now matches the city's
+  // narrow fov, and at the near-horizontal default view (elev 2°) an 18° moon sat
+  // just above the top edge. 12° centres it in the visible sky. Lower further for a
+  // horizon moon (accepts partial ground occlusion); raise to clear the skyline.
+  elevationDeg: 12,
   // Sits on the star shell so the moon hugs the celestial sphere. Tracks the star
   // radius default (was 4500·CITY_SCALE, stale after stars.radius → 3200·CITY_SCALE,
   // which left the moon floating beyond the star dome).
@@ -151,7 +153,12 @@ export const DEFAULT_MOON = {
 export const DEFAULT_STARS = {
   radius: 3200 * CITY_SCALE,
   depth: 360 * CITY_SCALE,
-  count: 24000,
+  // Raised 24000 → 120000 (2026-06-24): the star camera now matches the city's
+  // (narrow ~20°) fov for 1:1 elevation tracking, which shows a much smaller slice
+  // of sky than the old fixed 60°. ~(60/20)² ≈ 9× more stars keeps the visible
+  // density rich. Tunable via the Stars slider (persisted configs keep their old
+  // value until reverted). Points are cheap; revisit under device-adaptive quality.
+  count: 120000,
   factor: 36,
   // Twinkle AMPLITUDE (the σ scale of the log-normal scintillation; see
   // wiki/research/star-twinkle-scintillation.md). 0 = dead steady, 1 ≈ σ 0.1 at

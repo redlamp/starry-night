@@ -3,25 +3,23 @@
 import { createPortal, useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useMemo } from "react";
 import * as THREE from "three";
-// Fixed wide fov for the star camera regardless of projection. The main
-// camera's perspective fov (~28°) is narrow on purpose for city framing —
-// using it for the star pass leaves only a tiny slice of the dome visible.
-// Locking the star pass to a wider fov keeps the star density similar in
-// perspective and orthographic modes; the city is unaffected because it
-// renders in the main scene with its own camera/projection.
+// Fallback fov only — used if the main camera is somehow not a PerspectiveCamera.
+// Normally the star camera MATCHES the main camera's live fov (see the sync below),
+// so this constant is just a safety default.
 export const STAR_FOV = 60;
 
-// Renders its children (the star field) in a dedicated perspective pass drawn
-// *before* the main scene. The main camera is often orthographic (city framing,
-// orthoSize ~240), which collapses the distant star shell (radius ~4500) far
-// off-screen. Stars need a true perspective projection to spread across the sky
-// regardless of how the city is framed.
+// Renders its children (the star field + moon) in a dedicated perspective pass
+// drawn *before* the main scene. The main camera is often orthographic (city
+// framing, orthoSize ~240), which collapses the distant star shell (radius ~6400)
+// far off-screen. Stars need a true perspective projection to spread across the
+// sky regardless of how the city is framed.
 //
-// Each frame we sync a private PerspectiveCamera to the main camera's transform
-// + fov (so the sky tracks the orbit), render the stars over the sky-colour
-// background, clear depth, then composite the main scene on top. In pure
-// perspective mode the star camera matches the main camera exactly, so the
-// result is identical to rendering stars inline.
+// Each frame we sync a private PerspectiveCamera pinned at the world origin (city
+// centre), copying the main camera's ORIENTATION and FOV (never its position), and
+// kept perspective even when the city goes ortho. Centre-anchored = the sky is
+// locked to the city centre with zero parallax (the eye can't leave the dome);
+// fov-matched = the sky pitches at the city's rate, so it tracks elevation 1:1
+// instead of slipping behind the horizon.
 //
 // Adding any positive-priority useFrame disables R3F's automatic render, so the
 // main scene render is taken over here too.
@@ -51,15 +49,27 @@ export function StarPass({
   }, [starScene, backgroundColor]);
 
   useFrame(() => {
-    // Skybox-style: anchor star camera at the dome centre (world origin) and
-    // only copy main camera orientation. The sky then rotates with camera
-    // rotation, not camera position, so stars sweep at the same rate as the
-    // city's look direction during orbit — no parallax mismatch.
-    starCamera.position.set(0, 0, 0);
+    // The star camera has the SAME TRANSFORM as the city camera (position +
+    // orientation + fov), so the sky is rendered from the city camera's exact
+    // viewpoint and tracks it 1:1 — the only difference is it stays PERSPECTIVE
+    // when the city goes ortho (ortho collapses the distant shell).
+    //
+    // To make the sky behave as if it's INFINITELY far (so it can't parallax or be
+    // escaped), the star SCENE rides along with the camera: with the eye always at
+    // the dome's centre, the stars keep their fixed sky directions and only ROTATE
+    // with the view — they never slide around, and the camera can never travel past
+    // the dome. (Parallax only appears when a FINITE dome is pinned at a fixed point
+    // while the eye moves — the shell sits only ~1.3× the orbit radius away, so it
+    // swims; an eye-centred/infinite sky removes that.) (#65, 2026-06-24)
+    const pcam = mainCamera as THREE.PerspectiveCamera;
+    starCamera.position.copy(mainCamera.position);
     starCamera.quaternion.copy(mainCamera.quaternion);
-    starCamera.fov = STAR_FOV;
+    starCamera.fov = pcam.isPerspectiveCamera && pcam.fov > 0 ? pcam.fov : STAR_FOV;
+    starCamera.near = mainCamera.near;
+    starCamera.far = mainCamera.far;
     starCamera.aspect = size.width / Math.max(1, size.height);
     starCamera.updateProjectionMatrix();
+    starScene.position.copy(mainCamera.position); // sky rides the eye → infinite, no parallax
 
     // Pass 1: sky background + stars.
     gl.autoClear = true;

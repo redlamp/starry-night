@@ -101,9 +101,14 @@ export function ShootingStars({ masterSeed, radius }: { masterSeed: string; radi
     const u = material.uniforms;
     const time = u.uTime.value as number;
     // Star-camera horizontal half-fov minus a margin, so the whole travel arc
-    // tends to stay on screen.
+    // tends to stay on screen. The star camera matches the main camera's fov, so
+    // read it live (fall back to STAR_FOV if somehow not perspective).
+    const camFov =
+      (camera as THREE.PerspectiveCamera).isPerspectiveCamera && (camera as THREE.PerspectiveCamera).fov > 0
+        ? (camera as THREE.PerspectiveCamera).fov
+        : STAR_FOV;
     const hHalf = Math.atan(
-      Math.tan((STAR_FOV / 2) * (Math.PI / 180)) * (size.width / Math.max(1, size.height)),
+      Math.tan((camFov / 2) * (Math.PI / 180)) * (size.width / Math.max(1, size.height)),
     );
     u.uAzHalf.value = Math.max(0.25, hHalf - 0.3);
 
