@@ -114,7 +114,10 @@ export type OrbitConfig = {
 // X/Y/Z = 0) (user 2026-06-21). Radius scales with city width
 // (CITY_SCALE); 1800s sweep (0.2°/s) once un-paused. lookAtY (focal HEIGHT) is NOT
 // scaled — building heights are fixed across size tiers, so the skyline sits at the
-// same Y regardless of extent. (Pairs with orbitPaused defaulting true.)
+// same Y regardless of extent. Per-model transport default (catalog.startsPaused,
+// applied on model switch): Map enters paused on this still curated pose, while
+// Drift / Turntable auto-play. Initial orbitPaused is false because the default
+// model is Drift; switching to Map sets it true.
 export const DEFAULT_ORBIT: OrbitConfig = {
   centerX: 0,
   centerZ: 0, // focal at the origin (user 2026-06-21; was -120)
@@ -600,7 +603,7 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "fog", defaultValue: DEFAULT_FOG, persist: true },
   { key: "haze", defaultValue: DEFAULT_HAZE, persist: true },
   { key: "flySpeed", defaultValue: DEFAULT_FLY_SPEED, persist: true },
-  { key: "orbitPaused", defaultValue: true as const, persist: true },
+  { key: "orbitPaused", defaultValue: false as const, persist: true },
   { key: "showFocalIndicator", defaultValue: false as const, persist: true },
   { key: "orbitPivotFromBottom", defaultValue: 0.37, persist: true },
   { key: "groundFraming", defaultValue: true as const, persist: true },
@@ -1327,7 +1330,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setFocalDragging: (focalDragging) => set({ focalDragging }),
   panelHidden: true,
   setPanelHidden: (panelHidden) => set({ panelHidden }),
-  orbitPaused: true,
+  orbitPaused: false,
   setOrbitPaused: (orbitPaused) => set({ orbitPaused }),
   orbit: DEFAULT_ORBIT,
   setOrbit: (patch) => set((s) => ({ orbit: { ...s.orbit, ...patch } })),

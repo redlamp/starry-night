@@ -9,6 +9,11 @@ export interface CameraModelMeta {
   label: string; // short label for the selector tab
   character: string; // one-line personality, shown under the selector
   blurb: string; // longer description (tooltip / future detail)
+  // Transport default applied when this model becomes active (on a USER switch —
+  // the selector / the t·f hotkeys — never on hydration, so a saved pose restores
+  // exactly as saved). Omitted = plays (orbitPaused false). Map is the still
+  // curated pose, so it starts paused; Drift / Turntable are ambient, so they play.
+  startsPaused?: boolean;
 }
 
 export const CAMERA_MODELS: CameraModelMeta[] = [
@@ -18,6 +23,7 @@ export const CAMERA_MODELS: CameraModelMeta[] = [
     character: "Hands-on — grab, orbit, and zoom the city like a map.",
     blurb:
       "The full map-style controller: drag to orbit + tilt, grab the ground to pan, scrub the pin for focal height, wheel to zoom toward the cursor, double-click to reset. Persp/ortho morph. The default.",
+    startsPaused: true, // the curated still pose — auto-revolution off until you press play
   },
   {
     id: "drift",

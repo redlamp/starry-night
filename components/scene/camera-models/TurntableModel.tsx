@@ -40,7 +40,6 @@ export function TurntableModel() {
   const gl = useThree((s) => s.gl);
   const azimuth = useRef(0); // current azimuth (deg); advanced by spin, nudged by drag
   const seeded = useRef(false);
-  const paused = useRef(false);
   const dragging = useRef(false);
   const wasDragging = useRef(false);
   const resumeAt = useRef(0);
@@ -97,7 +96,8 @@ export function TurntableModel() {
       const el = e.target as HTMLElement | null;
       if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return;
       e.preventDefault();
-      paused.current = !paused.current;
+      const st = useSceneStore.getState();
+      st.setOrbitPaused(!st.orbitPaused);
     };
     dom.addEventListener("pointerdown", onDown);
     window.addEventListener("pointermove", onMove);
@@ -132,7 +132,7 @@ export function TurntableModel() {
     wasDragging.current = dragging.current;
 
     const spinning =
-      !paused.current && !dragging.current && tt >= resumeAt.current && cfg.spinSec > 0;
+      !s.orbitPaused && !dragging.current && tt >= resumeAt.current && cfg.spinSec > 0;
     if (spinning) azimuth.current = (azimuth.current + (360 / cfg.spinSec) * dt) % 360;
 
     const tier = CITY_TIERS[s.citySize] + GROUND_APRON_M;

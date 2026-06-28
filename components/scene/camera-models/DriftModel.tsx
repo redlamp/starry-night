@@ -80,7 +80,6 @@ export function DriftModel() {
   const mode = useSceneStore((s) => s.cameraMode);
   const masterSeed = useSceneStore((s) => s.masterSeed);
   const t = useRef(0); // accumulated drift time (frozen while paused)
-  const paused = useRef(false);
   const lastWrite = useRef(0);
   const phase = useRef<{ seed: string; value: number }>({ seed: "", value: 0 });
 
@@ -103,8 +102,8 @@ export function DriftModel() {
     c.maxPolarAngle = Math.PI;
   }, [mode]);
 
-  // Space pauses / resumes the drift (self-contained — the map controller's Space
-  // handler is unmounted while this model is active).
+  // Space pauses / resumes the drift via the shared orbitPaused flag — the same one
+  // the Orbit play button and Map's auto-revolution use, so one control governs all.
   useEffect(() => {
     if (mode !== "orbit") return;
     const onKey = (e: KeyboardEvent) => {
@@ -112,7 +111,8 @@ export function DriftModel() {
       const el = e.target as HTMLElement | null;
       if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return;
       e.preventDefault();
-      paused.current = !paused.current;
+      const st = useSceneStore.getState();
+      st.setOrbitPaused(!st.orbitPaused);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -128,7 +128,7 @@ export function DriftModel() {
     }
     const ph = phase.current.value;
 
-    if (!paused.current) t.current += dt;
+    if (!s.orbitPaused) t.current += dt;
     const tt = t.current;
     const cam = state.camera as THREE.PerspectiveCamera;
 

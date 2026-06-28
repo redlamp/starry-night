@@ -12,6 +12,14 @@ import {
   type RenderMode,
 } from "@/lib/state/sceneStore";
 import { maxHalfExtent } from "@/lib/seed/topology";
+import { getCameraModelMeta } from "@/components/scene/camera-models/catalog";
+import type { CameraModelId } from "@/lib/state/sceneStore";
+
+// Apply a model's transport default (Map paused, Drift/Turntable playing) on a
+// user-initiated switch — mirrors the selector's pickCamera. See catalog.startsPaused.
+function applyTransportDefault(id: CameraModelId) {
+  useSceneStore.getState().setOrbitPaused(getCameraModelMeta(id).startsPaused ?? false);
+}
 
 // Shared camera-mode logic — the single source of truth for the Fly / Orbit /
 // Top-down switch, used by the Camera panel's mode tabs, the `t` hotkey, and the
@@ -197,7 +205,9 @@ export function setCameraTab(tab: CameraTab) {
 export function toggleTopDown() {
   const s = useSceneStore.getState();
   s.setCameraMode("orbit");
-  s.setCameraModel(s.cameraModel === "topdown" ? "map" : "topdown");
+  const next = s.cameraModel === "topdown" ? "map" : "topdown";
+  s.setCameraModel(next);
+  applyTransportDefault(next);
 }
 
 // `f` hotkey: toggle the Fly camera MODEL on/off (back to Map when leaving).
@@ -206,9 +216,11 @@ export function toggleFly() {
   if (s.cameraModel === "fly") {
     s.setCameraMode("orbit");
     s.setCameraModel("map");
+    applyTransportDefault("map");
   } else {
     s.setCameraMode("fly");
     s.setCameraModel("fly");
+    applyTransportDefault("fly");
   }
 }
 

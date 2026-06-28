@@ -395,6 +395,12 @@ export function CameraPanel() {
     if (id == null) return;
     setCameraModel(id as CameraModelId);
     setCameraMode(id === "fly" ? "fly" : "orbit");
+    // Land in the model's transport default (Map paused on its still pose; Drift /
+    // Turntable auto-play). The shared orbitPaused flag can't encode per-model
+    // defaults on its own, so each switch applies the active model's.
+    useSceneStore
+      .getState()
+      .setOrbitPaused(getCameraModelMeta(id as CameraModelId).startsPaused ?? false);
   };
   const cameraCaption = getCameraModelMeta(cameraModel).character;
   const livePos = cameraLive.position;
@@ -482,7 +488,9 @@ export function CameraPanel() {
           </span>
           <Select value={activeCamera} onValueChange={pickCamera}>
             <SelectTrigger className="w-full" aria-label="Camera">
-              <SelectValue />
+              <SelectValue>
+                {(value) => (value ? getCameraModelMeta(value as CameraModelId).label : "")}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {[...CAMERA_MODELS]
