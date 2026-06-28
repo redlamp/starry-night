@@ -120,7 +120,6 @@ function resetDragAxis(): void {
   _rotAccX = 0;
   _rotAccY = 0;
 }
-const TURNTABLE_MIN_R = 40; // px floor on press↔pin distance, so the press-relative spin can't blow up at the pin
 const GESTURE_LOCK_PX = 12; // two-finger: travel before locking to one of pinch/twist/tilt
 // Focal indicator: a ground beacon ring around the focal's ground point.
 const RING_RADIUS = 50;
@@ -515,65 +514,40 @@ function pinScreenHit(
   return Math.abs(dx) <= PIN_HIT_HALF_W + pad && dy >= -above && dy <= below;
 }
 
-// LMB / 1-finger drag → orbit + tilt, eased (transition = true). AZIMUTH is PRESS-POINT-RELATIVE:
-// the grabbed point sweeps an angle around the pin, (v × drag) / |v|² (v = press − pin, screen), so
-// where you grab sets the lever arm — press far from the pin → slow / wide arc, near → fast / tight —
-// and the direction flips by side for free (above the pin a rightward drag goes CCW, below CW). TILT
-// stays a plain uniform vertical drag (the pin-relative tilt is the part that felt bad). |v| is
-// floored so the spin can't blow up right at the pin. Shared by touch + mouse. (user 2026-06-16)
+// LMB / 1-finger drag → orbit + tilt, eased (transition = true). AZIMUTH is a DIRECT
+// horizontal-drag mapping at every elevation (user 2026-06-24): drag left→right = orbit
+// counter-clockwise, right→left = clockwise — always, with NO press-relative lever arm and
+// NO above/below side-flip (the lever arm's flip-by-side is exactly what this replaces). TILT
+// stays a plain uniform vertical drag — it orbits the elevation down toward the ground (and the
+// ground clamp stops the eye at the floor). An axis gate keeps a mostly-vertical "tilt" drag from
+// bleeding into orbit. Shared by touch + mouse.
 function dragRotate(
   c: CameraControlsImpl,
-  camera: THREE.Camera,
   dom: HTMLCanvasElement,
   dx: number,
   dy: number,
-  pointerX: number,
-  pointerY: number,
 ): void {
-  markCameraActivity("rotate");
-  c.getTarget(_tgt);
   const r = dom.getBoundingClientRect();
-  let pinX = r.left + r.width * 0.5;
-  let pinY = r.top + r.height * 0.5;
-  if (focalScreenPos(camera, dom, _tgt, _screen2)) {
-    pinX = _screen2.x;
-    pinY = _screen2.y;
-  }
-  const vx = pointerX - pinX;
-  const vy = pointerY - pinY;
-  const r2 = Math.max(vx * vx + vy * vy, TURNTABLE_MIN_R * TURNTABLE_MIN_R);
-  let dAz = (vx * dy - vy * dx) / r2; // press-point-relative azimuth (lever arm; CCW above / CW below)
   const st = useSceneStore.getState();
-  // Tilt is a regulated, slower action (user 2026-06-16): a gentler rate than rotation, scaled by the
-  // tiltSpeed knob (1 = the legacy 2*pi/height gain), so a vertical drag eases the pitch.
-  let dPolar = (-2 * Math.PI * st.tiltSpeed * dy) / Math.max(1, dom.clientHeight);
-  // Tilt/rotate axis gate: accumulate the gesture's recent direction (decayed) and gate AZIMUTH by
-  // how horizontal it is, so the natural arc of a vertical "tilt" drag does not bleed into rotation.
+  // Tilt/rotate axis gate: accumulate the gesture's recent direction (decayed) and gate the AZIMUTH by
+  // how horizontal the drag is, so the natural arc of a vertical "tilt" drag does not bleed into orbit.
   _rotAccX = _rotAccX * ROT_AXIS_DECAY + Math.abs(dx);
   _rotAccY = _rotAccY * ROT_AXIS_DECAY + Math.abs(dy);
   const horizFrac = _rotAccX / (_rotAccX + _rotAccY + 1e-6);
   const xa = clamp((horizFrac - ROT_AXIS_GATE_LO) / (ROT_AXIS_GATE_HI - ROT_AXIS_GATE_LO), 0, 1);
-  dAz *= xa * xa * (3 - 2 * xa); // smoothstep: vertical drag → no azimuth, horizontal → full
+  const azGate = xa * xa * (3 - 2 * xa); // smoothstep: vertical drag → no azimuth, horizontal → full
+  markCameraActivity("rotate");
+  // Tilt is a regulated, slower action (user 2026-06-16): a gentler rate than rotation, scaled by the
+  // tiltSpeed knob (1 = the legacy 2*pi/height gain), so a vertical drag eases the pitch.
+  let dPolar = (-2 * Math.PI * st.tiltSpeed * dy) / Math.max(1, dom.clientHeight);
+  // Direct horizontal-drag azimuth: a full canvas-width drag sweeps π (180°). left→right = CCW,
+  // right→left = CW. Frame-rate-independent. (Sign is one flip away if it reads backwards on-device.)
+  let dAz = ((-dx * Math.PI) / Math.max(1, r.width)) * azGate;
   // Speed limit at grazing / far-out views: taper by elevation (smoothstep to the store floor below
   // the store threshold) and by distance (mild 1/d past ROT_DIST_REF), then hard-cap the step.
   const elevDeg = 90 - c.polarAngle / DEG;
-  // Low-angle direct orbit (user 2026-06-23). Near the horizon the focal pin is pulled
-  // to the screen bottom (Screen-Y framing), so the press-relative LEVER ARM gets a
-  // long, erratic radius — a small horizontal drag flings the azimuth, which is why
-  // swiping at a low angle felt awful. Below the Screen-Y threshold, blend the lever
-  // arm toward a DIRECT horizontal-drag azimuth (predictable, frame-rate-independent):
-  // drag right→left = clockwise, left→right = counter-clockwise. Uses the SAME
-  // low-angle curve (rotateSlowBelowDeg) as the Screen-Y pull, so it eases in lockstep
-  // with the framing rather than snapping at a separate threshold. (Sign is one flip
-  // away if the rotation direction reads backwards on-device.)
-  const lowT = lowAngleT(elevDeg, st.rotateSlowBelowDeg);
-  if (lowT > 0) {
-    const azGate = xa * xa * (3 - 2 * xa);
-    const dAzDirect = ((-dx * Math.PI) / Math.max(1, r.width)) * azGate;
-    dAz = dAz * (1 - lowT) + dAzDirect * lowT;
-  }
-  // Shared low-angle curve (also drives the Screen-Y ground pull) — tilt eases 1 → rotateLowAngleGain
-  // as the view nears the horizon, in lockstep with the framing.
+  // Shared low-angle curve (also drives the Screen-Y ground pull) — orbit + tilt ease 1 →
+  // rotateLowAngleGain as the view nears the horizon, in lockstep with the framing.
   const gElev = 1 + (st.rotateLowAngleGain - 1) * lowAngleT(elevDeg, st.rotateSlowBelowDeg);
   const gDist = clamp(ROT_DIST_REF / Math.max(ROT_DIST_REF, c.distance), ROT_DIST_MIN_GAIN, 1);
   const gain = gElev * gDist;
@@ -786,7 +760,7 @@ export function DreiSceneControls() {
       }
       const c = controls.current;
       if (!c) return;
-      dragRotate(c, camera, dom, e.clientX - lastX, e.clientY - lastY, e.clientX, e.clientY);
+      dragRotate(c, dom, e.clientX - lastX, e.clientY - lastY);
       lastX = e.clientX;
       lastY = e.clientY;
     };
@@ -1193,7 +1167,7 @@ export function DreiSceneControls() {
           void c.setLookAt(_camPos.x, _camPos.y, _camPos.z, _tgt.x, targetY, _tgt.z, false);
         } else {
           // 1-finger → press-point-relative orbit + uniform tilt (smoothed).
-          dragRotate(c, camera, dom, e.clientX - lastX, e.clientY - lastY, e.clientX, e.clientY);
+          dragRotate(c, dom, e.clientX - lastX, e.clientY - lastY);
           lastX = e.clientX;
           lastY = e.clientY;
         }
@@ -1588,7 +1562,7 @@ export function DreiSceneControls() {
     // ground clamp has nothing to protect against — but when it binds it MOVES the orbit point and
     // fights the in-place re-aim, worst right at Focal Y = 0 where the clamp sits at its limit. Relax
     // it while scrubbing; the live clamp resumes on release (the orbit point never left the ground, so
-    // there's nothing to snap back). (user 2026-06-21 — the "fight near Focal Y = 0")
+    // there's nothing to snap back). (user 2026-06-21 — the "fight near Focal Y = 0").
     if (allowUnder || focalScrubbing.current) maxPolar = Math.PI * 0.98;
     c.maxPolarAngle = maxPolar;
 
