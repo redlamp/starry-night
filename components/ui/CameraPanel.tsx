@@ -112,6 +112,7 @@ import {
   RoadHighlightAction,
 } from "@/components/ui/RoadsPanel";
 import { readTileCull, TILE_LAYERS } from "@/lib/scene/tileCullDebug";
+import { getLastDeviceFit } from "@/lib/perf/applyDeviceFit";
 import { tweenOrbitToDefault, tweenOrbitTowards, tweenProjectionTo } from "@/lib/scene/cameraView";
 
 function copyConfigToClipboard() {
@@ -3032,6 +3033,7 @@ function PerfReadout() {
   const qualityTier = useSceneStore((s) => s.qualityTier);
   const setQualityTier = useSceneStore((s) => s.setQualityTier);
   const setStars = useSceneStore((s) => s.setStars);
+  const setQualityUserSet = useSceneStore((s) => s.setQualityUserSet);
   return (
     <div className="flex items-center gap-2 text-xs">
       <span className="text-foreground/70 w-14 shrink-0">quality</span>
@@ -3041,6 +3043,9 @@ function PerfReadout() {
           const tier = v as QualityTier;
           setQualityTier(tier);
           setStars({ count: QUALITY_TIERS[tier].starCount });
+          // The user picked a tier — lock auto-tuning off (boot fit + runtime
+          // AdaptiveQuality both back off once this is set). (#53)
+          setQualityUserSet(true);
         }}
       >
         <SelectTrigger
@@ -3067,6 +3072,11 @@ function PerfReadout() {
 function AdaptiveGroup() {
   const adaptive = useSceneStore((s) => s.adaptive);
   const setAdaptive = useSceneStore((s) => s.setAdaptive);
+  const qualityUserSet = useSceneStore((s) => s.qualityUserSet);
+  // The boot device-fit (#53) runs in CaptureBoot, which mounts before this
+  // panel, so its result is available by the time the panel reads it. Snapshot
+  // it once on mount for the class + reason readout.
+  const [fit] = useState(() => getLastDeviceFit());
   return (
     <SubGroup
       label="Adaptive quality"
@@ -3074,13 +3084,25 @@ function AdaptiveGroup() {
         <Switch
           checked={adaptive}
           onCheckedChange={(v) => setAdaptive(v)}
-          title="Auto-pick the quality tier + render radius for this GPU, then step DPR down to hold framerate. Verify on real hardware."
+          title="Step DPR down at runtime to hold framerate, and crop the render radius if DPR bottoms out. Verify on real hardware."
         />
       }
     >
       <div className="text-foreground/40 text-[10px]">
-        Device-fit tier + radius on enable, then dynamic DPR to hold fps. Strong GPUs stay full.
+        Boot device-fit picks the starting tier + radius for this GPU; the runtime monitor then
+        steps DPR to hold fps. Strong GPUs stay full. Picking a tier locks both off.
       </div>
+      {fit?.applied && (
+        <div className="text-foreground/55 text-[10px] leading-snug">
+          Device fit: <span className="text-foreground/80">{fit.cls}</span> → tier{" "}
+          <span className="text-foreground/80">{fit.tier}</span>. {fit.reason}
+        </div>
+      )}
+      {qualityUserSet && (
+        <div className="text-[10px] text-amber-300/70">
+          Tier locked by your pick — auto-fit off.
+        </div>
+      )}
     </SubGroup>
   );
 }
