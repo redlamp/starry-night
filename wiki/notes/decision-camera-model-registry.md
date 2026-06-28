@@ -25,7 +25,7 @@ self-contained controller components into the orbit slot. New models live in the
 own files; the existing controller is registered **unmodified** as the default.
 
 - **Store** (`lib/state/sceneStore.ts`): `cameraModel: CameraModelId`
-  (`"map" | "drift" | "turntable" | "topdown" | "fly"` as of Stage B),
+  (`"map" | "drift" | "turntable" | "topdown" | "fly" | "dreimap" | "dreicamera"`),
   `setCameraModel`, default `"drift"`, `persist:true` via the `SETTINGS_REGISTRY`
   (so it round-trips through Save/Revert/Reset/Copy for free). `cameraMode`
   (fly/orbit) is kept in sync as a bridge (fly → `"fly"`, else `"orbit"`).
@@ -116,6 +116,33 @@ saved. Defaults: **Map** `startsPaused: true` (the curated still pose); **Drift*
 **Turntable** play (field omitted). Initial `orbitPaused` flipped `true → false` because
 the default model is now Drift, which should drift on load.
 
+## Vanilla drei modes + per-model panels + double-click reset (2026-06-28)
+
+**Two stock-drei models** added for comparison (own files, registered like the rest):
+**Drei - MapControls** (three.js OrbitControls rebound — LMB pan, RMB orbit, wheel zoom) and
+**Drei - CameraControls** (the camera-controls lib the app's orbit is built on, native input
+ON — LMB orbit, RMB truck, wheel dolly). Both frame the city on mount and force **perspective**
+(the faked-ortho morph needs the per-frame `orbit.radius` write-back the stock controls don't do —
+perspective-only, matching `/camera-lab`). Shared `orbitWriteback.ts` derives az/elev/radius from
+the camera→target offset so fog / moon / panel readout track them.
+
+**Controls panel reflects the active model** (`ControlsGuide`): a per-model `MODEL_GUIDE`
+(`Record<CameraModelId, …>` → compile error if a model lacks a sheet) replaced the hardcoded Map
+sheet. Each mode shows only its real gestures (Fly = WASD / E·Q keycaps; Drift / Top-down = a
+note; the drei modes = their bindings) + a model-scoped hotkey-toggle set, with the model name in
+the card header.
+
+**Side-view panel reflects the active model** (`CameraSideView` / `cameraReadout`): only Map writes
+the live `cameraReadout` singleton, so the diagram showed stale Map data everywhere else. Non-Map
+models now derive the diagram from `orbit` + `cameraLive` (Map keeps its rich framing gauges);
+Top-down is special-cased to straight-down. Added a `cameraLive` write-back to `TopDownModel` —
+fixes its fog/moon-follow staleness too.
+
+**Double-click reset, across modes, only if changed** (`cameraReset.useDoubleClickReset`): Map
+already had it (`tweenOrbitToHome`). Drift / Turntable reset their sliders if changed; Drei-Map /
+Drei-Camera re-frame (a no-op when already home); Fly returns to a default fly pose + speed;
+Top-down has nothing to reset. Map's own dbl-click is unchanged (always tweens home).
+
 ## Verification
 
 `tsc --noEmit` clean · ESLint clean · Prettier clean (touched code) · `bun run build`
@@ -127,9 +154,8 @@ play/pause behaviour rests on tsc/lint/build + the live session.)
 
 ## Follow-ups / open
 
-- The `ControlsGuide` cheat-sheet still documents only the map controls; it doesn't
-  yet reflect the active model (Drift = "watch; Space pauses"). Generate guide rows
-  from the model descriptor later (audit item).
+- ~~The `ControlsGuide` cheat-sheet still documents only the map controls.~~ **Resolved
+  2026-06-28** — it's now driven by a per-model `MODEL_GUIDE`; see the section above.
 - ~~Drift's pause is self-contained (its own Space), so the guide's Auto-Orbit switch
   (`orbitPaused`) doesn't drive it.~~ **Resolved 2026-06-28** — Drift/Turntable now read
   the shared `orbitPaused`; see "Per-model transport default" above.
