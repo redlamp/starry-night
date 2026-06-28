@@ -53,6 +53,20 @@ export const CAMERA_MODELS: CameraModelMeta[] = [
     blurb:
       "First-person free flight in perspective. W/S fly along the look direction, A/D strafe, E/Q up/down, drag to look (no roll), wheel sets speed, Shift sprints. Desktop.",
   },
+  {
+    id: "dreimap",
+    label: "Drei - MapControls",
+    character: "Vanilla drei MapControls — drag to pan, right-drag to orbit.",
+    blurb:
+      "drei's stock MapControls (three.js OrbitControls rebound for maps), exposed unmodified: LMB pans across the ground, RMB orbits, wheel zooms. A different library from the app's camera-controls-based orbit. Perspective only.",
+  },
+  {
+    id: "dreicamera",
+    label: "Drei - CameraControls",
+    character: "Vanilla camera-controls — the library the app is built on, out of the box.",
+    blurb:
+      "drei's stock CameraControls (the camera-controls library that DreiSceneControls / Drift / Turntable wrap), with native input left ON: LMB orbits, RMB trucks (screen-plane pan), wheel dollies. The unmodified baseline. Perspective only.",
+  },
 ];
 
 export const DEFAULT_CAMERA_MODEL: CameraModelId = "drift";

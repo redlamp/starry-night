@@ -5,10 +5,11 @@ import { useFrame } from "@react-three/fiber";
 import { CameraControls } from "@react-three/drei";
 import CameraControlsImpl from "camera-controls";
 import * as THREE from "three";
-import { useSceneStore } from "@/lib/state/sceneStore";
+import { useSceneStore, DEFAULT_DRIFT } from "@/lib/state/sceneStore";
 import { CITY_CENTER, CITY_TIERS } from "@/lib/seed/topology";
 import { orbitFramingFactor } from "@/lib/scene/aspectFraming";
 import { GROUND_APRON_M } from "../Ground";
+import { useDoubleClickReset, changedFromDefault } from "./cameraReset";
 
 // "Drift" — an ambient, hands-off cinematic camera model (the screensaver at rest).
 // A slow seeded crane-orbit around the city: azimuth creeps around, elevation
@@ -117,6 +118,12 @@ export function DriftModel() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [mode]);
+
+  // Double-click resets the Drift sliders to their defaults — only if they've been changed.
+  useDoubleClickReset(() => {
+    const s = useSceneStore.getState();
+    if (changedFromDefault(s.drift, DEFAULT_DRIFT)) s.setDrift({ ...DEFAULT_DRIFT });
+  });
 
   useFrame((state, dt) => {
     const c = controls.current;

@@ -4,7 +4,9 @@ import { useEffect, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { useSceneStore } from "@/lib/state/sceneStore";
-import { CITY_SCALE } from "@/lib/seed/topology";
+import { CITY_SCALE, CITY_CENTER, CITY_TIERS } from "@/lib/seed/topology";
+import { GROUND_APRON_M } from "../Ground";
+import { useDoubleClickReset } from "./cameraReset";
 
 // "Fly" — free first-person flight in PERSPECTIVE (per spec). W/S fly along the look
 // direction, A/D strafe, E up / Q down in world space (no roll/tilt), drag to look
@@ -13,6 +15,7 @@ import { CITY_SCALE } from "@/lib/seed/topology";
 
 const LOOK_SENS = 0.0025; // rad per pixel of drag
 const HALF_PI = Math.PI / 2;
+const DEG = Math.PI / 180;
 const BASE_SPEED = 600 * CITY_SCALE; // world units / sec at the default speed
 const MIN_SPEED = 60 * CITY_SCALE;
 const MAX_SPEED = 6000 * CITY_SCALE;
@@ -102,6 +105,32 @@ export function FlyModel() {
       keySet.clear();
     };
   }, [gl]);
+
+  // Double-click returns to a default establishing fly pose + speed (e.g. after flying off into space).
+  useDoubleClickReset(() => {
+    const cam = camera as THREE.PerspectiveCamera;
+    const s = useSceneStore.getState();
+    const tier = CITY_TIERS[s.citySize] + GROUND_APRON_M;
+    const R = tier * 2.0;
+    const elev = 28 * DEG;
+    const az = s.orbit.azimuthDeg * DEG;
+    const cx = CITY_CENTER.x;
+    const cz = CITY_CENTER.z;
+    cam.position.set(
+      cx + R * Math.cos(elev) * Math.sin(az),
+      R * Math.sin(elev),
+      cz + R * Math.cos(elev) * Math.cos(az),
+    );
+    // Aim at the city centre — derive yaw/pitch from the look direction (FlyModel's YXZ convention:
+    // fwd = (−cos·sin yaw, sin pitch, −cos·cos yaw)).
+    const lx = cx - cam.position.x;
+    const ly = -cam.position.y;
+    const lz = cz - cam.position.z;
+    const len = Math.hypot(lx, ly, lz) || 1;
+    pitch.current = Math.asin(ly / len);
+    yaw.current = Math.atan2(-lx / len, -lz / len);
+    speed.current = BASE_SPEED;
+  });
 
   useFrame((state, dt) => {
     const cam = camera as THREE.PerspectiveCamera;

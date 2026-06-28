@@ -5,10 +5,11 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { CameraControls } from "@react-three/drei";
 import CameraControlsImpl from "camera-controls";
 import * as THREE from "three";
-import { useSceneStore } from "@/lib/state/sceneStore";
+import { useSceneStore, DEFAULT_TURNTABLE } from "@/lib/state/sceneStore";
 import { CITY_CENTER, CITY_TIERS } from "@/lib/seed/topology";
 import { orbitFramingFactor } from "@/lib/scene/aspectFraming";
 import { GROUND_APRON_M } from "../Ground";
+import { useDoubleClickReset, changedFromDefault } from "./cameraReset";
 
 // "Turntable" — a showcase spin. The city rotates steadily at a fixed elevation,
 // presented like a model on a rotating stage. Unlike Drift (hands-off, organic
@@ -112,6 +113,13 @@ export function TurntableModel() {
       window.removeEventListener("keydown", onKey);
     };
   }, [mode, gl]);
+
+  // Double-click resets the Turntable sliders (elevation, spin) to their defaults — only if changed.
+  useDoubleClickReset(() => {
+    const s = useSceneStore.getState();
+    if (changedFromDefault(s.turntable, DEFAULT_TURNTABLE))
+      s.setTurntable({ ...DEFAULT_TURNTABLE });
+  });
 
   useFrame((state, dt) => {
     const c = controls.current;
