@@ -14,6 +14,8 @@ import { useIdle } from "@/lib/useIdle";
 import { Switch } from "@/components/ui/switch";
 import { toggleProjection } from "@/lib/scene/cameraView";
 import { MapPin } from "lucide-react";
+import { getCameraModelMeta } from "@/components/scene/camera-models/catalog";
+import type { CameraModelId } from "@/lib/state/sceneStore";
 
 // In-app controls cheat-sheet. A small, NON-MODAL card anchored bottom-right (no scrim — it STAYS UP
 // while you test the gestures; dismiss with the ✕, the "?" button, or Esc — a click on the scene does
@@ -24,7 +26,13 @@ import { MapPin } from "lucide-react";
 // Bindings live in DreiSceneControls; keep this list in sync when they change.
 
 type Mode = "mouse" | "touch";
-type Item = { icon: string; motion?: "ud" | "all"; badge?: string; label: string; sub?: string };
+type Item = {
+  icon: string;
+  motion?: "ud" | "all" | "lr";
+  badge?: string;
+  label: string;
+  sub?: string;
+};
 
 // Focal Height's one-button twin uses Ctrl on Windows/Linux, ⌘ on macOS — resolve to the user's
 // platform so the hint shows the one key they actually press. navigator only exists client-side; the
@@ -34,20 +42,100 @@ const IS_MAC =
   /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent || "");
 const MOD = IS_MAC ? "⌘" : "Ctrl";
 
-const MOUSE_ITEMS: Item[] = [
+// Map model — the full hands-on controller (the original sheet).
+const MAP_MOUSE: Item[] = [
   { icon: "mouse-left", motion: "all", label: "Rotate & Tilt" },
   { icon: "mouse-right", motion: "all", label: "Move", sub: "Shift + LMB" },
   { icon: "mouse-wheel", motion: "ud", label: "Zoom", sub: "z: cursor ↔ pin" },
   { icon: "mouse-both", motion: "ud", label: "Focal Height", sub: `${MOD} + LMB` },
   { icon: "mouse-left", badge: "×2", label: "Reset", sub: "double-click" },
 ];
-const TOUCH_ITEMS: Item[] = [
+const MAP_TOUCH: Item[] = [
   { icon: "finger-1", motion: "all", label: "Rotate & Tilt" },
   { icon: "finger-2", motion: "all", label: "Move" },
   { icon: "pinch", label: "Zoom", sub: "pinch in / out" },
   { icon: "pin", motion: "ud", label: "Focal Height", sub: "drag the pin" },
   { icon: "finger-1", badge: "×2", label: "Reset", sub: "double-tap" },
 ];
+
+type KeyRow = { cap: string; label: string };
+type GuideSpec = {
+  mouse: Item[];
+  touch: Item[];
+  keys?: KeyRow[]; // keyboard rows (Fly) — shown on the Mouse tab only
+  note?: string; // shown when a model has few/no pointer gestures
+  hotkeys: HotkeyId[]; // which toggle switches are relevant to this model
+};
+
+// Per-model control sheets. The guide renders whichever matches the active cameraModel, so
+// it only ever shows gestures that do something now. Typed Record<CameraModelId, …> so a new
+// model without a sheet is a compile error (mirrors the model registry). HotkeyId is declared
+// just below — TS hoists the type, so forward-referencing it here is fine.
+const MODEL_GUIDE: Record<CameraModelId, GuideSpec> = {
+  map: {
+    mouse: MAP_MOUSE,
+    touch: MAP_TOUCH,
+    hotkeys: ["autoOrbit", "projection", "showPin", "zoom", "settings"],
+  },
+  drift: {
+    mouse: [],
+    touch: [],
+    note: "Hands-off — Drift flies itself. Pause it with the Auto-Orbit toggle below (or Space).",
+    hotkeys: ["autoOrbit", "projection", "settings"],
+  },
+  turntable: {
+    mouse: [{ icon: "mouse-left", motion: "lr", label: "Spin", sub: "drag left / right" }],
+    touch: [{ icon: "finger-1", motion: "lr", label: "Spin", sub: "drag left / right" }],
+    note: "Grab and drag to spin it by hand; the auto-spin resumes after a beat.",
+    hotkeys: ["autoOrbit", "projection", "settings"],
+  },
+  topdown: {
+    mouse: [],
+    touch: [],
+    note: "Fixed plan view — north up, straight down at the city centre. No camera controls.",
+    hotkeys: ["settings"],
+  },
+  fly: {
+    mouse: [
+      { icon: "mouse-left", motion: "all", label: "Look", sub: "drag" },
+      { icon: "mouse-wheel", motion: "ud", label: "Speed", sub: "wheel" },
+    ],
+    touch: [{ icon: "finger-1", motion: "all", label: "Look", sub: "drag" }],
+    keys: [
+      { cap: "W A S D", label: "Fly / strafe" },
+      { cap: "E / Q", label: "Up / down" },
+      { cap: "Shift", label: "Sprint" },
+    ],
+    hotkeys: ["settings"],
+  },
+  dreimap: {
+    mouse: [
+      { icon: "mouse-left", motion: "all", label: "Pan", sub: "drag the ground" },
+      { icon: "mouse-right", motion: "all", label: "Orbit" },
+      { icon: "mouse-wheel", motion: "ud", label: "Zoom" },
+    ],
+    touch: [
+      { icon: "finger-1", motion: "all", label: "Pan" },
+      { icon: "finger-2", motion: "all", label: "Orbit" },
+      { icon: "pinch", label: "Zoom", sub: "pinch in / out" },
+    ],
+    note: "Vanilla drei MapControls — perspective only.",
+    hotkeys: ["settings"],
+  },
+  dreicamera: {
+    mouse: [
+      { icon: "mouse-left", motion: "all", label: "Orbit" },
+      { icon: "mouse-right", motion: "all", label: "Move", sub: "truck" },
+      { icon: "mouse-wheel", motion: "ud", label: "Dolly", sub: "zoom" },
+    ],
+    touch: [
+      { icon: "finger-1", motion: "all", label: "Orbit" },
+      { icon: "pinch", label: "Zoom + pan", sub: "two fingers" },
+    ],
+    note: "Vanilla camera-controls — perspective only.",
+    hotkeys: ["settings"],
+  },
+};
 
 // Toggle rows under the gestures: the keyboard shortcut (desktop only) + label + a live Switch wired
 // to the SAME store state the key flips, so the card doubles as a control surface. On touch the keycap
@@ -71,14 +159,27 @@ const ACTION_LABEL: Record<CameraAction, string> = {
   reset: "Reset",
 };
 
-function Glyph({ icon, motion, badge }: { icon: string; motion?: "ud" | "all"; badge?: string }) {
+function Glyph({
+  icon,
+  motion,
+  badge,
+}: {
+  icon: string;
+  motion?: "ud" | "all" | "lr";
+  badge?: string;
+}) {
   return (
     <span className="flex w-20 shrink-0 items-center justify-start gap-1.5">
       {icon === "pin" ? (
         // the actual scene pin — lucide MapPin in the same sky-blue (#7dd3fc = sky-300) it renders at
         <MapPin className="h-9 w-auto text-sky-300" strokeWidth={2.5} />
       ) : (
-        <img src={asset(`/controls/${icon}.svg`)} alt="" className="h-10 w-auto" draggable={false} />
+        <img
+          src={asset(`/controls/${icon}.svg`)}
+          alt=""
+          className="h-10 w-auto"
+          draggable={false}
+        />
       )}
       {motion && (
         <img
@@ -109,7 +210,10 @@ function Rows({ items, active }: { items: Item[]; active: string | null }) {
             <Glyph icon={it.icon} motion={it.motion} badge={it.badge} />
             <div className="min-w-0">
               <div
-                className={cn("text-base", on ? "font-medium text-amber-300" : "text-foreground/90")}
+                className={cn(
+                  "text-base",
+                  on ? "font-medium text-amber-300" : "text-foreground/90",
+                )}
               >
                 {it.label}
               </div>
@@ -122,9 +226,27 @@ function Rows({ items, active }: { items: Item[]; active: string | null }) {
   );
 }
 
+// Keyboard rows (Fly's WASD / E·Q / Shift). No glyph assets for keys, so render keycaps in
+// the same amber style as the hotkey switches below.
+function KeyRows({ rows }: { rows: KeyRow[] }) {
+  return (
+    <div className="flex flex-col gap-1.5 py-1">
+      {rows.map((r, i) => (
+        <div key={i} className="flex items-center gap-3 px-1.5">
+          <kbd className="inline-flex min-w-[4.5rem] justify-center rounded bg-amber-400 px-2 py-1 font-mono text-sm font-semibold text-black">
+            {r.cap}
+          </kbd>
+          <span className="text-foreground/90 text-base">{r.label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // Live toggle switches for the camera shortcuts — each reads + writes the SAME store state its key
-// flips, so the card doubles as a control surface (essential on touch, which has no keyboard).
-function HotkeyToggles({ showKeys }: { showKeys: boolean }) {
+// flips, so the card doubles as a control surface (essential on touch, which has no keyboard). Only
+// the shortcuts relevant to the active model are shown (ids).
+function HotkeyToggles({ showKeys, ids }: { showKeys: boolean; ids: HotkeyId[] }) {
   const orbitPaused = useSceneStore((s) => s.orbitPaused);
   const setOrbitPaused = useSceneStore((s) => s.setOrbitPaused);
   const isOrtho = useSceneStore((s) => s.projection === "orthographic");
@@ -143,9 +265,11 @@ function HotkeyToggles({ showKeys }: { showKeys: boolean }) {
     settings: { on: !panelHidden, toggle: (v) => setPanelHidden(!v) },
   };
 
+  const rows = HOTKEYS.filter((hk) => ids.includes(hk.id));
+  if (rows.length === 0) return null;
   return (
     <div className="border-foreground/10 mt-2.5 flex flex-col gap-2 border-t pt-2.5">
-      {HOTKEYS.map((hk) => {
+      {rows.map((hk) => {
         const s = state[hk.id];
         return (
           <div key={hk.id} className="flex items-center gap-2">
@@ -166,6 +290,7 @@ function HotkeyToggles({ showKeys }: { showKeys: boolean }) {
 
 export function ControlsGuide() {
   const captureMode = useSceneStore((s) => s.captureMode);
+  const cameraModel = useSceneStore((s) => s.cameraModel);
   const idle = useIdle(); // fade the "?" button when idle (unless the panel is open)
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<Mode>(() =>
@@ -191,8 +316,7 @@ export function ControlsGuide() {
     if (!open) return;
     let raf = 0;
     const tick = () => {
-      const fresh =
-        performance.now() - cameraActivity.at < 260 ? cameraActivity.action : null;
+      const fresh = performance.now() - cameraActivity.at < 260 ? cameraActivity.action : null;
       const label = fresh ? ACTION_LABEL[fresh] : null;
       setActiveLabel((prev) => (prev === label ? prev : label));
       raf = requestAnimationFrame(tick);
@@ -212,6 +336,10 @@ export function ControlsGuide() {
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
 
+  const guide = MODEL_GUIDE[cameraModel] ?? MODEL_GUIDE.map;
+  const meta = getCameraModelMeta(cameraModel);
+  const items = mode === "mouse" ? guide.mouse : guide.touch;
+
   if (captureMode) return null; // headless stills hide all UI
 
   return (
@@ -223,8 +351,13 @@ export function ControlsGuide() {
           aria-label="Camera controls"
           className="border-foreground/10 bg-popover/70 text-foreground pointer-events-auto fixed right-3 bottom-16 z-30 flex max-h-[75dvh] w-80 flex-col overflow-y-auto rounded-lg border p-3 shadow-2xl backdrop-blur-md"
         >
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-foreground/80 text-sm font-semibold tracking-wide">Controls</span>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div className="flex min-w-0 items-baseline gap-2">
+              <span className="text-foreground/80 text-sm font-semibold tracking-wide">
+                Controls
+              </span>
+              <span className="text-foreground/45 truncate text-xs">{meta.label}</span>
+            </div>
             <button
               onClick={() => setOpen(false)}
               aria-label="Close"
@@ -249,8 +382,15 @@ export function ControlsGuide() {
               </TabsTrigger>
             </TabsList>
           </Tabs>
-          <Rows items={mode === "mouse" ? MOUSE_ITEMS : TOUCH_ITEMS} active={activeLabel} />
-          <HotkeyToggles showKeys={mode === "mouse"} />
+          {items.length > 0 && <Rows items={items} active={activeLabel} />}
+          {mode === "mouse" && guide.keys && <KeyRows rows={guide.keys} />}
+          {guide.note && (
+            <p className="text-foreground/55 px-1.5 py-1.5 text-sm leading-snug">{guide.note}</p>
+          )}
+          {items.length === 0 && !guide.keys && !guide.note && (
+            <p className="text-foreground/45 px-1.5 py-1.5 text-sm">No pointer controls.</p>
+          )}
+          <HotkeyToggles showKeys={mode === "mouse"} ids={guide.hotkeys} />
         </div>
       )}
       <button

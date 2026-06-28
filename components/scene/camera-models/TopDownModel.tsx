@@ -31,6 +31,7 @@ export function TopDownModel() {
   const size = useThree((s) => s.size);
   const citySize = useSceneStore((s) => s.citySize);
   const prevOrtho = useRef<number | null>(null);
+  const lastWrite = useRef(0);
 
   // Snapshot orthoSize on mount; restore it (and camera.up) on exit so the orbit models
   // resume with the user's zoom and a normal up vector.
@@ -51,7 +52,7 @@ export function TopDownModel() {
     useSceneStore.getState().setOrthoSize(fitOrthoSize(tier, aspect));
   }, [citySize, size.width, size.height]);
 
-  useFrame(() => {
+  useFrame((state) => {
     const cam = camera as THREE.PerspectiveCamera;
     const aspect = size.width / Math.max(1, size.height);
     const tier = CITY_TIERS[citySize] + GROUND_APRON_M;
@@ -63,6 +64,17 @@ export function TopDownModel() {
     cam.up.copy(NORTH_UP);
     cam.lookAt(CITY_CENTER.x, 0, CITY_CENTER.z);
     cam.updateMatrixWorld();
+    // Keep cameraLive current (camera-anchored fog, moon-follow, panel readout, side-view diagram) —
+    // this model drives the camera directly, so nothing else writes it. ~10/s, like the other models.
+    const tt = state.clock.elapsedTime;
+    if (tt - lastWrite.current >= 0.1) {
+      lastWrite.current = tt;
+      useSceneStore.getState().setCameraLive({
+        position: [cam.position.x, cam.position.y, cam.position.z],
+        rotation: [cam.rotation.x, cam.rotation.y, cam.rotation.z],
+        fov: cam.fov,
+      });
+    }
   });
 
   return null;
