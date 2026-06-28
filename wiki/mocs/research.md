@@ -5,6 +5,7 @@ Map of Content for external references that shape direction.
 ## Visual references
 
 - [[after-dark-starry-night-original]] — YT capture of the original Berkeley Systems *After Dark* "Starry Night" Mac screensaver; the primary homage anchor (ambient behaviour + pacing)
+- [[city-life-montages]] — curated montages that establish a city as a living organism beyond the main story: the GITS (1995) New Port City anchor + anime, the "city symphony" film genre (Berlin/Vertov/Koyaanisqatsi), live-action (Blade Runner, Drive), and games (Night City, Kamurocho). Maps each "aliveness" lever onto our scene
 - [[night-sky-reference-real]] — #26 research pass: Bortle skyglow color/extent, magnitude-band star counts + 2.512× brightness law, elevation-driven twinkle, moon 21.84° halo physics, moonlit-sky behavior
 - [[night-sky-reference-stylized]] — #26 research pass: the original decoded from `starryn` C source (exact constants), Outer Wilds/BotW/Firewatch/Van Gogh/Ghibli techniques, Three.js recipes (gradient dithering, fog-chunk override → #54)
 - [[star-twinkle-scintillation]] — 3-agent pass on atmospheric scintillation: physics (log-normal, `(sec z)³` amplitude, few–16 Hz broadband, chromatic flash), rendering landscape (Stellarium dim-only luminance model, sum-of-sines vs noise), foundational white papers (Dravins/Osborn/Roddier; Jensen night-sky/Temporal Glare), and the target model spec. Verdict: keep the per-vertex chassis, replace the signal
@@ -32,6 +33,7 @@ Map of Content for external references that shape direction.
 ## Interaction / camera references
 
 - [[camera-interaction-models]] — survey of camera/navigation models (Google Maps, Mapbox, Cesium; RTS + city-builders; Blender/Maya/Fusion/Unity/Unreal; drei `<CameraControls>` / camera-controls / OrbitControls vs MapControls) to evaluate "drag the pin to set Focal Y" + find missing angles for the drei camera bridge. Includes the open-decisions list awaiting review.
+- [[camera-architecture-and-perf]] — the architecture/perf/library-internals companion to the above (2026-06-27): camera-controls + drei internals (update/rest/SmoothDamp, the #2005 demand bug, ortho ZOOM≠DOLLY), R3F render-loop levers (StarPass FPS throttle, dirty-flag projection, static-city matrices, adaptive DPR), receding-eye morph theory, and 2024–26 interaction/a11y deltas (DragControls now auto-disables; `@use-gesture` already installed; reduced-motion). Feeds [[plan-camera-refactor-optimization]]
 
 ## Colour references
 

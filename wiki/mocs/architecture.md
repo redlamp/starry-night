@@ -13,6 +13,9 @@ reference notes that describe how the running system behaves.
 
 ## Camera & controls
 
+- [[plan-unify-camera-selector]] — **2026-06-28 plan:** collapse the two selection axes (`cameraMode` Fly/Orbit/Top-down + `cameraModel` Map/Drift/Turntable) into one shadcn `<Select>` "Camera" dropdown; Stage A = presentation over the existing axes, Stage B = one `CameraId` + fold Fly/Top-down into the registry + retire the legacy controller
+- [[plan-camera-refactor-optimization]] — **2026-06-27 audit + plan:** current-state analysis (3 coexisting controllers / stalled migration, faked-ortho keystone, the 1758-line monolith, the `cameraLive` re-render storm, doc-lag) + a P0–P4 prioritized change/optimization plan
+- [[camera-architecture-and-perf]] — external research feeding the plan: camera-controls/drei internals, R3F render-loop perf (throttle in StarPass, adaptive DPR, static-matrix), projection-morph theory, 2024–26 interaction/a11y deltas
 - [[camera-systems-history]] — timestamped survey of every camera + controller in the
   repo's history (eras A–G), current control mappings, and parallels to known systems
 - [[camera-lab-test-plan]] — the `/camera-lab` testbed: the seven methods, test tasks,
