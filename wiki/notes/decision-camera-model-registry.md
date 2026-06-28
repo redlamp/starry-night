@@ -24,10 +24,11 @@ Add a **camera-model registry**: a runtime-selectable layer that mounts one of N
 self-contained controller components into the orbit slot. New models live in their
 own files; the existing controller is registered **unmodified** as the default.
 
-- **Store** (`lib/state/sceneStore.ts`): new `cameraModel: CameraModelId`
-  (`"map" | "drift"`), `setCameraModel`, default `"map"`, `persist:true` via the
-  `SETTINGS_REGISTRY` (so it round-trips through Save/Revert/Reset/Copy for free).
-  Orthogonal to `cameraMode` (still/fly/orbit) — models apply in orbit.
+- **Store** (`lib/state/sceneStore.ts`): `cameraModel: CameraModelId`
+  (`"map" | "drift" | "turntable" | "topdown" | "fly"` as of Stage B),
+  `setCameraModel`, default `"drift"`, `persist:true` via the `SETTINGS_REGISTRY`
+  (so it round-trips through Save/Revert/Reset/Copy for free). `cameraMode`
+  (fly/orbit) is kept in sync as a bridge (fly → `"fly"`, else `"orbit"`).
 - **`components/scene/camera-models/`** (all new):
   - `catalog.ts` — pure metadata (id, label, character, blurb); no component
     imports, so the settings UI reads labels without pulling in three.js.
@@ -99,20 +100,39 @@ appears (open) when the model is active, and the Map pose sliders hide: **Drift*
 reach/speed, elevation mean/bob, revolve seconds, breathe; **Turntable** — elevation, spin
 seconds. The shared Screen Y / ground-pull controls below affect all three models.
 
+## Per-model transport default + unified play/pause (2026-06-28)
+
+The Orbit header's play/pause button (and Space, and the controls guide) all write one
+`orbitPaused` flag. Drift and Turntable originally kept **local** `paused` refs, so that
+button never reached them. Fixed: both now read the shared `orbitPaused` in their frame
+loop, so **one transport control governs Map, Drift, and Turntable**.
+
+A single shared flag can't encode three *different* defaults, so the natural starting
+state is declared per model in the catalog (`CameraModelMeta.startsPaused`) and applied
+on every **user** switch — the selector (`pickCamera`) and the `t` / `f` hotkeys
+(`cameraView.applyTransportDefault`). It is deliberately **not** applied in the generic
+`setCameraModel` setter, so boot **hydration** still restores a saved pose exactly as
+saved. Defaults: **Map** `startsPaused: true` (the curated still pose); **Drift** /
+**Turntable** play (field omitted). Initial `orbitPaused` flipped `true → false` because
+the default model is now Drift, which should drift on load.
+
 ## Verification
 
 `tsc --noEmit` clean · ESLint clean · Prettier clean (touched code) · `bun run build`
 green. **Feel is unverified** — the Drift cadence/framing and the selector UX are
 the user's live test ([[feedback_interaction-feel-verification]]); the constants in
-`DriftModel.tsx` are first-pass and meant to be tuned.
+`DriftModel.tsx` are first-pass and meant to be tuned. (Headless capture for the
+2026-06-28 transport work was blocked by the Windows Playwright launch hang, so the
+play/pause behaviour rests on tsc/lint/build + the live session.)
 
 ## Follow-ups / open
 
 - The `ControlsGuide` cheat-sheet still documents only the map controls; it doesn't
   yet reflect the active model (Drift = "watch; Space pauses"). Generate guide rows
   from the model descriptor later (audit item).
-- Drift's pause is self-contained (its own Space), so the guide's Auto-Orbit switch
-  (`orbitPaused`) doesn't drive it. Acceptable for v1.
+- ~~Drift's pause is self-contained (its own Space), so the guide's Auto-Orbit switch
+  (`orbitPaused`) doesn't drive it.~~ **Resolved 2026-06-28** — Drift/Turntable now read
+  the shared `orbitPaused`; see "Per-model transport default" above.
 - Confirmed via the build route table: `/camera-lab` + `/drei-lab` ship on the
   public GH-Pages build (audit P4 open question) — decide whether to guard them.
 - Candidate future models: Fly (promote the legacy rig — starts finishing the migration),
