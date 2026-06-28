@@ -614,7 +614,7 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "orbitZoomToPin", defaultValue: true as const, persist: false },
   { key: "allowUnderview", defaultValue: false as const, persist: false },
   { key: "cameraMode", defaultValue: "orbit" as const, persist: true },
-  { key: "cameraModel", defaultValue: "map" as const, persist: true },
+  { key: "cameraModel", defaultValue: "drift" as const, persist: true },
   { key: "drift", defaultValue: DEFAULT_DRIFT, persist: true },
   { key: "turntable", defaultValue: DEFAULT_TURNTABLE, persist: true },
   { key: "orbitRestore", defaultValue: null as SceneState["orbitRestore"], persist: false },
@@ -1256,7 +1256,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setMoonLive: (moonLive) => set({ moonLive }),
   // Note: cameraMode default is "orbit" — see below.
   cameraMode: "orbit",
-  cameraModel: "map",
+  cameraModel: "drift",
   drift: DEFAULT_DRIFT,
   turntable: DEFAULT_TURNTABLE,
   cameraIntent: DEFAULT_INTENT,

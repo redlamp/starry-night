@@ -485,11 +485,13 @@ export function CameraPanel() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {CAMERA_MODELS.map((m) => (
-                <SelectItem key={m.id} value={m.id}>
-                  {m.label}
-                </SelectItem>
-              ))}
+              {[...CAMERA_MODELS]
+                .sort((a, b) => a.label.localeCompare(b.label))
+                .map((m) => (
+                  <SelectItem key={m.id} value={m.id}>
+                    {m.label}
+                  </SelectItem>
+                ))}
             </SelectContent>
           </Select>
           <span className="text-foreground/50 text-[11px] leading-snug">{cameraCaption}</span>

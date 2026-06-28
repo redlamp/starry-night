@@ -35,7 +35,7 @@ export const CAMERA_MODELS: CameraModelMeta[] = [
   },
   {
     id: "topdown",
-    label: "Top-down",
+    label: "Top-Down",
     character: "North-up overhead, looking straight down at the city.",
     blurb:
       "A fixed plan view from straight above the city centre, north up, fit to the whole city. No rotation, no auto-motion.",
@@ -49,7 +49,7 @@ export const CAMERA_MODELS: CameraModelMeta[] = [
   },
 ];
 
-export const DEFAULT_CAMERA_MODEL: CameraModelId = "map";
+export const DEFAULT_CAMERA_MODEL: CameraModelId = "drift";
 
 export function getCameraModelMeta(id: CameraModelId): CameraModelMeta {
   return CAMERA_MODELS.find((m) => m.id === id) ?? CAMERA_MODELS[0];
