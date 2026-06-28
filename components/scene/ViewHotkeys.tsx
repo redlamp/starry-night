@@ -1,7 +1,12 @@
 "use client";
 
 import { useEffect } from "react";
-import { toggleTopDown, toggleProjection, toggleAllWireframe } from "@/lib/scene/cameraView";
+import {
+  toggleTopDown,
+  toggleFly,
+  toggleProjection,
+  toggleAllWireframe,
+} from "@/lib/scene/cameraView";
 import { useSceneStore } from "@/lib/state/sceneStore";
 import { isTypingTarget } from "@/lib/utils";
 
@@ -16,10 +21,11 @@ export function ViewHotkeys() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase();
-      if (k !== "t" && k !== "p" && k !== "d") return;
+      if (k !== "t" && k !== "f" && k !== "p" && k !== "d") return;
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (isTypingTarget(e)) return;
       if (k === "t") toggleTopDown();
+      else if (k === "f") toggleFly();
       else if (k === "p") toggleProjection();
       else if (useSceneStore.getState().cameraMode === "orbit") toggleAllWireframe();
     };

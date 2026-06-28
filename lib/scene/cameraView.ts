@@ -193,10 +193,23 @@ export function setCameraTab(tab: CameraTab) {
   else enterTopDownMode();
 }
 
-// `t` hotkey: toggle top-down on/off (enter from orbit or fly, exit back to orbit).
+// `t` hotkey: toggle the Top-down camera MODEL on/off (back to Map when leaving).
 export function toggleTopDown() {
-  if (isTopDown()) enterOrbitMode();
-  else enterTopDownMode();
+  const s = useSceneStore.getState();
+  s.setCameraMode("orbit");
+  s.setCameraModel(s.cameraModel === "topdown" ? "map" : "topdown");
+}
+
+// `f` hotkey: toggle the Fly camera MODEL on/off (back to Map when leaving).
+export function toggleFly() {
+  const s = useSceneStore.getState();
+  if (s.cameraModel === "fly") {
+    s.setCameraMode("orbit");
+    s.setCameraModel("map");
+  } else {
+    s.setCameraMode("fly");
+    s.setCameraModel("fly");
+  }
 }
 
 // "Default Orbit" button: reset the orbit framing to DEFAULT_ORBIT with a tween
@@ -269,7 +282,7 @@ export function tweenOrbitToHome() {
     onUpdate: () => {
       const st = useSceneStore.getState();
       st.setOrbit({
-        azimuthDeg: (((p.az % 360) + 360) % 360),
+        azimuthDeg: ((p.az % 360) + 360) % 360,
         elevationDeg: p.el,
         radius: p.r,
         lookAtY: p.ly,

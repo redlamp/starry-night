@@ -94,10 +94,7 @@ import {
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
-  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -115,13 +112,7 @@ import {
   RoadHighlightAction,
 } from "@/components/ui/RoadsPanel";
 import { readTileCull, TILE_LAYERS } from "@/lib/scene/tileCullDebug";
-import {
-  setCameraTab,
-  currentCameraTab,
-  tweenOrbitToDefault,
-  tweenOrbitTowards,
-  tweenProjectionTo,
-} from "@/lib/scene/cameraView";
+import { tweenOrbitToDefault, tweenOrbitTowards, tweenProjectionTo } from "@/lib/scene/cameraView";
 
 function copyConfigToClipboard() {
   const s = useSceneStore.getState();
@@ -328,10 +319,10 @@ export function CameraPanel() {
     hasSavedConfig,
     clearSavedConfig,
   } = useSceneStore();
-  const orbitRestoreSet = useSceneStore((s) => s.orbitRestore !== null);
   const showPinPlane = useSceneStore((s) => s.debug.showPinPlane);
   const cameraModel = useSceneStore((s) => s.cameraModel);
   const setCameraModel = useSceneStore((s) => s.setCameraModel);
+  const setCameraMode = useSceneStore((s) => s.setCameraMode);
 
   const hidden = useSceneStore((s) => s.panelHidden);
   const setHidden = useSceneStore((s) => s.setPanelHidden);
@@ -396,26 +387,16 @@ export function CameraPanel() {
   }
 
   const flying = cameraMode === "fly";
-  const modeTab = currentCameraTab(cameraMode, orbitRestoreSet);
-  // Stage A camera picker: collapse the cameraMode (fly/orbit/top-down) + cameraModel
-  // (map/drift/turntable) axes into one derived id, dispatched via the existing helpers
-  // (presentation only — see wiki plan-unify-camera-selector).
-  const activeCamera = modeTab === "fly" ? "fly" : modeTab === "top-down" ? "topdown" : cameraModel;
+  // Stage B: cameraModel is the single camera selector (map/drift/turntable/topdown/fly).
+  // cameraMode is kept in sync (fly → "fly", else "orbit") for the orbit models' self-gate
+  // and the framing helpers; Fly + Top-down are now models in the registry.
+  const activeCamera = cameraModel;
   const pickCamera = (id: string | null) => {
     if (id == null) return;
-    if (id === "fly") setCameraTab("fly");
-    else if (id === "topdown") setCameraTab("top-down");
-    else {
-      if (modeTab !== "orbit") setCameraTab("orbit");
-      setCameraModel(id as CameraModelId);
-    }
+    setCameraModel(id as CameraModelId);
+    setCameraMode(id === "fly" ? "fly" : "orbit");
   };
-  const cameraCaption =
-    activeCamera === "fly"
-      ? "Free flight: WASD + drag-look (desktop)."
-      : activeCamera === "topdown"
-        ? "North-up overhead, aspect-fit."
-        : getCameraModelMeta(cameraModel).character;
+  const cameraCaption = getCameraModelMeta(cameraModel).character;
   const livePos = cameraLive.position;
   const liveRotDeg: Vec3 = [
     cameraLive.rotation[0] * RAD2DEG,
@@ -504,17 +485,11 @@ export function CameraPanel() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectGroup>
-                <SelectLabel>Orbit</SelectLabel>
-                {CAMERA_MODELS.map((m) => (
-                  <SelectItem key={m.id} value={m.id}>
-                    {m.label}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-              <SelectSeparator />
-              <SelectItem value="topdown">Top-down</SelectItem>
-              <SelectItem value="fly">Fly</SelectItem>
+              {CAMERA_MODELS.map((m) => (
+                <SelectItem key={m.id} value={m.id}>
+                  {m.label}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
           <span className="text-foreground/50 text-[11px] leading-snug">{cameraCaption}</span>

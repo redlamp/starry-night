@@ -3,6 +3,8 @@ import type { CameraModelId } from "@/lib/state/sceneStore";
 import { DreiSceneControls } from "../DreiSceneControls";
 import { DriftModel } from "./DriftModel";
 import { TurntableModel } from "./TurntableModel";
+import { TopDownModel } from "./TopDownModel";
+import { FlyModel } from "./FlyModel";
 
 // id → controller component. The "map" model IS the existing DreiSceneControls,
 // registered WITHOUT modification (the in-flight controller is untouched). New
@@ -15,4 +17,6 @@ export const CAMERA_MODEL_COMPONENTS: Record<CameraModelId, ComponentType> = {
   map: DreiSceneControls,
   drift: DriftModel,
   turntable: TurntableModel,
+  topdown: TopDownModel,
+  fly: FlyModel,
 };

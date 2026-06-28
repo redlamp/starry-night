@@ -28,7 +28,7 @@ export type CameraMode = "still" | "fly" | "orbit";
 // other ids are self-contained alternative models mounted via the camera-model
 // registry. Orthogonal to cameraMode (still/fly/orbit) — models apply in orbit.
 // Metadata (labels/blurbs) live in components/scene/camera-models/catalog.ts.
-export type CameraModelId = "map" | "drift" | "turntable";
+export type CameraModelId = "map" | "drift" | "turntable" | "topdown" | "fly";
 
 // Quality tier presets. Affects the DPR ceiling passed to the R3F Canvas and
 // the suggested star count. User can still override stars.count via slider;

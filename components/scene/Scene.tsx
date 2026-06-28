@@ -63,14 +63,13 @@ export function Scene() {
   );
   const legacyControls = controlsFlag === "legacy" || controlsFlag === "old";
   const cameraMode = useSceneStore((s) => s.cameraMode);
-  // drei owns orbit unless forced legacy. The CameraModelHost is mounted across modes and renders
-  // the selected camera MODEL (Settings → Camera model, orbit only); the active model self-gates to
-  // orbit and goes inert otherwise. The default "map" model IS DreiSceneControls, so this is
-  // behaviourally identical to mounting it directly — its once-per-mount "pin perspective" entry
-  // effect still doesn't re-fire on a mode change. The old controller mounts only for fly / still
-  // (or all modes in legacy).
+  // The CameraModelHost mounts the selected camera MODEL (Settings → Camera): Map / Drift /
+  // Turntable / Top-down are orbit-rig models, Fly is free flight. cameraMode is kept in sync
+  // (fly → "fly", else "orbit") so the orbit models' self-gate and the framing helpers still
+  // read it. The legacy controller now only covers Still (capture) + the ?controls=legacy
+  // escape hatch.
   const dreiOrbit = !legacyControls && cameraMode === "orbit";
-  const oldController = legacyControls || cameraMode !== "orbit";
+  const oldController = legacyControls || cameraMode === "still";
 
   // #44: warm the heavy city-generation cache off the mount-critical path. The
   // canvas + sky / stars / moon / ground mount immediately; the city-derived

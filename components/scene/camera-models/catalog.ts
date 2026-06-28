@@ -33,6 +33,20 @@ export const CAMERA_MODELS: CameraModelMeta[] = [
     blurb:
       "A steady showcase rotation at a fixed elevation, presenting the city like a turntable model. Drag horizontally to spin it by hand (auto-spin pauses, then resumes); Space pauses. Elevation + spin rate are adjustable.",
   },
+  {
+    id: "topdown",
+    label: "Top-down",
+    character: "North-up overhead, looking straight down at the city.",
+    blurb:
+      "A fixed plan view from straight above the city centre, north up, fit to the whole city. No rotation, no auto-motion.",
+  },
+  {
+    id: "fly",
+    label: "Fly",
+    character: "Free flight: WASD, E up / Q down, drag to look.",
+    blurb:
+      "First-person free flight in perspective. W/S fly along the look direction, A/D strafe, E/Q up/down, drag to look (no roll), wheel sets speed, Shift sprints. Desktop.",
+  },
 ];
 
 export const DEFAULT_CAMERA_MODEL: CameraModelId = "map";
