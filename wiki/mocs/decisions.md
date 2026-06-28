@@ -25,6 +25,7 @@ Map of Content for architectural and product decisions. Each decision is an atom
 - [[decision-facade-display-space-color]] — **Facade colour authored in display space:** the city shader writes gl_FragColor raw, so linear-converted colours collapse to black; per-building variance live-tunable (sat/light/hue families) through the #55 source arrays; lights kill switch for facade debugging
 - [[decision-moon-celestial-model]] — Moon parametrised as azimuth / elevation / distance, not cylinder coords
 - [[decision-orbit-spherical-controls]] — Spherical orbit + drag / pinch / wheel controls on the canvas
+- [[decision-camera-model-registry]] — **Pluggable camera-model registry (2026-06-28):** a settings-selectable layer that mounts one of N self-contained "3 Cs" controller components into the orbit slot; the existing controller registered unmodified as the default "map" model, first new model "drift" (ambient cinematic orbit). Sidesteps the in-flight monolith; coexists with [[plan-drei-camera-migration]]
 - [[decision-github-pages-deploy]] — Static export to GitHub Pages on every push to main
 - [[decision-merge-styles]] — **Merge styles:** feature → dev `--no-ff` (bubble per feature), dev → main `--ff-only` + tag (main = bookmark on dev, zero graph lanes); direct-to-main = CI/hotfix only, back-merged same session
 - [[decision-debug-panel-architecture]] — IA + master toggle + save / reset / copy values *(superseded)*

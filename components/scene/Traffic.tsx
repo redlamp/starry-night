@@ -3,7 +3,7 @@
 import { useMemo, useEffect, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import { useSceneStore } from "@/lib/state/sceneStore";
+import { useSceneStore, DEFAULT_ORTHO_SIZE } from "@/lib/state/sceneStore";
 import { buildTraffic } from "@/lib/seed/traffic";
 import { sharedTime } from "@/lib/shaders/sharedTime";
 import { sharedStreetlightIntroProgress } from "@/lib/shaders/sharedIntro";
@@ -131,6 +131,13 @@ export function Traffic({ masterSeed }: { masterSeed: string }) {
         uLodCull: { value: 16000 },
         uLodSizeFloor: { value: 0.5 },
         uLodBrightFloor: { value: 0.4 },
+        // Ortho light-size: in ortho the camera parks far (so the camera-distance
+        // LOD floors every light) and orthoSize is the zoom, so fixed-pixel lights
+        // ignore zoom. uOrthoT (0 persp → 1 ortho) blends the size driver from
+        // camera-distance LOD to the ortho zoom ratio (uOrthoSizeScale), so ortho
+        // lights match perspective at default framing and scale with zoom. (#78)
+        uOrthoT: { value: 0 },
+        uOrthoSizeScale: { value: 1 },
       },
       transparent: true,
       depthWrite: false,
@@ -171,6 +178,7 @@ export function Traffic({ masterSeed }: { masterSeed: string }) {
     state.camera.getWorldDirection(_viewDir);
     u.uViewDir.value.copy(_viewDir);
     u.uIntroCenter.value.set(s.orbit.centerX, 0, s.orbit.centerZ);
+    u.uSizeScale.value = SIZE_SCALE * (s.traffic.lightSize ?? 1); // live car-light size knob
     // Distance LOD (#52) — live, render-only; shares the streetlights' settings.
     const lod = s.lod;
     u.uLodEnabled.value = lod.enabled ? 1 : 0;
@@ -179,6 +187,12 @@ export function Traffic({ masterSeed }: { masterSeed: string }) {
     u.uLodCull.value = lod.cull;
     u.uLodSizeFloor.value = lod.sizeFloor;
     u.uLodBrightFloor.value = lod.brightnessFloor;
+    // Ortho light-size: blend toward the ortho-zoom-driven size so lights track
+    // the city's magnification (smaller orthoSize = zoomed in = bigger lights),
+    // instead of the parked-far camera distance. refOrthoSize/orthoSize = 1 at the
+    // default frame (matching perspective), clamped so deep zoom can't blow up.
+    u.uOrthoT.value = s.projectionBlend;
+    u.uOrthoSizeScale.value = Math.max(0.3, Math.min(6, DEFAULT_ORTHO_SIZE / Math.max(1, s.orthoSize)));
 
     // #55 per-tile culling: copy only the visible tiles' cars into the draw
     // buffers when the visible tile set changes.

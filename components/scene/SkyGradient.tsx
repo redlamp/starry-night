@@ -78,6 +78,10 @@ export function SkyGradient({
   // background shows. Wireframe is a no-op for the sky dome.
   const skyHidden = useSceneStore((s) => s.debug.renderModes.sky === "hidden");
 
+  // Fixed at the world origin (city centre). The star camera renders the dome from
+  // the origin too, so the camera is always at the dome's centre and the
+  // direction-based gradient (vDir = normalize(localPosition)) maps straight to
+  // view rays — horizon stays level regardless of where the city camera orbits.
   return (
     <mesh material={material} renderOrder={-1} frustumCulled={false} visible={!skyHidden}>
       <sphereGeometry args={[9000, 32, 16]} />

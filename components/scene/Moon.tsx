@@ -88,6 +88,16 @@ export function Moon() {
           uSharpness: { value: 0.7 },
         },
         fog: false,
+        // Render the moon IN FRONT of the stars (#65): it's the nearest body, so no
+        // stars should show through it (esp. the dark side). The moon shares the star
+        // pass to stay locked to them, but as an opaque object it would draw BEFORE
+        // the additive stars and let them paint over it. Mark it transparent (joins
+        // the late queue) + a high renderOrder so it draws AFTER the stars, and
+        // depthTest off so the star shell (same radius) can't occlude it — alpha 1 +
+        // normal blending then covers the stars under the disc.
+        transparent: true,
+        depthWrite: false,
+        depthTest: false,
       }),
     [],
   );
@@ -139,11 +149,18 @@ export function Moon() {
       moon.distance * Math.sin(elevation),
       horizontalRadius * Math.cos(azimuth),
     );
+    // No fov scale-compensation (2026-06-24): the star camera now MATCHES the main
+    // camera's fov (and renders from the origin, like the moon's anchor), so the
+    // moon appears the size the main camera would render it with no correction —
+    // the ratio tan(starFov/2)/tan(mainFov/2) is 1. Apparent size follows from
+    // moonRadius and moon.distance; tune via radiusRatio if needed.
 
     // Halo billboard: face camera + size/uniforms from store each frame. Intensity
     // scales with the illuminated fraction (thin crescent barely glows, full blooms);
     // the lit-side bias lives in the halo shader (uSunDir).
     if (haloRef.current) {
+      // The star camera shares the main camera's position (the sky rides the eye),
+      // so the halo billboard faces the camera.
       haloRef.current.lookAt(camera.position);
       const haloSize = moonRadius * haloCfg.radiusMul * 2;
       haloRef.current.scale.set(haloSize, haloSize, 1);
@@ -167,9 +184,11 @@ export function Moon() {
   // Debug "moon" group (Slice B): Hidden drops the moon + halo; Wireframe
   // renders the lunar sphere as edges (halo billboard left as-is).
   return (
-    <mesh ref={meshRef} material={bodyMaterial} visible={moonMode !== "hidden"}>
+    // renderOrder: stars draw ~0; halo (10) glows over them; the moon body (20) draws
+    // last and covers the stars under its disc (#65).
+    <mesh ref={meshRef} material={bodyMaterial} renderOrder={20} visible={moonMode !== "hidden"}>
       <sphereGeometry args={[moonRadius, 48, 48]} />
-      <mesh ref={haloRef} material={haloMaterial} renderOrder={-1}>
+      <mesh ref={haloRef} material={haloMaterial} renderOrder={10}>
         <planeGeometry args={[1, 1]} />
       </mesh>
     </mesh>

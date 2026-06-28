@@ -557,6 +557,21 @@ function dragRotate(
   // Speed limit at grazing / far-out views: taper by elevation (smoothstep to the store floor below
   // the store threshold) and by distance (mild 1/d past ROT_DIST_REF), then hard-cap the step.
   const elevDeg = 90 - c.polarAngle / DEG;
+  // Low-angle direct orbit (user 2026-06-23). Near the horizon the focal pin is pulled
+  // to the screen bottom (Screen-Y framing), so the press-relative LEVER ARM gets a
+  // long, erratic radius — a small horizontal drag flings the azimuth, which is why
+  // swiping at a low angle felt awful. Below the Screen-Y threshold, blend the lever
+  // arm toward a DIRECT horizontal-drag azimuth (predictable, frame-rate-independent):
+  // drag right→left = clockwise, left→right = counter-clockwise. Uses the SAME
+  // low-angle curve (rotateSlowBelowDeg) as the Screen-Y pull, so it eases in lockstep
+  // with the framing rather than snapping at a separate threshold. (Sign is one flip
+  // away if the rotation direction reads backwards on-device.)
+  const lowT = lowAngleT(elevDeg, st.rotateSlowBelowDeg);
+  if (lowT > 0) {
+    const azGate = xa * xa * (3 - 2 * xa);
+    const dAzDirect = ((-dx * Math.PI) / Math.max(1, r.width)) * azGate;
+    dAz = dAz * (1 - lowT) + dAzDirect * lowT;
+  }
   // Shared low-angle curve (also drives the Screen-Y ground pull) — tilt eases 1 → rotateLowAngleGain
   // as the view nears the horizon, in lockstep with the framing.
   const gElev = 1 + (st.rotateLowAngleGain - 1) * lowAngleT(elevDeg, st.rotateSlowBelowDeg);

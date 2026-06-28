@@ -19,6 +19,8 @@ uniform float uLodFar;
 uniform float uLodCull;
 uniform float uLodSizeFloor;
 uniform float uLodBrightFloor;
+uniform float uOrthoT;          // 0 = perspective, 1 = orthographic (projection blend)
+uniform float uOrthoSizeScale;  // ortho zoom ratio (refOrthoSize / orthoSize)
 
 attribute vec3 aA;     // travel-start (lane-offset world point)
 attribute vec3 aB;     // travel-end
@@ -74,12 +76,21 @@ void main() {
   vec3 worldPos = (modelMatrix * vec4(p, 1.0)).xyz;
   float camDist = distance(worldPos, cameraPosition);
   float lodT = uLodEnabled > 0.5 ? smoothstep(uLodNear, uLodFar, camDist) : 0.0;
-  vLodBright = mix(1.0, uLodBrightFloor, lodT);
-  float keep = (uLodEnabled > 0.5 && camDist > uLodCull) ? 0.0 : 1.0;
+  // Cull only on the perspective side — in ortho the camera is parked far, so the
+  // camera-distance test would wrongly drop cars regardless of the ortho zoom.
+  float keep = (uLodEnabled > 0.5 && camDist > uLodCull && uOrthoT < 0.5) ? 0.0 : 1.0;
 
-  // Fixed apparent size (correct under the default orthographic projection;
-  // points stay legible dots in perspective too). uSizeScale tunes globally.
-  gl_PointSize = keep * clamp(aSize * uPixelRatio * uSizeScale * mix(1.0, uLodSizeFloor, lodT), 1.0, 16.0);
+  // Size + brightness drivers, blended persp ↔ ortho by uOrthoT:
+  //  - perspective: camera-distance LOD (near full, far shrinks/dims to the floor) —
+  //    a real depth cue.
+  //  - ortho: no perspective depth, and the parked-far camera makes camDist useless.
+  //    Drive size by the ortho zoom ratio so lights stay full at the default frame
+  //    and scale WITH the city as orthoSize shrinks (zoom in); brightness stays full.
+  float perspSize = mix(1.0, uLodSizeFloor, lodT);
+  float sizeFactor = mix(perspSize, uOrthoSizeScale, uOrthoT);
+  vLodBright = mix(mix(1.0, uLodBrightFloor, lodT), 1.0, uOrthoT);
+
+  gl_PointSize = keep * clamp(aSize * uPixelRatio * uSizeScale * sizeFactor, 1.0, 16.0);
 }
 `;
 

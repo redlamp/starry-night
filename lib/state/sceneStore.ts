@@ -23,6 +23,20 @@ export type LightingMode = "classic" | "modern";
 export type QualityTier = "low" | "med" | "high" | "ultra";
 export type CameraMode = "still" | "fly" | "orbit";
 
+// Which camera-control MODEL drives the orbit slot (the "3 Cs": Camera / Controls /
+// Character). "map" = the hands-on grab/orbit/zoom controller (DreiSceneControls);
+// other ids are self-contained alternative models mounted via the camera-model
+// registry. Orthogonal to cameraMode (still/fly/orbit) — models apply in orbit.
+// Metadata (labels/blurbs) live in components/scene/camera-models/catalog.ts.
+export type CameraModelId =
+  | "map"
+  | "drift"
+  | "turntable"
+  | "topdown"
+  | "fly"
+  | "dreimap"
+  | "dreicamera";
+
 // Quality tier presets. Affects the DPR ceiling passed to the R3F Canvas and
 // the suggested star count. User can still override stars.count via slider;
 // the tier sets the boot-time ceiling and the DPR cap from then on.
@@ -110,7 +124,10 @@ export type OrbitConfig = {
 // X/Y/Z = 0) (user 2026-06-21). Radius scales with city width
 // (CITY_SCALE); 1800s sweep (0.2°/s) once un-paused. lookAtY (focal HEIGHT) is NOT
 // scaled — building heights are fixed across size tiers, so the skyline sits at the
-// same Y regardless of extent. (Pairs with orbitPaused defaulting true.)
+// same Y regardless of extent. Per-model transport default (catalog.startsPaused,
+// applied on model switch): Map enters paused on this still curated pose, while
+// Drift / Turntable auto-play. Initial orbitPaused is false because the default
+// model is Drift; switching to Map sets it true.
 export const DEFAULT_ORBIT: OrbitConfig = {
   centerX: 0,
   centerZ: 0, // focal at the origin (user 2026-06-21; was -120)
@@ -121,6 +138,36 @@ export const DEFAULT_ORBIT: OrbitConfig = {
   periodSec: 1800,
 };
 
+// Drift camera-model tunables (the hands-off ambient orbit). Defaults = the authored
+// feel; all are live-editable in Settings -> Orbit -> Drift, and persisted.
+export interface DriftConfig {
+  wanderRadius: number; // brownian ground-wander reach, as a fraction of the city half-extent
+  wanderSpeed: number; // multiplier on the wander's base frequencies
+  elevMid: number; // mean camera elevation above the horizon (deg)
+  elevAmp: number; // elevation sine-bob amplitude (deg)
+  revolveSec: number; // seconds per steady azimuth revolution; 0 = no revolve (pure wander + bob)
+  breathe: number; // dolly breathe amount (fraction of radius)
+}
+export const DEFAULT_DRIFT: DriftConfig = {
+  wanderRadius: 0.45,
+  wanderSpeed: 1,
+  elevMid: 4,
+  elevAmp: 2.5,
+  revolveSec: 360,
+  breathe: 0.05,
+};
+
+// Turntable camera-model tunables (the showcase spin). Live-editable in
+// Settings -> Orbit -> Turntable, and persisted.
+export interface TurntableConfig {
+  elevDeg: number; // fixed camera elevation above the horizon (deg)
+  spinSec: number; // seconds per revolution; 0 = no auto-spin (grab-to-spin only)
+}
+export const DEFAULT_TURNTABLE: TurntableConfig = {
+  elevDeg: 8, // low + ortho-safe (sky above the skyline); raise it in perspective for a 3/4 showcase
+  spinSec: 60,
+};
+
 // Azimuth flipped 180° from the 200° tuning that paired with the old camera
 // pose: with the new defaults the camera faces +z, so the moon sits at +z too.
 // radiusRatio: moon radius as a fraction of star shell radius (~4500m), so
@@ -129,7 +176,12 @@ export const DEFAULT_ORBIT: OrbitConfig = {
 // panel for live tuning.
 export const DEFAULT_MOON = {
   azimuthDeg: 20,
-  elevationDeg: 1,
+  // Raised off the horizon (#65 v3) so the ground/horizon (main pass) doesn't draw
+  // over it. Lowered 18° → 12° (2026-06-24): the star camera now matches the city's
+  // narrow fov, and at the near-horizontal default view (elev 2°) an 18° moon sat
+  // just above the top edge. 12° centres it in the visible sky. Lower further for a
+  // horizon moon (accepts partial ground occlusion); raise to clear the skyline.
+  elevationDeg: 12,
   // Sits on the star shell so the moon hugs the celestial sphere. Tracks the star
   // radius default (was 4500·CITY_SCALE, stale after stars.radius → 3200·CITY_SCALE,
   // which left the moon floating beyond the star dome).
@@ -151,7 +203,12 @@ export const DEFAULT_MOON = {
 export const DEFAULT_STARS = {
   radius: 3200 * CITY_SCALE,
   depth: 360 * CITY_SCALE,
-  count: 24000,
+  // Raised 24000 → 120000 (2026-06-24): the star camera now matches the city's
+  // (narrow ~20°) fov for 1:1 elevation tracking, which shows a much smaller slice
+  // of sky than the old fixed 60°. ~(60/20)² ≈ 9× more stars keeps the visible
+  // density rich. Tunable via the Stars slider (persisted configs keep their old
+  // value until reverted). Points are cheap; revisit under device-adaptive quality.
+  count: 120000,
   factor: 36,
   // Twinkle AMPLITUDE (the σ scale of the log-normal scintillation; see
   // wiki/research/star-twinkle-scintillation.md). 0 = dead steady, 1 ≈ σ 0.1 at
@@ -271,7 +328,7 @@ export const DEFAULT_FOG = {
   mode: "linear" as const,
   color: "#0b0d14",
   near: 1.25,
-  far: 2,
+  far: 4, // far edge at 4× the focal distance (user 2026-06-23; was 2 = closer fog)
   // exp² mode: fog AMOUNT at the city centre (0..0.9) — FogTicker solves the
   // actual three.js density from it per frame, so it's camera-independent.
   density: 0.45,
@@ -283,7 +340,7 @@ export const DEFAULT_HAZE = {
   // Vertical extents are absolute (heights don't scale with city width — #47).
   topY: 240,
   bottomY: -30,
-  intensity: 1,
+  intensity: 0.5, // "strength" slider — softer default horizon haze (user 2026-06-28)
   radius: 1500 * CITY_SCALE, // 3000 at City
 };
 
@@ -315,6 +372,7 @@ export const DEFAULT_CITY_PLANNING_VIS = {
   showArterials: false,
   showStreets: false,
   showPopulationHeat: false,
+  showTrafficDensity: false,
 };
 
 // ---------------------------------------------------------------------------
@@ -380,6 +438,10 @@ export const DEFAULT_TRAFFIC = {
   arterial: 2,
   minor: 1,
   popCoupling: 1,
+  // Global car-light size multiplier (×SIZE_SCALE in the traffic shader). Street
+  // cars are the smallest tier (size 4 vs arterial 5.5 / highway 7); raise this to
+  // make all car lights bigger. Live uniform — no regen.
+  lightSize: 1,
 };
 
 // Streetlights along the road network. On by default; toggled from the Roads panel.
@@ -505,6 +567,9 @@ type AnySettingEntry =
   | SettingEntry<"orbitZoomToPin">
   | SettingEntry<"allowUnderview">
   | SettingEntry<"cameraMode">
+  | SettingEntry<"cameraModel">
+  | SettingEntry<"drift">
+  | SettingEntry<"turntable">
   | SettingEntry<"orbitRestore">
   | SettingEntry<"topDownTip">
   | SettingEntry<"intro">
@@ -555,7 +620,7 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "fog", defaultValue: DEFAULT_FOG, persist: true },
   { key: "haze", defaultValue: DEFAULT_HAZE, persist: true },
   { key: "flySpeed", defaultValue: DEFAULT_FLY_SPEED, persist: true },
-  { key: "orbitPaused", defaultValue: true as const, persist: true },
+  { key: "orbitPaused", defaultValue: false as const, persist: true },
   { key: "showFocalIndicator", defaultValue: false as const, persist: true },
   { key: "orbitPivotFromBottom", defaultValue: 0.37, persist: true },
   { key: "groundFraming", defaultValue: true as const, persist: true },
@@ -569,6 +634,9 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "orbitZoomToPin", defaultValue: true as const, persist: false },
   { key: "allowUnderview", defaultValue: false as const, persist: false },
   { key: "cameraMode", defaultValue: "orbit" as const, persist: true },
+  { key: "cameraModel", defaultValue: "drift" as const, persist: true },
+  { key: "drift", defaultValue: DEFAULT_DRIFT, persist: true },
+  { key: "turntable", defaultValue: DEFAULT_TURNTABLE, persist: true },
   { key: "orbitRestore", defaultValue: null as SceneState["orbitRestore"], persist: false },
   { key: "topDownTip", defaultValue: 0, persist: false },
   { key: "intro", defaultValue: DEFAULT_INTRO, persist: true },
@@ -629,6 +697,10 @@ type SavedConfig = {
   showFocalIndicator?: boolean;
   // 2026-06-08: the camera comes back EXACTLY as saved (mode + paused state).
   cameraMode?: CameraMode;
+  // Optional so configs saved before the camera-model selector still load.
+  cameraModel?: CameraModelId;
+  drift?: DriftConfig;
+  turntable?: TurntableConfig;
   orbitPaused?: boolean;
   intro?: SceneState["intro"];
   starIntro?: SceneState["starIntro"];
@@ -655,6 +727,8 @@ type SavedConfig = {
     showStreets: boolean;
     // Optional so configs saved before the Population panel still load.
     showPopulationHeat?: boolean;
+    // Optional so configs saved before the traffic-density overlay still load.
+    showTrafficDensity?: boolean;
   };
 };
 
@@ -907,6 +981,12 @@ type SceneState = {
   };
   setMoonLive: (live: SceneState["moonLive"]) => void;
   cameraMode: CameraMode;
+  cameraModel: CameraModelId;
+  setCameraModel: (id: CameraModelId) => void;
+  drift: DriftConfig;
+  setDrift: (patch: Partial<DriftConfig>) => void;
+  turntable: TurntableConfig;
+  setTurntable: (patch: Partial<TurntableConfig>) => void;
   cameraIntent: CameraIntent;
   cameraLive: CameraLive;
   // Transient UI signal: true while the user drags the atmosphere near/far
@@ -1084,6 +1164,7 @@ type SceneState = {
     showArterials: boolean;
     showStreets: boolean;
     showPopulationHeat: boolean;
+    showTrafficDensity: boolean;
     topologyKind: TopologyKind | null;
     highwayCount: number;
     arterialCount: number;
@@ -1215,6 +1296,9 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setMoonLive: (moonLive) => set({ moonLive }),
   // Note: cameraMode default is "orbit" — see below.
   cameraMode: "orbit",
+  cameraModel: "drift",
+  drift: DEFAULT_DRIFT,
+  turntable: DEFAULT_TURNTABLE,
   cameraIntent: DEFAULT_INTENT,
   cameraLive: {
     position: DEFAULT_INTENT.position,
@@ -1283,7 +1367,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setFocalDragging: (focalDragging) => set({ focalDragging }),
   panelHidden: true,
   setPanelHidden: (panelHidden) => set({ panelHidden }),
-  orbitPaused: true,
+  orbitPaused: false,
   setOrbitPaused: (orbitPaused) => set({ orbitPaused }),
   orbit: DEFAULT_ORBIT,
   setOrbit: (patch) => set((s) => ({ orbit: { ...s.orbit, ...patch } })),
@@ -1300,6 +1384,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     showArterials: false,
     showStreets: false,
     showPopulationHeat: false,
+    showTrafficDensity: false,
     topologyKind: null,
     highwayCount: 0,
     arterialCount: 0,
@@ -1390,6 +1475,9 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setQualityTier: (qualityTier) => set({ qualityTier }),
   setPaused: (paused) => set({ paused }),
   setCameraMode: (cameraMode) => set({ cameraMode }),
+  setCameraModel: (cameraModel) => set({ cameraModel }),
+  setDrift: (patch) => set((s) => ({ drift: { ...s.drift, ...patch } })),
+  setTurntable: (patch) => set((s) => ({ turntable: { ...s.turntable, ...patch } })),
   setCameraIntent: (intent) =>
     set((s) => ({
       cameraIntent: {
@@ -1469,6 +1557,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         showArterials: s.cityPlanning.showArterials,
         showStreets: s.cityPlanning.showStreets,
         showPopulationHeat: s.cityPlanning.showPopulationHeat,
+        showTrafficDensity: s.cityPlanning.showTrafficDensity,
       };
     }
     writeSavedConfig(snap as SavedConfig);
@@ -1520,6 +1609,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         showArterials: s.cityPlanning.showArterials,
         showStreets: s.cityPlanning.showStreets,
         showPopulationHeat: s.cityPlanning.showPopulationHeat,
+        showTrafficDensity: s.cityPlanning.showTrafficDensity,
       };
     }
     return out;

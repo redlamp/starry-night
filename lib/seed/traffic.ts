@@ -63,23 +63,31 @@ const MIN_SEG = 6; // drop a macro-segment shorter than this (m)
 // the gentle tensor curvature means a chord barely deviates from the road.
 const CHUNK = 55;
 
+// A car light is a light, not a vehicle — its apparent size must depend ONLY on how
+// far it is from the camera (the distance LOD term in the shader), never on the road
+// tier it sits on (#78). A highway headlight and a side-street headlight at the same
+// distance read identically. So every car gets the same base point size regardless of
+// tier; only a small per-car jitter (±15%) survives for natural variation. (Previously
+// this was per-tier — highway 7 / arterial 5.5 / minor 4 — which fattened big-road
+// lights and was the reported bug.)
+const CAR_LIGHT_SIZE = 5;
+
 type TierCfg = {
   carsPerM: number;
   speed: number;
   laneHalf: number; // offset (m) from centreline to the innermost lane (median gap)
   laneWidth: number; // spacing (m) between adjacent lanes within one direction
   lanes: number; // lanes per direction
-  size: number;
 };
 
 function tierCfg(tier: "highway" | "arterial" | "minor"): TierCfg {
   switch (tier) {
     case "highway":
-      return { carsPerM: 0.02, speed: 24, laneHalf: 4.0, laneWidth: 4.0, lanes: 3, size: 7 };
+      return { carsPerM: 0.02, speed: 24, laneHalf: 4.0, laneWidth: 4.0, lanes: 3 };
     case "arterial":
-      return { carsPerM: 0.012, speed: 14, laneHalf: 3.0, laneWidth: 3.2, lanes: 2, size: 5.5 };
+      return { carsPerM: 0.012, speed: 14, laneHalf: 3.0, laneWidth: 3.2, lanes: 2 };
     default:
-      return { carsPerM: 0.008, speed: 8, laneHalf: 2.5, laneWidth: 0, lanes: 1, size: 4 }; // minor
+      return { carsPerM: 0.008, speed: 8, laneHalf: 2.5, laneWidth: 0, lanes: 1 }; // minor
   }
 }
 
@@ -100,33 +108,34 @@ function busyness(pop: number): number {
   return BUSY_FLOOR + (1 - BUSY_FLOOR) * Math.min(1, Math.pow(pop / BUSY_REF, BUSY_GAMMA));
 }
 
-export function buildTraffic(
+type Tier = "highway" | "arterial" | "minor";
+
+type RawSeg = {
+  ax: number;
+  az: number;
+  bx: number;
+  bz: number;
+  len: number;
+  cfg: TierCfg;
+  mult: number;
+};
+
+// Shared macro-segment builder — the SAME chunking + population-busyness logic
+// buildTraffic uses to place cars, factored out so the traffic-density debug
+// overlay can compute each segment's EXPECTED density from the identical inputs
+// (no behavioural change to buildTraffic — it calls this and proceeds as before).
+function buildTrafficSegments(
   masterSeed: string,
-  density = 1,
-  tierMul: { highway: number; arterial: number; minor: number } = {
-    highway: 1,
-    arterial: 1,
-    minor: 1,
-  },
-  shape: CityShapeSetting = "square",
-  shapeScale = 1,
-  popCoupling = 1, // 0 = uniform (old look), 1 = fully population-driven
-): TrafficData {
-  const rng = seedrandom(`${masterSeed}::traffic`);
+  tierMul: { highway: number; arterial: number; minor: number },
+  shape: CityShapeSetting,
+  shapeScale: number,
+  popCoupling: number,
+): RawSeg[] {
   const city = generateCity(masterSeed, shape, shapeScale);
   const pop = popCoupling > 0 ? buildPopulationField(masterSeed, shape, shapeScale) : null;
 
-  type Seg = {
-    ax: number;
-    az: number;
-    bx: number;
-    bz: number;
-    len: number;
-    cfg: TierCfg;
-    mult: number;
-  };
-  const segs: Seg[] = [];
-  const collect = (verts: Vert[], tier: "highway" | "arterial" | "minor") => {
+  const segs: RawSeg[] = [];
+  const collect = (verts: Vert[], tier: Tier) => {
     const cfg = tierCfg(tier);
     const baseMult = tierMul[tier];
     if (verts.length < 2) return;
@@ -155,6 +164,89 @@ export function buildTraffic(
   for (const h of city.topology.highways) collect(h.vertices, "highway");
   for (const a of city.arterials) collect(a.vertices, "arterial");
   for (const s of city.streets) collect(s.vertices, "minor");
+  return segs;
+}
+
+// One macro-segment's EXPECTED car count (pre-MAX_CARS-cap) — the intended
+// density. Mirrors buildTraffic's `expected` line exactly.
+function segExpected(s: RawSeg, density: number): number {
+  return s.len * s.cfg.carsPerM * density * s.mult * s.cfg.lanes;
+}
+
+export type TrafficDensitySeg = {
+  ax: number;
+  az: number;
+  bx: number;
+  bz: number;
+  density: number; // 0..1, normalised across all segments (relative to p99)
+  raw: number; // raw EXPECTED car count for the segment (pre-cap)
+};
+
+export type TrafficDensityField = {
+  segments: TrafficDensitySeg[];
+  maxRaw: number; // the p99 raw density used to normalise (debug readout)
+};
+
+// Per-segment EXPECTED traffic density for the debug overlay (#78). Uses the
+// SAME macro-segments + per-tier cfg + population-busyness multiplier as
+// buildTraffic, and the SAME `len × carsPerM × density × busyness × lanes`
+// formula — but reports the EXPECTED count BEFORE the MAX_CARS cap and the rng
+// rounding, so the intended distribution is legible. Normalised against a high
+// percentile (p99, like the population field) so one busy downtown chord can't
+// crush the rest of the ramp toward the cool end. Pure derivation, no rng.
+export function buildTrafficDensity(
+  masterSeed: string,
+  density = 1,
+  tierMul: { highway: number; arterial: number; minor: number } = {
+    highway: 1,
+    arterial: 1,
+    minor: 1,
+  },
+  shape: CityShapeSetting = "square",
+  shapeScale = 1,
+  popCoupling = 1,
+): TrafficDensityField {
+  const segs = buildTrafficSegments(masterSeed, tierMul, shape, shapeScale, popCoupling);
+  const raws = segs.map((s) => segExpected(s, density));
+  // Per-metre intensity (count / length) drives the COLOUR — otherwise a long
+  // highway chord always out-colours a short busy downtown block purely on
+  // length. Normalise that against p99 so the ramp reads the road hierarchy.
+  const perM = segs.map((s, i) => (s.len > 0 ? raws[i] / s.len : 0));
+  const sorted = [...perM].sort((a, b) => a - b);
+  const p99 = sorted.length ? sorted[Math.floor(sorted.length * 0.99)] || 0 : 0;
+  const norm = p99 > 0 ? p99 : 1;
+  // Gamma-spread the normalised intensity (#78): highways carry ~7.5x a city
+  // street's per-metre density, so a LINEAR ramp crushes every non-highway road
+  // into the near-black bottom of the inferno ramp (arterials + streets read as one
+  // flat purple). The road tiers are roughly MULTIPLICATIVE, so a sub-1 gamma lifts
+  // the mid/low band into the visible ramp: busy arterials → orange, city streets →
+  // magenta, suburban → dim purple, highways still top out yellow.
+  const GAMMA = 0.45;
+  const segments: TrafficDensitySeg[] = segs.map((s, i) => ({
+    ax: s.ax,
+    az: s.az,
+    bx: s.bx,
+    bz: s.bz,
+    density: Math.pow(Math.min(1, perM[i] / norm), GAMMA),
+    raw: raws[i],
+  }));
+  return { segments, maxRaw: p99 };
+}
+
+export function buildTraffic(
+  masterSeed: string,
+  density = 1,
+  tierMul: { highway: number; arterial: number; minor: number } = {
+    highway: 1,
+    arterial: 1,
+    minor: 1,
+  },
+  shape: CityShapeSetting = "square",
+  shapeScale = 1,
+  popCoupling = 1, // 0 = uniform (old look), 1 = fully population-driven
+): TrafficData {
+  const rng = seedrandom(`${masterSeed}::traffic`);
+  const segs = buildTrafficSegments(masterSeed, { ...tierMul }, shape, shapeScale, popCoupling);
 
   // First pass: expected cars per segment (∝ length × tier density × population
   // busyness × lanes). Computed for ALL segments up front so the MAX_CARS budget is
@@ -234,7 +326,7 @@ export function buildTraffic(
       aTail[c * 3 + 2] = tail[2];
       aHead[c] = dir > 0 ? 1 : 0;
       aReveal[c] = rng(); // intro reveal time — drives the density ramp
-      aSize[c] = s.cfg.size * (0.85 + rng() * 0.3);
+      aSize[c] = CAR_LIGHT_SIZE * (0.85 + rng() * 0.3); // tier-independent (#78)
       const r1 = Math.hypot(sx, sz + 120);
       const r2 = Math.hypot(ex, ez + 120);
       if (r1 > maxRadius) maxRadius = r1;
