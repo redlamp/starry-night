@@ -94,7 +94,10 @@ import {
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -118,7 +121,6 @@ import {
   tweenOrbitToDefault,
   tweenOrbitTowards,
   tweenProjectionTo,
-  type CameraTab,
 } from "@/lib/scene/cameraView";
 
 function copyConfigToClipboard() {
@@ -395,6 +397,25 @@ export function CameraPanel() {
 
   const flying = cameraMode === "fly";
   const modeTab = currentCameraTab(cameraMode, orbitRestoreSet);
+  // Stage A camera picker: collapse the cameraMode (fly/orbit/top-down) + cameraModel
+  // (map/drift/turntable) axes into one derived id, dispatched via the existing helpers
+  // (presentation only — see wiki plan-unify-camera-selector).
+  const activeCamera = modeTab === "fly" ? "fly" : modeTab === "top-down" ? "topdown" : cameraModel;
+  const pickCamera = (id: string | null) => {
+    if (id == null) return;
+    if (id === "fly") setCameraTab("fly");
+    else if (id === "topdown") setCameraTab("top-down");
+    else {
+      if (modeTab !== "orbit") setCameraTab("orbit");
+      setCameraModel(id as CameraModelId);
+    }
+  };
+  const cameraCaption =
+    activeCamera === "fly"
+      ? "Free flight: WASD + drag-look (desktop)."
+      : activeCamera === "topdown"
+        ? "North-up overhead, aspect-fit."
+        : getCameraModelMeta(cameraModel).character;
   const livePos = cameraLive.position;
   const liveRotDeg: Vec3 = [
     cameraLive.rotation[0] * RAD2DEG,
@@ -447,49 +468,6 @@ export function CameraPanel() {
             </Button>
           </div>
         </div>
-        <Tabs value={modeTab} onValueChange={(v) => setCameraTab(v as CameraTab)}>
-          <TabsList className="w-full">
-            <TabsTrigger
-              value="fly"
-              className="data-[state=active]:bg-orange-500 data-[state=active]:text-black"
-            >
-              Fly <span className="text-[10px] opacity-70">(F)</span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="orbit"
-              className="data-[state=active]:bg-purple-500 data-[state=active]:text-black"
-            >
-              Orbit <span className="text-[10px] opacity-70">(G)</span>
-            </TabsTrigger>
-            <TabsTrigger
-              value="top-down"
-              className="data-[state=active]:bg-sky-400 data-[state=active]:text-black"
-            >
-              Top-down <span className="text-[10px] opacity-70">(T)</span>
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-        {/* Camera model — the "3 Cs" personality driving the orbit slot (map vs drift vs …).
-            Orthogonal to the Fly/Orbit/Top-down mode above; only meaningful in orbit. */}
-        {modeTab === "orbit" && (
-          <div className="flex flex-col gap-1.5">
-            <span className="text-foreground/55 text-[10px] font-medium tracking-wide uppercase">
-              Camera model
-            </span>
-            <Tabs value={cameraModel} onValueChange={(v) => setCameraModel(v as CameraModelId)}>
-              <TabsList className="w-full">
-                {CAMERA_MODELS.map((m) => (
-                  <TabsTrigger key={m.id} value={m.id} title={m.blurb}>
-                    {m.label}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </Tabs>
-            <span className="text-foreground/50 text-[11px] leading-snug">
-              {getCameraModelMeta(cameraModel).character}
-            </span>
-          </div>
-        )}
         <div className="relative">
           <Search
             aria-hidden="true"
@@ -514,6 +492,33 @@ export function CameraPanel() {
             </button>
           )}
         </div>
+        {/* One "Camera" picker (Stage A) — collapses the old Fly/Orbit/Top-down tabs and
+            the Map/Drift/Turntable selector into a single dropdown over the existing
+            cameraMode + cameraModel. See wiki plan-unify-camera-selector. */}
+        <div className="flex flex-col gap-1.5">
+          <span className="text-foreground/55 text-[10px] font-medium tracking-wide uppercase">
+            Camera
+          </span>
+          <Select value={activeCamera} onValueChange={pickCamera}>
+            <SelectTrigger className="w-full" aria-label="Camera">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectLabel>Orbit</SelectLabel>
+                {CAMERA_MODELS.map((m) => (
+                  <SelectItem key={m.id} value={m.id}>
+                    {m.label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+              <SelectSeparator />
+              <SelectItem value="topdown">Top-down</SelectItem>
+              <SelectItem value="fly">Fly</SelectItem>
+            </SelectContent>
+          </Select>
+          <span className="text-foreground/50 text-[11px] leading-snug">{cameraCaption}</span>
+        </div>
       </div>
 
       {/* Scrollable middle */}
@@ -527,31 +532,9 @@ export function CameraPanel() {
             }}
             className="flex flex-col gap-1.5"
           >
-            {/* Section order is the user's reading order (2026-06-07): Intro,
-                Camera, Orbit, Roads, Buildings, Population, City Details*,
-                Stars, Moon, Atmosphere, Debug, Performance. (*unlisted — kept
-                with the city group.) */}
-            <Section
-              value="intro"
-              icon={Sparkles}
-              label="Intro"
-              hidden={!show("intro")}
-              action={
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  title="Replay both wake-up sequences from progress = 0"
-                  className="bg-foreground/10 text-foreground/80 hover:bg-foreground/20 h-6 px-2 text-xs"
-                  onClick={() => useSceneStore.getState().playAllIntros()}
-                >
-                  <RotateCcw className="size-3.5" />
-                  replay
-                </Button>
-              }
-            >
-              <IntroSection />
-            </Section>
-
+            {/* Section order (2026-06-28): Camera, Orbit, Intro, Roads, Buildings,
+                Population, City Details*, Stars, Moon, Atmosphere, Debug, Performance.
+                (*unlisted — kept with the city group.) */}
             <Section
               value="pose"
               icon={Camera}
@@ -617,6 +600,28 @@ export function CameraPanel() {
               action={<OrbitHeaderActions />}
             >
               <OrbitSection />
+            </Section>
+
+            {/* Intro moved below Camera + Orbit (user 2026-06-28). */}
+            <Section
+              value="intro"
+              icon={Sparkles}
+              label="Intro"
+              hidden={!show("intro")}
+              action={
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  title="Replay both wake-up sequences from progress = 0"
+                  className="bg-foreground/10 text-foreground/80 hover:bg-foreground/20 h-6 px-2 text-xs"
+                  onClick={() => useSceneStore.getState().playAllIntros()}
+                >
+                  <RotateCcw className="size-3.5" />
+                  replay
+                </Button>
+              }
+            >
+              <IntroSection />
             </Section>
 
             {/* Roads (user 2026-06-08): each block is its own expandable
