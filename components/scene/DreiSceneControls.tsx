@@ -116,21 +116,9 @@ const ROT_AXIS_GATE_LO = 0.4; // horizontal fraction at/below which azimuth is f
 const ROT_AXIS_GATE_HI = 0.7; // at/above this horizontal fraction, full azimuth
 let _rotAccX = 0; // decayed |dx| over the active drag
 let _rotAccY = 0; // decayed |dy| over the active drag
-// Phase 1 ↔ 2 vertical seam (user 2026-06-25). The vertical drag is ONE continuous sweep: orbit the
-// elevation DOWN to the ground (Phase 1, the eased turntable tilt), then — once the eye bottoms out on
-// the floor — pitch the gaze UP to the sky IN PLACE (Phase 2, a position-locked free-look). A downward
-// drag in Phase 2 lowers the gaze back to the horizon, then hands back to the orbit, which lifts the
-// camera again. The frame loop publishes the live ground clamp + the Phase-2 pose; dragRotate reads them
-// to pick the phase per pointer event, and re-seeds the free-look accumulator on each fresh entry.
-const GROUND_LOOK_RAD = 3 * DEG; // polar within this of the live ground clamp = bottomed out on the floor
-const LOOK_HORIZON = 0.02; // view-dir Y (≈sin pitch) above this = the gaze is over the horizon (looking up)
-let _groundMaxPolar = Math.PI / 2; // live ground clamp (pre-relaxation), published each frame for the seam test
-let _lookingUp = false; // Phase-2 pose: eye on the floor + gaze up — published each frame (relax clamp + freeze framing)
-let _prevWasLook = false; // was the previous dragRotate event a Phase-2 look? (re-seed freeLookAim on entry)
 function resetDragAxis(): void {
   _rotAccX = 0;
   _rotAccY = 0;
-  _prevWasLook = false; // a fresh drag restarts Phase-1↔2 tracking (re-seeds the free-look on the next look event)
 }
 const GESTURE_LOCK_PX = 12; // two-finger: travel before locking to one of pinch/twist/tilt
 // Focal indicator: a ground beacon ring around the focal's ground point.
@@ -170,7 +158,6 @@ const _camRight = new THREE.Vector3();
 const _camUp = new THREE.Vector3();
 const _camFwd = new THREE.Vector3();
 const _camWorld = new THREE.Vector3();
-const _lookFwd = new THREE.Vector3(); // view direction for the Phase-1↔2 seam test (kept separate from _camFwd)
 
 // Ground bounds = the ground disc (Ground.tsx): centre CITY_CENTER, radius = the
 // current tier's half-extent + apron. The focal/target is clamped to it so a pan
@@ -531,14 +518,9 @@ function pinScreenHit(
 // horizontal-drag mapping at every elevation (user 2026-06-24): drag left→right = orbit
 // counter-clockwise, right→left = clockwise — always, with NO press-relative lever arm and
 // NO above/below side-flip (the lever arm's flip-by-side is exactly what this replaces). TILT
-// stays a plain uniform vertical drag. An axis gate keeps a mostly-vertical "tilt" drag from
+// stays a plain uniform vertical drag — it orbits the elevation down toward the ground (and the
+// ground clamp stops the eye at the floor). An axis gate keeps a mostly-vertical "tilt" drag from
 // bleeding into orbit. Shared by touch + mouse.
-//   VERTICAL is two-phase (user 2026-06-25): Phase 1 orbits the elevation down to the ground; once the
-// eye bottoms out on the floor (polar ≈ the live ground clamp), Phase 2 takes over and a further UP drag
-// pitches the gaze toward the sky IN PLACE — the eye stays planted, only the aim tilts — via the
-// position-locked freeLookAim (also yaws on a horizontal drag, so you can look around the sky without
-// leaving your spot). A downward drag below the horizon falls through to Phase 1, which lifts the rig.
-// So the whole vertical axis is one continuous sweep: overhead → ground → sky.
 function dragRotate(
   c: CameraControlsImpl,
   dom: HTMLCanvasElement,
@@ -547,32 +529,13 @@ function dragRotate(
 ): void {
   const r = dom.getBoundingClientRect();
   const st = useSceneStore.getState();
-  // Tilt/rotate axis gate (shared by both phases): accumulate the gesture's recent direction (decayed)
-  // and gate the HORIZONTAL action by how horizontal the drag is, so the natural arc of a vertical
-  // "tilt" / "look-up" drag does not bleed into orbit (Phase 1) or yaw (Phase 2).
+  // Tilt/rotate axis gate: accumulate the gesture's recent direction (decayed) and gate the AZIMUTH by
+  // how horizontal the drag is, so the natural arc of a vertical "tilt" drag does not bleed into orbit.
   _rotAccX = _rotAccX * ROT_AXIS_DECAY + Math.abs(dx);
   _rotAccY = _rotAccY * ROT_AXIS_DECAY + Math.abs(dy);
   const horizFrac = _rotAccX / (_rotAccX + _rotAccY + 1e-6);
   const xa = clamp((horizFrac - ROT_AXIS_GATE_LO) / (ROT_AXIS_GATE_HI - ROT_AXIS_GATE_LO), 0, 1);
   const azGate = xa * xa * (3 - 2 * xa); // smoothstep: vertical drag → no azimuth, horizontal → full
-
-  // Phase 2 — at the ground floor (the orbit elevation has bottomed out against the live clamp), a
-  // further UP drag, or any drag while the gaze is already over the horizon, becomes an in-place look:
-  // freeLookAim re-aims from the FIXED eye (it never moves the camera position, so it can't push the rig
-  // through the ground), pitching toward the sky and yawing on horizontal. The frame loop relaxes the
-  // ground clamp + freezes the framing pull for this pose (see _lookingUp). dy < 0 = drag up.
-  const cam = c.camera as THREE.PerspectiveCamera;
-  cam.getWorldDirection(_lookFwd);
-  const atGround = _groundMaxPolar - c.polarAngle <= GROUND_LOOK_RAD;
-  if (atGround && (_lookFwd.y > LOOK_HORIZON || dy < 0)) {
-    if (!_prevWasLook) resetFreeLook(); // re-seed the look accumulator at the start of a look run
-    _prevWasLook = true;
-    freeLookAim(c, dx * azGate, dy, dom.clientHeight); // in-place yaw (gated) + pitch toward the sky
-    return;
-  }
-  _prevWasLook = false;
-
-  // Phase 1 — turntable orbit: direct horizontal azimuth + eased vertical tilt.
   markCameraActivity("rotate");
   // Tilt is a regulated, slower action (user 2026-06-16): a gentler rate than rotation, scaled by the
   // tiltSpeed knob (1 = the legacy 2*pi/height gain), so a vertical drag eases the pitch.
@@ -1556,7 +1519,7 @@ export function DreiSceneControls() {
     // park the orbit pivot at the screen-focus position (focal offset; scales w/ zoom). The
     // low-elevation ground pull freezes while a Focal-Y scrub is live (focalScrubbing) so it can't
     // chase the per-event tilt, then eases back on release. (See applyScreenFocus.)
-    applyScreenFocus(c, camera, focalScrubbing.current || _lookingUp); // freeze the framing pull while looking up too
+    applyScreenFocus(c, camera, focalScrubbing.current);
 
     const allowUnder = s.allowUnderview;
 
@@ -1595,20 +1558,12 @@ export function DreiSceneControls() {
     const oeff = s.orthoSize * orbitFramingFactor((camera as THREE.PerspectiveCamera).aspect);
     const eyeFloor = s.projectionBlend * Math.max(0, oeff * (1 - 2 * s.groundFrameLow));
     let maxPolar = Math.acos(clamp((eyeFloor - (_tgt.y + offsetY)) / Math.max(1, c.distance), -1, 1));
-    // Publish the live ground clamp (pre-relaxation) + the Phase-2 look-up pose so the LMB / 1-finger
-    // drag can find the Phase-1↔2 seam: the eye is "on the floor" once the polar reaches this clamp, and
-    // we're "looking up" when, at the floor, the view points over the horizon. (user 2026-06-25)
-    _groundMaxPolar = maxPolar;
-    camera.getWorldDirection(_lookFwd);
-    _lookingUp = _lookFwd.y > LOOK_HORIZON && maxPolar - c.polarAngle <= GROUND_LOOK_RAD;
     // A Focal-Y scrub re-aims from a FIXED orbit point (it can't push the camera underground), so the
     // ground clamp has nothing to protect against — but when it binds it MOVES the orbit point and
     // fights the in-place re-aim, worst right at Focal Y = 0 where the clamp sits at its limit. Relax
     // it while scrubbing; the live clamp resumes on release (the orbit point never left the ground, so
-    // there's nothing to snap back). (user 2026-06-21 — the "fight near Focal Y = 0"). The Phase-2 look
-    // (looking up at the sky from the ground) relaxes it the same way: the in-place pitch raises the aim
-    // past the clamp and freeLookAim never moves the eye, so there is nothing to protect against.
-    if (allowUnder || focalScrubbing.current || _lookingUp) maxPolar = Math.PI * 0.98;
+    // there's nothing to snap back). (user 2026-06-21 — the "fight near Focal Y = 0").
+    if (allowUnder || focalScrubbing.current) maxPolar = Math.PI * 0.98;
     c.maxPolarAngle = maxPolar;
 
     // Side-view diagram readout (display-only; the CameraSideView overlay paints it). A cheap
