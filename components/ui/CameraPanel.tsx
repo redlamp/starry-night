@@ -77,11 +77,14 @@ import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { RangeSlider, ValueSlider } from "@/components/ui/value-slider";
+import { HelpHint } from "@/components/ui/tooltip";
 import { NumberField, NumberFieldGroup, NumberFieldInput } from "@/components/ui/number-field";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CAMERA_MODELS, getCameraModelMeta } from "@/components/scene/camera-models/catalog";
+import type { CameraModelId } from "@/lib/state/sceneStore";
 import {
   Accordion,
   AccordionContent,
@@ -325,6 +328,8 @@ export function CameraPanel() {
   } = useSceneStore();
   const orbitRestoreSet = useSceneStore((s) => s.orbitRestore !== null);
   const showPinPlane = useSceneStore((s) => s.debug.showPinPlane);
+  const cameraModel = useSceneStore((s) => s.cameraModel);
+  const setCameraModel = useSceneStore((s) => s.setCameraModel);
 
   const hidden = useSceneStore((s) => s.panelHidden);
   const setHidden = useSceneStore((s) => s.setPanelHidden);
@@ -464,6 +469,27 @@ export function CameraPanel() {
             </TabsTrigger>
           </TabsList>
         </Tabs>
+        {/* Camera model — the "3 Cs" personality driving the orbit slot (map vs drift vs …).
+            Orthogonal to the Fly/Orbit/Top-down mode above; only meaningful in orbit. */}
+        {modeTab === "orbit" && (
+          <div className="flex flex-col gap-1.5">
+            <span className="text-foreground/55 text-[10px] font-medium tracking-wide uppercase">
+              Camera model
+            </span>
+            <Tabs value={cameraModel} onValueChange={(v) => setCameraModel(v as CameraModelId)}>
+              <TabsList className="w-full">
+                {CAMERA_MODELS.map((m) => (
+                  <TabsTrigger key={m.id} value={m.id} title={m.blurb}>
+                    {m.label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+            <span className="text-foreground/50 text-[11px] leading-snug">
+              {getCameraModelMeta(cameraModel).character}
+            </span>
+          </div>
+        )}
         <div className="relative">
           <Search
             aria-hidden="true"
@@ -816,6 +842,13 @@ function OrbitSection() {
   const setTiltSpeed = useSceneStore((s) => s.setTiltSpeed);
   const showSideView = useSceneStore((s) => s.showSideView);
   const setShowSideView = useSceneStore((s) => s.setShowSideView);
+  const cameraModel = useSceneStore((s) => s.cameraModel);
+  const drift = useSceneStore((s) => s.drift);
+  const setDrift = useSceneStore((s) => s.setDrift);
+  const turntable = useSceneStore((s) => s.turntable);
+  const setTurntable = useSceneStore((s) => s.setTurntable);
+  const isDrift = cameraModel === "drift";
+  const isMap = cameraModel === "map";
   const setFocalAdjust = useSceneStore((s) => s.setFocalAdjust);
   // Show the focal pin (and, for Screen Y, the guide line) WHILE a slider is being adjusted,
   // then revert on release: a slider drag ends precisely via onCommit (base-ui's
@@ -862,91 +895,212 @@ function OrbitSection() {
         </span>
         <Switch checked={showSideView} onCheckedChange={setShowSideView} />
       </label>
-      <ValueSlider
-        label="Speed °/s"
-        value={orbit.periodSec !== 0 ? Number((360 / orbit.periodSec).toFixed(1)) : 0}
-        min={-60}
-        max={60}
-        step={0.1}
-        onChange={(dps) => setOrbit({ periodSec: dps !== 0 ? 360 / dps : 0 })}
-        stepperClass="w-32"
-      />
-      {/* Shown in ortho too: the radius doesn't drive ortho zoom (orthoSize does), but it
+      {/* Drift model controls — its motion is auto-driven, so the Map pose sliders
+          (Speed/Distance/Compass/Focal) are hidden while Drift is active; the framing
+          controls below (Screen Y / ground pull) still apply to both. */}
+      {isDrift && (
+        <SubGroup
+          label="Drift"
+          defaultOpen
+          action={
+            <HelpHint>
+              Hands-off ambient orbit — Space pauses. Revolve s = 0 stops the spin (pure wander +
+              bob). Screen Y sets how low the skyline sits.
+            </HelpHint>
+          }
+        >
+          <ValueSlider
+            label="Wander"
+            value={drift.wanderRadius}
+            min={0}
+            max={1}
+            step={0.05}
+            onChange={(v) => setDrift({ wanderRadius: v })}
+            stepperClass="w-32"
+            format={{ maximumFractionDigits: 2 }}
+          />
+          <ValueSlider
+            label="Wander spd"
+            value={drift.wanderSpeed}
+            min={0.2}
+            max={3}
+            step={0.1}
+            onChange={(v) => setDrift({ wanderSpeed: v })}
+            stepperClass="w-32"
+            format={{ maximumFractionDigits: 1 }}
+          />
+          <ValueSlider
+            label="Elev mean"
+            value={drift.elevMid}
+            min={1}
+            max={8}
+            step={0.5}
+            onChange={(v) => setDrift({ elevMid: v })}
+            stepperClass="w-32"
+            format={{ maximumFractionDigits: 1 }}
+          />
+          <ValueSlider
+            label="Elev bob"
+            value={drift.elevAmp}
+            min={0}
+            max={5}
+            step={0.5}
+            onChange={(v) => setDrift({ elevAmp: v })}
+            stepperClass="w-32"
+            format={{ maximumFractionDigits: 1 }}
+          />
+          <ValueSlider
+            label="Revolve s"
+            value={drift.revolveSec}
+            min={0}
+            max={900}
+            step={30}
+            onChange={(v) => setDrift({ revolveSec: v })}
+            stepperClass="w-32"
+            format={{ maximumFractionDigits: 0 }}
+          />
+          <ValueSlider
+            label="Breathe"
+            value={drift.breathe}
+            min={0}
+            max={0.2}
+            step={0.01}
+            onChange={(v) => setDrift({ breathe: v })}
+            stepperClass="w-32"
+            format={{ maximumFractionDigits: 2 }}
+          />
+        </SubGroup>
+      )}
+      {cameraModel === "turntable" && (
+        <SubGroup
+          label="Turntable"
+          defaultOpen
+          action={
+            <HelpHint>
+              Showcase spin — drag to grab and spin it; Space pauses. Spin s = 0 is manual only. A
+              higher elevation shows more of the city (best in perspective); low keeps the skyline +
+              sky.
+            </HelpHint>
+          }
+        >
+          <ValueSlider
+            label="Elevation"
+            value={turntable.elevDeg}
+            min={2}
+            max={45}
+            step={1}
+            onChange={(v) => setTurntable({ elevDeg: v })}
+            stepperClass="w-32"
+            format={{ maximumFractionDigits: 0 }}
+          />
+          <ValueSlider
+            label="Spin s"
+            value={turntable.spinSec}
+            min={0}
+            max={300}
+            step={5}
+            onChange={(v) => setTurntable({ spinSec: v })}
+            stepperClass="w-32"
+            format={{ maximumFractionDigits: 0 }}
+          />
+        </SubGroup>
+      )}
+      {isMap && (
+        <>
+          <ValueSlider
+            label="Speed °/s"
+            value={orbit.periodSec !== 0 ? Number((360 / orbit.periodSec).toFixed(1)) : 0}
+            min={-60}
+            max={60}
+            step={0.1}
+            onChange={(dps) => setOrbit({ periodSec: dps !== 0 ? 360 / dps : 0 })}
+            stepperClass="w-32"
+          />
+          {/* Shown in ortho too: the radius doesn't drive ortho zoom (orthoSize does), but it
           still moves the camera along the view axis — useful while debugging the camera. */}
-      <ValueSlider
-        label="Distance"
-        value={orbit.radius}
-        min={1}
-        max={5000}
-        step={5}
-        onChange={(radius) => setOrbit({ radius })}
-        stepperClass="w-32"
-        format={{ maximumFractionDigits: 1 }} // cap the readout to XXXX.X (radius is often a float, e.g. the ortho park value)
-      />
-      <ValueSlider
-        label="Elevation"
-        value={orbit.elevationDeg}
-        min={0.01}
-        max={90}
-        step={0.5}
-        onChange={(elevationDeg) => setOrbit({ elevationDeg })}
-        stepperClass="w-32"
-      />
-      <ValueSlider
-        label="Compass"
-        value={orbit.azimuthDeg}
-        min={0}
-        max={360}
-        step={1}
-        loop
-        onChange={(azimuthDeg) => setOrbit({ azimuthDeg })}
-        stepperClass="w-32"
-      />
-      <ValueSlider
-        label="Focal Y"
-        value={orbit.lookAtY}
-        min={-1000}
-        max={1000}
-        step={1}
-        onChange={(lookAtY) => {
-          setOrbit({ lookAtY });
-          showFocalAdjust("focalY");
-        }}
-        onCommit={endFocalAdjust}
-        stepperClass="w-32"
-        origin={0}
-        // fill out from 0; match the focal pin — sky-blue above ground, soil-brown below
-        // (COLOR_ABOVE / COLOR_BELOW in DreiSceneControls).
-        indicatorStyle={{ background: orbit.lookAtY >= 0 ? "#7dd3fc" : "#b5835a" }}
-      />
-      <ValueSlider
-        label="Focal X"
-        value={orbit.centerX}
-        min={-5000}
-        max={5000}
-        step={5}
-        onChange={(centerX) => {
-          setOrbit({ centerX });
-          showFocalAdjust("focalY");
-        }}
-        onCommit={endFocalAdjust}
-        stepperClass="w-32"
-      />
-      <ValueSlider
-        label="Focal Z"
-        value={orbit.centerZ}
-        min={-5000}
-        max={5000}
-        step={5}
-        onChange={(centerZ) => {
-          setOrbit({ centerZ });
-          showFocalAdjust("focalY");
-        }}
-        onCommit={endFocalAdjust}
-        stepperClass="w-32"
-      />
+          <ValueSlider
+            label="Distance"
+            value={orbit.radius}
+            min={1}
+            max={5000}
+            step={5}
+            onChange={(radius) => setOrbit({ radius })}
+            stepperClass="w-32"
+            format={{ maximumFractionDigits: 1 }} // cap the readout to XXXX.X (radius is often a float, e.g. the ortho park value)
+          />
+          <ValueSlider
+            label="Elevation"
+            value={orbit.elevationDeg}
+            min={0.01}
+            max={90}
+            step={0.5}
+            onChange={(elevationDeg) => setOrbit({ elevationDeg })}
+            stepperClass="w-32"
+          />
+          <ValueSlider
+            label="Compass"
+            value={orbit.azimuthDeg}
+            min={0}
+            max={360}
+            step={1}
+            loop
+            onChange={(azimuthDeg) => setOrbit({ azimuthDeg })}
+            stepperClass="w-32"
+          />
+          <ValueSlider
+            label="Focal Y"
+            value={orbit.lookAtY}
+            min={-1000}
+            max={1000}
+            step={1}
+            onChange={(lookAtY) => {
+              setOrbit({ lookAtY });
+              showFocalAdjust("focalY");
+            }}
+            onCommit={endFocalAdjust}
+            stepperClass="w-32"
+            origin={0}
+            // fill out from 0; match the focal pin — sky-blue above ground, soil-brown below
+            // (COLOR_ABOVE / COLOR_BELOW in DreiSceneControls).
+            indicatorStyle={{ background: orbit.lookAtY >= 0 ? "#7dd3fc" : "#b5835a" }}
+          />
+          <ValueSlider
+            label="Focal X"
+            value={orbit.centerX}
+            min={-5000}
+            max={5000}
+            step={5}
+            onChange={(centerX) => {
+              setOrbit({ centerX });
+              showFocalAdjust("focalY");
+            }}
+            onCommit={endFocalAdjust}
+            stepperClass="w-32"
+          />
+          <ValueSlider
+            label="Focal Z"
+            value={orbit.centerZ}
+            min={-5000}
+            max={5000}
+            step={5}
+            onChange={(centerZ) => {
+              setOrbit({ centerZ });
+              showFocalAdjust("focalY");
+            }}
+            onCommit={endFocalAdjust}
+            stepperClass="w-32"
+          />
+        </>
+      )}
       <RangeSlider
         label="Screen Y"
+        hint={
+          <>
+            Where the focal sits on screen (0 top, 100 bottom). Left thumb = resting spot; with the
+            ground pull on, near the horizon it eases DOWN to the right thumb so the skyline settles
+            low with sky above. Off holds the resting spot at every angle.
+          </>
+        }
         // Screen Y is top-down (0 = top, 100 = bottom); the store holds fractions UP from the bottom,
         // so invert. Left thumb = resting Screen Y (orbitPivotFromBottom); right thumb = the low-angle
         // Screen Y it eases DOWN to near the horizon (groundFrameLow), used when the ground pull is on.
@@ -964,14 +1118,9 @@ function OrbitSection() {
         <span className="text-foreground/70">low-angle ground pull</span>
         <Switch checked={groundFraming} onCheckedChange={setGroundFraming} />
       </label>
-      <div className="text-foreground/45 text-[11px] leading-snug">
-        Screen Y is where the focal sits on screen (0 top, 100 bottom). The left thumb is its
-        resting spot; with the ground pull on, near the horizon it eases DOWN to the right thumb so
-        the skyline settles low with sky above (tracking the tilt live). Off holds the resting spot
-        at every angle.
-      </div>
       <ValueSlider
         label="Tilt speed"
+        hint="How fast a vertical drag pitches the view (lower = more regulated; 1 = the old rate)."
         value={tiltSpeed}
         min={0.1}
         max={1}
@@ -981,6 +1130,7 @@ function OrbitSection() {
       />
       <ValueSlider
         label="Low-angle speed"
+        hint="Eases rotate + tilt speed down near the horizon (1 = no limit); distance past the city tapers them further."
         value={rotateFloor}
         min={0.1}
         max={1}
@@ -990,6 +1140,7 @@ function OrbitSection() {
       />
       <ValueSlider
         label="Slow below °"
+        hint="The elevation below which the low-angle easing (and the ground pull) start."
         value={rotateSlowBelow}
         min={2}
         max={45}
@@ -997,11 +1148,6 @@ function OrbitSection() {
         onChange={setRotateSlowBelow}
         stepperClass="w-32"
       />
-      <div className="text-foreground/45 text-[11px] leading-snug">
-        Tilt speed sets how fast a vertical drag pitches the view (lower = more regulated; 1 = the
-        old rate). Low-angle speed and Slow below ° additionally ease rotate + tilt down near the
-        horizon (1 = no limit), and distance past the city tapers them further.
-      </div>
     </>
   );
 }
@@ -1322,13 +1468,15 @@ function FacadeSection() {
   const setFacade = useSceneStore((s) => s.setFacade);
   return (
     <>
-      <div className="text-foreground/55 text-[10px] leading-snug">
-        Wall color. Each building flips a weighted coin (warm %) for its hue family — warm masonry
-        vs cool glass — then rolls one hue, saturation + lightness from these ranges (lightness
-        skews dark, so pale towers stay rare). Live — no regen.
-      </div>
       <ValueSlider
         label="warm %"
+        hint={
+          <>
+            Wall color. Each building flips a weighted coin (warm %) for its hue family — warm
+            masonry vs cool glass — then rolls one hue, saturation + lightness from these ranges
+            (lightness skews dark, so pale towers stay rare). Live — no regen.
+          </>
+        }
         value={facade.warmShare}
         min={0}
         max={1}
@@ -1410,40 +1558,31 @@ function WindowsSection() {
       {mode === "simple" ? <WindowsSimpleControls /> : <WindowProfilesSection />}
       <ValueSlider
         label="stagger"
+        hint="Share of correlated floors (whole / fractional bands) that switch on in 2–4 column banks instead of all at once."
         value={stagger}
         min={0}
         max={1}
         step={0.05}
         onChange={(v) => setWindowAA({ stagger: v })}
       />
-      <div className="text-foreground/55 text-[10px] leading-snug">
-        Share of correlated floors (whole / fractional bands) that switch on in 2–4 column banks
-        instead of all at once.
-      </div>
       <ValueSlider
         label="curtain"
+        hint="Share of correlated office towers whose banded floors render as curtain glass — ribbon floors on otherwise normal facades, piers at the corners."
         value={curtain}
         min={0}
         max={1}
         step={0.05}
         onChange={(v) => setWindowAA({ curtain: v })}
       />
-      <div className="text-foreground/55 text-[10px] leading-snug">
-        Share of correlated office towers whose banded floors render as curtain glass — ribbon
-        floors on otherwise normal facades, piers at the corners.
-      </div>
       <ValueSlider
         label="crt width"
+        hint="Pane fill on curtain towers. 0.99 keeps hairline mullions; exactly 1.0 merges each lit floor into one continuous window. 1 in 5 curtain towers rolls full regardless."
         value={curtainW}
         min={0.85}
         max={1}
         step={0.01}
         onChange={(v) => setWindowAA({ curtainW: v })}
       />
-      <div className="text-foreground/55 text-[10px] leading-snug">
-        Pane fill on curtain towers. 0.99 keeps hairline mullions; exactly 1.0 merges each lit floor
-        into one continuous window. 1 in 5 curtain towers rolls full regardless.
-      </div>
     </>
   );
 }
@@ -1453,12 +1592,9 @@ function WindowsSimpleControls() {
   const setWindowSimple = useSceneStore((s) => s.setWindowSimple);
   return (
     <>
-      <div className="text-foreground/55 text-[10px] leading-snug">
-        Each building rolls one window width and height from the ranges (all its windows match); the
-        two rolls are independent.
-      </div>
       <RangeSlider
         label="width"
+        hint="Each building rolls one window width and height from the ranges (all its windows match); the two rolls are independent."
         value={[ws.wMin, ws.wMax]}
         min={0.1}
         max={1}
@@ -1505,10 +1641,10 @@ function WindowProfilesSection() {
   const shown = filter === "all" ? ARCHETYPE_ORDER : [filter];
   return (
     <>
-      <div className="text-foreground/55 text-[10px] leading-snug">
+      <HelpHint>
         Glass-to-cell fraction per building style. Each building rolls one width and one height from
         its archetype&apos;s ranges (all its windows match). Grid spacing is baked per archetype.
-      </div>
+      </HelpHint>
       <TooltipProvider>
         <div className="flex items-center gap-0.5">
           {(["all", ...ARCHETYPE_ORDER] as (Archetype | "all")[]).map((id) => {
@@ -1978,33 +2114,42 @@ function SubGroup({
   label: string;
   defaultOpen?: boolean;
   action?: ReactNode;
-  children: ReactNode;
+  children?: ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
     <>
       <div className="mt-1 flex items-center gap-1.5 border-t border-white/10 pt-2">
-        <button
-          type="button"
-          onClick={() => setOpen((o) => !o)}
-          className="text-foreground/55 hover:text-foreground/80 flex flex-1 items-center text-[11px] font-medium tracking-wide uppercase transition-colors"
-        >
-          {label}
-        </button>
+        {children != null ? (
+          <button
+            type="button"
+            onClick={() => setOpen((o) => !o)}
+            className="text-foreground/55 hover:text-foreground/80 flex flex-1 items-center text-[11px] font-medium tracking-wide uppercase transition-colors"
+          >
+            {label}
+          </button>
+        ) : (
+          <span className="text-foreground/55 flex flex-1 items-center text-[11px] font-medium tracking-wide uppercase">
+            {label}
+          </span>
+        )}
         {action}
-        {/* Chevron also toggles, but the label button is the accessible /
-            tabbable control — keep this one out of the tab order. */}
-        <button
-          type="button"
-          tabIndex={-1}
-          aria-hidden="true"
-          onClick={() => setOpen((o) => !o)}
-          className="text-foreground/55 hover:text-foreground/80 transition-colors"
-        >
-          <ChevronDown className={cn("size-3.5 transition-transform", !open && "-rotate-90")} />
-        </button>
+        {/* Chevron toggles the body; only shown when there IS a body. Some groups are
+            just a header + action (e.g. an overlay switch + "?"), so no chevron. The
+            label button is the accessible / tabbable control. */}
+        {children != null && (
+          <button
+            type="button"
+            tabIndex={-1}
+            aria-hidden="true"
+            onClick={() => setOpen((o) => !o)}
+            className="text-foreground/55 hover:text-foreground/80 transition-colors"
+          >
+            <ChevronDown className={cn("size-3.5 transition-transform", !open && "-rotate-90")} />
+          </button>
+        )}
       </div>
-      {open && <div className="flex flex-col gap-2.5">{children}</div>}
+      {open && children != null && <div className="flex flex-col gap-2.5">{children}</div>}
     </>
   );
 }
@@ -2098,11 +2243,11 @@ function DebugSection() {
             onChange={(km) => setCityShapeScale(Math.min(1, km / sizeKm))}
           />
         ) : null}
-        <div className="text-foreground/45 text-[11px] leading-snug">
+        <HelpHint>
           Size sets the generated extent (re-rolls the layout; bigger = slower to generate). Crop
           reveals/hides the already-generated city — grow = reveal, never a re-roll. auto = each
           seed picks its shape; square = full field.
-        </div>
+        </HelpHint>
         {/* #51 deviation — scales each seed's rolled field deformation. Regen on
           RELEASE only (same drag-preview rationale as the size tier). */}
         <div className="flex items-center gap-2 text-xs">
@@ -2123,13 +2268,20 @@ function DebugSection() {
             ×{(dragDeviation ?? fieldDeviation).toFixed(2)}
           </span>
         </div>
-        <div className="text-foreground/45 text-[11px] leading-snug">
+        <HelpHint>
           Deviation scales how hard the street field bends (re-rolls on release). ×1 = the
           seed&apos;s own character; lower = calmer grids, higher = stronger warps/shears.
-        </div>
+        </HelpHint>
       </SubGroup>
 
-      <SubGroup label="Render modes">
+      <SubGroup
+        label="Render modes"
+        action={
+          <HelpHint>
+            Wireframe applies to mesh geometry; it&apos;s a no-op for Sky + Stars.
+          </HelpHint>
+        }
+      >
         <RenderModeTabs
           label="all"
           value={allMode}
@@ -2143,9 +2295,6 @@ function DebugSection() {
             onChange={(v) => setRenderMode(g, v as RenderMode)}
           />
         ))}
-        <div className="text-foreground/45 text-[11px] leading-snug">
-          Wireframe applies to mesh geometry; it&apos;s a no-op for Sky + Stars.
-        </div>
       </SubGroup>
 
       {/* Header switch = the overlay toggle itself (Windows-lights pattern) —
@@ -2153,27 +2302,36 @@ function DebugSection() {
       <SubGroup
         label="Tensor field"
         action={
-          <Switch
-            checked={showTensorField}
-            onCheckedChange={setShowTensorField}
-            title="Show the grain direction overlay"
-          />
+          <>
+            <HelpHint>
+              The major-eigenvector field the roads follow — ticks colored by grain angle.
+            </HelpHint>
+            <Switch
+              checked={showTensorField}
+              onCheckedChange={setShowTensorField}
+              title="Show the grain direction overlay"
+            />
+          </>
         }
-      >
-        <div className="text-foreground/45 text-[11px] leading-snug">
-          The major-eigenvector field the roads follow — ticks colored by grain angle.
-        </div>
-      </SubGroup>
+      />
 
       {/* #55 tile culling — visualize the per-tile materialisation machinery. */}
       <SubGroup
         label="Tile culling"
         action={
-          <Switch
-            checked={tileOverlay}
-            onCheckedChange={setTileOverlay}
-            title="Show the tile grid overlay (green = materialised, red = evicted)"
-          />
+          <>
+            <HelpHint>
+              Tiles are the 500 m cells buildings / streetlights / traffic materialise in — green =
+              in the cull frustum, red = evicted. Freeze pins the frustum to the current pose so you
+              can orbit out and watch eviction (unfrozen, an evicted tile is offscreen by
+              definition). The culling switch itself lives in Roads → Distance LOD.
+            </HelpHint>
+            <Switch
+              checked={tileOverlay}
+              onCheckedChange={setTileOverlay}
+              title="Show the tile grid overlay (green = materialised, red = evicted)"
+            />
+          </>
         }
       >
         <label className="flex cursor-pointer items-center justify-between gap-2 text-xs">
@@ -2181,12 +2339,6 @@ function DebugSection() {
           <Switch checked={tileFreeze} onCheckedChange={setTileFreeze} />
         </label>
         <TileCullReadout />
-        <div className="text-foreground/45 text-[11px] leading-snug">
-          Tiles are the 500 m cells buildings / streetlights / traffic materialise in — green = in
-          the cull frustum, red = evicted. Freeze pins the frustum to the current pose so you can
-          orbit out and watch eviction (unfrozen, an evicted tile is offscreen by definition). The
-          culling switch itself lives in Roads → Distance LOD.
-        </div>
       </SubGroup>
 
       {/* Pin-plane framing aid (2026-06-14, throwaway): the plane through the focal
@@ -2195,20 +2347,22 @@ function DebugSection() {
       <SubGroup
         label="Pin plane"
         action={
-          <Switch
-            checked={showPinPlane}
-            onCheckedChange={setShowPinPlane}
-            title="Show the focal-pin plane + ortho view outline"
-          />
+          <>
+            <HelpHint>
+              On the plane through the focal pin (perpendicular to the view), two footprints: the
+              orthographic view in <span className="text-sky-300">sky-blue</span> and the
+              perspective view in <span className="text-amber-700">soil-brown</span>. Both honour
+              Screen Y. Adjust FOV / distance until the brown rect lands on the blue one —
+              that&apos;s matched framing.
+            </HelpHint>
+            <Switch
+              checked={showPinPlane}
+              onCheckedChange={setShowPinPlane}
+              title="Show the focal-pin plane + ortho view outline"
+            />
+          </>
         }
-      >
-        <div className="text-foreground/45 text-[11px] leading-snug">
-          On the plane through the focal pin (perpendicular to the view), two footprints: the
-          orthographic view in <span className="text-sky-300">sky-blue</span> and the perspective
-          view in <span className="text-amber-700">soil-brown</span>. Both honour Screen Y. Adjust
-          FOV / distance until the brown rect lands on the blue one — that&apos;s matched framing.
-        </div>
-      </SubGroup>
+      />
     </>
   );
 }

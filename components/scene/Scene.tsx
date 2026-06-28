@@ -14,7 +14,7 @@ import { Ground } from "./Ground";
 import { Streetlights } from "./Streetlights";
 import { Beacons } from "./Beacons";
 import { CameraControls } from "./CameraControls";
-import { DreiSceneControls } from "./DreiSceneControls";
+import { CameraModelHost } from "./camera-models/CameraModelHost";
 import { ScreenYGuide } from "./ScreenYGuide";
 import { PerfMonitor } from "./PerfMonitor";
 import { AdaptiveQuality } from "./AdaptiveQuality";
@@ -63,10 +63,12 @@ export function Scene() {
   );
   const legacyControls = controlsFlag === "legacy" || controlsFlag === "old";
   const cameraMode = useSceneStore((s) => s.cameraMode);
-  // drei owns orbit unless forced legacy. Keep DreiSceneControls MOUNTED across modes (it
-  // self-gates to orbit and goes inert otherwise) so its once-per-mount "pin perspective"
-  // entry effect doesn't re-fire each time you return to orbit; the old controller mounts only
-  // for fly / still (or all modes in legacy).
+  // drei owns orbit unless forced legacy. The CameraModelHost is mounted across modes and renders
+  // the selected camera MODEL (Settings → Camera model, orbit only); the active model self-gates to
+  // orbit and goes inert otherwise. The default "map" model IS DreiSceneControls, so this is
+  // behaviourally identical to mounting it directly — its once-per-mount "pin perspective" entry
+  // effect still doesn't re-fire on a mode change. The old controller mounts only for fly / still
+  // (or all modes in legacy).
   const dreiOrbit = !legacyControls && cameraMode === "orbit";
   const oldController = legacyControls || cameraMode !== "orbit";
 
@@ -90,7 +92,7 @@ export function Scene() {
         dpr={dprCap ?? [1, dprMax]}
         style={{ touchAction: "none" }}
       >
-        {!legacyControls && <DreiSceneControls />}
+        {!legacyControls && <CameraModelHost />}
         {oldController && <CameraControls />}
         <ProjectionBlender />
         <PerfMonitor />
