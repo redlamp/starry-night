@@ -176,9 +176,9 @@ export const DEFAULT_MOON = {
   // Raised off the horizon (#65 v3) so the ground/horizon (main pass) doesn't draw
   // over it. Lowered 18° → 12° (2026-06-24): the star camera now matches the city's
   // narrow fov, and at the near-horizontal default view (elev 2°) an 18° moon sat
-  // just above the top edge. 12° centres it in the visible sky. Lower further for a
-  // horizon moon (accepts partial ground occlusion); raise to clear the skyline.
-  elevationDeg: 12,
+  // just above the top edge. 12° centred it in the sky; dropped to 3° (user 2026-06-28)
+  // for a low, near-horizon moon (accepts partial skyline occlusion); raise to clear it.
+  elevationDeg: 3,
   // Sits on the star shell so the moon hugs the celestial sphere. Tracks the star
   // radius default (was 4500·CITY_SCALE, stale after stars.radius → 3200·CITY_SCALE,
   // which left the moon floating beyond the star dome).
