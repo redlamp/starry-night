@@ -12,6 +12,14 @@ import {
   type RenderMode,
 } from "@/lib/state/sceneStore";
 import { maxHalfExtent } from "@/lib/seed/topology";
+import { getCameraModelMeta } from "@/components/scene/camera-models/catalog";
+import type { CameraModelId } from "@/lib/state/sceneStore";
+
+// Apply a model's transport default (Map paused, Drift/Turntable playing) on a
+// user-initiated switch — mirrors the selector's pickCamera. See catalog.startsPaused.
+function applyTransportDefault(id: CameraModelId) {
+  useSceneStore.getState().setOrbitPaused(getCameraModelMeta(id).startsPaused ?? false);
+}
 
 // Shared camera-mode logic — the single source of truth for the Fly / Orbit /
 // Top-down switch, used by the Camera panel's mode tabs, the `t` hotkey, and the
@@ -193,10 +201,27 @@ export function setCameraTab(tab: CameraTab) {
   else enterTopDownMode();
 }
 
-// `t` hotkey: toggle top-down on/off (enter from orbit or fly, exit back to orbit).
+// `t` hotkey: toggle the Top-down camera MODEL on/off (back to Map when leaving).
 export function toggleTopDown() {
-  if (isTopDown()) enterOrbitMode();
-  else enterTopDownMode();
+  const s = useSceneStore.getState();
+  s.setCameraMode("orbit");
+  const next = s.cameraModel === "topdown" ? "map" : "topdown";
+  s.setCameraModel(next);
+  applyTransportDefault(next);
+}
+
+// `f` hotkey: toggle the Fly camera MODEL on/off (back to Map when leaving).
+export function toggleFly() {
+  const s = useSceneStore.getState();
+  if (s.cameraModel === "fly") {
+    s.setCameraMode("orbit");
+    s.setCameraModel("map");
+    applyTransportDefault("map");
+  } else {
+    s.setCameraMode("fly");
+    s.setCameraModel("fly");
+    applyTransportDefault("fly");
+  }
 }
 
 // "Default Orbit" button: reset the orbit framing to DEFAULT_ORBIT with a tween
@@ -269,7 +294,7 @@ export function tweenOrbitToHome() {
     onUpdate: () => {
       const st = useSceneStore.getState();
       st.setOrbit({
-        azimuthDeg: (((p.az % 360) + 360) % 360),
+        azimuthDeg: ((p.az % 360) + 360) % 360,
         elevationDeg: p.el,
         radius: p.r,
         lookAtY: p.ly,

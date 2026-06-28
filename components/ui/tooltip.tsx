@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip";
 
 import { cn } from "@/lib/utils";
@@ -41,4 +42,36 @@ function TooltipContent({
   );
 }
 
-export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider };
+// A compact "?" help affordance: a small round button that reveals `children` in a
+// tooltip on hover/focus (a tap focuses it, so it works on touch too). Use it to tuck
+// long inline descriptions out of the way, next to a control or group label.
+function HelpHint({
+  children,
+  side = "top",
+  label = "More info",
+}: {
+  children: ReactNode;
+  side?: "top" | "right" | "bottom" | "left";
+  label?: string;
+}) {
+  return (
+    <TooltipProvider delay={100}>
+      <Tooltip>
+        <TooltipTrigger
+          aria-label={label}
+          className="text-foreground/40 hover:text-foreground/80 focus-visible:text-foreground/80 inline-flex size-4 shrink-0 cursor-help items-center justify-center rounded-full border border-current text-[9px] leading-none font-semibold transition-colors"
+        >
+          ?
+        </TooltipTrigger>
+        <TooltipContent
+          side={side}
+          className="bg-popover text-foreground border-border max-w-[15rem] border text-[11px] leading-snug font-normal shadow-md"
+        >
+          {children}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+export { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider, HelpHint };

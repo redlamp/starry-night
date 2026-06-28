@@ -23,6 +23,20 @@ export type LightingMode = "classic" | "modern";
 export type QualityTier = "low" | "med" | "high" | "ultra";
 export type CameraMode = "still" | "fly" | "orbit";
 
+// Which camera-control MODEL drives the orbit slot (the "3 Cs": Camera / Controls /
+// Character). "map" = the hands-on grab/orbit/zoom controller (DreiSceneControls);
+// other ids are self-contained alternative models mounted via the camera-model
+// registry. Orthogonal to cameraMode (still/fly/orbit) — models apply in orbit.
+// Metadata (labels/blurbs) live in components/scene/camera-models/catalog.ts.
+export type CameraModelId =
+  | "map"
+  | "drift"
+  | "turntable"
+  | "topdown"
+  | "fly"
+  | "dreimap"
+  | "dreicamera";
+
 // Quality tier presets. Affects the DPR ceiling passed to the R3F Canvas and
 // the suggested star count. User can still override stars.count via slider;
 // the tier sets the boot-time ceiling and the DPR cap from then on.
@@ -107,7 +121,10 @@ export type OrbitConfig = {
 // X/Y/Z = 0) (user 2026-06-21). Radius scales with city width
 // (CITY_SCALE); 1800s sweep (0.2°/s) once un-paused. lookAtY (focal HEIGHT) is NOT
 // scaled — building heights are fixed across size tiers, so the skyline sits at the
-// same Y regardless of extent. (Pairs with orbitPaused defaulting true.)
+// same Y regardless of extent. Per-model transport default (catalog.startsPaused,
+// applied on model switch): Map enters paused on this still curated pose, while
+// Drift / Turntable auto-play. Initial orbitPaused is false because the default
+// model is Drift; switching to Map sets it true.
 export const DEFAULT_ORBIT: OrbitConfig = {
   centerX: 0,
   centerZ: 0, // focal at the origin (user 2026-06-21; was -120)
@@ -116,6 +133,36 @@ export const DEFAULT_ORBIT: OrbitConfig = {
   azimuthDeg: 187,
   elevationDeg: 2,
   periodSec: 1800,
+};
+
+// Drift camera-model tunables (the hands-off ambient orbit). Defaults = the authored
+// feel; all are live-editable in Settings -> Orbit -> Drift, and persisted.
+export interface DriftConfig {
+  wanderRadius: number; // brownian ground-wander reach, as a fraction of the city half-extent
+  wanderSpeed: number; // multiplier on the wander's base frequencies
+  elevMid: number; // mean camera elevation above the horizon (deg)
+  elevAmp: number; // elevation sine-bob amplitude (deg)
+  revolveSec: number; // seconds per steady azimuth revolution; 0 = no revolve (pure wander + bob)
+  breathe: number; // dolly breathe amount (fraction of radius)
+}
+export const DEFAULT_DRIFT: DriftConfig = {
+  wanderRadius: 0.45,
+  wanderSpeed: 1,
+  elevMid: 4,
+  elevAmp: 2.5,
+  revolveSec: 360,
+  breathe: 0.05,
+};
+
+// Turntable camera-model tunables (the showcase spin). Live-editable in
+// Settings -> Orbit -> Turntable, and persisted.
+export interface TurntableConfig {
+  elevDeg: number; // fixed camera elevation above the horizon (deg)
+  spinSec: number; // seconds per revolution; 0 = no auto-spin (grab-to-spin only)
+}
+export const DEFAULT_TURNTABLE: TurntableConfig = {
+  elevDeg: 8, // low + ortho-safe (sky above the skyline); raise it in perspective for a 3/4 showcase
+  spinSec: 60,
 };
 
 // Azimuth flipped 180° from the 200° tuning that paired with the old camera
@@ -290,7 +337,7 @@ export const DEFAULT_HAZE = {
   // Vertical extents are absolute (heights don't scale with city width — #47).
   topY: 240,
   bottomY: -30,
-  intensity: 1,
+  intensity: 0.5, // "strength" slider — softer default horizon haze (user 2026-06-28)
   radius: 1500 * CITY_SCALE, // 3000 at City
 };
 
@@ -515,6 +562,9 @@ type AnySettingEntry =
   | SettingEntry<"orbitZoomToPin">
   | SettingEntry<"allowUnderview">
   | SettingEntry<"cameraMode">
+  | SettingEntry<"cameraModel">
+  | SettingEntry<"drift">
+  | SettingEntry<"turntable">
   | SettingEntry<"orbitRestore">
   | SettingEntry<"topDownTip">
   | SettingEntry<"intro">
@@ -560,7 +610,7 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "fog", defaultValue: DEFAULT_FOG, persist: true },
   { key: "haze", defaultValue: DEFAULT_HAZE, persist: true },
   { key: "flySpeed", defaultValue: DEFAULT_FLY_SPEED, persist: true },
-  { key: "orbitPaused", defaultValue: true as const, persist: true },
+  { key: "orbitPaused", defaultValue: false as const, persist: true },
   { key: "showFocalIndicator", defaultValue: false as const, persist: true },
   { key: "orbitPivotFromBottom", defaultValue: 0.37, persist: true },
   { key: "groundFraming", defaultValue: true as const, persist: true },
@@ -574,6 +624,9 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "orbitZoomToPin", defaultValue: true as const, persist: false },
   { key: "allowUnderview", defaultValue: false as const, persist: false },
   { key: "cameraMode", defaultValue: "orbit" as const, persist: true },
+  { key: "cameraModel", defaultValue: "drift" as const, persist: true },
+  { key: "drift", defaultValue: DEFAULT_DRIFT, persist: true },
+  { key: "turntable", defaultValue: DEFAULT_TURNTABLE, persist: true },
   { key: "orbitRestore", defaultValue: null as SceneState["orbitRestore"], persist: false },
   { key: "topDownTip", defaultValue: 0, persist: false },
   { key: "intro", defaultValue: DEFAULT_INTRO, persist: true },
@@ -631,6 +684,10 @@ type SavedConfig = {
   showFocalIndicator?: boolean;
   // 2026-06-08: the camera comes back EXACTLY as saved (mode + paused state).
   cameraMode?: CameraMode;
+  // Optional so configs saved before the camera-model selector still load.
+  cameraModel?: CameraModelId;
+  drift?: DriftConfig;
+  turntable?: TurntableConfig;
   orbitPaused?: boolean;
   intro?: SceneState["intro"];
   starIntro?: SceneState["starIntro"];
@@ -896,6 +953,12 @@ type SceneState = {
   };
   setMoonLive: (live: SceneState["moonLive"]) => void;
   cameraMode: CameraMode;
+  cameraModel: CameraModelId;
+  setCameraModel: (id: CameraModelId) => void;
+  drift: DriftConfig;
+  setDrift: (patch: Partial<DriftConfig>) => void;
+  turntable: TurntableConfig;
+  setTurntable: (patch: Partial<TurntableConfig>) => void;
   cameraIntent: CameraIntent;
   cameraLive: CameraLive;
   // Transient UI signal: true while the user drags the atmosphere near/far
@@ -1203,6 +1266,9 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setMoonLive: (moonLive) => set({ moonLive }),
   // Note: cameraMode default is "orbit" — see below.
   cameraMode: "orbit",
+  cameraModel: "drift",
+  drift: DEFAULT_DRIFT,
+  turntable: DEFAULT_TURNTABLE,
   cameraIntent: DEFAULT_INTENT,
   cameraLive: {
     position: DEFAULT_INTENT.position,
@@ -1271,7 +1337,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setFocalDragging: (focalDragging) => set({ focalDragging }),
   panelHidden: true,
   setPanelHidden: (panelHidden) => set({ panelHidden }),
-  orbitPaused: true,
+  orbitPaused: false,
   setOrbitPaused: (orbitPaused) => set({ orbitPaused }),
   orbit: DEFAULT_ORBIT,
   setOrbit: (patch) => set((s) => ({ orbit: { ...s.orbit, ...patch } })),
@@ -1379,6 +1445,9 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setQualityTier: (qualityTier) => set({ qualityTier }),
   setPaused: (paused) => set({ paused }),
   setCameraMode: (cameraMode) => set({ cameraMode }),
+  setCameraModel: (cameraModel) => set({ cameraModel }),
+  setDrift: (patch) => set((s) => ({ drift: { ...s.drift, ...patch } })),
+  setTurntable: (patch) => set((s) => ({ turntable: { ...s.turntable, ...patch } })),
   setCameraIntent: (intent) =>
     set((s) => ({
       cameraIntent: {

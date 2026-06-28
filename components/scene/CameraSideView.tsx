@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSceneStore } from "@/lib/state/sceneStore";
 import { CameraDiagram, type CamReadout } from "@/components/scene/CameraDiagram";
-import { cameraReadout } from "@/lib/scene/cameraReadout";
+import { cameraReadout, deriveReadout } from "@/lib/scene/cameraReadout";
 import { tweenProjectionTo } from "@/lib/scene/cameraView";
 
 // DOM overlay that paints the live side-view diagram in the app (Orbit settings → "side-view
@@ -18,15 +18,22 @@ export function CameraSideView() {
   const show = useSceneStore((s) => s.showSideView);
   const captureMode = useSceneStore((s) => s.captureMode);
   const mode = useSceneStore((s) => s.cameraMode);
+  const cameraModel = useSceneStore((s) => s.cameraModel);
   const [snap, setSnap] = useState<CamReadout>(() => ({ ...cameraReadout }));
   const sigRef = useRef("");
+
+  // Only the Map model writes the live `cameraReadout` singleton (with the framing gauges); every other
+  // model keeps `orbit` + `cameraLive` current, so derive the diagram from those instead.
+  const usesSingleton = cameraModel === "map";
+  // Drei-* and Fly own the projection (perspective-locked), so don't offer the tap-to-toggle there.
+  const projLocked = cameraModel === "dreimap" || cameraModel === "dreicamera" || mode === "fly";
 
   const active = show && !captureMode;
   useEffect(() => {
     if (!active) return;
     let raf = 0;
     const tick = () => {
-      const r = cameraReadout;
+      const r = usesSingleton ? cameraReadout : deriveReadout();
       // Signature of the displayed quantities, rounded as the SVG rounds them — repaint only when one
       // moves a visible amount. blend keeps 2 decimals so a projection tween animates smoothly.
       const sig = `${Math.round(r.elev)}|${Math.round(r.dist)}|${Math.round(r.focalY)}|${Math.round(r.camY)}|${r.parallel ? 1 : 0}|${Math.round(r.frustumHh)}|${r.blend.toFixed(2)}`;
@@ -38,7 +45,7 @@ export function CameraSideView() {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [active]);
+  }, [active, usesSingleton]);
 
   if (!active) return null;
   return (
@@ -47,10 +54,15 @@ export function CameraSideView() {
       mode={mode}
       show
       className="bottom-16 left-3 z-10"
-      onToggleProjection={() =>
-        tweenProjectionTo(
-          useSceneStore.getState().projection === "orthographic" ? "perspective" : "orthographic",
-        )
+      onToggleProjection={
+        projLocked
+          ? undefined
+          : () =>
+              tweenProjectionTo(
+                useSceneStore.getState().projection === "orthographic"
+                  ? "perspective"
+                  : "orthographic",
+              )
       }
     />
   );

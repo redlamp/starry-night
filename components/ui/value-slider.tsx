@@ -1,7 +1,8 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { Slider, LoopingSlider } from "@/components/ui/slider";
+import { HelpHint } from "@/components/ui/tooltip";
 import {
   NumberField,
   NumberFieldScrubArea,
@@ -18,6 +19,7 @@ import { cn } from "@/lib/utils";
 // label doubles as a base-ui scrub area — drag it horizontally to nudge.
 export function ValueSlider({
   label,
+  hint,
   value,
   min,
   max,
@@ -32,6 +34,7 @@ export function ValueSlider({
   format,
 }: {
   label: string;
+  hint?: ReactNode;
   value: number;
   min: number;
   max: number;
@@ -73,6 +76,7 @@ export function ValueSlider({
       <NumberFieldScrubArea>
         <span className={cn("text-foreground/70 block w-14 shrink-0", labelClass)}>{label}</span>
       </NumberFieldScrubArea>
+      {hint ? <HelpHint>{hint}</HelpHint> : null}
       {loop ? (
         <LoopingSlider
           min={min}
@@ -113,6 +117,7 @@ export function ValueSlider({
 // arrow keys, or scroll) — each clamped against the other end of the range.
 export function RangeSlider({
   label,
+  hint,
   value,
   min,
   max,
@@ -123,6 +128,7 @@ export function RangeSlider({
   indicatorClassName,
 }: {
   label: string;
+  hint?: ReactNode;
   value: [number, number];
   min: number;
   max: number;
@@ -135,6 +141,7 @@ export function RangeSlider({
   return (
     <div className="flex flex-row items-center gap-2 text-xs">
       <span className={cn("text-foreground/70 block w-14 shrink-0", labelClass)}>{label}</span>
+      {hint ? <HelpHint>{hint}</HelpHint> : null}
       <Slider
         min={min}
         max={max}

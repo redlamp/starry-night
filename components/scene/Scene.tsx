@@ -14,7 +14,7 @@ import { Ground } from "./Ground";
 import { Streetlights } from "./Streetlights";
 import { Beacons } from "./Beacons";
 import { CameraControls } from "./CameraControls";
-import { DreiSceneControls } from "./DreiSceneControls";
+import { CameraModelHost } from "./camera-models/CameraModelHost";
 import { ScreenYGuide } from "./ScreenYGuide";
 import { PerfMonitor } from "./PerfMonitor";
 import { AdaptiveQuality } from "./AdaptiveQuality";
@@ -63,12 +63,13 @@ export function Scene() {
   );
   const legacyControls = controlsFlag === "legacy" || controlsFlag === "old";
   const cameraMode = useSceneStore((s) => s.cameraMode);
-  // drei owns orbit unless forced legacy. Keep DreiSceneControls MOUNTED across modes (it
-  // self-gates to orbit and goes inert otherwise) so its once-per-mount "pin perspective"
-  // entry effect doesn't re-fire each time you return to orbit; the old controller mounts only
-  // for fly / still (or all modes in legacy).
+  // The CameraModelHost mounts the selected camera MODEL (Settings → Camera): Map / Drift /
+  // Turntable / Top-down are orbit-rig models, Fly is free flight. cameraMode is kept in sync
+  // (fly → "fly", else "orbit") so the orbit models' self-gate and the framing helpers still
+  // read it. The legacy controller now only covers Still (capture) + the ?controls=legacy
+  // escape hatch.
   const dreiOrbit = !legacyControls && cameraMode === "orbit";
-  const oldController = legacyControls || cameraMode !== "orbit";
+  const oldController = legacyControls || cameraMode === "still";
 
   // #44: warm the heavy city-generation cache off the mount-critical path. The
   // canvas + sky / stars / moon / ground mount immediately; the city-derived
@@ -90,7 +91,7 @@ export function Scene() {
         dpr={dprCap ?? [1, dprMax]}
         style={{ touchAction: "none" }}
       >
-        {!legacyControls && <DreiSceneControls />}
+        {!legacyControls && <CameraModelHost />}
         {oldController && <CameraControls />}
         <ProjectionBlender />
         <PerfMonitor />
