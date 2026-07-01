@@ -8,7 +8,8 @@ import { MapPin } from "lucide-react";
 import * as THREE from "three";
 import { useSceneStore, DEFAULT_INTENT } from "@/lib/state/sceneStore";
 import { orbitFramingFactor } from "@/lib/scene/aspectFraming";
-import { CITY_SCALE } from "@/lib/seed/topology";
+import { CITY_SCALE, CITY_CENTER, CITY_TIERS } from "@/lib/seed/topology";
+import { GROUND_APRON_M } from "../Ground";
 import { writeOrbitPose } from "./orbitWriteback";
 
 // "Starry Night Cam v2" — the current Starry Night interactive camera (the app default). A
@@ -159,6 +160,26 @@ function zoomAtCursor(
     _cur.copy(_eye).addScaledVector(_ray.ray.direction, _eye.distanceTo(_tgt));
   }
   zoomAboutPoint(c, _cur, k, smooth);
+}
+
+// Keep the focal point within the city's ground disc (centre CITY_CENTER, radius = the current tier
+// half-extent + apron) so a pan can't wander the view off the map into the void. Returns the clamped
+// [x, z]; the pan shifts the eye by the same clamped amount, preserving the pose.
+const _cc = { x: 0, z: 0 };
+function clampToCity(x: number, z: number): { x: number; z: number } {
+  const R = CITY_TIERS[useSceneStore.getState().citySize] + GROUND_APRON_M;
+  const dx = x - CITY_CENTER.x;
+  const dz = z - CITY_CENTER.z;
+  const d2 = dx * dx + dz * dz;
+  if (d2 <= R * R) {
+    _cc.x = x;
+    _cc.z = z;
+  } else {
+    const k = R / Math.sqrt(d2);
+    _cc.x = CITY_CENTER.x + dx * k;
+    _cc.z = CITY_CENTER.z + dz * k;
+  }
+  return _cc;
 }
 
 export function StarryNightV2Model() {
@@ -348,20 +369,17 @@ export function StarryNightV2Model() {
       lastY = e.clientY;
 
       if (drag === "pan") {
-        // Ground-anchored: shift the whole rig so the grabbed world point returns under the cursor.
+        // Ground-anchored: shift the whole rig so the grabbed world point returns under the cursor —
+        // but clamp the focal point to the city disc (shift the eye by the SAME clamped amount so the
+        // pose is preserved), so a pan stops at the boundary instead of wandering off-map into the void.
         if (!groundHit(cam, dom, e.clientX, e.clientY, _cur)) return;
         _delta.subVectors(_grab, _cur); // _grab.y === _cur.y === 0 → horizontal only
         c.getPosition(_eye);
         c.getTarget(_tgt);
-        void c.setLookAt(
-          _eye.x + _delta.x,
-          _eye.y,
-          _eye.z + _delta.z,
-          _tgt.x + _delta.x,
-          _tgt.y,
-          _tgt.z + _delta.z,
-          false,
-        );
+        const cl = clampToCity(_tgt.x + _delta.x, _tgt.z + _delta.z);
+        const adx = cl.x - _tgt.x; // actual (clamped) horizontal shift
+        const adz = cl.z - _tgt.z;
+        void c.setLookAt(_eye.x + adx, _eye.y, _eye.z + adz, cl.x, _tgt.y, cl.z, false);
       } else if (drag === "orbit") {
         // Rotate BOTH eye and target around the pivot _grab, so the pivot's screen position holds
         // (no re-centre). Yaw around world-up (stable at any tilt). Tilt around a CARRIED horizontal
