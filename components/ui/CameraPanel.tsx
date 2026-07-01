@@ -838,6 +838,8 @@ function OrbitSection() {
   const setDrift = useSceneStore((s) => s.setDrift);
   const turntable = useSceneStore((s) => s.turntable);
   const setTurntable = useSceneStore((s) => s.setTurntable);
+  const snv2 = useSceneStore((s) => s.snv2);
+  const setSnv2 = useSceneStore((s) => s.setSnv2);
   const isDrift = cameraModel === "drift";
   const isMap = cameraModel === "map";
   const setFocalAdjust = useSceneStore((s) => s.setFocalAdjust);
@@ -993,6 +995,27 @@ function OrbitSection() {
             onChange={(v) => setTurntable({ spinSec: v })}
             stepperClass="w-32"
             format={{ maximumFractionDigits: 0 }}
+          />
+        </SubGroup>
+      )}
+      {cameraModel === "snv2" && (
+        <SubGroup
+          label="Starry Night Cam v2"
+          defaultOpen
+          action={
+            <HelpHint>
+              Distance bounds — how close (left) and how far (right) the camera may get from its
+              target, in world metres. Wheel zoom is clamped to this range.
+            </HelpHint>
+          }
+        >
+          <RangeSlider
+            label="Distance"
+            value={[snv2.minDist, snv2.maxDist]}
+            min={1}
+            max={24000}
+            step={100}
+            onChange={([minDist, maxDist]) => setSnv2({ minDist, maxDist })}
           />
         </SubGroup>
       )}

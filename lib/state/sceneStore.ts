@@ -34,6 +34,7 @@ export type CameraModelId =
   | "turntable"
   | "topdown"
   | "fly"
+  | "snv2"
   | "googleearth"
   | "dreimap"
   | "dreicamera";
@@ -156,6 +157,17 @@ export const DEFAULT_DRIFT: DriftConfig = {
   elevAmp: 2.5,
   revolveSec: 360,
   breathe: 0.05,
+};
+
+// Starry Night Cam v2 tunables (the drone-style interactive camera). Live-editable in
+// Settings → Orbit → v2, and persisted.
+export interface Snv2Config {
+  minDist: number; // closest the camera may get to its target (world metres)
+  maxDist: number; // farthest the camera may get (world metres)
+}
+export const DEFAULT_SNV2: Snv2Config = {
+  minDist: 1,
+  maxDist: 20000,
 };
 
 // Turntable camera-model tunables (the showcase spin). Live-editable in
@@ -568,6 +580,7 @@ type AnySettingEntry =
   | SettingEntry<"cameraMode">
   | SettingEntry<"cameraModel">
   | SettingEntry<"drift">
+  | SettingEntry<"snv2">
   | SettingEntry<"turntable">
   | SettingEntry<"orbitRestore">
   | SettingEntry<"topDownTip">
@@ -633,8 +646,9 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "orbitZoomToPin", defaultValue: true as const, persist: false },
   { key: "allowUnderview", defaultValue: false as const, persist: false },
   { key: "cameraMode", defaultValue: "orbit" as const, persist: true },
-  { key: "cameraModel", defaultValue: "drift" as const, persist: true },
+  { key: "cameraModel", defaultValue: "snv2" as const, persist: true },
   { key: "drift", defaultValue: DEFAULT_DRIFT, persist: true },
+  { key: "snv2", defaultValue: DEFAULT_SNV2, persist: true },
   { key: "turntable", defaultValue: DEFAULT_TURNTABLE, persist: true },
   { key: "orbitRestore", defaultValue: null as SceneState["orbitRestore"], persist: false },
   { key: "topDownTip", defaultValue: 0, persist: false },
@@ -987,6 +1001,8 @@ type SceneState = {
   setCameraModel: (id: CameraModelId) => void;
   drift: DriftConfig;
   setDrift: (patch: Partial<DriftConfig>) => void;
+  snv2: Snv2Config;
+  setSnv2: (patch: Partial<Snv2Config>) => void;
   turntable: TurntableConfig;
   setTurntable: (patch: Partial<TurntableConfig>) => void;
   cameraIntent: CameraIntent;
@@ -1302,8 +1318,9 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setMoonLive: (moonLive) => set({ moonLive }),
   // Note: cameraMode default is "orbit" — see below.
   cameraMode: "orbit",
-  cameraModel: "drift",
+  cameraModel: "snv2",
   drift: DEFAULT_DRIFT,
+  snv2: DEFAULT_SNV2,
   turntable: DEFAULT_TURNTABLE,
   cameraIntent: DEFAULT_INTENT,
   cameraLive: {
@@ -1483,6 +1500,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setCameraMode: (cameraMode) => set({ cameraMode }),
   setCameraModel: (cameraModel) => set({ cameraModel }),
   setDrift: (patch) => set((s) => ({ drift: { ...s.drift, ...patch } })),
+  setSnv2: (patch) => set((s) => ({ snv2: { ...s.snv2, ...patch } })),
   setTurntable: (patch) => set((s) => ({ turntable: { ...s.turntable, ...patch } })),
   setCameraIntent: (intent) =>
     set((s) => ({

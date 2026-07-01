@@ -108,6 +108,20 @@ const MODEL_GUIDE: Record<CameraModelId, GuideSpec> = {
     ],
     hotkeys: ["settings"],
   },
+  snv2: {
+    mouse: [
+      { icon: "mouse-left", motion: "all", label: "Orbit + Tilt" },
+      { icon: "mouse-right", motion: "all", label: "Move", sub: "or Shift + LMB" },
+      { icon: "mouse-left", motion: "all", label: "Aim", sub: `${MOD} + LMB` },
+      { icon: "mouse-wheel", motion: "ud", label: "Zoom" },
+      { icon: "mouse-left", badge: "×2", label: "Zoom in", sub: "double-click" },
+    ],
+    touch: [
+      { icon: "finger-1", motion: "all", label: "Move" },
+      { icon: "pinch", label: "Zoom + rotate", sub: "two fingers" },
+    ],
+    hotkeys: ["settings"],
+  },
   googleearth: {
     mouse: [
       { icon: "mouse-left", motion: "all", label: "Move", sub: "drag the ground" },

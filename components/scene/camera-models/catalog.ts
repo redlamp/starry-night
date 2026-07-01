@@ -19,11 +19,19 @@ export interface CameraModelMeta {
 export const CAMERA_MODELS: CameraModelMeta[] = [
   {
     id: "map",
-    label: "Map",
-    character: "Hands-on — grab, orbit, and zoom the city like a map.",
+    label: "Starry Night Cam v1",
+    character: "The original hands-on Starry Night camera — orbit, tilt, pan, zoom.",
     blurb:
-      "The full map-style controller: drag to orbit + tilt, grab the ground to pan, scrub the pin for focal height, wheel to zoom toward the cursor, double-click to reset. Persp/ortho morph. The default.",
+      "The v1 controller: LMB drag to orbit + tilt, RMB / Shift+LMB to pan, scrub the pin for focal height, wheel to zoom toward the cursor, double-click to reset. Persp/ortho morph.",
     startsPaused: true, // the curated still pose — auto-revolution off until you press play
+  },
+  {
+    id: "snv2",
+    label: "Starry Night Cam v2",
+    character: "Drone-style — grab the ground to move, Shift to orbit a point, Ctrl to look.",
+    blurb:
+      "The current Starry Night camera (the default): LMB drag moves over the ground, Shift+LMB orbits the clicked point (pinned), Ctrl/⌘+LMB is a grab-look (the grabbed map point stays under the cursor), wheel zooms toward the cursor, double-click zooms in. Touch: 1-finger move, 2-finger pinch + twist. Perspective only.",
+    startsPaused: true,
   },
   {
     id: "drift",
@@ -76,7 +84,7 @@ export const CAMERA_MODELS: CameraModelMeta[] = [
   },
 ];
 
-export const DEFAULT_CAMERA_MODEL: CameraModelId = "drift";
+export const DEFAULT_CAMERA_MODEL: CameraModelId = "snv2";
 
 export function getCameraModelMeta(id: CameraModelId): CameraModelMeta {
   return CAMERA_MODELS.find((m) => m.id === id) ?? CAMERA_MODELS[0];
