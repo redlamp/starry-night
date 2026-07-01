@@ -85,12 +85,12 @@ export type CameraLive = {
 };
 
 // All in meters. See wiki/research/building-sizes-real-world-references.md
-// Tuned via the in-app Save/Copy values workflow on 2026-05-26.
+// Tuned via the in-app Save/Copy values workflow on 2026-07-01 (v2 hero establishing shot).
 export const DEFAULT_INTENT: CameraIntent = {
-  position: [3, 36, 720],
-  lookAt: [-3.377, 36.474, -759.372],
-  rotation: [2.9051946114622647, -0.005135430560327543, 3.140355522200459],
-  fov: 20, // narrow / low-distortion, matching Google Maps' 3D camera
+  position: [-108.66, 160.1, -2801],
+  lookAt: [-27, 211, -38],
+  rotation: [3.1224, -0.02967, 3.14159], // (178.9°, -1.7°, 180°); orientation actually from lookAt
+  fov: (360 / Math.PI) * Math.atan(12 / 55), // 55 mm-equiv "normal" lens (reads 25° fov / 55 mm)
   orient: "lookAt",
 };
 

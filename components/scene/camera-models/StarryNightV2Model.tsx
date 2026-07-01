@@ -6,9 +6,7 @@ import { CameraControls, Html } from "@react-three/drei";
 import CameraControlsImpl from "camera-controls";
 import { MapPin } from "lucide-react";
 import * as THREE from "three";
-import { useSceneStore } from "@/lib/state/sceneStore";
-import { CITY_CENTER, CITY_TIERS } from "@/lib/seed/topology";
-import { GROUND_APRON_M } from "../Ground";
+import { useSceneStore, DEFAULT_INTENT } from "@/lib/state/sceneStore";
 import { writeOrbitPose } from "./orbitWriteback";
 
 // "Starry Night Cam v2" — the current Starry Night interactive camera (the app default). A
@@ -21,8 +19,8 @@ import { writeOrbitPose } from "./orbitWriteback";
 //             RMB / Shift+LMB  Move — grab the ground (grabbing cursor); it stays under the cursor
 //             Ctrl/⌘ + LMB     Aim — grab a map point (grab / grabbing cursor) and swing the view in
 //                              place so it stays under the cursor (free-look)
-//             wheel            Zoom toward the cursor (native dollyToCursor)
-//             double-click     Zoom in toward the clicked point
+//             wheel            Zoom toward the cursor (Google-Earth curve; position only, no re-aim)
+//             double-click     Zoom in toward the clicked point (position only, keeps orientation)
 //   Touch     1-finger         Move (native truck)  ·  2-finger  pinch-zoom + twist-rotate
 //
 // Perspective only + frame-on-mount + ~10/s pose write-back, like the sibling camera models.
@@ -35,6 +33,7 @@ const MIN_EYE_Y = 5; // keep the camera above the ground while orbiting/tilting
 const MAX_VERT = 0.98; // clamp free-look short of straight up/down (no flip)
 const MAX_ORBIT_EL = 89.9 * DEG; // orbit look-down cap: 0.1° short of straight-down; never crosses (no flip)
 const MAX_STEP = 0.15; // per-move cap on the free-look servo (rad), guards against big jumps
+const WHEEL_ZOOM_SPEED = 1.0; // GE/OrbitControls wheel curve: ~5% dolly per notch at speed 1
 
 const _eye = new THREE.Vector3();
 const _tgt = new THREE.Vector3();
@@ -69,6 +68,27 @@ function groundHit(
   return _ray.ray.intersectPlane(_plane, out) !== null;
 }
 
+// Zoom by uniformly scaling eye + target about a world pivot by `k` (k < 1 = closer, > 1 = farther).
+// Uniform scale keeps the look vector's DIRECTION (only its length changes), so the camera's
+// orientation is untouched — position moves, rotation does not — and the pivot stays put on screen.
+// The resulting eye→target distance is clamped to the control's distance bounds. This is Google
+// Earth's zoom-toward-cursor (no re-aim), shared by the wheel and the double-click zoom-in.
+function zoomAboutPoint(c: CameraControlsImpl, pivot: THREE.Vector3, k: number, smooth: boolean) {
+  c.getPosition(_eye);
+  c.getTarget(_tgt);
+  const oldR = _eye.distanceTo(_tgt) || 1e-3;
+  const s = THREE.MathUtils.clamp(oldR * k, c.minDistance, c.maxDistance) / oldR;
+  void c.setLookAt(
+    pivot.x + (_eye.x - pivot.x) * s,
+    pivot.y + (_eye.y - pivot.y) * s,
+    pivot.z + (_eye.z - pivot.z) * s,
+    pivot.x + (_tgt.x - pivot.x) * s,
+    pivot.y + (_tgt.y - pivot.y) * s,
+    pivot.z + (_tgt.z - pivot.z) * s,
+    smooth,
+  );
+}
+
 export function StarryNightV2Model() {
   const controls = useRef<CameraControlsImpl | null>(null);
   const cam = useThree((s) => s.camera);
@@ -95,38 +115,27 @@ export function StarryNightV2Model() {
     };
   }, []);
 
-  // Frame the city + control config. Native input off for the mouse (custom below) except the
-  // wheel (native zoom-to-cursor); native touch left on for the mobile gestures.
+  // Frame the city + control config. ALL mouse input is custom (below) — including the wheel, so
+  // its zoom curve matches Google Earth; native touch is left on for the mobile gestures.
   useEffect(() => {
     const c = controls.current;
     if (!c) return;
-    const s = useSceneStore.getState();
-    const tier = CITY_TIERS[s.citySize] + GROUND_APRON_M;
-    const R = tier * 2.0;
-    const elev = 28 * DEG;
-    const az = s.orbit.azimuthDeg * DEG;
-    const cx = CITY_CENTER.x;
-    const cz = CITY_CENTER.z;
-    void c.setLookAt(
-      cx + R * Math.cos(elev) * Math.sin(az),
-      R * Math.sin(elev),
-      cz + R * Math.cos(elev) * Math.cos(az),
-      cx,
-      0,
-      cz,
-      false,
-    );
+    // Open to the curated default pose (DEFAULT_INTENT) — the hero establishing shot. v2 always
+    // opens here on mount; it doesn't restore a saved pose (the old computed framing didn't either).
+    const [px, py, pz] = DEFAULT_INTENT.position;
+    const [tx, ty, tz] = DEFAULT_INTENT.lookAt;
+    void c.setLookAt(px, py, pz, tx, ty, tz, false);
     // No tight polar clamp: free-look re-aims via setTarget (moving the target around a fixed eye),
     // which legitimately drives the eye→target polar past 90°. A tight clamp would "correct" that by
     // shoving the eye's POSITION — the bug where Ctrl-drag translated the camera. The under-ground
     // guard for orbit is enforced directly (MIN_EYE_Y) in the orbit handler instead.
     c.minPolarAngle = 0.001;
     c.maxPolarAngle = Math.PI - 0.001;
-    c.dollyToCursor = true; // zoom toward the pointer
+    c.dollyToCursor = true; // touch pinch-zoom toward the pinch centre (mouse wheel is custom)
     c.mouseButtons.left = A.NONE; // move / orbit / free-look are custom (below)
     c.mouseButtons.right = A.NONE;
     c.mouseButtons.middle = A.NONE;
-    c.mouseButtons.wheel = A.DOLLY; // native zoom toward the cursor
+    c.mouseButtons.wheel = A.NONE; // wheel zoom is custom (GE curve, below) — not native DOLLY
     c.touches.one = A.TOUCH_TRUCK; // mobile: 1-finger pan
     c.touches.two = A.TOUCH_ZOOM_ROTATE; // mobile: 2-finger pinch-zoom + twist-rotate
     c.touches.three = A.NONE;
@@ -312,15 +321,31 @@ export function StarryNightV2Model() {
       applyCursor(); // grabbing → grab (if Ctrl still held) → default
     };
 
-    // Double-click = zoom in toward the clicked point (GE / Maps signature): centre it, dolly ~40% closer.
+    // Double-click = zoom in toward the clicked point (~40% closer). Position-only: uniform scale
+    // about the clicked point keeps the camera's ORIENTATION and holds the point under the cursor
+    // (GE/Maps zoom-in with no re-aim).
     const onDbl = (e: MouseEvent) => {
       const c = controls.current;
       if (!c) return;
       if (!groundHit(cam, dom, e.clientX, e.clientY, _cur)) return;
-      c.getPosition(_eye);
-      _eye.sub(_cur).multiplyScalar(0.6).add(_cur); // keep the viewing direction, 60% of the distance
-      void c.setLookAt(_eye.x, _eye.y, _eye.z, _cur.x, _cur.y, _cur.z, true);
+      zoomAboutPoint(c, _cur, 0.6, true);
       setPin(null);
+    };
+
+    // Wheel zoom — Google Earth's curve + zoom-toward-cursor. A fixed multiplicative step per notch
+    // (OrbitControls' pow(0.95, …)), applied instantly (no spring), scaling about the ground point
+    // under the cursor so it stays put and the view keeps its orientation.
+    const onWheel = (e: WheelEvent) => {
+      const c = controls.current;
+      if (!c) return;
+      e.preventDefault();
+      c.getPosition(_eye);
+      c.getTarget(_tgt);
+      if (!groundHit(cam, dom, e.clientX, e.clientY, _cur)) {
+        _cur.copy(_eye).addScaledVector(_ray.ray.direction, _eye.distanceTo(_tgt));
+      }
+      const k = Math.pow(0.95, -e.deltaY * 0.01 * WHEEL_ZOOM_SPEED);
+      zoomAboutPoint(c, _cur, k, false);
     };
 
     // Suppress the browser context menu so RMB-drag can pan.
@@ -332,6 +357,7 @@ export function StarryNightV2Model() {
     dom.addEventListener("pointermove", onMove);
     dom.addEventListener("pointerup", onUp);
     dom.addEventListener("dblclick", onDbl);
+    dom.addEventListener("wheel", onWheel, { passive: false });
     dom.addEventListener("contextmenu", onContext);
     return () => {
       window.removeEventListener("keydown", onKeyDown);
@@ -340,6 +366,7 @@ export function StarryNightV2Model() {
       dom.removeEventListener("pointermove", onMove);
       dom.removeEventListener("pointerup", onUp);
       dom.removeEventListener("dblclick", onDbl);
+      dom.removeEventListener("wheel", onWheel);
       dom.removeEventListener("contextmenu", onContext);
       dom.style.cursor = "";
     };
