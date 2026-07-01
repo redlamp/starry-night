@@ -7,6 +7,8 @@ import CameraControlsImpl from "camera-controls";
 import { MapPin } from "lucide-react";
 import * as THREE from "three";
 import { useSceneStore, DEFAULT_INTENT } from "@/lib/state/sceneStore";
+import { orbitFramingFactor } from "@/lib/scene/aspectFraming";
+import { CITY_SCALE } from "@/lib/seed/topology";
 import { writeOrbitPose } from "./orbitWriteback";
 
 // "Starry Night Cam v2" — the current Starry Night interactive camera (the app default). A
@@ -23,7 +25,9 @@ import { writeOrbitPose } from "./orbitWriteback";
 //             double-click     Zoom in toward the clicked point (position only, keeps orientation)
 //   Touch     1-finger         Move (native truck)  ·  2-finger  pinch-zoom + twist-rotate
 //
-// Perspective only + frame-on-mount + ~10/s pose write-back, like the sibling camera models.
+// Perspective + faked-ortho (via ProjectionBlender): honors the current projection instead of
+// forcing perspective. In ortho, raycasts through a hand-built PARALLEL ray and zoom scales
+// orthoSize (not distance). frame-on-mount + ~10/s pose write-back, like the sibling models.
 // Self-gates to orbit. Mouse gestures are custom (guarded to pointerType "mouse"); touch falls
 // through to camera-controls' native touch actions.
 
@@ -34,6 +38,8 @@ const MAX_VERT = 0.98; // clamp free-look short of straight up/down (no flip)
 const MAX_ORBIT_EL = 89.9 * DEG; // orbit look-down cap: 0.1° short of straight-down; never crosses (no flip)
 const MAX_STEP = 0.15; // per-move cap on the free-look servo (rad), guards against big jumps
 const WHEEL_ZOOM_SPEED = 1.0; // GE/OrbitControls wheel curve: ~5% dolly per notch at speed 1
+const ORTHO_SIZE_MIN = 5 * CITY_SCALE; // faked-ortho zoom band (frustum half-height); matches Map
+const ORTHO_SIZE_MAX = 2000 * CITY_SCALE;
 
 const _eye = new THREE.Vector3();
 const _tgt = new THREE.Vector3();
@@ -51,10 +57,17 @@ const _ndc = new THREE.Vector2();
 const _ray = new THREE.Raycaster();
 const _plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 const _UP = new THREE.Vector3(0, 1, 0);
+const _camUp = new THREE.Vector3(); // ortho raycast: camera basis + world pose
+const _fwd = new THREE.Vector3();
+const _camWorld = new THREE.Vector3();
+const _anchor = new THREE.Vector3(); // ortho zoom: pre-zoom ground point under the cursor
 const A = CameraControlsImpl.ACTION;
 
-// Ground point (y = 0) under a client-space pointer (perspective only — v2 forces it). Leaves
-// _ray set from the cursor, so callers can reuse _ray.ray.direction when there's no ground hit.
+// Ground point (y = 0) under a client-space pointer. Leaves _ray set from the cursor, so callers
+// can reuse _ray.ray.direction when there's no ground hit. Ortho-correct: under the faked-ortho
+// camera (a PerspectiveCamera with an overridden matrix) setFromCamera would build a diverging
+// perspective ray, so at full ortho we build the PARALLEL ray ourselves from the camera basis +
+// orthoSize, matching ProjectionBlender's frustum (halfH = orthoSize·f, halfW = aspect·halfH).
 function groundHit(
   cam: THREE.Camera,
   dom: HTMLElement,
@@ -63,8 +76,25 @@ function groundHit(
   out: THREE.Vector3,
 ): boolean {
   const r = dom.getBoundingClientRect();
-  _ndc.set(((clientX - r.left) / r.width) * 2 - 1, -(((clientY - r.top) / r.height) * 2 - 1));
-  _ray.setFromCamera(_ndc, cam);
+  const nx = ((clientX - r.left) / r.width) * 2 - 1;
+  const ny = -(((clientY - r.top) / r.height) * 2 - 1);
+  if (useSceneStore.getState().projectionBlend >= 0.9999) {
+    const aspect = r.width / Math.max(1, r.height);
+    const halfH = useSceneStore.getState().orthoSize * orbitFramingFactor(aspect);
+    cam.updateMatrixWorld();
+    _right.setFromMatrixColumn(cam.matrixWorld, 0);
+    _camUp.setFromMatrixColumn(cam.matrixWorld, 1);
+    cam.getWorldDirection(_fwd);
+    cam.getWorldPosition(_camWorld);
+    _ray.ray.origin
+      .copy(_camWorld)
+      .addScaledVector(_right, nx * halfH * aspect)
+      .addScaledVector(_camUp, ny * halfH);
+    _ray.ray.direction.copy(_fwd).normalize();
+  } else {
+    _ndc.set(nx, ny);
+    _ray.setFromCamera(_ndc, cam);
+  }
   return _ray.ray.intersectPlane(_plane, out) !== null;
 }
 
@@ -89,6 +119,48 @@ function zoomAboutPoint(c: CameraControlsImpl, pivot: THREE.Vector3, k: number, 
   );
 }
 
+// Zoom at a screen point in EITHER projection. Perspective: scale eye + target about the cursor's
+// ground point (the GE zoom-toward-cursor above). Ortho: the camera distance is decoupled from
+// apparent size, so scale orthoSize instead, then truck the rig so the cursor's ground point stays
+// put (re-pin). k < 1 = zoom in.
+function zoomAtCursor(
+  c: CameraControlsImpl,
+  cam: THREE.Camera,
+  dom: HTMLElement,
+  sx: number,
+  sy: number,
+  k: number,
+  smooth: boolean,
+) {
+  const s = useSceneStore.getState();
+  if (s.projection === "orthographic") {
+    const had = groundHit(cam, dom, sx, sy, _anchor); // pre-zoom ground point under the cursor
+    s.setOrthoSize(THREE.MathUtils.clamp(s.orthoSize * k, ORTHO_SIZE_MIN, ORTHO_SIZE_MAX));
+    if (had && groundHit(cam, dom, sx, sy, _cur)) {
+      _delta.subVectors(_anchor, _cur); // how far that point slid under the new orthoSize
+      c.getPosition(_eye);
+      c.getTarget(_tgt);
+      void c.setLookAt(
+        _eye.x + _delta.x,
+        _eye.y,
+        _eye.z + _delta.z,
+        _tgt.x + _delta.x,
+        _tgt.y,
+        _tgt.z + _delta.z,
+        false,
+      );
+    }
+    return;
+  }
+  // Perspective: pivot about the cursor's ground point (fall back to a point along the ray on sky).
+  if (!groundHit(cam, dom, sx, sy, _cur)) {
+    c.getPosition(_eye);
+    c.getTarget(_tgt);
+    _cur.copy(_eye).addScaledVector(_ray.ray.direction, _eye.distanceTo(_tgt));
+  }
+  zoomAboutPoint(c, _cur, k, smooth);
+}
+
 export function StarryNightV2Model() {
   const controls = useRef<CameraControlsImpl | null>(null);
   const cam = useThree((s) => s.camera);
@@ -100,20 +172,28 @@ export function StarryNightV2Model() {
   const orbitAxis = useRef(new THREE.Vector3(1, 0, 0)); // carried tilt axis (stable through straight-down)
   const [pin, setPin] = useState<[number, number, number] | null>(null); // shift-orbit pivot marker
 
-  // Force perspective while active; restore the prior projection on exit (sibling pattern —
-  // the faked-ortho morph needs a per-frame radius write-back the stock control doesn't do).
+  // v2 supports BOTH projections (perspective + faked-ortho via ProjectionBlender). Honor the current
+  // projection instead of forcing perspective: snap the blend to match on mount. Runtime toggles
+  // (p hotkey / panel) morph the blend through tweenProjectionTo; writeOrbitPose keeps the live
+  // orbit.radius current so the morph's virtual-eye distance stays right. On a switch INTO ortho we
+  // match orthoSize to the live perspective framing so the flip doesn't jump the zoom.
+  const projection = useSceneStore((s) => s.projection);
+  const projSynced = useRef(false);
   useEffect(() => {
     const s = useSceneStore.getState();
-    const prevProj = s.projection;
-    const prevBlend = s.projectionBlend;
-    s.setProjection("perspective");
-    s.setProjectionBlend(0);
-    return () => {
-      const s2 = useSceneStore.getState();
-      s2.setProjection(prevProj);
-      s2.setProjectionBlend(prevBlend);
-    };
-  }, []);
+    if (!projSynced.current) {
+      projSynced.current = true; // mount: snap the blend; the framing effect sets ortho continuity
+      s.setProjectionBlend(s.projection === "orthographic" ? 1 : 0);
+      return;
+    }
+    if (s.projection === "orthographic") {
+      const c = controls.current;
+      if (c) {
+        const half = c.distance * Math.tan((s.cameraIntent.fov * DEG) / 2);
+        s.setOrthoSize(THREE.MathUtils.clamp(half, ORTHO_SIZE_MIN, ORTHO_SIZE_MAX));
+      }
+    }
+  }, [projection]);
 
   // Frame the city + control config. ALL mouse input is custom (below) — including the wheel, so
   // its zoom curve matches Google Earth; native touch is left on for the mobile gestures.
@@ -125,6 +205,14 @@ export function StarryNightV2Model() {
     const [px, py, pz] = DEFAULT_INTENT.position;
     const [tx, ty, tz] = DEFAULT_INTENT.lookAt;
     void c.setLookAt(px, py, pz, tx, ty, tz, false);
+    // Ortho continuity: if we boot in ortho, match orthoSize to this pose's framing so the faked-
+    // ortho render shows the same content the perspective pose would (no zoom mismatch on entry).
+    const st = useSceneStore.getState();
+    if (st.projection === "orthographic") {
+      const dist = Math.hypot(px - tx, py - ty, pz - tz);
+      const half = dist * Math.tan((st.cameraIntent.fov * DEG) / 2);
+      st.setOrthoSize(THREE.MathUtils.clamp(half, ORTHO_SIZE_MIN, ORTHO_SIZE_MAX));
+    }
     // No tight polar clamp: free-look re-aims via setTarget (moving the target around a fixed eye),
     // which legitimately drives the eye→target polar past 90°. A tight clamp would "correct" that by
     // shoving the eye's POSITION — the bug where Ctrl-drag translated the camera. The under-ground
@@ -160,8 +248,32 @@ export function StarryNightV2Model() {
     let lastY = 0;
     let ctrlHeld = false;
 
-    // Cursor: closed hand (grabbing) while actively moving (pan) or free-looking; open hand (grab)
-    // while Ctrl/⌘ is held pre-drag; default otherwise. Browser-standard hand cursors.
+    // Drag affordance glyph shown ALONGSIDE the hand cursor: a lucide eye (free-look) / move (move),
+    // as a fixed DOM overlay offset down-right of the pointer, updated in the pointer handlers. It
+    // rides next to the OS cursor rather than replacing it — the cursor stays browser-standard.
+    const EYE_SVG =
+      '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>';
+    const MOVE_SVG =
+      '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"/><path d="m15 19-3 3-3-3"/><path d="m19 9 3 3-3 3"/><path d="M2 12h20"/><path d="m5 9-3 3 3 3"/><path d="m9 5 3-3 3 3"/></svg>';
+    const glyph = document.createElement("div");
+    glyph.setAttribute("aria-hidden", "true");
+    glyph.style.cssText =
+      "position:fixed;left:0;top:0;z-index:9999;pointer-events:none;display:none;color:#7dd3fc;will-change:transform;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.85))";
+    document.body.appendChild(glyph);
+    const moveGlyph = (x: number, y: number) => {
+      glyph.style.transform = `translate3d(${x + 26}px, ${y + 24}px, 0)`; // down-right of the cursor
+    };
+    const showGlyph = (kind: "look" | "pan", x: number, y: number) => {
+      glyph.innerHTML = kind === "look" ? EYE_SVG : MOVE_SVG;
+      glyph.style.display = "block";
+      moveGlyph(x, y);
+    };
+    const hideGlyph = () => {
+      glyph.style.display = "none";
+    };
+
+    // Cursor: browser-standard hand — grabbing (closed) while moving / free-looking, grab (open) while
+    // Ctrl/⌘ is armed pre-drag; default otherwise. The eye / move glyph rides alongside (above).
     const applyCursor = () => {
       dom.style.cursor = drag === "look" || drag === "pan" ? "grabbing" : ctrlHeld ? "grab" : "";
     };
@@ -196,15 +308,18 @@ export function StarryNightV2Model() {
         const d = _eye.distanceTo(_tgt);
         if (hit) grabP.current.copy(_cur);
         else grabP.current.copy(_eye).addScaledVector(_ray.ray.direction, d);
+        showGlyph("look", e.clientX, e.clientY);
       } else if (e.button === 2 || e.shiftKey) {
         // Move (RMB or Shift+LMB): grab the ground point under the cursor; keep it under the cursor.
         drag = "pan";
         setPin(null);
         if (!groundHit(cam, dom, e.clientX, e.clientY, _grab)) drag = null;
+        else showGlyph("pan", e.clientX, e.clientY);
       } else {
         // Orbit + tilt (bare LMB) around the clicked ground point; drop a pin there (the view
         // rotates around it, no re-centre).
         drag = "orbit";
+        hideGlyph(); // orbit uses the pin marker, not a cursor glyph
         if (groundHit(cam, dom, e.clientX, e.clientY, _cur)) {
           _grab.copy(_cur); // reuse _grab as the orbit pivot for the gesture
           setPin([_cur.x, _cur.y, _cur.z]);
@@ -226,6 +341,7 @@ export function StarryNightV2Model() {
     const onMove = (e: PointerEvent) => {
       const c = controls.current;
       if (!c || !drag) return;
+      if (drag === "look" || drag === "pan") moveGlyph(e.clientX, e.clientY);
       const dx = e.clientX - lastX;
       const dy = e.clientY - lastY;
       lastX = e.clientX;
@@ -283,11 +399,26 @@ export function StarryNightV2Model() {
         // grabP's projection onto the pointer. setTarget re-aims without moving the eye.
         const pc = cam as THREE.PerspectiveCamera;
         const r = dom.getBoundingClientRect();
+        c.getPosition(_eye);
+        c.getTarget(_tgt);
+        _dir.subVectors(_tgt, _eye);
+        const d = _dir.length();
+        if (d < 1e-3) return;
         _proj.copy(grabP.current).project(pc);
         if (_proj.z > 1) return; // grabbed point went behind the camera — stop tracking
         const sx = (_proj.x * 0.5 + 0.5) * r.width;
         const sy = (-_proj.y * 0.5 + 0.5) * r.height;
-        const radPerPx = (2 * Math.tan((pc.fov * DEG) / 2)) / Math.max(1, r.height);
+        // Servo gain (rad per pixel of screen error). Perspective: a pixel subtends 2·tan(fov/2)/H,
+        // distance-independent (foreshortening cancels). ORTHO has no foreshortening — a view rotation
+        // shifts a point at focal distance d on screen by (d/oeff)·(H/2), so the gain must scale with
+        // orthoSize/d instead. The perspective gain in ortho made the aim mis-track (the Ctrl-drag
+        // issue). oeff = orthoSize · framing-factor, matching ProjectionBlender's ortho frustum.
+        const st = useSceneStore.getState();
+        const H = Math.max(1, r.height);
+        const radPerPx =
+          st.projection === "orthographic"
+            ? (2 * st.orthoSize * orbitFramingFactor(pc.aspect)) / (H * d)
+            : (2 * Math.tan((pc.fov * DEG) / 2)) / H;
         const dYaw = THREE.MathUtils.clamp(
           (e.clientX - r.left - sx) * radPerPx,
           -MAX_STEP,
@@ -298,11 +429,6 @@ export function StarryNightV2Model() {
           -MAX_STEP,
           MAX_STEP,
         );
-        c.getPosition(_eye);
-        c.getTarget(_tgt);
-        _dir.subVectors(_tgt, _eye);
-        const d = _dir.length();
-        if (d < 1e-3) return;
         _dir.multiplyScalar(1 / d);
         _q.setFromAxisAngle(_UP, dYaw);
         _dir.applyQuaternion(_q);
@@ -316,36 +442,30 @@ export function StarryNightV2Model() {
 
     const onUp = (e: PointerEvent) => {
       if (drag === "orbit") setPin(null); // pin only lives for the duration of the orbit drag
+      hideGlyph(); // clear the look / move glyph on release
       drag = null;
       dom.releasePointerCapture?.(e.pointerId);
       applyCursor(); // grabbing → grab (if Ctrl still held) → default
     };
 
-    // Double-click = zoom in toward the clicked point (~40% closer). Position-only: uniform scale
-    // about the clicked point keeps the camera's ORIENTATION and holds the point under the cursor
-    // (GE/Maps zoom-in with no re-aim).
+    // Double-click = zoom in toward the clicked point (~40% closer). Perspective: position-only (keeps
+    // orientation, holds the point under the cursor). Ortho: scales orthoSize + re-pins. See zoomAtCursor.
     const onDbl = (e: MouseEvent) => {
       const c = controls.current;
       if (!c) return;
-      if (!groundHit(cam, dom, e.clientX, e.clientY, _cur)) return;
-      zoomAboutPoint(c, _cur, 0.6, true);
+      zoomAtCursor(c, cam, dom, e.clientX, e.clientY, 0.6, true);
       setPin(null);
     };
 
-    // Wheel zoom — Google Earth's curve + zoom-toward-cursor. A fixed multiplicative step per notch
-    // (OrbitControls' pow(0.95, …)), applied instantly (no spring), scaling about the ground point
-    // under the cursor so it stays put and the view keeps its orientation.
+    // Wheel zoom — Google Earth's curve (a fixed ~5%/notch multiplicative step, applied instantly),
+    // zooming toward the cursor in BOTH projections (perspective dollies about the ground point; ortho
+    // scales orthoSize + re-pins). See zoomAtCursor.
     const onWheel = (e: WheelEvent) => {
       const c = controls.current;
       if (!c) return;
       e.preventDefault();
-      c.getPosition(_eye);
-      c.getTarget(_tgt);
-      if (!groundHit(cam, dom, e.clientX, e.clientY, _cur)) {
-        _cur.copy(_eye).addScaledVector(_ray.ray.direction, _eye.distanceTo(_tgt));
-      }
       const k = Math.pow(0.95, -e.deltaY * 0.01 * WHEEL_ZOOM_SPEED);
-      zoomAboutPoint(c, _cur, k, false);
+      zoomAtCursor(c, cam, dom, e.clientX, e.clientY, k, false);
     };
 
     // Suppress the browser context menu so RMB-drag can pan.
@@ -369,6 +489,7 @@ export function StarryNightV2Model() {
       dom.removeEventListener("wheel", onWheel);
       dom.removeEventListener("contextmenu", onContext);
       dom.style.cursor = "";
+      glyph.remove();
     };
   }, [gl, cam]);
 

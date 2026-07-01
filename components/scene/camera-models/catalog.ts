@@ -30,7 +30,7 @@ export const CAMERA_MODELS: CameraModelMeta[] = [
     label: "Starry Night Cam v2",
     character: "Drone-style — grab the ground to move, Shift to orbit a point, Ctrl to look.",
     blurb:
-      "The current Starry Night camera (the default): LMB drag moves over the ground, Shift+LMB orbits the clicked point (pinned), Ctrl/⌘+LMB is a grab-look (the grabbed map point stays under the cursor), wheel zooms toward the cursor, double-click zooms in. Touch: 1-finger move, 2-finger pinch + twist. Perspective only.",
+      "The current Starry Night camera (the default): LMB drag moves over the ground, Shift+LMB orbits the clicked point (pinned), Ctrl/⌘+LMB is a grab-look (the grabbed map point stays under the cursor), wheel zooms toward the cursor, double-click zooms in. Touch: 1-finger move, 2-finger pinch + twist. Perspective + orthographic (press p to toggle).",
     startsPaused: true,
   },
   {
