@@ -572,6 +572,14 @@ export function CameraPanel() {
                       <TooltipContent>distance camera → focal</TooltipContent>
                     </Tooltip>
                     <div className="text-right tabular-nums">{fmt(orbit.radius)}</div>
+
+                    <div className="text-foreground/40 text-[10px] uppercase">lens</div>
+                    <div className="text-right tabular-nums">
+                      {focalLengthMm(cameraLive.fov)} mm
+                    </div>
+                    <div className="text-foreground/50 col-span-2 pl-3">
+                      {lensName(focalLengthMm(cameraLive.fov))}
+                    </div>
                   </div>
                 </TooltipProvider>
               </div>
@@ -2718,6 +2726,33 @@ function ProjectionRow() {
   );
 }
 
+// 35 mm-equivalent focal length (in mm) for a vertical field of view (degrees).
+// Full-frame reference: sensor height 24 mm, so f = (24/2) / tan(vFOV/2). This is
+// the aspect-independent "lens size" a photographer would recognise — three.js `fov`
+// is the vertical angle, and vertical-FOV↔24 mm yields the true full-frame focal length
+// (e.g. 27° → 50 mm normal, 74° → 16 mm ultra-wide).
+const focalLengthMm = (vfovDeg: number) => Math.round(12 / Math.tan((vfovDeg * Math.PI) / 360));
+
+// Inverse of focalLengthMm: vertical fov (degrees) for a 35 mm-equivalent focal length.
+const fovFromFocalMm = (mm: number) => (360 / Math.PI) * Math.atan(12 / mm);
+
+// Real-world full-frame lens bounds for the "lens" slider. The fov slider shares these
+// exact limits (converted), so the two controls stay in lock-step and never disagree.
+const LENS_MIN_MM = 12; // ultra-wide prime -> 90 deg fov
+const LENS_MAX_MM = 300; // telephoto -> ~4.6 deg fov
+const FOV_MIN_DEG = fovFromFocalMm(LENS_MAX_MM); // ~4.58
+const FOV_MAX_DEG = 90; // === fovFromFocalMm(LENS_MIN_MM)
+
+// Rough full-frame focal-length category, shown beside the live focal length.
+function lensName(mm: number): string {
+  if (mm < 24) return "ultra-wide";
+  if (mm < 35) return "wide";
+  if (mm < 60) return "normal";
+  if (mm < 105) return "short tele";
+  if (mm < 300) return "telephoto";
+  return "super-tele";
+}
+
 function FovOrSizeSlider() {
   const projection = useSceneStore((s) => s.projection);
   const fov = useSceneStore((s) => s.cameraIntent.fov);
@@ -2738,15 +2773,38 @@ function FovOrSizeSlider() {
     );
   }
   return (
-    <ValueSlider
-      label="fov"
-      value={fov}
-      min={5}
-      max={90}
-      step={1}
-      format={{ maximumFractionDigits: 0 }}
-      onChange={(v) => setCameraIntent({ fov: v })}
-    />
+    <>
+      <ValueSlider
+        label="fov"
+        hint={
+          <>
+            Vertical field of view. The <b>lens</b> row below is the same setting shown as a 35
+            mm-equivalent focal length; the two sliders are locked together.
+          </>
+        }
+        value={fov}
+        min={FOV_MIN_DEG}
+        max={FOV_MAX_DEG}
+        step={1}
+        format={{ maximumFractionDigits: 0 }}
+        onChange={(v) => setCameraIntent({ fov: v })}
+      />
+      <ValueSlider
+        label="lens"
+        hint={
+          <>
+            35 mm-equivalent focal length (full-frame). Locked to fov: {LENS_MIN_MM} mm ≈{" "}
+            {FOV_MAX_DEG}°, {LENS_MAX_MM} mm ≈ {Math.round(FOV_MIN_DEG)}°.
+          </>
+        }
+        value={focalLengthMm(fov)}
+        min={LENS_MIN_MM}
+        max={LENS_MAX_MM}
+        step={1}
+        format={{ maximumFractionDigits: 0 }}
+        onChange={(mm) => setCameraIntent({ fov: fovFromFocalMm(mm) })}
+      />
+    </>
   );
 }
 
