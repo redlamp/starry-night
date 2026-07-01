@@ -1823,6 +1823,8 @@ function FogSection() {
   const haze = useSceneStore((s) => s.haze);
   const setHaze = useSceneStore((s) => s.setHaze);
   const setFogAdjusting = useSceneStore((s) => s.setFogAdjusting);
+  const fogBoundsAlways = useSceneStore((s) => s.fogBoundsAlways);
+  const setFogBoundsAlways = useSceneStore((s) => s.setFogBoundsAlways);
   // Show the in-world bracket rings while dragging near/far; linger briefly
   // after the last change so the rings don't blink out mid-adjust.
   const adjustTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1846,6 +1848,14 @@ function FogSection() {
           checked={fog.enabled}
           onCheckedChange={(enabled) => setFog({ enabled })}
           aria-label="Toggle scene fog"
+        />
+      </div>
+      <div className="flex items-center justify-between">
+        <span className="text-foreground/55 text-[10px] tracking-wide uppercase">Show bounds</span>
+        <Switch
+          checked={fogBoundsAlways}
+          onCheckedChange={setFogBoundsAlways}
+          aria-label="Always show the fog boundary walls"
         />
       </div>
       <div className="flex items-center gap-2 text-xs">
@@ -1876,15 +1886,14 @@ function FogSection() {
       </div>
       {fog.mode === "linear" ? (
         <>
-          {/* Positions on the camera→centre axis: 0 = at the camera, 1 = at
-              the city centre, >1 = beyond it — not absolute metres. Dragging
-              shows the in-world boundary walls (FogBoundsMarkers). */}
+          {/* near/far are ABSOLUTE world metres from the camera (world-locked haze).
+              Dragging shows the in-world boundary walls (FogBoundsMarkers). */}
           <ValueSlider
             label="near"
             value={fog.near}
             min={0}
-            max={4}
-            step={0.05}
+            max={20000}
+            step={100}
             onChange={(near) => {
               setFog({ near });
               pingAdjusting();
@@ -1893,9 +1902,9 @@ function FogSection() {
           <ValueSlider
             label="far"
             value={fog.far}
-            min={0.1}
-            max={6}
-            step={0.05}
+            min={100}
+            max={40000}
+            step={100}
             onChange={(far) => {
               setFog({ far });
               pingAdjusting();

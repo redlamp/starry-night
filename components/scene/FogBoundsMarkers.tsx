@@ -42,6 +42,7 @@ export function FogBoundsMarkers() {
   const camera = useThree((s) => s.camera);
   const scene = useThree((s) => s.scene);
   const adjusting = useSceneStore((s) => s.fogAdjusting);
+  const always = useSceneStore((s) => s.fogBoundsAlways);
   const mode = useSceneStore((s) => s.fog.mode);
 
   const near = useMemo(() => makeWall(RING_COLORS.near), []);
@@ -62,7 +63,7 @@ export function FogBoundsMarkers() {
     const g = group.current;
     if (!g) return;
     const fog = scene.fog as THREE.Fog | null;
-    const show = adjusting && mode === "linear" && !!fog && (fog as THREE.Fog).isFog;
+    const show = (adjusting || always) && mode === "linear" && !!fog && (fog as THREE.Fog).isFog;
     g.visible = show;
     if (!show) return;
     // Centre on the camera's ground projection; radius = the live brackets

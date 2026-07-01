@@ -252,7 +252,7 @@ export const DEFAULT_STARS = {
 export const DEFAULT_WINDOW_AA = {
   edge: 1.1,
   lodEnabled: true, // window distance-wash LOD; header toggle in the LOD group
-  lodNear: 0.2,
+  lodNear: 0.4,
   lodRange: 0.4,
   litBias: 0.7,
   churn: 0.2,
@@ -318,21 +318,19 @@ export const DEFAULT_WINDOW_PROFILES: Record<Archetype, WindowProfile> = {
 // emissive output (post-tonemap, so >1.0 blooms under ACES).
 export const DEFAULT_MOON_HALO = { radiusMul: 2.5, innerRadius: 0.05, intensity: 1.1 };
 
-// City-anchored fog (2026-06-06, replaces absolute metres): near/far are
-// positions on the live camera→city-centre axis — 0 = at the camera, 1 = at
-// the centre, >1 = beyond it. FogTicker multiplies them by the camera→centre
-// distance every frame, so the gradient follows the camera instead of being
-// swallowed by it. Defaults ≈ the old look at the default orbit radius
-// (near 4800 / far 7200 at d = 4800 ⇒ 0.9 / 1.5).
+// World-absolute fog (2026-07-01, reverts the camera-relative model): near/far are
+// ABSOLUTE world metres measured from the camera (THREE.Fog native), so the haze is
+// locked to the world and does not rescale with camera distance. FogTicker writes them
+// straight through. Defaults ≈ the previous look at the default view (near 6000 /
+// far 20000 m). exp² `density` stays a 0..0.9 "amount", referenced to a fixed world
+// distance inside FogTicker.
 export const DEFAULT_FOG = {
-  enabled: true,
+  enabled: false,
   mode: "linear" as const,
   color: "#0b0d14",
-  near: 1.25,
-  far: 4, // far edge at 4× the focal distance (user 2026-06-23; was 2 = closer fog)
-  // exp² mode: fog AMOUNT at the city centre (0..0.9) — FogTicker solves the
-  // actual three.js density from it per frame, so it's camera-independent.
-  density: 0.45,
+  near: 6000, // m — fog starts this far from the camera
+  far: 20000, // m — fully fogged by here
+  density: 0.45, // exp² amount at FogTicker's fixed reference distance (0..0.9)
 };
 
 export const DEFAULT_HAZE = {
@@ -792,9 +790,12 @@ function readSavedConfig(): SavedConfig | null {
       // produce NaN fog.
       const legacy = { ...(parsed.fog as Record<string, unknown>) };
       // near/far changed meaning (absolute metres → camera→centre fractions);
-      // metre-scale values would be absurd fractions — drop and refill.
-      if (typeof legacy.near === "number" && legacy.near > 10) delete legacy.near;
-      if (typeof legacy.far === "number" && legacy.far > 10) delete legacy.far;
+      // Fog near/far are ABSOLUTE METRES again (2026-07-01; reverted the camera-relative
+      // multiplier model). Multiplier-era saves (≤ ~10) would read as a few metres →
+      // white-out; drop and refill with the metre defaults. Genuine metre saves (old or
+      // new) are ≥ 100 and pass through.
+      if (typeof legacy.near === "number" && legacy.near < 100) delete legacy.near;
+      if (typeof legacy.far === "number" && legacy.far < 100) delete legacy.far;
       // short-lived intermediate field names (2026-06-06 same-day iteration)
       delete legacy.clearDepth;
       delete legacy.hazeDepth;
@@ -994,6 +995,10 @@ type SceneState = {
   // sliders — FogBoundsMarkers draws the in-world bracket rings while set.
   fogAdjusting: boolean;
   setFogAdjusting: (v: boolean) => void;
+  // Debug: keep the fog boundary walls (FogBoundsMarkers) visible at all times,
+  // not only while dragging the near/far sliders. Session-scoped runtime flag.
+  fogBoundsAlways: boolean;
+  setFogBoundsAlways: (v: boolean) => void;
   cameraTweenRequest: TweenRequest | null;
   // Projection model. We keep a single perspective camera under the hood; ortho
   // is implemented by overriding camera.projectionMatrix each frame using an
@@ -1490,6 +1495,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setCameraLive: (cameraLive) => set({ cameraLive }),
   fogAdjusting: false,
   setFogAdjusting: (fogAdjusting) => set({ fogAdjusting }),
+  fogBoundsAlways: false,
+  setFogBoundsAlways: (fogBoundsAlways) => set({ fogBoundsAlways }),
   resetCamera: () => {
     // Derive reset patch from the registry: every entry goes back to its
     // hardcoded defaultValue. Runtime readouts (cityPlanning.topologyKind /

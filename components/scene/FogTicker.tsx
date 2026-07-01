@@ -4,56 +4,37 @@ import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { useSceneStore } from "@/lib/state/sceneStore";
 
-// Focal-anchored fog (2026-06-06; re-anchored 2026-06-23 for #54). Three's fog is
-// eye-distance — with absolute near/far the camera's own movement decided how much
-// of the city drowned. This ticker re-derives the brackets every frame around
-// d = |camera → FOCAL POINT| (the orbit target — what the camera is framing) so the
-// gradient is pinned to whatever you're looking at: the near side stays clear, the
-// far side fades, and no camera path can consume the silhouettes.
+// World-absolute fog (2026-07-01): near/far are ABSOLUTE world metres measured from the
+// camera (THREE.Fog's native model), so the haze is a fixed property of the world and does
+// NOT rescale as the camera moves — a building at a given world distance reads the same haze
+// wherever the camera is. This replaces the 2026-06-06 camera→target RELATIVE model (near/far
+// as multiples of the camera→focal distance), which "breathed" with camera distance and, in
+// free-roam modes (Google Earth pan / free-look), lagged and pulsed as the target roamed.
 //
-// It used to anchor on the fixed CITY_CENTER, which broke for off-centre subjects:
-// orbiting a skyscraper cluster outside the centre from near the centre made d (the
-// small centre distance) far too short, so `far` fell in front of the cluster and
-// fogged it out (#54). The focal point is the orbit target, so it tracks the subject.
-//
-// Ortho note: "ortho" here is a projection-matrix morph — the camera never
-// physically moves and fog depth is still measured from the real camera. So an
-// ortho zoom-out (orthoSize ↑) shrinks the city on screen WITHOUT changing d,
-// and these brackets keep the fog identical — which is the correct reading of
-// a scale change that isn't a distance change. Perspective zoom (radius ↑)
-// changes d and the brackets track it 1:1.
-const _focal = new THREE.Vector3();
+// "Centered on distance from the camera" is THREE.Fog's native behaviour — near/far ARE camera
+// distances; we just feed them fixed world values instead of d-scaled ones. exp² has no near/far
+// brackets, so its "amount" (0..0.9) is anchored to a FIXED world reference distance below —
+// same world-locked, camera-independent feel.
+const FOG_EXP2_REF = 5000; // metres — exp² "amount" is the fog amount at this world distance
 
 export function FogTicker() {
   const scene = useThree((s) => s.scene);
-  const camera = useThree((s) => s.camera);
 
   useFrame(() => {
     const fog = scene.fog;
     if (!fog) return;
     const s = useSceneStore.getState();
-    // Focal point = the orbit target (what the camera frames), not the fixed city
-    // centre — so fog calibrates to the subject distance, off-centre or not (#54).
-    _focal.set(s.orbit.centerX, s.orbit.lookAtY, s.orbit.centerZ);
-    const d = Math.max(1, camera.position.distanceTo(_focal));
-
     if ((fog as THREE.Fog).isFog) {
-      // near/far are positions on the camera→centre axis: 0 = camera,
-      // 1 = city centre, >1 = beyond. Scaled by the live distance so the
-      // gradient rides with the camera.
+      // Absolute metres from the camera — FogTicker just mirrors the sliders so live edits
+      // (and the FogBoundsMarkers walls) stay in sync with the real fog.
       const f = fog as THREE.Fog;
-      f.near = Math.max(1, d * s.fog.near);
-      f.far = Math.max(f.near + 1, d * s.fog.far);
+      f.near = Math.max(0, s.fog.near);
+      f.far = Math.max(f.near + 1, s.fog.far);
     } else if ((fog as THREE.FogExp2).isFogExp2) {
-      // exp² has no near/far brackets, so anchor it by SOLVING for density:
-      // the slider is the fog AMOUNT at the city centre (0..0.9), and
-      // factor = 1 − e^(−(ρd)²) inverts to ρ = √(−ln(1−amount)) / d. The far
-      // half fades harder, the near half clears — and the amount at the city
-      // stays put for any camera distance. (A naive ρ ∝ 1/d keeps ρ·d at the
-      // tuned constant ~2.9 → e^(−8.3) → permanently white-out.)
+      // amount at FOG_EXP2_REF → density: 1 − e^(−(ρ·REF)²) = amount ⇒ ρ = √(−ln(1−amount)) / REF.
       const amount = Math.min(0.9, Math.max(0, s.fog.density));
       (fog as THREE.FogExp2).density =
-        amount <= 0 ? 0 : Math.sqrt(-Math.log(1 - amount)) / d;
+        amount <= 0 ? 0 : Math.sqrt(-Math.log(1 - amount)) / FOG_EXP2_REF;
     }
   });
 
