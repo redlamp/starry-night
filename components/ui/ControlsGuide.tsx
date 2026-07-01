@@ -108,6 +108,20 @@ const MODEL_GUIDE: Record<CameraModelId, GuideSpec> = {
     ],
     hotkeys: ["settings"],
   },
+  googleearth: {
+    mouse: [
+      { icon: "mouse-left", motion: "all", label: "Move", sub: "drag the ground" },
+      { icon: "mouse-right", motion: "all", label: "Orbit + Tilt", sub: "or Shift + LMB" },
+      { icon: "mouse-wheel", motion: "ud", label: "Zoom" },
+      { icon: "mouse-left", badge: "×2", label: "Zoom in", sub: "double-click" },
+    ],
+    touch: [
+      { icon: "finger-1", motion: "all", label: "Move" },
+      { icon: "pinch", label: "Zoom + rotate", sub: "two fingers" },
+    ],
+    note: "Google Earth reference controls (perspective only).",
+    hotkeys: ["settings"],
+  },
   dreimap: {
     mouse: [
       { icon: "mouse-left", motion: "all", label: "Pan", sub: "drag the ground" },

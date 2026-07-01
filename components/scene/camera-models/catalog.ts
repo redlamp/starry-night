@@ -54,6 +54,13 @@ export const CAMERA_MODELS: CameraModelMeta[] = [
       "First-person free flight in perspective. W/S fly along the look direction, A/D strafe, E/Q up/down, drag to look (no roll), wheel sets speed, Shift sprints. Desktop.",
   },
   {
+    id: "googleearth",
+    label: "Google Earth",
+    character: "Google Earth's stock controls, as a reference — drag to move, right-drag to orbit.",
+    blurb:
+      "A faithful reference of Google Earth's controls (drei MapControls): LMB drags across the ground, RMB / Shift+LMB orbit + tilt, wheel zooms toward the cursor, double-click zooms in. Touch: 1-finger pan, 2-finger pinch-zoom + twist. Perspective only.",
+  },
+  {
     id: "dreimap",
     label: "Drei - MapControls",
     character: "Vanilla drei MapControls — drag to pan, right-drag to orbit.",

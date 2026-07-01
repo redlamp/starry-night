@@ -34,6 +34,7 @@ export type CameraModelId =
   | "turntable"
   | "topdown"
   | "fly"
+  | "googleearth"
   | "dreimap"
   | "dreicamera";
 

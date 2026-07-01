@@ -5,6 +5,7 @@ import { DriftModel } from "./DriftModel";
 import { TurntableModel } from "./TurntableModel";
 import { TopDownModel } from "./TopDownModel";
 import { FlyModel } from "./FlyModel";
+import { GoogleEarthModel } from "./GoogleEarthModel";
 import { DreiMapControlsModel } from "./DreiMapControlsModel";
 import { DreiCameraControlsModel } from "./DreiCameraControlsModel";
 
@@ -21,6 +22,7 @@ export const CAMERA_MODEL_COMPONENTS: Record<CameraModelId, ComponentType> = {
   turntable: TurntableModel,
   topdown: TopDownModel,
   fly: FlyModel,
+  googleearth: GoogleEarthModel,
   dreimap: DreiMapControlsModel,
   dreicamera: DreiCameraControlsModel,
 };
