@@ -20,6 +20,12 @@ export function createCitySeed(master: string): CitySeed {
   };
 }
 
-export function randomSeed(): string {
+/**
+ * UI-ONLY entropy: mints a fresh master seed for the reroll buttons.
+ * Never import into generation paths — scene state must be a pure function of
+ * the master seed (PRD §5 determinism contract). The Math.random() here is the
+ * one sanctioned use: choosing WHICH deterministic city to show next.
+ */
+export function randomSeedForReroll(): string {
   return Math.random().toString(36).slice(2, 10);
 }

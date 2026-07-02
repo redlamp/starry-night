@@ -21,7 +21,7 @@ import {
   type RenderMode,
   type BuildingTintMode,
 } from "@/lib/state/sceneStore";
-import { randomSeed } from "@/lib/seed/rng";
+import { randomSeedForReroll } from "@/lib/seed/rng";
 import { ARCHETYPE_ORDER, type Archetype } from "@/lib/seed/cityGen";
 import { CITY_SHAPES, type CityShapeSetting } from "@/lib/seed/cityShape";
 import { CITY_TIER_ORDER } from "@/lib/seed/topology";
@@ -2978,7 +2978,7 @@ function SeedRow() {
       <Button
         variant="secondary"
         size="sm"
-        onClick={() => setSeed(randomSeed())}
+        onClick={() => setSeed(randomSeedForReroll())}
         title="Reroll seed"
         className="bg-foreground/10 text-foreground hover:bg-foreground/20"
       >
