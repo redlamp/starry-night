@@ -197,6 +197,132 @@ vec3 debugTintColor() {
   return c;
 }
 
+// Complete per-cell window state at an arbitrary point on the facade grid:
+// rgb = the lit colour (atlas tint x emissive boost x TV/band brightness),
+// a   = windowOn (wake + duty cycle + fractional-band segment gating).
+// Extracted from main so the anisotropic supersample (#82) can average it at
+// several points along a sub-resolved screen axis — every per-cell decision
+// (atlas state, hashes, cycle clocks) lives HERE and nowhere else. cellF is the
+// continuous grid coord of the sample point; bandFade is the precomputed
+// sub-resolution fade for the band-pane brightness jitter.
+vec4 windowCellState(vec2 cellF, float bandFade) {
+  float rowCoherent = step(1.5, vCorrelationMode);
+  float fracFloor = rowCoherent * (1.0 - step(2.5, vCorrelationMode)); // mode 2 exactly
+  vec2 cellId = floor(cellF) + vec2(vFaceId * 7.0, vFaceId * 11.0 * (1.0 - rowCoherent));
+  vec2 atlasCell = mod(cellId, vGrid.xy);
+  vec2 cellCentreUv = (atlasCell + 0.5) / vGrid.xy;
+  vec4 state = texture2D(uWindowAtlas, vAtlasOffset + cellCentreUv * vAtlasSize);
+  bool isBand = state.a > 0.7 && state.a < 0.9;
+  bool isTv = state.a > 0.2 && state.a < 0.7;
+  float isCurtain = 0.0;
+  if (rowCoherent > 0.5 && vGrid.z > 4.5 && isBand &&
+      hash11(vBuildingHash * 4.1 + 67.0) < uCurtainShare) {
+    isCurtain = 1.0;
+  }
+
+  // Correlated band cells share their timing: a whole-floor band uses one
+  // clock for the row on EVERY face (jx = 0); fractional bands AND curtain
+  // floors key per face, so each side wakes and cycles on its own. Per-window
+  // cells keep per-cell timing via the column term.
+  float faceClock = max(fracFloor, isCurtain);
+  float jx = isBand ? vFaceId * 31.0 * faceClock : cellId.x;
+  float seed = hash11(jx + cellId.y * 17.0 + vBuildingHash);
+
+  vec3 lit;
+  if (state.a > 0.2) {
+    float brightness = 1.0;
+    if (isTv) {
+      // 3 Hz — matches the typical scan rate of a real TV at this distance.
+      float tick = floor(uTime * 3.0);
+      float n = hash11(tick + seed * 100.0);
+      brightness = 0.4 + n * 0.6;
+    } else if (isBand) {
+      // Static per-pane luminance jitter (±18%) so a lit floor reads as glass
+      // panels over one interior; fades toward its mean as panes go
+      // sub-resolved (bandFade, fixed constants — see main).
+      brightness = 0.82 + 0.36 * hash11(cellId.x * 9.1 + cellId.y * 4.3 + vBuildingHash + 151.0);
+      brightness = mix(brightness, 1.0, bandFade);
+      brightness *= 1.0 + 0.15 * isCurtain;
+    }
+    lit = state.rgb * uEmissiveBoost * brightness;
+  } else {
+    // Atlas-unlit cells: default warm tungsten for the wake-up sweep — dimmer
+    // than the average lit window so full-lit moments still read as a city.
+    lit = vec3(1.0, 0.82, 0.55) * uEmissiveBoost * 0.55;
+  }
+
+  // After-Dark wake-and-cycle. Step 1: order cells by intro mode, pick a
+  // per-cell wake time in [0, uIntroDuration]. Step 2: after wake, alternate
+  // ON (uOffCycle ±30%) / OFF (uRetrigger ±30%) with per-cell jitter so the
+  // city doesn't pulse in unison. TV cells skip the cycle once they wake.
+  float baseline = 0.0;
+  if (uIntroMode == 0) {
+    baseline = seed;
+  } else if (uIntroMode == 1) {
+    baseline = vDistrictIdx / 3.0;
+  } else if (uIntroMode == 2) {
+    vec2 d = vBuildingCenter.xz - uIntroCityCenter.xz;
+    float r = clamp(length(d) / max(1.0, uIntroMaxRadius), 0.0, 1.0);
+    baseline = 1.0 - r;
+  } else if (uIntroMode == 3) {
+    float farD = distance(vBuildingCenter, uIntroCamPos);
+    float r = clamp(farD / max(1.0, uIntroMaxRadius * 2.0), 0.0, 1.0);
+    baseline = 1.0 - r;
+  } else {
+    vec2 d = vBuildingCenter.xz - uIntroCityCenter.xz;
+    float r = clamp(length(d) / max(1.0, uIntroMaxRadius), 0.0, 1.0);
+    baseline = r;
+  }
+  float wakeJitter = hash11(jx * 1.31 + cellId.y * 11.7 + vBuildingHash + 41.0);
+  float onJitter = hash11(jx * 5.7 + cellId.y * 3.1 + vBuildingHash + 71.0);
+  float offJitter = hash11(jx * 1.7 + cellId.y * 23.0 + vBuildingHash + 19.0);
+  float t0 = clamp(baseline, 0.0, 1.0) * uIntroDuration +
+             wakeJitter * min(uIntroDuration * 0.04, 4.0);
+  float wakeTime = uIntroStartTime + t0;
+
+  // Switch-bank stagger: a share (uStagger) of correlated floors light up in
+  // 2..4 column banks, 0.6–1.6 s apart — banks of switches down the hall.
+  if (isBand && hash11(cellId.y * 23.0 + vBuildingHash + 211.0) < uStagger) {
+    float banks = 2.0 + floor(hash11(cellId.y * 3.3 + vBuildingHash + 61.0) * 2.999);
+    float bank = floor(floor(cellF.x) / max(1.0, ceil(vGrid.x / banks)));
+    if (hash11(cellId.y * 7.7 + vBuildingHash + 97.0) < 0.5) bank = banks - 1.0 - bank;
+    wakeTime += bank * (0.6 + hash11(cellId.y * 5.1 + vBuildingHash + 23.0));
+  }
+
+  float windowOn;
+  if (uTime < wakeTime) {
+    windowOn = 0.0;
+  } else if (isTv) {
+    windowOn = 1.0;
+  } else {
+    // (1 - jitter) .. (1 + jitter) — at jitter=0 every window cycles in
+    // lockstep; at jitter=1 multipliers span 0..2.
+    float onSec = max(0.5, uOffCycle * (1.0 - uCycleJitter + onJitter * uCycleJitter * 2.0));
+    float offSec = max(0.5, uRetrigger * (1.0 - uCycleJitter + offJitter * uCycleJitter * 2.0));
+    // Curtain ribbons hold their light 4x longer — trading floors and cleaning
+    // crews, not apartment lamps.
+    if (isCurtain > 0.5) onSec *= 4.0;
+    float elapsed = uTime - wakeTime;
+    float period = onSec + offSec;
+    float phase = mod(elapsed, period);
+    windowOn = phase < onSec ? 1.0 : 0.0;
+  }
+
+  // Fractional-floor band: only a per-(face, floor) SEGMENT of the row lights —
+  // length and position hashed independently per face. Curtain floors are
+  // exempt (a curtain ribbon spans its whole face).
+  if (fracFloor > 0.5 && isBand && isCurtain < 0.5) {
+    float col = floor(cellF.x);
+    float u1 = hash11(vFaceId * 3.7 + cellId.y * 13.1 + vBuildingHash + 101.0);
+    float u2 = hash11(vFaceId * 9.3 + cellId.y * 5.7 + vBuildingHash + 137.0);
+    float litCount = floor(pow(u1, 1.6) * (vGrid.x + 0.999));
+    float start = floor(u2 * (vGrid.x - litCount + 1.0));
+    if (col < start || col > start + litCount - 1.0) windowOn = 0.0;
+  }
+
+  return vec4(lit, windowOn);
+}
+
 void main() {
   // Wireframe (Slice B): flat stroke, no window math, no fog. Colour matches the
   // building tint mode — blue default (uWireColor) when no mode is active, else
@@ -223,10 +349,27 @@ void main() {
 
   vec2 cell = vUv * vGrid.xy;
   vec2 cellLocal = fract(cell);
-  // Cells-per-pixel from the CONTINUOUS grid coord (see the LOD block below for
-  // why not atlasUv). Hoisted here because the band-jitter fade needs it before
-  // the LOD wash does. min: only counts as sub-resolved when BOTH axes are.
-  float relSpan = min(fwidth(cell.x), fwidth(cell.y));
+  // Cells-per-pixel PER AXIS from the CONTINUOUS grid coord (see the LOD block
+  // below for why not atlasUv). relSpan (min) drives the isotropic distance
+  // wash: sub-resolved in BOTH axes = genuinely far.
+  float spanX = fwidth(cell.x);
+  float spanY = fwidth(cell.y);
+  float relSpan = min(spanX, spanY);
+  // Anisotropic sub-resolution (#82): a grazing facade collapses ONE axis
+  // (several cells per pixel column) while the other stays resolved, so the
+  // min-gated wash never engages and per-cell state renders as stripe/churn
+  // noise. Per-axis ramps drive (a) the window-mask cell-mean below and (b) the
+  // footprint-averaged cell state in the lit path. Fixed constants like the
+  // band-jitter fade — this is aliasing control, not a detail knob, so the LOD
+  // sliders can't reintroduce it. Ortho has uniform derivatives and no grazing
+  // perspective; scale out like the wash does.
+  float lodAnisoX = smoothstep(0.3, 0.9, spanX) * (1.0 - uOrthoBlend);
+  float lodAnisoY = smoothstep(0.3, 0.9, spanY) * (1.0 - uOrthoBlend);
+  // Band-pane brightness jitter fade (2026-07-02): reads as interior depth up
+  // close, aliases into speckle under ~4px panes — fade toward the mean on the
+  // WORST axis (max: a grazed band is sub-resolved along the row even when
+  // floors stay resolved).
+  float bandFade = smoothstep(0.15, 0.35, max(spanX, spanY));
   // #25 per-face uniqueness: shift cellId by (faceId*7, faceId*11) BEFORE all
   // per-cell math (atlas sample, hashes, breathing seed, intro wake). Using
   // the shifted id everywhere means each face has its own atlas pattern AND
@@ -241,15 +384,15 @@ void main() {
   // every edge. X keeps its shift (band rows are uniform across the row, so
   // it has nothing to desync there).
   float rowCoherent = step(1.5, vCorrelationMode);
-  float fracFloor = rowCoherent * (1.0 - step(2.5, vCorrelationMode)); // mode 2 exactly
   vec2 cellId = floor(cell) + vec2(vFaceId * 7.0, vFaceId * 11.0 * (1.0 - rowCoherent));
   vec2 atlasCell = mod(cellId, vGrid.xy);
   vec2 cellCentreUv = (atlasCell + 0.5) / vGrid.xy;
   vec2 atlasUv = vAtlasOffset + cellCentreUv * vAtlasSize;
   vec4 state = texture2D(uWindowAtlas, atlasUv);
   // Correlated band cell (atlas alpha ≈ 0.78): part of a row painted as one
-  // lit unit. Sampled this early because both the curtain treatment (fraction
-  // pinning below) and the wake/cycle timing key off it.
+  // lit unit. Sampled here (redundantly with windowCellState — same cached
+  // texel) because the curtain FRACTION override below feeds the mask, which
+  // is main's job; timing/colour per-cell logic lives in windowCellState.
   bool isBand = state.a > 0.7 && state.a < 0.9;
 
   // Per-archetype window fraction, selected by archetype index. A constant-
@@ -330,8 +473,8 @@ void main() {
   // fwidth on the CONTINUOUS grid coord, not fract(cell): fract jumps 1→0 at
   // every cell boundary so its derivative spikes there, blowing up the AA band
   // into a visible facade seam line at each window edge.
-  float fwX = max(fwidth(cell.x) * uAaEdge, 0.001);
-  float fwY = max(fwidth(cell.y) * uAaEdge, 0.001);
+  float fwX = max(spanX * uAaEdge, 0.001);
+  float fwY = max(spanY * uAaEdge, 0.001);
   // Cap the AA band at 90% of the half-window in BOTH projections. Uncapped, a
   // grazing facade (huge fwidth from foreshortening) widens the mask past the
   // cell and lights the whole panel — window + border. Capped, the window keeps
@@ -352,6 +495,21 @@ void main() {
   // never an accident of a high slider.
   wMaskX = mix(wMaskX, 1.0, smoothstep(0.4955, 0.4995, halfW));
   wMaskY = mix(wMaskY, 1.0, smoothstep(0.4955, 0.4995, halfH));
+  // Anisotropic mask mean (#82): once an axis's thinnest mask FEATURE — the
+  // lit run (frac) or the gap between runs (1 - frac), whichever is smaller —
+  // drops under ~a pixel, it cannot be drawn faithfully: NEAREST-phase
+  // quantisation lands it on occasional whole pixel columns (the irregular
+  // "barcode" stripes on curtain/band floors, whose 1% mullions go sub-pixel
+  // even on 40px cells). The analytic mean of the mask over a cell is just the
+  // fraction, so converge to it as the feature crosses 2px → 1px. Also engages
+  // via the cell-level aniso ramp (grazing) — whichever fires first. Free: no
+  // extra samples, exact in the limit.
+  float featX = min(fracW, 1.0 - fracW) / max(spanX, 1e-4); // thinnest X feature in px
+  float featY = min(fracH, 1.0 - fracH) / max(spanY, 1e-4);
+  float maskLodX = max(lodAnisoX, 1.0 - smoothstep(1.0, 2.0, featX));
+  float maskLodY = max(lodAnisoY, 1.0 - smoothstep(1.0, 2.0, featY));
+  wMaskX = mix(wMaskX, fracW, maskLodX);
+  wMaskY = mix(wMaskY, fracH, maskLodY);
   float wMask = wMaskX * wMaskY;
   bool inWindow = wMask > 0.01;
 
@@ -362,123 +520,39 @@ void main() {
   // existing flicker / twinkle behaviour stays scoped to the atlas-lit subset
   // (alpha encoding 128 = TV-blue, 255 = steady).
   if (inWindow) {
-    // Correlated band cells share their timing: a whole-floor band uses one
-    // clock for the row on EVERY face (jx = 0); fractional bands AND curtain
-    // floors key per face, so each side wakes and cycles on its own — a lit
-    // curtain floor lights face-by-face instead of snapping on as a ring
-    // around the building. Per-window / per-block cells keep per-cell timing
-    // via the column term.
-    float faceClock = max(fracFloor, isCurtain);
-    float jx = isBand ? vFaceId * 31.0 * faceClock : cellId.x;
-    float seed = hash11(jx + cellId.y * 17.0 + vBuildingHash);
+    // Per-cell state (atlas classification, brightness, wake + duty cycle,
+    // fractional-band gating) — single source in windowCellState above.
+    vec4 cw = windowCellState(cell, bandFade);
+    vec3 lit = cw.rgb;
+    float windowOn = cw.a;
 
-    bool isTv = state.a > 0.2 && state.a < 0.7;
-    vec3 lit;
-    if (state.a > 0.2) {
-      float brightness = 1.0;
-      if (isTv) {
-        // 3 Hz — calmer than the original 8 Hz and matches the typical scan
-        // rate of a real TV at this perceived distance.
-        float tick = floor(uTime * 3.0);
-        float n = hash11(tick + seed * 100.0);
-        brightness = 0.4 + n * 0.6;
-      } else if (isBand) {
-        // Texture within a band: static per-pane luminance jitter (±18%) so a
-        // lit floor reads as glass panels over one interior — furniture,
-        // blinds, depth — rather than a uniform glowing strip. Curtain panes
-        // get a 15% lift: more glass lets more light out, and it keeps the
-        // ribbons legible at orbit distance where their hairline mullions
-        // are sub-pixel.
-        brightness = 0.82 + 0.36 * hash11(cellId.x * 9.1 + cellId.y * 4.3 + vBuildingHash + 151.0);
-        // The ±18% per-pane jitter reads as interior depth up close but aliases
-        // into moiré speckle once panes drop under ~4px (NVIDIA-visible
-        // "distressed" bands, 2026-07-02). Fade it toward its mean (1.0) as
-        // cells go sub-resolved — fixed constants, deliberately NOT tied to the
-        // LOD sliders so detail knobs can't reintroduce the noise.
-        brightness = mix(brightness, 1.0, smoothstep(0.15, 0.35, relSpan));
-        brightness *= 1.0 + 0.15 * isCurtain;
+    // Anisotropic footprint average (#82): when the DOMINANT screen axis spans
+    // multiple cells per pixel while the other stays resolved (grazing facade),
+    // per-cell state flips column-to-column — vertical stripe combs / diagonal
+    // churn. Average the cell state at 4 points across the footprint along the
+    // compressed axis and blend it in by the aniso ramp. The resolved axis
+    // keeps full detail (floors/columns stay readable) — this is what neither
+    // min() (never engages) nor max() (whole-panel glow) could do.
+    float lodTap = max(lodAnisoX, lodAnisoY);
+    if (lodTap > 0.001) {
+      vec2 tapDir = spanX >= spanY ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
+      // Cap the averaging window: past ~6 cells/px 4 taps undersample anyway
+      // and the isotropic wash below is close behind.
+      float tapSpan = min(max(spanX, spanY), 6.0);
+      vec3 litAcc = vec3(0.0);
+      float onAcc = 0.0;
+      for (int k = 0; k < 4; k++) {
+        float t = (float(k) + 0.5) * 0.25 - 0.5; // -0.375, -0.125, +0.125, +0.375
+        vec4 s = windowCellState(cell + tapDir * (t * tapSpan), bandFade);
+        litAcc += s.rgb * s.a;
+        onAcc += s.a;
       }
-      lit = state.rgb * uEmissiveBoost * brightness;
-    } else {
-      // Atlas-unlit cells get a default warm tungsten — slightly dimmer than
-      // the average atlas-lit window so a full-lit moment still reads as a
-      // city rather than a billboard.
-      lit = vec3(1.0, 0.82, 0.55) * uEmissiveBoost * 0.55;
-    }
-
-    // After-Dark wake-and-cycle. Step 1: order cells by intro mode, pick a
-    // per-cell wake time in [0, uIntroDuration]. Step 2: after wake, alternate
-    // ON (uOffCycle ±30%) / OFF (uRetrigger ±30%) using per-cell jitter so the
-    // city doesn't pulse in unison. TV cells skip the cycle once they wake.
-    float baseline = 0.0;
-    if (uIntroMode == 0) {
-      baseline = seed;
-    } else if (uIntroMode == 1) {
-      baseline = vDistrictIdx / 3.0;
-    } else if (uIntroMode == 2) {
-      vec2 d = vBuildingCenter.xz - uIntroCityCenter.xz;
-      float r = clamp(length(d) / max(1.0, uIntroMaxRadius), 0.0, 1.0);
-      baseline = 1.0 - r;
-    } else if (uIntroMode == 3) {
-      float farD = distance(vBuildingCenter, uIntroCamPos);
-      float r = clamp(farD / max(1.0, uIntroMaxRadius * 2.0), 0.0, 1.0);
-      baseline = 1.0 - r;
-    } else {
-      vec2 d = vBuildingCenter.xz - uIntroCityCenter.xz;
-      float r = clamp(length(d) / max(1.0, uIntroMaxRadius), 0.0, 1.0);
-      baseline = r;
-    }
-    float wakeJitter = hash11(jx * 1.31 + cellId.y * 11.7 + vBuildingHash + 41.0);
-    float onJitter = hash11(jx * 5.7 + cellId.y * 3.1 + vBuildingHash + 71.0);
-    float offJitter = hash11(jx * 1.7 + cellId.y * 23.0 + vBuildingHash + 19.0);
-    float t0 = clamp(baseline, 0.0, 1.0) * uIntroDuration +
-               wakeJitter * min(uIntroDuration * 0.04, 4.0);
-    float wakeTime = uIntroStartTime + t0;
-
-    // Switch-bank stagger: a share (uStagger) of correlated floors light up
-    // in 2..4 column banks, 0.6–1.6 s apart, sweeping left or right — banks
-    // of light switches being flipped down the hall. Shifting wakeTime moves
-    // the whole schedule, so the sweep re-plays on every breathing re-on.
-    if (isBand && hash11(cellId.y * 23.0 + vBuildingHash + 211.0) < uStagger) {
-      float banks = 2.0 + floor(hash11(cellId.y * 3.3 + vBuildingHash + 61.0) * 2.999);
-      float bank = floor(floor(cell.x) / max(1.0, ceil(vGrid.x / banks)));
-      if (hash11(cellId.y * 7.7 + vBuildingHash + 97.0) < 0.5) bank = banks - 1.0 - bank;
-      wakeTime += bank * (0.6 + hash11(cellId.y * 5.1 + vBuildingHash + 23.0));
-    }
-
-    float windowOn;
-    if (uTime < wakeTime) {
-      windowOn = 0.0;
-    } else if (isTv) {
-      windowOn = 1.0;
-    } else {
-      // (1 - jitter) .. (1 + jitter) — at jitter=0 every window cycles in
-      // lockstep; at jitter=1 multipliers span 0..2.
-      float onSec = max(0.5, uOffCycle * (1.0 - uCycleJitter + onJitter * uCycleJitter * 2.0));
-      float offSec = max(0.5, uRetrigger * (1.0 - uCycleJitter + offJitter * uCycleJitter * 2.0));
-      // Curtain ribbons hold their light 4x longer — trading floors and
-      // cleaning crews, not apartment lamps. Keeps the city's statement
-      // pieces visible instead of duty-cycling them away 1/3 of the time.
-      if (isCurtain > 0.5) onSec *= 4.0;
-      float elapsed = uTime - wakeTime;
-      float period = onSec + offSec;
-      float phase = mod(elapsed, period);
-      windowOn = phase < onSec ? 1.0 : 0.0;
-    }
-
-    // Fractional-floor band: only a per-(face, floor) SEGMENT of the row
-    // actually lights — length and position hashed independently per face, so
-    // the sides are deliberately uneven: a quarter here, the full row there,
-    // nothing on the back. pow() skews the length roll toward partial fills.
-    // Curtain floors are exempt — a curtain ribbon spans its whole face (the
-    // per-face unevenness they keep is the independent wake clock).
-    if (fracFloor > 0.5 && isBand && isCurtain < 0.5) {
-      float col = floor(cell.x);
-      float u1 = hash11(vFaceId * 3.7 + cellId.y * 13.1 + vBuildingHash + 101.0);
-      float u2 = hash11(vFaceId * 9.3 + cellId.y * 5.7 + vBuildingHash + 137.0);
-      float litCount = floor(pow(u1, 1.6) * (vGrid.x + 0.999));
-      float start = floor(u2 * (vGrid.x - litCount + 1.0));
-      if (col < start || col > start + litCount - 1.0) windowOn = 0.0;
+      // On-weighted mean colour + mean coverage: a half-lit footprint reads as
+      // the average lit colour at half strength, not as noise.
+      vec3 avgLit = litAcc / max(onAcc, 0.001);
+      float avgOn = onAcc * 0.25;
+      lit = mix(lit, avgLit, lodTap);
+      windowOn = mix(windowOn, avgOn, lodTap);
     }
 
     // Derivative-based LOD: when one fragment covers a sizeable chunk of an
@@ -493,8 +567,9 @@ void main() {
     // min, not max: a grazing facade has one foreshortened axis with huge
     // cells/pixel while the other stays resolved. max would force a full wash on
     // grazing alone (whole panel glows); min only engages when the window is
-    // sub-resolved in BOTH dimensions, i.e. genuinely far. (relSpan itself is
-    // hoisted next to cellLocal — the band-jitter fade reads it earlier.)
+    // sub-resolved in BOTH dimensions, i.e. genuinely far. The single-axis
+    // grazing case is handled UPSTREAM by the anisotropic footprint average
+    // (lodAnisoX/Y + windowCellState taps), which keeps the resolved axis.
     // 0 below 0.12 (close, crisp), 1 above 0.45 (far / grazing, smooth glow).
     // Disabled in ortho — fwidth(atlasUv) is uniform across the ortho frustum
     // so the LOD path would mask the entire scene; ortho also doesn't have the
