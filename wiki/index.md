@@ -10,6 +10,7 @@ Top-level Map of Content. See `CLAUDE.md` for conventions.
 
 ## Active
 
+- [[fable-codebase-survey-2026-07-02]] — **2026-07-02 survey:** codebase health B+, determinism contract verified, ranked perf/security/hygiene backlog
 - [[projects/v1-still-frame]] — Milestone 1: the still composition *(stub)*
 - [[projects/stage-1-streets-first]] — M2: streets-first city generation, file-level migration plan
 - [[settings-ia-evaluation]] — settings-panel IA evaluation + 5 layout proposals (incl. drag-drop `/studio`)

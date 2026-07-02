@@ -4,6 +4,12 @@ Map of Content for system shape, rendering strategy, and the language used to
 talk about them. Decision history lives in [[decisions]]; this collects the
 reference notes that describe how the running system behaves.
 
+## Surveys
+
+- [[fable-codebase-survey-2026-07-02]] — full-project survey (architecture,
+  performance, security, determinism, docs health) with a prioritized action
+  backlog; determinism contract verified end-to-end
+
 ## Rendering & animation
 
 - [[road-reveal-choreography]] — the city-load animation: phases (blueprint
