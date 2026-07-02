@@ -223,6 +223,10 @@ void main() {
 
   vec2 cell = vUv * vGrid.xy;
   vec2 cellLocal = fract(cell);
+  // Cells-per-pixel from the CONTINUOUS grid coord (see the LOD block below for
+  // why not atlasUv). Hoisted here because the band-jitter fade needs it before
+  // the LOD wash does. min: only counts as sub-resolved when BOTH axes are.
+  float relSpan = min(fwidth(cell.x), fwidth(cell.y));
   // #25 per-face uniqueness: shift cellId by (faceId*7, faceId*11) BEFORE all
   // per-cell math (atlas sample, hashes, breathing seed, intro wake). Using
   // the shifted id everywhere means each face has its own atlas pattern AND
@@ -386,6 +390,12 @@ void main() {
         // ribbons legible at orbit distance where their hairline mullions
         // are sub-pixel.
         brightness = 0.82 + 0.36 * hash11(cellId.x * 9.1 + cellId.y * 4.3 + vBuildingHash + 151.0);
+        // The ±18% per-pane jitter reads as interior depth up close but aliases
+        // into moiré speckle once panes drop under ~4px (NVIDIA-visible
+        // "distressed" bands, 2026-07-02). Fade it toward its mean (1.0) as
+        // cells go sub-resolved — fixed constants, deliberately NOT tied to the
+        // LOD sliders so detail knobs can't reintroduce the noise.
+        brightness = mix(brightness, 1.0, smoothstep(0.15, 0.35, relSpan));
         brightness *= 1.0 + 0.15 * isCurtain;
       }
       lit = state.rgb * uEmissiveBoost * brightness;
@@ -483,8 +493,8 @@ void main() {
     // min, not max: a grazing facade has one foreshortened axis with huge
     // cells/pixel while the other stays resolved. max would force a full wash on
     // grazing alone (whole panel glows); min only engages when the window is
-    // sub-resolved in BOTH dimensions, i.e. genuinely far.
-    float relSpan = min(fwidth(cell.x), fwidth(cell.y));
+    // sub-resolved in BOTH dimensions, i.e. genuinely far. (relSpan itself is
+    // hoisted next to cellLocal — the band-jitter fade reads it earlier.)
     // 0 below 0.12 (close, crisp), 1 above 0.45 (far / grazing, smooth glow).
     // Disabled in ortho — fwidth(atlasUv) is uniform across the ortho frustum
     // so the LOD path would mask the entire scene; ortho also doesn't have the

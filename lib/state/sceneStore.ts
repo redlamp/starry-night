@@ -272,7 +272,11 @@ export const DEFAULT_STARS = {
 export const DEFAULT_WINDOW_AA = {
   edge: 1.1,
   lodEnabled: true, // window distance-wash LOD; header toggle in the LOD group
-  lodNear: 0.4,
+  // 0.2 = wash starts at ~5px windows. Raised to 0.4 in 8e79a2f (window LOD
+  // tuning), which left the 2.5-8px band unmitigated → NVIDIA-visible moiré
+  // speckle (2026-07-02). Restored to 0.2; the band-jitter sub-resolution fade
+  // in cityInstanced carries the close-range case.
+  lodNear: 0.2,
   lodRange: 0.4,
   litBias: 0.7,
   churn: 0.2,
