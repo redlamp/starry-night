@@ -428,12 +428,11 @@ type SceneState = {
     enabled: boolean;
     mode: "linear" | "exp2";
     color: string;
-    // City-anchored model: positions on the camera→CITY_CENTER axis (0 = at
-    // the camera, 1 = at the centre, >1 = beyond). FogTicker scales them by
-    // the live camera→centre distance every frame, so the fog gradient stays
-    // pinned to the city while the camera orbits, flies, or zooms.
-    near: number; // where the fade begins (0..4)
-    far: number; // where the fade completes (0..6)
+    // World-absolute model (2026-07-01, reverted the camera-relative scaling):
+    // near/far are ABSOLUTE world metres from the camera (THREE.Fog native);
+    // FogTicker writes them straight through. See DEFAULT_FOG in sceneDefaults.
+    near: number; // m — fog starts this far from the camera
+    far: number; // m — fully fogged by here
     density: number; // exp² mode: fog amount at the city centre (0..0.9)
   };
   setFog: (
