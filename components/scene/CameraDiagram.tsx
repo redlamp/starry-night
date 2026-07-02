@@ -1,6 +1,9 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import type { CamReadout } from "@/lib/scene/cameraReadout";
+
+export type { CamReadout };
 
 // Live side-view (elevation) schematic of the camera rig: an abstracted cross-section in the
 // vertical plane that contains the camera and the focal point. It shows how the three things the
@@ -21,23 +24,6 @@ const DEG = Math.PI / 180;
 const W = 248;
 const H = 150;
 const PAD = 20;
-
-export type CamReadout = {
-  elev: number; // degrees above the horizon
-  dist: number; // camera → focal (world units)
-  focalY: number; // focal-point height above ground
-  camY: number; // camera eye height above ground
-  parallel: boolean; // true = (mostly) orthographic — drives the label
-  frustumHh: number; // world half-height of the view at the focal plane
-  blend: number; // 0 = perspective, 1 = orthographic (the live morph amount)
-  // Low-angle framing + tilt-throttle gauges (the app provides these; the lab omits them → no gauges).
-  screenY?: number; // current eased pivot, fraction up from the bottom
-  screenYBase?: number; // the "normal" Screen-Y endpoint
-  screenYLow?: number; // the low-angle Screen-Y endpoint
-  tilt?: number; // current rotate/tilt speed multiplier, 0..1
-  frameBelow?: number; // elevation (deg) below which the framing eases in
-  tiltBelow?: number; // elevation (deg) below which the tilt throttle eases in
-};
 
 type P = { h: number; y: number }; // side-plane world coords: h = horizontal from focal, y = up
 
