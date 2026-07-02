@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 import { useIdle } from "@/lib/useIdle";
 import { Switch } from "@/components/ui/switch";
 import { toggleProjection } from "@/lib/scene/cameraView";
-import { MapPin } from "lucide-react";
+import { Eye, MapPin, Move } from "lucide-react";
 import { getCameraModelMeta } from "@/components/scene/camera-models/catalog";
 import type { CameraModelId } from "@/lib/state/sceneStore";
 
@@ -32,6 +32,7 @@ type Item = {
   badge?: string;
   label: string;
   sub?: string;
+  affordance?: "pin" | "move" | "eye"; // right-aligned scene-affordance icon (mirrors the on-screen glyph)
 };
 
 // Focal Height's one-button twin uses Ctrl on Windows/Linux, ⌘ on macOS — resolve to the user's
@@ -110,9 +111,15 @@ const MODEL_GUIDE: Record<CameraModelId, GuideSpec> = {
   },
   snv2: {
     mouse: [
-      { icon: "mouse-left", motion: "all", label: "Rotate & Tilt" },
-      { icon: "mouse-right", motion: "all", label: "Move", sub: "or Shift + LMB" },
-      { icon: "mouse-left", motion: "all", label: "Look Around", sub: `${MOD} + LMB` },
+      { icon: "mouse-left", motion: "all", label: "Rotate & Tilt", affordance: "pin" },
+      { icon: "mouse-right", motion: "all", label: "Move", sub: "or Shift + LMB", affordance: "move" },
+      {
+        icon: "mouse-both",
+        motion: "all",
+        label: "Look Around",
+        sub: `or ${MOD} + LMB`,
+        affordance: "eye",
+      },
       { icon: "mouse-wheel", motion: "ud", label: "Zoom" },
       { icon: "mouse-left", badge: "×2", label: "Zoom in", sub: "double-click" },
     ],
@@ -120,7 +127,8 @@ const MODEL_GUIDE: Record<CameraModelId, GuideSpec> = {
       { icon: "finger-1", motion: "all", label: "Move" },
       { icon: "pinch", label: "Zoom + rotate", sub: "two fingers" },
     ],
-    hotkeys: ["settings"],
+    keys: [{ cap: "R", label: "Reset camera" }],
+    hotkeys: ["projection", "settings"],
   },
   googleearth: {
     mouse: [
@@ -222,6 +230,14 @@ function Glyph({
   );
 }
 
+// Right-aligned scene-affordance icon on a control row: the same blue marker / glyph that appears in
+// the scene during that gesture — pin (rotate/tilt), move arrows (move), eye (free-look) — so the sheet
+// reads as "this is what you'll see". Same sky-blue (#7dd3fc) the scene renders them in.
+function AffordanceIcon({ kind }: { kind: NonNullable<Item["affordance"]> }) {
+  const Icon = kind === "pin" ? MapPin : kind === "move" ? Move : Eye;
+  return <Icon aria-hidden className="ml-auto size-6 shrink-0 text-sky-300" strokeWidth={2.5} />;
+}
+
 function Rows({ items, active }: { items: Item[]; active: string | null }) {
   return (
     <div className="flex flex-col">
@@ -247,6 +263,7 @@ function Rows({ items, active }: { items: Item[]; active: string | null }) {
               </div>
               {it.sub && <div className="text-foreground/45 text-xs leading-tight">{it.sub}</div>}
             </div>
+            {it.affordance && <AffordanceIcon kind={it.affordance} />}
           </div>
         );
       })}

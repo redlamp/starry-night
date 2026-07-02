@@ -38,17 +38,19 @@ import { writeOrbitPose } from "./orbitWriteback";
 
 const DEG = Math.PI / 180;
 const ORBIT_RATE = 0.006; // rad per pixel of Shift orbit (~0.34°/px; a ~500px drag ≈ 170°)
-const MIN_EYE_Y = 5; // keep the camera above the ground while orbiting/tilting
+const MIN_EYE_Y = 1; // floor the camera ~1m above the ground while orbiting / tilting / reframing
 const MAX_VERT = 0.98; // clamp free-look short of straight up/down (no flip)
 const MAX_ORBIT_EL = 89.9 * DEG; // orbit look-down cap: 0.1° short of straight-down; never crosses (no flip)
 const MAX_STEP = 0.15; // per-move cap on the free-look servo (rad), guards against big jumps
 const WHEEL_ZOOM_SPEED = 1.0; // GE/OrbitControls wheel curve: ~5% dolly per notch at speed 1
 const ORTHO_SIZE_MIN = 5 * CITY_SCALE; // faked-ortho zoom band (frustum half-height); matches Map
 const ORTHO_SIZE_MAX = 2000 * CITY_SCALE;
-// "Skyline Mode": ortho + aim within 2° of flat — looking at the city edge-on, like an architectural
-// elevation. In this regime (a) the ground pick is degenerate (near-parallel ray) so the orbit/pan
-// pivot is synthesized, and (b) RMB-vertical drag reframes the city on screen (a v2-local "Screen Y"
-// lens-shift) instead of panning depth, so the viewer can push the empty ground off the bottom.
+// "Skyline Mode": aim within 2° of flat (EITHER projection) — looking at the city edge-on, like an
+// architectural elevation. In this regime (a) the ground pick is degenerate (near-parallel ray) so the
+// orbit/pan pivot is synthesized at the mid-map point under the cursor, and (b) RMB-vertical drag
+// reframes the city vertically: ORTHO shifts a focal-offset lens (the eye is invisible there, so it
+// reads as a pure frame shift); PERSPECTIVE pedestals the coupled eye + focal (a real altitude move,
+// floored at MIN_EYE_Y) — "reframing the camera". Both push the empty ground off the bottom, no re-tilt.
 const SKYLINE_TILT_SIN = Math.sin(2 * DEG);
 const SKYLINE_SCREEN_Y_MIN = 0.05; // v2-local Skyline framing (fraction of the city's rest point up from bottom)
 const SKYLINE_SCREEN_Y_MAX = 0.95;
@@ -91,33 +93,40 @@ function groundHit(
   const r = dom.getBoundingClientRect();
   const nx = ((clientX - r.left) / r.width) * 2 - 1;
   const ny = -(((clientY - r.top) / r.height) * 2 - 1);
-  if (useSceneStore.getState().projectionBlend >= 0.9999) {
-    const aspect = r.width / Math.max(1, r.height);
-    const halfH = useSceneStore.getState().orthoSize * orbitFramingFactor(aspect);
-    cam.updateMatrixWorld();
+  const st = useSceneStore.getState();
+  const ortho = st.projectionBlend >= 0.9999;
+  const aspect = r.width / Math.max(1, r.height);
+  cam.updateMatrixWorld();
+  cam.getWorldDirection(_fwd);
+  // SKYLINE MODE (flat aim, EITHER projection): the cursor ray grazes the ground, so a true hit is far
+  // and unstable — the pivot flings around near the horizon (and in perspective the pan ray misses
+  // entirely). The cursor carries no depth signal when flat (screen-vertical maps to world height, not
+  // ground depth), so synthesize the pick: CITY_CENTER's forward depth (the "midway point of the ground"),
+  // slid along the horizontal right-axis to stay under the cursor. Lateral scale differs by projection —
+  // ortho uses the fixed frustum half-width; perspective uses the half-width at that depth (f·tan(fov/2)).
+  // Callers' clampToCity keeps it on the disc.
+  if (Math.abs(_fwd.y) <= SKYLINE_TILT_SIN) {
+    _right.setFromMatrixColumn(cam.matrixWorld, 0);
+    cam.getWorldPosition(_camWorld);
+    const fhLen = Math.hypot(_fwd.x, _fwd.z) || 1e-6;
+    const rhLen = Math.hypot(_right.x, _right.z) || 1e-6;
+    const fhx = _fwd.x / fhLen;
+    const fhz = _fwd.z / fhLen;
+    const rhx = _right.x / rhLen;
+    const rhz = _right.z / rhLen;
+    const f = (CITY_CENTER.x - _camWorld.x) * fhx + (CITY_CENTER.z - _camWorld.z) * fhz; // fwd depth of city centre
+    const halfW = ortho
+      ? st.orthoSize * orbitFramingFactor(aspect) * aspect
+      : Math.max(0, f) * Math.tan(((cam as THREE.PerspectiveCamera).fov * DEG) / 2) * aspect;
+    const lat = nx * halfW; // lateral offset under the cursor
+    out.set(_camWorld.x + fhx * f + rhx * lat, 0, _camWorld.z + fhz * f + rhz * lat);
+    return true;
+  }
+  if (ortho) {
+    const halfH = st.orthoSize * orbitFramingFactor(aspect);
     _right.setFromMatrixColumn(cam.matrixWorld, 0);
     _camUp.setFromMatrixColumn(cam.matrixWorld, 1);
-    cam.getWorldDirection(_fwd);
     cam.getWorldPosition(_camWorld);
-    // SKYLINE MODE (ortho, aim ≤2° from flat): the cursor ray is near-parallel to the ground plane, so
-    // a true intersection lands at a huge distance (or misses) — an unstable, far-from-city pivot that's
-    // hard to control. The cursor carries no depth signal when flat (screen-vertical maps to world
-    // height, not ground depth), so synthesize the pick: place it at CITY_CENTER's forward depth (the
-    // "midway point of the ground"), slid along the horizontal right-axis to stay under the cursor
-    // horizontally. Callers' clampToCity keeps it on the disc. (Ortho only; perspective's far pick still
-    // points at a real vanishing direction, so its disc-clamp behaves.)
-    if (Math.abs(_fwd.y) <= SKYLINE_TILT_SIN) {
-      const fhLen = Math.hypot(_fwd.x, _fwd.z) || 1e-6;
-      const rhLen = Math.hypot(_right.x, _right.z) || 1e-6;
-      const fhx = _fwd.x / fhLen;
-      const fhz = _fwd.z / fhLen;
-      const rhx = _right.x / rhLen;
-      const rhz = _right.z / rhLen;
-      const f = (CITY_CENTER.x - _camWorld.x) * fhx + (CITY_CENTER.z - _camWorld.z) * fhz; // fwd depth of city centre
-      const s = nx * halfH * aspect; // lateral offset under the cursor (same scale as the ortho pick)
-      out.set(_camWorld.x + fhx * f + rhx * s, 0, _camWorld.z + fhz * f + rhz * s);
-      return true;
-    }
     _ray.ray.origin
       .copy(_camWorld)
       .addScaledVector(_right, nx * halfH * aspect)
@@ -213,11 +222,10 @@ function clampToCity(x: number, z: number): { x: number; z: number } {
   return _cc;
 }
 
-// Skyline Mode = ortho projection AND the aim within 2° of flat (looking at the city edge-on). Both
-// the synthesized ground pick (in groundHit) and the RMB-vertical Screen-Y reframe key off this. Single
-// source of truth for the threshold, shared by the pointer handlers and the per-frame framing.
+// Skyline Mode = the aim within 2° of flat (looking at the city edge-on), in EITHER projection. The
+// RMB-vertical reframe and the per-frame focal offset key off this; the synthesized ground pick in
+// groundHit shares the same flat test. Single source of truth for the threshold.
 function isSkylineMode(camera: THREE.Camera): boolean {
-  if (useSceneStore.getState().projectionBlend < 0.9999) return false; // ortho only
   camera.getWorldDirection(_fwd);
   return Math.abs(_fwd.y) <= SKYLINE_TILT_SIN;
 }
@@ -309,6 +317,17 @@ export function StarryNightV2Model() {
     let lastX = 0;
     let lastY = 0;
     let ctrlHeld = false;
+    let shiftHeld = false;
+    // Deferred drag affordances: on press we record the down point and mark the drag "not yet moved";
+    // the grabbing cursor and the orbit pivot pin appear only once the pointer crosses a small
+    // threshold, so a click or double-click (zoom-in) never flashes them. Reset on release.
+    let dragMoved = false;
+    let dragDownX = 0;
+    let dragDownY = 0;
+    let orbitPinPending: [number, number, number] | null = null;
+    let hoverX = 0; // last mouse position over the canvas — anchors the armed-modifier glyph
+    let hoverY = 0;
+    let overCanvas = false;
 
     // Drag affordance glyph shown ALONGSIDE the hand cursor: a lucide eye (free-look) / move (move),
     // as a fixed DOM overlay offset down-right of the pointer, updated in the pointer handlers. It
@@ -322,22 +341,40 @@ export function StarryNightV2Model() {
     glyph.style.cssText =
       "position:fixed;left:0;top:0;z-index:9999;pointer-events:none;display:none;color:#7dd3fc;will-change:transform;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.85))";
     document.body.appendChild(glyph);
+    let glyphKind: "look" | "pan" | null = null; // current SVG — reset innerHTML only when it changes
     const moveGlyph = (x: number, y: number) => {
       glyph.style.transform = `translate3d(${x + 16}px, ${y + 14}px, 0)`; // just down-right of the cursor
     };
     const showGlyph = (kind: "look" | "pan", x: number, y: number) => {
-      glyph.innerHTML = kind === "look" ? EYE_SVG : MOVE_SVG;
+      if (glyphKind !== kind) {
+        glyph.innerHTML = kind === "look" ? EYE_SVG : MOVE_SVG;
+        glyphKind = kind;
+      }
       glyph.style.display = "block";
       moveGlyph(x, y);
     };
     const hideGlyph = () => {
       glyph.style.display = "none";
     };
+    // While a modifier arms a gesture but no button is down, ride its affordance glyph next to the
+    // cursor — mirroring the mouse-down options: Ctrl/⌘ = free-look (eye), Shift = move (move). A drag
+    // owns the glyph; off-canvas or unmodified, nothing shows.
+    const applyModifierGlyph = () => {
+      if (drag) return;
+      if (overCanvas && ctrlHeld) showGlyph("look", hoverX, hoverY);
+      else if (overCanvas && shiftHeld) showGlyph("pan", hoverX, hoverY);
+      else hideGlyph();
+    };
 
     // Cursor: browser-standard hand — grabbing (closed) while moving / free-looking, grab (open) while
     // Ctrl/⌘ is armed pre-drag; default otherwise. The eye / move glyph rides alongside (above).
     const applyCursor = () => {
-      dom.style.cursor = drag === "look" || drag === "pan" ? "grabbing" : ctrlHeld ? "grab" : "";
+      dom.style.cursor =
+        drag && dragMoved
+          ? "grabbing" // closed hand only once a drag is actually under way (not on bare press)
+          : shiftHeld || ctrlHeld
+            ? "grab" // open hand: a modified drag is armed (Shift = move, Ctrl/⌘ = free-look)
+            : "pointer"; // default affordance: pointer finger
     };
     // R: reset to the default camera pose + projection + fov (the old double-click "home"), tweened.
     const resetToDefault = () => {
@@ -357,6 +394,13 @@ export function StarryNightV2Model() {
       if (e.key === "Control" || e.key === "Meta") {
         ctrlHeld = true;
         applyCursor();
+        applyModifierGlyph();
+        return;
+      }
+      if (e.key === "Shift") {
+        shiftHeld = true;
+        applyCursor();
+        applyModifierGlyph();
         return;
       }
       if (
@@ -373,6 +417,11 @@ export function StarryNightV2Model() {
       if (e.key === "Control" || e.key === "Meta") {
         ctrlHeld = false;
         applyCursor();
+        applyModifierGlyph();
+      } else if (e.key === "Shift") {
+        shiftHeld = false;
+        applyCursor();
+        applyModifierGlyph();
       }
     };
 
@@ -398,6 +447,9 @@ export function StarryNightV2Model() {
       if (e.button !== 0 && e.button !== 2) return; // LMB or RMB only
       lastX = e.clientX;
       lastY = e.clientY;
+      dragDownX = e.clientX;
+      dragDownY = e.clientY;
+      dragMoved = false;
       if ((e.button === 0 && (e.ctrlKey || e.metaKey)) || (e.buttons & 0b11) === 0b11) {
         // Free-look: Ctrl/⌘ + LMB, OR the LMB+RMB chord (both buttons down).
         engageLook(e.clientX, e.clientY);
@@ -408,8 +460,9 @@ export function StarryNightV2Model() {
         if (!groundHit(cam, dom, e.clientX, e.clientY, _grab)) drag = null;
         else showGlyph("pan", e.clientX, e.clientY);
       } else {
-        // Orbit + tilt (bare LMB) around the clicked ground point; drop a pin there (the view
-        // rotates around it, no re-centre).
+        // Orbit + tilt (bare LMB) around the clicked ground point. The pin marking the pivot is
+        // DEFERRED: captured here, revealed in onMove only once the drag actually moves — so a single
+        // click or a double-click (zoom-in) never flashes it. The view rotates around it, no re-centre.
         drag = "orbit";
         hideGlyph(); // orbit uses the pin marker, not a cursor glyph
         if (groundHit(cam, dom, e.clientX, e.clientY, _cur)) {
@@ -418,14 +471,15 @@ export function StarryNightV2Model() {
           // point outside the city's ground.
           const cl = clampToCity(_cur.x, _cur.z);
           _grab.set(cl.x, 0, cl.z); // reuse _grab as the orbit pivot for the gesture
-          setPin([cl.x, 0, cl.z]);
+          orbitPinPending = [cl.x, 0, cl.z]; // shown once the drag begins (see onMove)
         } else {
           // No ground hit (aimed at the sky) — orbit the current target, kept within the disc.
           c.getTarget(_grab);
           const cl = clampToCity(_grab.x, _grab.z);
           _grab.set(cl.x, _grab.y, cl.z);
-          setPin(null);
+          orbitPinPending = null;
         }
+        setPin(null); // no pin until the drag begins
         // Seed the carried tilt axis from the current view heading (kept valid through the pole).
         c.getPosition(_eye);
         c.getTarget(_tgt);
@@ -438,12 +492,26 @@ export function StarryNightV2Model() {
     };
 
     const onMove = (e: PointerEvent) => {
+      if (e.pointerType === "mouse") {
+        hoverX = e.clientX;
+        hoverY = e.clientY;
+        overCanvas = true;
+      }
       const c = controls.current;
-      if (!c || !drag) return;
+      if (!c || !drag) {
+        if (e.pointerType === "mouse") applyModifierGlyph(); // armed-modifier glyph rides the cursor
+        return;
+      }
       // LMB+RMB chord → free-look, even if the second button arrives after the first (some browsers
       // report it as a move with buttons updated rather than a fresh pointerdown).
       if (drag !== "look" && (e.buttons & 0b11) === 0b11) {
         engageLook(e.clientX, e.clientY);
+        applyCursor();
+      }
+      // Promote to a "real" drag once the pointer crosses a small jitter threshold: only THEN does the
+      // grabbing cursor (and the orbit pivot pin) appear — a click / double-click never gets here.
+      if (!dragMoved && Math.abs(e.clientX - dragDownX) + Math.abs(e.clientY - dragDownY) > 3) {
+        dragMoved = true;
         applyCursor();
       }
       if (drag === "look" || drag === "pan") moveGlyph(e.clientX, e.clientY);
@@ -454,11 +522,48 @@ export function StarryNightV2Model() {
       lastY = e.clientY;
 
       if (drag === "pan") {
-        // SKYLINE MODE: vertical drag reframes the city on screen (Screen Y) instead of panning depth —
-        // there's no ground depth to pan when looking flat. Drag down → city moves down (grab metaphor),
-        // so the empty ground below the skyline slides off the bottom. Horizontal drag still pans
-        // laterally below (the synthesized groundHit ignores screen-Y, so only dx moves the rig). The
-        // focal-offset lens-shift is applied per-frame in useFrame; here we just move the target value.
+        const st = useSceneStore.getState();
+        // PERSPECTIVE SKYLINE reframe ("reframing the camera"): RMB is a pure translation of the COUPLED
+        // rig — vertical drag pedestals the eye AND focal together (an altitude move, floored at
+        // MIN_EYE_Y so it never sinks below ~1m); horizontal drag trucks laterally. No tilt change (that
+        // is LMB) and no lens-shift — camera and focal move as one, reframing the city in the window.
+        // Drag DOWN pulls the world down (grab metaphor) so the eye rises; drag UP lowers you toward
+        // street level (removing the empty foreground). Ortho keeps its focal-offset lens-shift below.
+        if (isSkylineMode(cam) && st.projection === "perspective") {
+          c.getPosition(_eye);
+          c.getTarget(_tgt);
+          const rect = dom.getBoundingClientRect();
+          const pc = cam as THREE.PerspectiveCamera;
+          const halfH = _eye.distanceTo(_tgt) * Math.tan((pc.fov * DEG) / 2); // focal-plane half-height
+          const wantY = _eye.y + (dy / Math.max(1, rect.height)) * 2 * halfH; // drag down → rise
+          const eyeY = Math.max(MIN_EYE_Y, wantY);
+          const upDY = eyeY - _eye.y; // applied (floored) vertical shift, shared by eye + focal
+          // Lateral truck: the synth ground pick ignores screen-Y when flat, so prev→curr is dx only.
+          let latX = 0;
+          let latZ = 0;
+          if (
+            groundHit(cam, dom, e.clientX - dx, e.clientY - dy, _grab) &&
+            groundHit(cam, dom, e.clientX, e.clientY, _cur)
+          ) {
+            _delta.subVectors(_grab, _cur);
+            const cl = clampToCity(_tgt.x + _delta.x, _tgt.z + _delta.z);
+            latX = cl.x - _tgt.x;
+            latZ = cl.z - _tgt.z;
+          }
+          void c.setLookAt(
+            _eye.x + latX,
+            eyeY,
+            _eye.z + latZ,
+            _tgt.x + latX,
+            _tgt.y + upDY,
+            _tgt.z + latZ,
+            false,
+          );
+          return;
+        }
+        // ORTHO SKYLINE: vertical drag reframes via the Screen-Y focal-offset lens-shift (applied per-
+        // frame in useFrame); horizontal drag pans laterally below. Ortho ignores the eye's along-view
+        // position, so a lens-shift reads identically to a camera move — and keeps the full range.
         if (isSkylineMode(cam)) {
           const h = Math.max(1, dom.getBoundingClientRect().height);
           skylineScreenY.current = THREE.MathUtils.clamp(
@@ -484,6 +589,12 @@ export function StarryNightV2Model() {
         const adz = cl.z - _tgt.z;
         void c.setLookAt(_eye.x + adx, _eye.y, _eye.z + adz, cl.x, _tgt.y, cl.z, false);
       } else if (drag === "orbit") {
+        // Reveal the pivot pin the moment the drag becomes "real" (same threshold as the cursor) — a
+        // click or double-click never moves far enough, so the pin never flashes on a zoom-in.
+        if (orbitPinPending && dragMoved) {
+          setPin(orbitPinPending);
+          orbitPinPending = null;
+        }
         // Rotate BOTH eye and target around the pivot _grab, so the pivot's screen position holds
         // (no re-centre). Yaw around world-up (stable at any tilt). Tilt around a CARRIED horizontal
         // axis (kept valid through the pole).
@@ -581,10 +692,12 @@ export function StarryNightV2Model() {
 
     const onUp = (e: PointerEvent) => {
       if (drag === "orbit") setPin(null); // pin only lives for the duration of the orbit drag
-      hideGlyph(); // clear the look / move glyph on release
+      orbitPinPending = null;
+      dragMoved = false;
       drag = null;
       dom.releasePointerCapture?.(e.pointerId);
-      applyCursor(); // grabbing → grab (if Ctrl still held) → default
+      applyCursor(); // grabbing → grab (if a modifier is still held) → pointer
+      applyModifierGlyph(); // keep the eye / move glyph if Ctrl / Shift is still held, else hide
     };
 
     // Double-click = zoom in toward the clicked point (~40% closer). Perspective: position-only (keeps
@@ -615,6 +728,13 @@ export function StarryNightV2Model() {
     // Suppress the browser context menu so RMB-drag can pan.
     const onContext = (e: Event) => e.preventDefault();
 
+    // Pointer left the canvas — drop the armed-modifier glyph (a drag keeps its own glyph via capture).
+    const onLeave = () => {
+      overCanvas = false;
+      if (!drag) hideGlyph();
+    };
+
+    dom.style.cursor = "pointer"; // default affordance before any interaction
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
     dom.addEventListener("pointerdown", onDown);
@@ -623,6 +743,7 @@ export function StarryNightV2Model() {
     dom.addEventListener("dblclick", onDbl);
     dom.addEventListener("wheel", onWheel, { passive: false });
     dom.addEventListener("contextmenu", onContext);
+    dom.addEventListener("pointerleave", onLeave);
     return () => {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
@@ -632,6 +753,7 @@ export function StarryNightV2Model() {
       dom.removeEventListener("dblclick", onDbl);
       dom.removeEventListener("wheel", onWheel);
       dom.removeEventListener("contextmenu", onContext);
+      dom.removeEventListener("pointerleave", onLeave);
       dom.style.cursor = "";
       glyph.remove();
     };
@@ -677,14 +799,19 @@ export function StarryNightV2Model() {
     const c = controls.current;
     if (!c || mode !== "orbit") return;
 
-    // Skyline Mode framing (v2-local Screen Y): a vertical focal-offset lens-shift that moves the city
-    // up/down on screen without re-aiming. Target = the RMB-set rest point in Skyline, else 0 (centred).
-    // Eased every frame so entering/leaving Skyline glides instead of snapping the city. Ortho-only, so
-    // the focal-plane half-height is the ortho half-height (orthoSize · framing) — matches the shared
-    // Screen-Y convention (offY = (frac − 0.5) · 2 · halfH) without touching the persisted Screen Y.
+    // Skyline framing — ORTHO ONLY (perspective reframes by physically moving the coupled rig; see the
+    // pan handler). At full ortho the eye's along-view position is invisible, so a vertical focal-offset
+    // lens-shift slides the city up/down on screen without re-aiming — the v2-local "Screen Y". Target =
+    // the RMB-set rest point in Skyline, else 0 (centred); eased so entering/leaving glides. Gated on the
+    // blend being full ortho (not just projection === ortho) so a mid-morph frame never pedestals a
+    // still-perspective view. Doesn't touch the persisted Screen Y.
     const st = useSceneStore.getState();
-    const oeff = st.orthoSize * orbitFramingFactor((state.camera as THREE.PerspectiveCamera).aspect);
-    const targetOffY = isSkylineMode(state.camera) ? (skylineScreenY.current - 0.5) * 2 * oeff : 0;
+    const pcam = state.camera as THREE.PerspectiveCamera;
+    let targetOffY = 0;
+    if (st.projectionBlend >= 0.9999 && isSkylineMode(pcam)) {
+      const oeff = st.orthoSize * orbitFramingFactor(pcam.aspect);
+      targetOffY = (skylineScreenY.current - 0.5) * 2 * oeff;
+    }
     const curOffY = c.getFocalOffset(_focalOff).y;
     const nextOffY = curOffY + (targetOffY - curOffY) * 0.35;
     if (Math.abs(nextOffY - curOffY) > 0.5) c.setFocalOffset(0, nextOffY, 0, false);

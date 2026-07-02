@@ -26,6 +26,7 @@ Map of Content for architectural and product decisions. Each decision is an atom
 - [[decision-moon-celestial-model]] — Moon parametrised as azimuth / elevation / distance, not cylinder coords
 - [[decision-orbit-spherical-controls]] — Spherical orbit + drag / pinch / wheel controls on the canvas
 - [[decision-camera-model-registry]] — **Pluggable camera-model registry (2026-06-28):** a settings-selectable layer that mounts one of N self-contained "3 Cs" controller components into the orbit slot; the existing controller registered unmodified as the default "map" model, first new model "drift" (ambient cinematic orbit). Sidesteps the in-flight monolith; coexists with [[plan-drei-camera-migration]]
+- [[decision-perspective-skyline-reframe]] — **Perspective Skyline reframes the coupled rig (2026-07-02):** at a flat aim `eye.y == target.y`, so RMB up/down pedestals eye + focal together (a physical altitude move, floored ~1 m) rather than a lens fake or auto-descent; LMB pin-fixed rotate around a synthesised mid-map pivot; ortho keeps its focal-offset lens-shift
 - [[decision-github-pages-deploy]] — Static export to GitHub Pages on every push to main
 - [[decision-merge-styles]] — **Merge styles:** feature → dev `--no-ff` (bubble per feature), dev → main `--ff-only` + tag (main = bookmark on dev, zero graph lanes); direct-to-main = CI/hotfix only, back-merged same session
 - [[decision-debug-panel-architecture]] — IA + master toggle + save / reset / copy values *(superseded)*
