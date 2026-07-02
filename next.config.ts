@@ -21,8 +21,11 @@ try {
   /* no node_modules yet — nothing to special-case */
 }
 
-// Security headers — served on Vercel deploys only. GitHub Pages (static
-// export) ignores headers(); Next also warns if headers() is set alongside
+// Security headers — only take effect when the app is SERVED by a Node host
+// (`next start` or a platform runtime). The production deployment is GitHub
+// Pages static export, which ignores headers() entirely — so today this block
+// is inert future-proofing (corrected 2026-07-02; the repo never adopted
+// Vercel despite the PRD). Next also warns if headers() is set alongside
 // output:"export", so the block is skipped for static builds and in dev
 // (HMR/turbopack need eval + relaxed policies).
 const securityHeaders = [

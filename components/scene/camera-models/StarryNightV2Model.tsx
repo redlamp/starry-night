@@ -198,6 +198,13 @@ function zoomAtCursor(
     c.getPosition(_eye);
     c.getTarget(_tgt);
     _cur.copy(_eye).addScaledVector(_ray.ray.direction, _eye.distanceTo(_tgt));
+  } else {
+    // Low-angle guard: a cursor near the horizon hits the ground plane way off the map
+    // (hit distance grows ~1/sin(tilt)), and zooming about that far pivot lunges the
+    // camera across the city. Orbit and pan already clamp their picks to the disc
+    // (groundHit's stated contract); zoom was the one caller that didn't.
+    const cl = clampToCity(_cur.x, _cur.z);
+    _cur.set(cl.x, 0, cl.z);
   }
   zoomAboutPoint(c, _cur, k, smooth);
 }

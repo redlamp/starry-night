@@ -13,7 +13,7 @@
 
 ## Stack
 
-See `docs/PRD.md` §4 for the full list. Core: Next.js (App Router), Bun, Three.js + R3F + drei, Zustand, seedrandom, Tailwind + shadcn/ui (M4), Vercel.
+See `docs/PRD.md` §4 for the full list. Core: Next.js (App Router), Bun, Three.js + R3F + drei, Zustand, seedrandom, Tailwind + shadcn/ui (M4). Hosting: GitHub Pages static export (`.github/workflows/deploy-pages.yml`) — the PRD's Vercel entry was planned, never adopted (corrected 2026-07-02).
 
 ## Architectural rules (see `docs/PRD.md` §5)
 
@@ -39,7 +39,7 @@ If a request conflicts with the PRD or a `decision-*.md` note, surface the confl
 - Default: do not commit — leave changes uncommitted and report what changed. Commit only on a user signal ("ship it", "commit it", "next", "move on", "yes, commit").
 - Merge & push run on the same kind of signal as commit — no preview-and-wait dance. A clear ship signal ("ship it", "ready to share", "push it", "merge to main / dev") authorizes the whole chain through push; take it end-to-end without re-confirming each step.
 - Only `--force` / `-f` is hard-gated by `.claude/hooks/git-gate.sh` (narrowed 2026-06-14 — it used to block merge/push too). Surface a force op, get explicit approval, then prefix that one command with `GIT_GATE_BYPASS=1`.
-- Pushing `main` deploys via Vercel (outward-facing), so don't push it without a signal that covers shipping ("ship / share / deploy / push" all do).
+- Pushing `main` deploys via the GitHub Pages workflow (outward-facing), so don't push it without a signal that covers shipping ("ship / share / deploy / push" all do).
 
 ### End-of-turn structure
 
@@ -56,4 +56,4 @@ Lead with the next concrete step for the current concept (what to try next, desi
 
 - Formal artefacts (specs, PRDs) → `docs/`.
 - Project state, decisions, daily logs → `wiki/` per `wiki/CLAUDE.md`.
-- Code comments only when the *why* is non-obvious.
+- Code comments only when the _why_ is non-obvious.
