@@ -131,8 +131,8 @@ Outcomes added 2026-07-02 (worked through on the `fable` branch; commits noted):
 | 4 | Rename/document `randomSeed()` as UI-only | 10 min | Determinism guard-rail | **Done** `f07385e` → `randomSeedForReroll` |
 | 5 | Wiki: retag 2 superseded decisions, link 9 orphans | 30 min | Vault navigability | **Done** `c46f05e` — all 48 notes MOC-reachable |
 | 6 | Fix 2 lib→components metadata imports | 30 min | Clean layering | **Done** `c3c4d7c` — catalog + CamReadout moved to lib, shims keep importers |
-| 7 | Split sceneStore into sub-files (one logical store) | 1–2 h | Readability | In progress (agent) |
-| 8 | Split CameraPanel into `panels/` | 2–4 h | Maintainability | In progress (agent; camera work settled 2026-07-02) |
+| 7 | Split sceneStore into sub-files (one logical store) | 1–2 h | Readability | **Done** `ce27c09` — 1717 → 1097 + types/defaults/migration; registry stayed (would cycle) |
+| 8 | Split CameraPanel into `panels/` | 2–4 h | Maintainability | **Done** `1b33fcb` — 3273 → 811 + 11 panels; differential DOM probe pre/post identical |
 | 9 | PRD refresh or successor state-of-codebase note | 1–2 h | Onboarding accuracy | **Done** `a2f546a` — status banner + annotations |
 | 10 | Profile tile-cull recompaction; hysteresis if justified | 3–5 h | Conditional | **Measured, no action**: 0% still / 1.33% drift-orbit recompaction frames (`scripts/profileTileCull.ts`, `f0b25ba`) |
 | 11 | CSP headers | 30 min | Optional hardening | **Done** `7b33780` — Vercel-served only |
