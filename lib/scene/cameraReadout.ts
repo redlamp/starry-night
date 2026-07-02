@@ -1,6 +1,22 @@
-import type { CamReadout } from "@/components/scene/CameraDiagram";
 import { useSceneStore } from "@/lib/state/sceneStore";
 import { orbitFramingFactor } from "@/lib/scene/aspectFraming";
+
+export type CamReadout = {
+  elev: number; // degrees above the horizon
+  dist: number; // camera → focal (world units)
+  focalY: number; // focal-point height above ground
+  camY: number; // camera eye height above ground
+  parallel: boolean; // true = (mostly) orthographic — drives the label
+  frustumHh: number; // world half-height of the view at the focal plane
+  blend: number; // 0 = perspective, 1 = orthographic (the live morph amount)
+  // Low-angle framing + tilt-throttle gauges (the app provides these; the lab omits them → no gauges).
+  screenY?: number; // current eased pivot, fraction up from the bottom
+  screenYBase?: number; // the "normal" Screen-Y endpoint
+  screenYLow?: number; // the low-angle Screen-Y endpoint
+  tilt?: number; // current rotate/tilt speed multiplier, 0..1
+  frameBelow?: number; // elevation (deg) below which the framing eases in
+  tiltBelow?: number; // elevation (deg) below which the tilt throttle eases in
+};
 
 // Live camera-rig readout for the side-view diagram (components/scene/CameraDiagram). DreiSceneControls
 // (the Map model) writes this object every frame — a plain mutable singleton, never React state — and

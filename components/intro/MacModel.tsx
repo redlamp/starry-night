@@ -8,7 +8,7 @@ import type { ThreeElements } from "@react-three/fiber";
 import { ScreenCity } from "./ScreenCity";
 import { setCursorZone, isDoubleTap } from "./stageCursor";
 import { useSceneStore } from "@/lib/state/sceneStore";
-import { randomSeed } from "@/lib/seed/rng";
+import { randomSeedForReroll } from "@/lib/seed/rng";
 import { asset } from "@/lib/basePath";
 import {
   SCREEN_COLOR_MODE_INDEX,
@@ -284,7 +284,7 @@ function AppleBadge() {
         if (d && Math.hypot(e.clientX - d.x, e.clientY - d.y) > BADGE_DRAG_SLOP) return;
         // a fresh city deserves a fresh boot: reroll the seed AND replay the
         // wake sequence (windows + stars), like the screensaver restarting
-        setSeed(randomSeed());
+        setSeed(randomSeedForReroll());
         playAllIntros();
       }}
       onDoubleClick={(e) => e.stopPropagation()}

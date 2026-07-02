@@ -2,12 +2,14 @@
 tags:
   - domain/3d
   - domain/visual-language
-  - status/adopted
+  - status/superseded
   - scope/m2
   - origin/external-research
 ---
 
 # Decision: Streets-First City Generation
+
+**Superseded by** [[decision-grid-first-city-generation]].
 
 **Date**: 2026-05-26
 **Status**: adopted — all 20 grilling branches resolved; implementation staged across multiple PRs.

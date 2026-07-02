@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSceneStore } from "@/lib/state/sceneStore";
-import { randomSeed } from "@/lib/seed/rng";
+import { randomSeedForReroll } from "@/lib/seed/rng";
 import { cn } from "@/lib/utils";
 
 /**
@@ -112,7 +112,7 @@ export function SeedControls() {
         {copied ? "Copied" : "Copy URL"}
       </button>
       <button
-        onClick={() => setSeed(randomSeed())}
+        onClick={() => setSeed(randomSeedForReroll())}
         className={cn(
           "rounded bg-white/10 px-2 py-0.5 hover:bg-white/20",
           expanded ? "inline-flex" : "hidden",

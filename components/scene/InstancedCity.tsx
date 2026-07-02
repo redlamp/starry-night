@@ -107,8 +107,29 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
   const frustum = useRef(new THREE.Frustum());
   const visible = useRef<number[]>([]);
   const lastSigs = useRef<string[]>([]);
+
+  // Uniform write cache: skip per-frame GPU uniform writes when settings-driven
+  // values haven't changed. Scalar cache keyed by uniform name; object caches
+  // hold the last-seen store object reference (setters always spread → new ref).
+  // All refs allocated once; no per-frame allocations.
+  const uCache = useRef<Record<string, number>>({});
+  // windowAA / windowSimple / windowProfiles / debug: store setters always
+  // produce a NEW top-level object via spread (sceneStore.ts lines 1304, 1312,
+  // 1316), so a reference comparison is sufficient to detect any change.
+  const lastWindowAA = useRef<object | null>(null);
+  const lastWindowSimple = useRef<object | null>(null);
+  const lastWindowProfiles = useRef<object | null>(null);
+  const lastDebug = useRef<object | null>(null);
   useEffect(() => {
     lastSigs.current = entries.map(() => "");
+    // Rebuilt meshes carry creation-DEFAULT uniforms (not store values), so a
+    // stale cache would skip the writes that sync them to live settings.
+    // Clearing forces one full write pass on the next frame.
+    uCache.current = {};
+    lastWindowAA.current = null;
+    lastWindowSimple.current = null;
+    lastWindowProfiles.current = null;
+    lastDebug.current = null;
   }, [entries]);
 
   // Facade recolor: sliders rewrite the per-instance colour SOURCE arrays
@@ -178,50 +199,107 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
     // #55 debug readout (Debug View → Tile culling) — cheap counter writes.
     const total = entries.reduce((n, e) => n + e.partition.total, 0);
     reportTileCull("buildings", tilesVis, tilesTot, hidden ? 0 : drawn, total, s.lod.tiles);
+    // --- Settings-driven uniforms: compute gated values once, then write to
+    // all 7 archetype materials only when a value has changed. All meshes receive
+    // identical values, so a single shared cache suffices (no per-mesh cache needed).
+    const uc = uCache.current;
+
+    // windowAA: spread-setter → new object reference on any change (line 1304).
+    const wa = s.windowAA;
+    const waChanged = wa !== lastWindowAA.current;
+    if (waChanged) lastWindowAA.current = wa;
+
+    // windowSimple: spread-setter → new object reference on any change (line 1312).
+    const ws = s.windowSimple;
+    const wsChanged = ws !== lastWindowSimple.current;
+    if (wsChanged) lastWindowSimple.current = ws;
+
+    // windowProfiles: spread-setter → new top-level object on any change (line 1316).
+    const profiles = s.windowProfiles;
+    const profChanged = profiles !== lastWindowProfiles.current;
+    if (profChanged) lastWindowProfiles.current = profiles;
+
+    // debug: spread-setter → new object on any change (standard Zustand pattern).
+    const dbg = s.debug;
+    const dbgChanged = dbg !== lastDebug.current;
+    if (dbgChanged) lastDebug.current = dbg;
+
+    // Derived scalars from settings objects (computed once per frame, written only on change).
+    const aaEdge = wa.edge;
+    const lodNear = wa.lodEnabled ? wa.lodNear : 1e9;
+    const lodRange = wa.lodRange;
+    const stagger = wa.stagger;
+    const curtainShare = wa.curtain;
+    const curtainWidth = wa.curtainW;
+    const lightsOn = s.windowLights ? 1 : 0;
+    const windowMode = s.windowMode === "advanced" ? 1 : 0;
+    const tint = dbg.buildingTint;
+    const debugMode = tint.enabled ? (TINT_MODE_IDX[tint.mode] ?? 0) : 0;
+    const debugTint = tint.enabled ? tint.intensity : 0;
+    const wire = dbg.renderModes.buildings === "wireframe";
+    const wireframe = wire ? 1 : 0;
+    const orthoBlend = s.projectionBlend;
+    const orthoChanged = orthoBlend !== uc.orthoBlend;
+    const lightsChanged = lightsOn !== uc.lightsOn;
+    const modeChanged = windowMode !== uc.windowMode;
+
     for (const m of meshes) {
       const mat = m.material as THREE.ShaderMaterial;
+
+      // Always write: camera position changes every frame during any camera motion.
       mat.uniforms.uIntroCityCenter.value.set(s.orbit.centerX, 0, s.orbit.centerZ);
       mat.uniforms.uIntroMaxRadius.value = maxRadius;
       const camPos = s.cameraLive.position;
       mat.uniforms.uIntroCamPos.value.set(camPos[0], camPos[1], camPos[2]);
-      mat.uniforms.uOrthoBlend.value = s.projectionBlend;
-      const wa = s.windowAA;
-      mat.uniforms.uAaEdge.value = wa.edge;
-      // LOD off → push the distance-wash threshold to infinity so `lod` stays 0
-      // everywhere (full per-cell window detail to the horizon).
-      mat.uniforms.uLodNear.value = wa.lodEnabled ? wa.lodNear : 1e9;
-      mat.uniforms.uLodRange.value = wa.lodRange;
-      mat.uniforms.uStagger.value = wa.stagger;
-      mat.uniforms.uCurtainShare.value = wa.curtain;
-      mat.uniforms.uCurtainWidth.value = wa.curtainW;
-      mat.uniforms.uLightsOn.value = s.windowLights ? 1 : 0;
-      mat.uniforms.uWindowMode.value = s.windowMode === "advanced" ? 1 : 0;
-      mat.uniforms.uWinSimpleWMin.value = s.windowSimple.wMin;
-      mat.uniforms.uWinSimpleWMax.value = s.windowSimple.wMax;
-      mat.uniforms.uWinSimpleHMin.value = s.windowSimple.hMin;
-      mat.uniforms.uWinSimpleHMax.value = s.windowSimple.hMax;
-      const profiles = s.windowProfiles;
-      const fwMin = mat.uniforms.uWinFracWMin.value as number[];
-      const fwMax = mat.uniforms.uWinFracWMax.value as number[];
-      const fhMin = mat.uniforms.uWinFracHMin.value as number[];
-      const fhMax = mat.uniforms.uWinFracHMax.value as number[];
-      for (let k = 0; k < ARCHETYPE_ORDER.length; k++) {
-        const p = profiles[ARCHETYPE_ORDER[k]];
-        fwMin[k] = p.wMin;
-        fwMax[k] = p.wMax;
-        fhMin[k] = p.hMin;
-        fhMax[k] = p.hMax;
+
+      // Gated scalars: skip GPU uniform write when value is unchanged. The
+      // *Changed flags are computed BEFORE the mesh loop and the caches update
+      // AFTER it — updating a cache mid-loop would starve meshes 2..7.
+      if (orthoChanged) mat.uniforms.uOrthoBlend.value = orthoBlend;
+      if (waChanged) {
+        // LOD off → push the distance-wash threshold to infinity so `lod` stays 0
+        // everywhere (full per-cell window detail to the horizon).
+        mat.uniforms.uAaEdge.value = aaEdge;
+        mat.uniforms.uLodNear.value = lodNear;
+        mat.uniforms.uLodRange.value = lodRange;
+        mat.uniforms.uStagger.value = stagger;
+        mat.uniforms.uCurtainShare.value = curtainShare;
+        mat.uniforms.uCurtainWidth.value = curtainWidth;
+      }
+      if (lightsChanged) mat.uniforms.uLightsOn.value = lightsOn;
+      if (modeChanged) mat.uniforms.uWindowMode.value = windowMode;
+      if (wsChanged) {
+        mat.uniforms.uWinSimpleWMin.value = ws.wMin;
+        mat.uniforms.uWinSimpleWMax.value = ws.wMax;
+        mat.uniforms.uWinSimpleHMin.value = ws.hMin;
+        mat.uniforms.uWinSimpleHMax.value = ws.hMax;
+      }
+      if (profChanged) {
+        const fwMin = mat.uniforms.uWinFracWMin.value as number[];
+        const fwMax = mat.uniforms.uWinFracWMax.value as number[];
+        const fhMin = mat.uniforms.uWinFracHMin.value as number[];
+        const fhMax = mat.uniforms.uWinFracHMax.value as number[];
+        for (let k = 0; k < ARCHETYPE_ORDER.length; k++) {
+          const p = profiles[ARCHETYPE_ORDER[k]];
+          fwMin[k] = p.wMin;
+          fwMax[k] = p.wMax;
+          fhMin[k] = p.hMin;
+          fhMax[k] = p.hMax;
+        }
       }
       // Debug view (Slice A tint + Slice B wireframe) — uniform / flag only.
       // enabled gates the wash (the retired "off" mode, 2026-06-08); a disabled
       // tint forces mode 0 so the shader takes its plain branch.
-      const tint = s.debug.buildingTint;
-      mat.uniforms.uDebugMode.value = tint.enabled ? (TINT_MODE_IDX[tint.mode] ?? 0) : 0;
-      mat.uniforms.uDebugTint.value = tint.enabled ? tint.intensity : 0;
-      const wire = s.debug.renderModes.buildings === "wireframe";
-      mat.wireframe = wire;
-      mat.uniforms.uWireframe.value = wire ? 1 : 0;
+      if (dbgChanged) {
+        mat.uniforms.uDebugMode.value = debugMode;
+        mat.uniforms.uDebugTint.value = debugTint;
+        mat.wireframe = wire;
+        mat.uniforms.uWireframe.value = wireframe;
+      }
     }
+    uc.orthoBlend = orthoBlend;
+    uc.lightsOn = lightsOn;
+    uc.windowMode = windowMode;
   });
 
   return (

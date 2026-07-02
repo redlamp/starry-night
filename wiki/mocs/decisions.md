@@ -9,10 +9,14 @@ Map of Content for architectural and product decisions. Each decision is an atom
 - [[decision-1-unit-equals-1-meter]] — World units = meters, with derived archetype dimensions
 - [[decision-district-based-city-layout]] — City composes from rotated districts with own grid angles and characters *(superseded)*
 - [[decision-streets-first-city-generation]] — Streets-first hybrid: highways and arterials drawn first, districts form between them, blocks/lots emerge from network closure *(road mechanism partially superseded)*
+- [[plan-grid-first-rework]] — (superseded) staged implementation plan for the grid-first rework (flag-gated lattice.ts stages 0–7, A/B harness on `/plan`); superseded when tensor-field roads became the default model
 - [[decision-grid-first-city-generation]] — Grid-first rework: coherent grid substrate, patchwork via center-anchored orientation field, continuous seam streets, arterials = heavy grid lines (kills the radial starburst), zone-driven hybrid fill *(geometry superseded)*
 - [[decision-tensor-field-roads]] — **Tensor-field streets-first (current model):** roads = streamlines of a grid-basis tensor field, criss-cross arterials + streets, one promoted highway, occasional roundabout, buildings line the frontage; default city generator
 - [[decision-network-aligned-districts]] — **Districts follow the arterials:** raster flood-fill with arterials/highway as hard walls (minor streets passable), slivers merged; replaces free-floating Voronoi on the tensor path; one shared field across buildings + all overlays
 - [[decision-additive-growth-citygen]] — **Additive growth = generate-at-max + crop:** fix gen at a constant MAX extent (extent-invariant core), drive the size slider as a crop only, materialise buildings lazily within the crop; sidesteps road seam-coherence / global district re-ranking; unblocks the #14 scale spike
+- [[plan-city-scale-migration]] — #14 implementation checklist (generate-at-max + crop migration); Steps 1–4 shipped, Steps 5–7 remaining (camera/fog follow crop, lazy materialisation, traffic)
+- [[plan-metro-suburbs-highways]] — metro scale + radial density gradient + kidney-bean suburbs + highway corridor model + interchange geometry; staged plan driving #13/#14
+- [[plan-suburb-node-fields]] — population-node radial fields for suburban roads (#49); all five stages shipped 2026-06-08
 - [[decision-density-gradient-bands]] — **District count + absolute-distance character (#49):** sliver-merge keyed to an absolute min area (count scales with the city), high-rise pinned to a compact CBD core by absolute distance (Clark 1951) with residential as the bulk; fixed the Metro "84–98% high-rise slab"
 - [[decision-tensor-field-morphology]] — **Tensor field morphology menu (#51):** each seed draws one family — warp / shear / calm-grid / tamed-radial — all as grid-basis layouts with per-position θ; kills the "dull linear / common bullseye" read; per-seed `deviation` for spread
 - [[decision-sketch-tensor-field]] — **Sketch-driven tensor fields (#40):** a photo of a hand-hatched sketch becomes the street plan — structure-tensor recovery, doubled-angle bilinear sampling, ink = footprint mask; registry mirrors the store, one inert tracer param, `/tensor` lab as the bridge
@@ -31,10 +35,12 @@ Map of Content for architectural and product decisions. Each decision is an atom
 - [[decision-merge-styles]] — **Merge styles:** feature → dev `--no-ff` (bubble per feature), dev → main `--ff-only` + tag (main = bookmark on dev, zero graph lanes); direct-to-main = CI/hotfix only, back-merged same session
 - [[decision-debug-panel-architecture]] — IA + master toggle + save / reset / copy values *(superseded)*
 - [[decision-settings-sidebar-shadcn]] — shadcn rewire: full-height sidebar, multi-open accordion, light/grey/dark theme tokens
+- [[settings-ia-evaluation]] — settings-panel IA evaluation + five layout proposals (A–E); Option D built and reverted; v2 direction = vertical grouped + Basic/Advanced toggle + search
 
 ## Intro exploration
 
 - [[decision-intro-mac-viewport]] — **/intro Mac stage + screen pipeline:** Daz 128K model (CC BY-NC, screen mesh separable), native-512×342 multi-pass chain (process-then-filter kills dither moiré), screen-blend over the model's glass, halation in-chain / bloom quality-gated, orientation-derived snow-globe coupling, dblclick gesture map
+- [[intro-exploration-merge-handoff]] — (historical) merge plan for `intro/exploration` → `dev`; resolved 2026-06-07, branch torn down; kept for the conflict-reconciliation record and post-merge follow-ups (#71–#74)
 - [[plan-drei-camera-migration]] — **planned:** unify `/` + `/intro` camera controls on drei `<CameraControls>` (camera-controls); fly via a small custom drag-look controller (desktop-only, no stock drei fits); auto-revolution + projection + north-up roll stay thin custom; phased behind the Zustand store; `gate1` unaffected
 - [[camera-controls-feature-matrix]] — **living reference:** behavior-by-behavior matrix (old `/` custom vs drei out-of-the-box vs our thin layer) for the camera migration; single source of truth, kept current before/during implementation
 - [[camera-tuning-notes]] — **open:** running tuning issues for the drei camera bridge (Focal Y = focal height, ortho parity, touch refinements) + done-this-session log; on `feat/drei-camera-tuning`

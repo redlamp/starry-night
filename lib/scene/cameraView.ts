@@ -12,7 +12,7 @@ import {
   type RenderMode,
 } from "@/lib/state/sceneStore";
 import { maxHalfExtent } from "@/lib/seed/topology";
-import { getCameraModelMeta } from "@/components/scene/camera-models/catalog";
+import { getCameraModelMeta } from "@/lib/scene/cameraModelCatalog";
 import type { CameraModelId } from "@/lib/state/sceneStore";
 
 // Apply a model's transport default (Map paused, Drift/Turntable playing) on a

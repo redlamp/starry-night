@@ -2,12 +2,14 @@
 tags:
   - domain/3d
   - domain/visual-language
-  - status/adopted
+  - status/superseded
   - scope/m2
   - origin/external-research
 ---
 
 # Decision: Grid-First City Generation
+
+**Superseded by** [[decision-tensor-field-roads]] (geometry-ownership: road-network + block-formation mechanism replaced by tensor-field streamlines; the grid-first grammar and patchwork orientation model informed the tensor approach).
 
 **Date**: 2026-05-30
 **Status**: adopted — grilled end-to-end on 2026-05-30 (see [[2026-05-30]]); informed by two agent workflows (current-generator map + grid-technique design/judge panel).

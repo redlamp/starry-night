@@ -4,6 +4,22 @@ A modernized homage to the Berkeley Systems After Dark "Starry Night" screensave
 
 ---
 
+## Status
+
+This is the v1 spec, written May 2026. v1 shipped. The living record of what was actually
+built - architecture decisions, superseded approaches, and current system state - is in
+`wiki/notes/fable-codebase-survey-2026-07-02.md` and the `wiki/notes/decision-*.md` notes
+linked throughout this document.
+
+| Milestone           | Status                                                                                  |
+| ------------------- | --------------------------------------------------------------------------------------- |
+| M1: The still frame | Shipped and exceeded - slow orbit motion was added on top of the still-frame foundation |
+| M2: Window dynamics | Infrastructure ready (shader flicker, data textures); not yet fully user-facing         |
+| M3: Distant orbit   | Shipped - pluggable camera-model registry with 7 models, drone-style default            |
+| M4: Seed sharing    | Shipped - URL seed parameter, SeedControls UI with shadcn/ui                            |
+
+---
+
 ## 1. Overview and Goals
 
 A web-based ambient cityscape that evokes the original Starry Night screensaver while introducing depth, atmosphere, and a sense of inhabited place. The city sits beneath a star-filled sky, lit from within by warm residential and cool commercial windows, with a slow distant orbit that rewards long looks rather than demanding attention.
@@ -77,13 +93,15 @@ Socioeconomic layers, each with its own character:
 
 ### City generation grammar
 
+_Superseded: see `wiki/notes/decision-tensor-field-roads.md` (tensor-field streamlines replaced the grid/streets-first approach) and `wiki/notes/decision-additive-growth-citygen.md` (generate-at-max-extent + crop replaced fixed building count and extent; metro-scale ~1,500 buildings per seed)._
+
 The city is generated **streets-first**: highway and arterial network is laid down before buildings exist; the network's geometric closure defines where districts can form; buildings emerge inside lots bounded by streets — never overlapping, always respecting per-zone setbacks and per-district height caps.
 
 The acceptance criterion is that **different seeds produce categorically different cities**, not variations of one template. A viewer doing a slow orbit can read a city's identity at a glance: its network topology, where its centres of gravity lie, what its dominant heights look like.
 
 **Plausibility lives at the grammar level** — real urban-planning topologies (Crossroads / Bypass / Ring / Ring + radial), real zoning categories (Residential / Commercial / Industrial / Mixed-use), real silhouette templates (Tabletop / Wedding cake / Twin-peak / Landmark). Street-level details (sidewalks, awnings, ground-floor commerce, fenestration) are deliberately out of scope until a closer-camera milestone is scheduled.
 
-Determinism is preserved end-to-end: every choice (topology, district placement, character, silhouette, zone, block, lot, building) derives from sub-seeds of the master seed. *Districts* and *Roads* debug panels expose generator state in a verifiable way.
+Determinism is preserved end-to-end: every choice (topology, district placement, character, silhouette, zone, block, lot, building) derives from sub-seeds of the master seed. _Districts_ and _Roads_ debug panels expose generator state in a verifiable way.
 
 Full grammar: `wiki/notes/decision-streets-first-city-generation.md`. Glossary: `CONTEXT.md`.
 
@@ -96,7 +114,7 @@ Full grammar: `wiki/notes/decision-streets-first-city-generation.md`. Glossary: 
 - **Styling**: Tailwind CSS, shadcn/ui (deferred install — first UI lands at M4)
 - **3D**: Three.js, React Three Fiber, drei
 - **Animation**: R3F `useFrame` + drei tweening for v1. GSAP reserved for later motion-graphics work (vignettes, curated camera moments) if needed.
-- **State**: Zustand (runtime-only state — see §5 *Runtime vs derived state*)
+- **State**: Zustand (runtime-only state — see §5 _Runtime vs derived state_)
 - **RNG**: seedrandom (deterministic procedural generation)
 - **Linting**: ESLint + Prettier baseline
 - **Hosting**: Vercel
@@ -128,11 +146,11 @@ One master seed derives sub-seeds for each subsystem. This lets layout stay cons
 
 ```ts
 type CitySeed = {
-  master: string
-  layout: number     // derived
-  lighting: number   // derived
-  residents: number  // derived, unused in v1
-}
+  master: string;
+  layout: number; // derived
+  lighting: number; // derived
+  residents: number; // derived, unused in v1
+};
 ```
 
 Sub-seeds are derived deterministically from the master so the same string always produces the same city.
@@ -152,7 +170,7 @@ Scene
 └── Camera (aspect-bucket framing, static in v1)
 ```
 
-Windows are *not* React components or geometry. Each building face's fragment shader computes window grid from UVs and samples per-window state (lit / unlit / flicker phase) from a small data texture. One quad face renders hundreds of windows at zero extra draw-call cost.
+Windows are _not_ React components or geometry. Each building face's fragment shader computes window grid from UVs and samples per-window state (lit / unlit / flicker phase) from a small data texture. One quad face renders hundreds of windows at zero extra draw-call cost.
 
 ### Rendering strategy
 
@@ -167,10 +185,10 @@ Windows are *not* React components or geometry. Each building face's fragment sh
 
 Two kinds of state exist in this project, and they live in different places:
 
-| Kind | Examples | Where it lives |
-|---|---|---|
+| Kind                  | Examples                                                                                    | Where it lives                                                                                      |
+| --------------------- | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | **Derived from seed** | Building positions, archetype assignment, which windows start lit, per-window flicker phase | Computed when seed changes, held in refs / memos / instanced buffer attributes. **Not** in Zustand. |
-| **Runtime / UI** | Current seed string, lighting mode, quality tier, paused flag, settings-panel open? | Zustand. |
+| **Runtime / UI**      | Current seed string, lighting mode, quality tier, paused flag, settings-panel open?         | Zustand.                                                                                            |
 
 Rule of thumb: if the same seed always produces the same value, it's derived — recompute it, do not store it. Storing derived state wastes memory and tempts mutation that breaks the determinism guarantee.
 
@@ -186,6 +204,8 @@ A core promise of seed-based generation: share the URL, your friend sees the sam
 Implementation: a fragment shader uniform `uTime` (seconds since page load) combined with the per-window seed produces brightness via `mix(low, high, noise(seed + uTime * frequency))`. Same inputs, same output, every frame, every viewer. Per-session phase offset on page load is fine — pattern parity matters, frame-by-frame parity across sessions does not.
 
 ### Aspect-bucket camera
+
+_Superseded in part: see `wiki/notes/decision-camera-model-registry.md`. The aspect-bucket framing logic still holds, but the camera is now a pluggable registry of 7 named models (Drift, Turntable, Map, Top-down, Fly, Drei-MapControls, Drei-CameraControls) with a drone-style ambient default ("Drift"), not a simple orbit._
 
 Canvas is fullbleed and resizable; the viewer can be ultrawide, square, or portrait. Camera framing snaps to one of three aspect buckets (landscape / square / portrait), each with its own framing variant:
 
@@ -297,6 +317,8 @@ Captured for future iterations, with reasoning:
 
 ## 8. Open Questions
 
+_Some starting values below have since been resolved. See `wiki/notes/fable-codebase-survey-2026-07-02.md` for current numbers. Notable: building count is metro-scale (~1,500 per seed) per `wiki/notes/decision-additive-growth-citygen.md`; sky color resolved to deep navy; visual style committed to Streets of Rage direction per `wiki/notes/decision-streets-of-rage-direction.md`._
+
 Practical starting values picked for v1; bigger decisions deferred until the still-frame review surfaces direction.
 
 - Visual style commitment: deferred — decide after still-frame review of sampled seeds
@@ -312,6 +334,7 @@ Practical starting values picked for v1; bigger decisions deferred until the sti
 This project will lean on Claude Code subagents and tools when they help. Starting modestly — solo greenfield work has limited surface area for agents — but baking in patterns now.
 
 **Available now**
+
 - `cavecrew-investigator` — locate symbols / files / call sites once codebase is non-trivial
 - `cavecrew-builder` — surgical 1-2 file edits
 - `cavecrew-reviewer` — diff / file review
@@ -319,12 +342,14 @@ This project will lean on Claude Code subagents and tools when they help. Starti
 - `Explore` — open-ended codebase searches
 
 **Likely useful at M2+**
+
 - Parallel agents for content scaling: one per building archetype, one per shader variant
 - Snapshot diff agent: given two PNGs from `/samples/`, describe perceptual difference — useful for regressions and style A/B
 - Vercel Agent for automated PR review on preview deploys
 - `Plan` agent to break M2-M4 into ticket-sized chunks once M1 lands
 
 **Not yet useful**
+
 - Full multi-agent fan-out — project too small until codebase has multiple independent surfaces
 
 ## 10. Documentation conventions
@@ -333,4 +358,4 @@ This PRD lives in `docs/` (formal artefact). Project state, decisions, daily log
 
 ---
 
-*This PRD is a living document. Update as decisions are made and as the v1 still frame review surfaces new direction.*
+_This PRD is a living document. Update as decisions are made and as the v1 still frame review surfaces new direction._

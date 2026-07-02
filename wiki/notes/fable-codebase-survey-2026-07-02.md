@@ -120,19 +120,26 @@ lockfile and standard actions. Both `dangerouslySetInnerHTML` uses and the one
 
 ## Prioritized action backlog
 
-| # | Action | Effort | Payoff |
-| --- | --- | --- | --- |
-| 1 | Move `shadcn` to devDependencies | 5 min | Clears high-severity audit chain |
-| 2 | Cache/skip unchanged uniforms in InstancedCity | 1–2 h | 5–10% frame CPU |
-| 3 | Drop redundant `.slice()` in Traffic.tsx | 30 min | Alloc churn per seed change |
-| 4 | Rename/document `randomSeed()` as UI-only | 10 min | Determinism guard-rail |
-| 5 | Wiki: retag 2 superseded decisions, link 9 orphans | 30 min | Vault navigability |
-| 6 | Fix 2 lib→components metadata imports | 30 min | Clean layering |
-| 7 | Split sceneStore into sub-files (one logical store) | 1–2 h | Readability |
-| 8 | Split CameraPanel into `panels/` | 2–4 h | Maintainability — *after camera work settles* |
-| 9 | PRD refresh or successor state-of-codebase note | 1–2 h | Onboarding accuracy |
-| 10 | Profile tile-cull recompaction; hysteresis if justified | 3–5 h | Conditional |
-| 11 | CSP headers | 30 min | Optional hardening |
+Outcomes added 2026-07-02 (worked through on the `fable` branch; commits noted):
+
+| # | Action | Effort | Payoff | Outcome |
+| --- | --- | --- | --- | --- |
+| 0 | Window moiré on band floors (user report) | — | Visual correctness | **Fixed** `ee9e79f` — see [[window-lod-moire-diagnosis]] |
+| 1 | Move `shadcn` to devDependencies | 5 min | Clears high-severity audit chain | **Done** `c031436` (+ missing typecheck script) |
+| 2 | Cache/skip unchanged uniforms in InstancedCity | 1–2 h | 5–10% frame CPU | **Done** `759b94f` (agent draft had 2 correctness bugs: mid-loop cache starving meshes 2–7, stale cache after rebuild — both fixed in review) |
+| 3 | Drop redundant `.slice()` in Traffic.tsx | 30 min | Alloc churn per seed change | **Invalid** — slices are load-bearing: `compactVisible` needs src/dst distinct or compaction corrupts tiles (`tileCull.ts:138`) |
+| 4 | Rename/document `randomSeed()` as UI-only | 10 min | Determinism guard-rail | **Done** `f07385e` → `randomSeedForReroll` |
+| 5 | Wiki: retag 2 superseded decisions, link 9 orphans | 30 min | Vault navigability | **Done** `c46f05e` — all 48 notes MOC-reachable |
+| 6 | Fix 2 lib→components metadata imports | 30 min | Clean layering | **Done** `c3c4d7c` — catalog + CamReadout moved to lib, shims keep importers |
+| 7 | Split sceneStore into sub-files (one logical store) | 1–2 h | Readability | **Done** `ce27c09` — 1717 → 1097 + types/defaults/migration; registry stayed (would cycle) |
+| 8 | Split CameraPanel into `panels/` | 2–4 h | Maintainability | **Done** `1b33fcb` — 3273 → 811 + 11 panels; differential DOM probe pre/post identical |
+| 9 | PRD refresh or successor state-of-codebase note | 1–2 h | Onboarding accuracy | **Done** `a2f546a` — status banner + annotations |
+| 10 | Profile tile-cull recompaction; hysteresis if justified | 3–5 h | Conditional | **Measured, no action**: 0% still / 1.33% drift-orbit recompaction frames (`scripts/profileTileCull.ts`, `f0b25ba`) |
+| 11 | CSP headers | 30 min | Optional hardening | **Done** `7b33780` — Vercel-served only |
+
+Git-hygiene follow-ups (2026-07-02 history review, parked per user): resolve
+`feature/road-reveal` (15 unmerged commits), delete merged
+`origin/feat/drei-camera-tuning`, add CI typecheck/lint/build gate.
 
 Items 8 and anything touching `camera-models/`, `CameraControls.tsx`,
 `DreiSceneControls.tsx`, or `CameraPanel.tsx` should wait for the in-flight camera

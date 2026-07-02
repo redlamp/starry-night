@@ -9,6 +9,9 @@ reference notes that describe how the running system behaves.
 - [[fable-codebase-survey-2026-07-02]] — full-project survey (architecture,
   performance, security, determinism, docs health) with a prioritized action
   backlog; determinism contract verified end-to-end
+- [[window-lod-moire-diagnosis]] — NVIDIA-visible window speckle root-caused to
+  a lodNear default regression + band-pane jitter under sub-resolution; probe
+  table, capture metric, and the shipped fix
 
 ## Rendering & animation
 
@@ -16,6 +19,8 @@ reference notes that describe how the running system behaves.
   trace → scout glint → cascade → intro gate → settled), the glossary
   (wavefront, tip, stagger window, straggler tail, radial orphan…), and the
   tuning quick-reference
+- [[plan-device-adaptive-quality]] — device-tier detection + adaptive DPR/crop wiring plan (#53); most infra already exists but is default-off and unverified
+- [[plan-fog-extent-adaptation]] — fog/haze adapt to focal distance + displayed extent (#54); fixes fog keying off city centre instead of the orbit target
 
 ## Camera & controls
 
@@ -30,6 +35,7 @@ reference notes that describe how the running system behaves.
   controller (side-view diagram, Focal-Y detent, touch pin-scrub, default focal-Y) and the one gap left
 - [[camera-controls-feature-matrix]] — behavior-by-behavior migration matrix
 - [[plan-drei-camera-migration]] — the drei `<CameraControls>` migration plan
+- [[camera-rotate-tilt-foray]] — (historical) grab-to-rotate + tilt-gate experiments, all reverted; records why each approach failed and the fundamental grab-vs-tilt geometric tension
 
 ## Load-bearing decisions (see [[decisions]] for the full list)
 
