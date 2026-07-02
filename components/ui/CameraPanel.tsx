@@ -682,7 +682,7 @@ export function CameraPanel() {
         <div className="border-foreground/10 flex shrink-0 flex-wrap items-center gap-2 border-t px-4 pt-3 pb-3">
           <div className="flex flex-wrap items-center gap-1.5">
             <FooterAction
-              label="Reset"
+              label="Reset All"
               onClick={() => resetCamera()}
               className="text-rose-400 hover:bg-rose-400/10 hover:text-rose-300"
             >
@@ -690,7 +690,7 @@ export function CameraPanel() {
             </FooterAction>
             {savedExists && (
               <FooterAction
-                label="Revert"
+                label="Revert to Saved"
                 onClick={() => revertToSaved()}
                 className="text-amber-400 hover:bg-amber-400/10 hover:text-amber-300"
               >
@@ -713,7 +713,7 @@ export function CameraPanel() {
           <div className="ml-auto flex flex-wrap items-center gap-1.5">
             <CopyButton />
             <FooterAction
-              label="Save"
+              label="Save Settings"
               variant="default"
               onClick={() => {
                 saveCurrentAsDefault();
@@ -781,7 +781,7 @@ function CopyButton() {
           <Button
             variant="secondary"
             size="icon"
-            aria-label="Copy"
+            aria-label="Copy Settings"
             onClick={onCopy}
             className="bg-foreground/10 text-foreground hover:bg-foreground/20"
           >
@@ -793,7 +793,9 @@ function CopyButton() {
           </Button>
         }
       />
-      <TooltipContent side="top">{copyState === "copied" ? "Copied!" : "Copy"}</TooltipContent>
+      <TooltipContent side="top">
+        {copyState === "copied" ? "Copied!" : "Copy Settings"}
+      </TooltipContent>
     </Tooltip>
   );
 }
