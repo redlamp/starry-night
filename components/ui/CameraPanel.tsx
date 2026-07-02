@@ -3,6 +3,7 @@
 import {
   useEffect,
   useState,
+  type ReactNode,
 } from "react";
 import {
   useSceneStore,
@@ -676,60 +677,93 @@ export function CameraPanel() {
         </div>
       </ScrollArea>
 
-      {/* Sticky footer */}
-      <div className="border-foreground/10 flex shrink-0 flex-wrap items-center gap-2 border-t px-4 pt-3 pb-3">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <Button
-            variant="ghost"
-            onClick={() => resetCamera()}
-            title="Reset every setting to its built-in default"
-            className="text-rose-400 hover:bg-rose-400/10 hover:text-rose-300"
-          >
-            <RotateCcw className="size-4" />
-            Reset
-          </Button>
-          {savedExists && (
-            <Button
-              variant="ghost"
-              onClick={() => revertToSaved()}
-              title="Restore the last config you Saved"
-              className="text-amber-400 hover:bg-amber-400/10 hover:text-amber-300"
+      {/* Sticky footer — icon-only actions; labels live in the tooltips. */}
+      <TooltipProvider>
+        <div className="border-foreground/10 flex shrink-0 flex-wrap items-center gap-2 border-t px-4 pt-3 pb-3">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <FooterAction
+              label="Reset"
+              onClick={() => resetCamera()}
+              className="text-rose-400 hover:bg-rose-400/10 hover:text-rose-300"
             >
-              <Undo2 className="size-4" />
-              Revert
-            </Button>
-          )}
-          {savedExists && (
-            <Button
-              variant="ghost"
+              <RotateCcw className="size-4" />
+            </FooterAction>
+            {savedExists && (
+              <FooterAction
+                label="Revert"
+                onClick={() => revertToSaved()}
+                className="text-amber-400 hover:bg-amber-400/10 hover:text-amber-300"
+              >
+                <Undo2 className="size-4" />
+              </FooterAction>
+            )}
+            {savedExists && (
+              <FooterAction
+                label="Clear Saved"
+                onClick={() => {
+                  clearSavedConfig();
+                  setSavedExists(false);
+                }}
+                className="text-foreground/55 hover:bg-foreground/10 hover:text-foreground/80"
+              >
+                <Trash2 className="size-4" />
+              </FooterAction>
+            )}
+          </div>
+          <div className="ml-auto flex flex-wrap items-center gap-1.5">
+            <CopyButton />
+            <FooterAction
+              label="Save"
+              variant="default"
               onClick={() => {
-                clearSavedConfig();
-                setSavedExists(false);
+                saveCurrentAsDefault();
+                setSavedExists(true);
               }}
-              title="Delete the saved default from this browser. Reloads will boot the built-in default."
-              className="text-foreground/55 hover:bg-foreground/10 hover:text-foreground/80"
+              className="bg-emerald-400 text-black hover:bg-emerald-400/90"
             >
-              <Trash2 className="size-4" />
-              Clear Saved
-            </Button>
-          )}
+              <Save className="size-4" />
+            </FooterAction>
+          </div>
         </div>
-        <div className="ml-auto flex flex-wrap items-center gap-1.5">
-          <CopyButton />
-          <Button
-            onClick={() => {
-              saveCurrentAsDefault();
-              setSavedExists(true);
-            }}
-            title="Snapshot every current setting as the new Reset target"
-            className="bg-emerald-400 text-black hover:bg-emerald-400/90"
-          >
-            <Save className="size-4" />
-            Save
-          </Button>
-        </div>
-      </div>
+      </TooltipProvider>
     </div>
+  );
+}
+
+// One footer icon button + its hover/focus tooltip (action name only —
+// user 2026-07-02). base-ui's Trigger merges onto the Button via `render`
+// (same idiom as the gauge icons above) so we don't nest <button> in
+// <button>. aria-label mirrors the tooltip text.
+function FooterAction({
+  label,
+  onClick,
+  className,
+  variant = "ghost",
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  className?: string;
+  variant?: "ghost" | "default" | "secondary";
+  children: ReactNode;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            variant={variant}
+            size="icon"
+            aria-label={label}
+            onClick={onClick}
+            className={className}
+          >
+            {children}
+          </Button>
+        }
+      />
+      <TooltipContent side="top">{label}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -741,25 +775,26 @@ function CopyButton() {
     setTimeout(() => setCopyState("idle"), 1200);
   };
   return (
-    <Button
-      variant="secondary"
-      size="sm"
-      onClick={onCopy}
-      title="Copy every current setting as JSON to the clipboard"
-      className="bg-foreground/10 text-foreground hover:bg-foreground/20"
-    >
-      {copyState === "copied" ? (
-        <>
-          <Check className="size-4" />
-          Copied
-        </>
-      ) : (
-        <>
-          <Copy className="size-4" />
-          Copy
-        </>
-      )}
-    </Button>
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            variant="secondary"
+            size="icon"
+            aria-label="Copy"
+            onClick={onCopy}
+            className="bg-foreground/10 text-foreground hover:bg-foreground/20"
+          >
+            {copyState === "copied" ? (
+              <Check className="size-4 text-emerald-400" />
+            ) : (
+              <Copy className="size-4" />
+            )}
+          </Button>
+        }
+      />
+      <TooltipContent side="top">{copyState === "copied" ? "Copied!" : "Copy"}</TooltipContent>
+    </Tooltip>
   );
 }
 
