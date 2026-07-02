@@ -110,9 +110,9 @@ const MODEL_GUIDE: Record<CameraModelId, GuideSpec> = {
   },
   snv2: {
     mouse: [
-      { icon: "mouse-left", motion: "all", label: "Orbit + Tilt" },
+      { icon: "mouse-left", motion: "all", label: "Rotate & Tilt" },
       { icon: "mouse-right", motion: "all", label: "Move", sub: "or Shift + LMB" },
-      { icon: "mouse-left", motion: "all", label: "Aim", sub: `${MOD} + LMB` },
+      { icon: "mouse-left", motion: "all", label: "Look Around", sub: `${MOD} + LMB` },
       { icon: "mouse-wheel", motion: "ud", label: "Zoom" },
       { icon: "mouse-left", badge: "×2", label: "Zoom in", sub: "double-click" },
     ],

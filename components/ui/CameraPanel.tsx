@@ -114,6 +114,7 @@ import {
 import { readTileCull, TILE_LAYERS } from "@/lib/scene/tileCullDebug";
 import { getLastDeviceFit } from "@/lib/perf/applyDeviceFit";
 import { tweenOrbitToDefault, tweenOrbitTowards, tweenProjectionTo } from "@/lib/scene/cameraView";
+import { cameraCommand } from "@/lib/scene/cameraCommand";
 
 function copyConfigToClipboard() {
   const s = useSceneStore.getState();
@@ -1024,6 +1025,42 @@ function OrbitSection() {
             max={24000}
             step={100}
             onChange={([minDist, maxDist]) => setSnv2({ minDist, maxDist })}
+          />
+          <ValueSlider
+            label="Orbit speed"
+            hint="Tilt / rotate drag sensitivity."
+            value={snv2.orbitSpeed}
+            min={0.25}
+            max={3}
+            step={0.05}
+            onChange={(orbitSpeed) => setSnv2({ orbitSpeed })}
+          />
+          <ValueSlider
+            label="Zoom speed"
+            hint="Mouse-wheel zoom rate."
+            value={snv2.zoomSpeed}
+            min={0.25}
+            max={3}
+            step={0.05}
+            onChange={(zoomSpeed) => setSnv2({ zoomSpeed })}
+          />
+          <ValueSlider
+            label="Tilt°"
+            hint="The camera's current tilt (look-down angle). 0 = parallel to the ground; 90 = straight down. Drag to re-pitch in place — azimuth, distance, and target hold. Clamped by Min tilt."
+            value={orbit.elevationDeg}
+            min={0}
+            max={90}
+            step={0.5}
+            onChange={(deg) => cameraCommand.setTiltDeg?.(deg, false)}
+          />
+          <ValueSlider
+            label="Min tilt°"
+            hint="Perspective: lowest the view tilts. 0 = level (no looking up); negative lets the camera drop to a low vantage looking up; positive keeps it angled down."
+            value={snv2.tiltFloorDeg}
+            min={-45}
+            max={60}
+            step={1}
+            onChange={(tiltFloorDeg) => setSnv2({ tiltFloorDeg })}
           />
         </SubGroup>
       )}

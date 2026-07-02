@@ -6,8 +6,12 @@ import { CameraControls, Html } from "@react-three/drei";
 import CameraControlsImpl from "camera-controls";
 import { MapPin } from "lucide-react";
 import * as THREE from "three";
-import { useSceneStore, DEFAULT_INTENT } from "@/lib/state/sceneStore";
+import { useSceneStore, DEFAULT_INTENT, DEFAULT_PROJECTION } from "@/lib/state/sceneStore";
 import { orbitFramingFactor } from "@/lib/scene/aspectFraming";
+import { markCameraActivity } from "@/lib/scene/cameraActivity";
+import { cameraCommand } from "@/lib/scene/cameraCommand";
+import { tweenProjectionTo } from "@/lib/scene/cameraView";
+import { isTypingTarget } from "@/lib/utils";
 import { CITY_SCALE, CITY_CENTER, CITY_TIERS } from "@/lib/seed/topology";
 import { GROUND_APRON_M } from "../Ground";
 import { writeOrbitPose } from "./orbitWriteback";
@@ -41,6 +45,13 @@ const MAX_STEP = 0.15; // per-move cap on the free-look servo (rad), guards agai
 const WHEEL_ZOOM_SPEED = 1.0; // GE/OrbitControls wheel curve: ~5% dolly per notch at speed 1
 const ORTHO_SIZE_MIN = 5 * CITY_SCALE; // faked-ortho zoom band (frustum half-height); matches Map
 const ORTHO_SIZE_MAX = 2000 * CITY_SCALE;
+// "Skyline Mode": ortho + aim within 2° of flat — looking at the city edge-on, like an architectural
+// elevation. In this regime (a) the ground pick is degenerate (near-parallel ray) so the orbit/pan
+// pivot is synthesized, and (b) RMB-vertical drag reframes the city on screen (a v2-local "Screen Y"
+// lens-shift) instead of panning depth, so the viewer can push the empty ground off the bottom.
+const SKYLINE_TILT_SIN = Math.sin(2 * DEG);
+const SKYLINE_SCREEN_Y_MIN = 0.05; // v2-local Skyline framing (fraction of the city's rest point up from bottom)
+const SKYLINE_SCREEN_Y_MAX = 0.95;
 
 const _eye = new THREE.Vector3();
 const _tgt = new THREE.Vector3();
@@ -60,6 +71,7 @@ const _plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 const _UP = new THREE.Vector3(0, 1, 0);
 const _camUp = new THREE.Vector3(); // ortho raycast: camera basis + world pose
 const _fwd = new THREE.Vector3();
+const _focalOff = new THREE.Vector3(); // Skyline Mode: live camera-controls focal offset (read-back)
 const _camWorld = new THREE.Vector3();
 const _anchor = new THREE.Vector3(); // ortho zoom: pre-zoom ground point under the cursor
 const A = CameraControlsImpl.ACTION;
@@ -87,6 +99,25 @@ function groundHit(
     _camUp.setFromMatrixColumn(cam.matrixWorld, 1);
     cam.getWorldDirection(_fwd);
     cam.getWorldPosition(_camWorld);
+    // SKYLINE MODE (ortho, aim ≤2° from flat): the cursor ray is near-parallel to the ground plane, so
+    // a true intersection lands at a huge distance (or misses) — an unstable, far-from-city pivot that's
+    // hard to control. The cursor carries no depth signal when flat (screen-vertical maps to world
+    // height, not ground depth), so synthesize the pick: place it at CITY_CENTER's forward depth (the
+    // "midway point of the ground"), slid along the horizontal right-axis to stay under the cursor
+    // horizontally. Callers' clampToCity keeps it on the disc. (Ortho only; perspective's far pick still
+    // points at a real vanishing direction, so its disc-clamp behaves.)
+    if (Math.abs(_fwd.y) <= SKYLINE_TILT_SIN) {
+      const fhLen = Math.hypot(_fwd.x, _fwd.z) || 1e-6;
+      const rhLen = Math.hypot(_right.x, _right.z) || 1e-6;
+      const fhx = _fwd.x / fhLen;
+      const fhz = _fwd.z / fhLen;
+      const rhx = _right.x / rhLen;
+      const rhz = _right.z / rhLen;
+      const f = (CITY_CENTER.x - _camWorld.x) * fhx + (CITY_CENTER.z - _camWorld.z) * fhz; // fwd depth of city centre
+      const s = nx * halfH * aspect; // lateral offset under the cursor (same scale as the ortho pick)
+      out.set(_camWorld.x + fhx * f + rhx * s, 0, _camWorld.z + fhz * f + rhz * s);
+      return true;
+    }
     _ray.ray.origin
       .copy(_camWorld)
       .addScaledVector(_right, nx * halfH * aspect)
@@ -182,6 +213,15 @@ function clampToCity(x: number, z: number): { x: number; z: number } {
   return _cc;
 }
 
+// Skyline Mode = ortho projection AND the aim within 2° of flat (looking at the city edge-on). Both
+// the synthesized ground pick (in groundHit) and the RMB-vertical Screen-Y reframe key off this. Single
+// source of truth for the threshold, shared by the pointer handlers and the per-frame framing.
+function isSkylineMode(camera: THREE.Camera): boolean {
+  if (useSceneStore.getState().projectionBlend < 0.9999) return false; // ortho only
+  camera.getWorldDirection(_fwd);
+  return Math.abs(_fwd.y) <= SKYLINE_TILT_SIN;
+}
+
 export function StarryNightV2Model() {
   const controls = useRef<CameraControlsImpl | null>(null);
   const cam = useThree((s) => s.camera);
@@ -191,6 +231,7 @@ export function StarryNightV2Model() {
   const lastWrite = useRef(0);
   const grabP = useRef(new THREE.Vector3()); // free-look grab handle (a fixed world point)
   const orbitAxis = useRef(new THREE.Vector3(1, 0, 0)); // carried tilt axis (stable through straight-down)
+  const skylineScreenY = useRef(0.5); // Skyline Mode framing: city rest point up from bottom (0.5 = centred)
   const [pin, setPin] = useState<[number, number, number] | null>(null); // shift-orbit pivot marker
 
   // v2 supports BOTH projections (perspective + faked-ortho via ProjectionBlender). Honor the current
@@ -282,7 +323,7 @@ export function StarryNightV2Model() {
       "position:fixed;left:0;top:0;z-index:9999;pointer-events:none;display:none;color:#7dd3fc;will-change:transform;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.85))";
     document.body.appendChild(glyph);
     const moveGlyph = (x: number, y: number) => {
-      glyph.style.transform = `translate3d(${x + 26}px, ${y + 24}px, 0)`; // down-right of the cursor
+      glyph.style.transform = `translate3d(${x + 16}px, ${y + 14}px, 0)`; // just down-right of the cursor
     };
     const showGlyph = (kind: "look" | "pan", x: number, y: number) => {
       glyph.innerHTML = kind === "look" ? EYE_SVG : MOVE_SVG;
@@ -298,10 +339,34 @@ export function StarryNightV2Model() {
     const applyCursor = () => {
       dom.style.cursor = drag === "look" || drag === "pan" ? "grabbing" : ctrlHeld ? "grab" : "";
     };
+    // R: reset to the default camera pose + projection + fov (the old double-click "home"), tweened.
+    const resetToDefault = () => {
+      const c = controls.current;
+      if (!c) return;
+      const s = useSceneStore.getState();
+      if (s.projection !== DEFAULT_PROJECTION) tweenProjectionTo(DEFAULT_PROJECTION); // default mode
+      if (s.cameraIntent.fov !== DEFAULT_INTENT.fov) s.setCameraIntent({ fov: DEFAULT_INTENT.fov });
+      drag = null;
+      setPin(null);
+      hideGlyph();
+      const [px, py, pz] = DEFAULT_INTENT.position;
+      const [tx, ty, tz] = DEFAULT_INTENT.lookAt;
+      void c.setLookAt(px, py, pz, tx, ty, tz, true); // smooth return to the hero pose
+    };
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Control" || e.key === "Meta") {
         ctrlHeld = true;
         applyCursor();
+        return;
+      }
+      if (
+        e.key.toLowerCase() === "r" &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.altKey &&
+        !isTypingTarget(e)
+      ) {
+        resetToDefault();
       }
     };
     const onKeyUp = (e: KeyboardEvent) => {
@@ -311,25 +376,31 @@ export function StarryNightV2Model() {
       }
     };
 
+    // Engage free-look: grab the map point under the cursor (or a point along the ray at the focal
+    // distance if the cursor is on the sky), then swing the view (onMove) so it stays under the cursor.
+    const engageLook = (clientX: number, clientY: number) => {
+      const c = controls.current;
+      if (!c) return;
+      drag = "look";
+      setPin(null);
+      const hit = groundHit(cam, dom, clientX, clientY, _cur);
+      c.getPosition(_eye);
+      c.getTarget(_tgt);
+      const d = _eye.distanceTo(_tgt);
+      if (hit) grabP.current.copy(_cur);
+      else grabP.current.copy(_eye).addScaledVector(_ray.ray.direction, d);
+      showGlyph("look", clientX, clientY);
+    };
+
     const onDown = (e: PointerEvent) => {
       const c = controls.current;
       if (!c || e.pointerType !== "mouse") return;
       if (e.button !== 0 && e.button !== 2) return; // LMB or RMB only
       lastX = e.clientX;
       lastY = e.clientY;
-      if (e.button === 0 && (e.ctrlKey || e.metaKey)) {
-        // Aim / free-look (Ctrl+LMB): grab the map point under the cursor, then swing the view
-        // (below) so that point stays under the cursor as you drag. Grab the ground; if the cursor
-        // is on the sky, grab a point along the ray at the current focal distance.
-        drag = "look";
-        setPin(null);
-        const hit = groundHit(cam, dom, e.clientX, e.clientY, _cur);
-        c.getPosition(_eye);
-        c.getTarget(_tgt);
-        const d = _eye.distanceTo(_tgt);
-        if (hit) grabP.current.copy(_cur);
-        else grabP.current.copy(_eye).addScaledVector(_ray.ray.direction, d);
-        showGlyph("look", e.clientX, e.clientY);
+      if ((e.button === 0 && (e.ctrlKey || e.metaKey)) || (e.buttons & 0b11) === 0b11) {
+        // Free-look: Ctrl/⌘ + LMB, OR the LMB+RMB chord (both buttons down).
+        engageLook(e.clientX, e.clientY);
       } else if (e.button === 2 || e.shiftKey) {
         // Move (RMB or Shift+LMB): grab the ground point under the cursor; keep it under the cursor.
         drag = "pan";
@@ -342,10 +413,17 @@ export function StarryNightV2Model() {
         drag = "orbit";
         hideGlyph(); // orbit uses the pin marker, not a cursor glyph
         if (groundHit(cam, dom, e.clientX, e.clientY, _cur)) {
-          _grab.copy(_cur); // reuse _grab as the orbit pivot for the gesture
-          setPin([_cur.x, _cur.y, _cur.z]);
+          // Pivot must lie within the ground disc — a click near the horizon hits the (infinite)
+          // ground plane far off the map, so clamp it to the disc edge; we never orbit around a
+          // point outside the city's ground.
+          const cl = clampToCity(_cur.x, _cur.z);
+          _grab.set(cl.x, 0, cl.z); // reuse _grab as the orbit pivot for the gesture
+          setPin([cl.x, 0, cl.z]);
         } else {
+          // No ground hit (aimed at the sky) — orbit the current target, kept within the disc.
           c.getTarget(_grab);
+          const cl = clampToCity(_grab.x, _grab.z);
+          _grab.set(cl.x, _grab.y, cl.z);
           setPin(null);
         }
         // Seed the carried tilt axis from the current view heading (kept valid through the pole).
@@ -362,18 +440,43 @@ export function StarryNightV2Model() {
     const onMove = (e: PointerEvent) => {
       const c = controls.current;
       if (!c || !drag) return;
+      // LMB+RMB chord → free-look, even if the second button arrives after the first (some browsers
+      // report it as a move with buttons updated rather than a fresh pointerdown).
+      if (drag !== "look" && (e.buttons & 0b11) === 0b11) {
+        engageLook(e.clientX, e.clientY);
+        applyCursor();
+      }
       if (drag === "look" || drag === "pan") moveGlyph(e.clientX, e.clientY);
+      markCameraActivity(drag === "orbit" ? "rotate" : drag === "pan" ? "pan" : "look");
       const dx = e.clientX - lastX;
       const dy = e.clientY - lastY;
       lastX = e.clientX;
       lastY = e.clientY;
 
       if (drag === "pan") {
-        // Ground-anchored: shift the whole rig so the grabbed world point returns under the cursor —
-        // but clamp the focal point to the city disc (shift the eye by the SAME clamped amount so the
-        // pose is preserved), so a pan stops at the boundary instead of wandering off-map into the void.
-        if (!groundHit(cam, dom, e.clientX, e.clientY, _cur)) return;
-        _delta.subVectors(_grab, _cur); // _grab.y === _cur.y === 0 → horizontal only
+        // SKYLINE MODE: vertical drag reframes the city on screen (Screen Y) instead of panning depth —
+        // there's no ground depth to pan when looking flat. Drag down → city moves down (grab metaphor),
+        // so the empty ground below the skyline slides off the bottom. Horizontal drag still pans
+        // laterally below (the synthesized groundHit ignores screen-Y, so only dx moves the rig). The
+        // focal-offset lens-shift is applied per-frame in useFrame; here we just move the target value.
+        if (isSkylineMode(cam)) {
+          const h = Math.max(1, dom.getBoundingClientRect().height);
+          skylineScreenY.current = THREE.MathUtils.clamp(
+            skylineScreenY.current - dy / h,
+            SKYLINE_SCREEN_Y_MIN,
+            SKYLINE_SCREEN_Y_MAX,
+          );
+        }
+        // INCREMENTAL ground-anchored pan: shift the rig by the ground delta between the PREVIOUS and
+        // CURRENT cursor, clamping the focal point to the city disc (eye shifts by the same clamped
+        // amount so the pose holds). Incremental (vs a fixed grab anchor) so the disc clamp engages
+        // gracefully at the boundary — no accumulated dead-zone where the cursor moves but the rig sticks.
+        if (
+          !groundHit(cam, dom, e.clientX - dx, e.clientY - dy, _grab) ||
+          !groundHit(cam, dom, e.clientX, e.clientY, _cur)
+        )
+          return;
+        _delta.subVectors(_grab, _cur); // prev→curr ground delta (horizontal)
         c.getPosition(_eye);
         c.getTarget(_tgt);
         const cl = clampToCity(_tgt.x + _delta.x, _tgt.z + _delta.z);
@@ -386,7 +489,9 @@ export function StarryNightV2Model() {
         // axis (kept valid through the pole).
         c.getPosition(_eye);
         c.getTarget(_tgt);
-        _q.setFromAxisAngle(_UP, -dx * ORBIT_RATE);
+        const cfg = useSceneStore.getState().snv2;
+        const orbitRate = ORBIT_RATE * cfg.orbitSpeed;
+        _q.setFromAxisAngle(_UP, -dx * orbitRate);
         _eye.sub(_grab).applyQuaternion(_q).add(_grab);
         _tgt.sub(_grab).applyQuaternion(_q).add(_grab);
         _dir.subVectors(_tgt, _eye);
@@ -400,8 +505,15 @@ export function StarryNightV2Model() {
         // elevation check let a single large step overshoot the pole and land on the far side at a
         // low-enough angle to pass — teleporting the eye across the top: the reported flip/flicker.)
         const lookDown = Math.asin(THREE.MathUtils.clamp(-_dir.y / dlen, -1, 1));
-        const desired = lookDown + dy * ORBIT_RATE; // drag down tilts toward straight-down
-        const applied = lookDown - Math.min(desired, MAX_ORBIT_EL); // == -dy·RATE until the cap
+        const desired = lookDown + dy * orbitRate; // drag down tilts toward straight-down
+        // Cap at straight-down; in PERSPECTIVE floor at the user's Min tilt (default 0° = level → no
+        // looking up; negative lets the camera drop into a low, upward vantage). ORTHO is hard-capped
+        // at 0° (parallel to ground) — never looks up (that would show the ground's underside).
+        const floor =
+          useSceneStore.getState().projection === "perspective"
+            ? cfg.tiltFloorDeg * DEG
+            : 0;
+        const applied = lookDown - THREE.MathUtils.clamp(desired, floor, MAX_ORBIT_EL);
         _q.setFromAxisAngle(orbitAxis.current, applied);
         _e2.copy(_eye).sub(_grab).applyQuaternion(_q).add(_grab);
         _t2.copy(_tgt).sub(_grab).applyQuaternion(_q).add(_grab);
@@ -453,6 +565,15 @@ export function StarryNightV2Model() {
         _right.crossVectors(_dir, _UP).normalize();
         _q.setFromAxisAngle(_right, dPitch);
         _look.copy(_dir).applyQuaternion(_q);
+        // Cap how far up the aim may go. PERSPECTIVE honours the user's Min tilt (0° = no looking up;
+        // negative lets it look up from a low vantage). ORTHO is hard-capped at 0° (parallel to ground)
+        // — never looks up (that would show the ground's underside).
+        const maxUpY =
+          st.projection === "perspective" ? -Math.sin(st.snv2.tiltFloorDeg * DEG) : 0;
+        if (_look.y > maxUpY) {
+          _look.y = maxUpY;
+          if (_look.lengthSq() > 1e-9) _look.normalize();
+        }
         if (Math.abs(_look.y) < MAX_VERT) _dir.copy(_look);
         void c.setTarget(_eye.x + _dir.x * d, _eye.y + _dir.y * d, _eye.z + _dir.z * d, false);
       }
@@ -471,6 +592,7 @@ export function StarryNightV2Model() {
     const onDbl = (e: MouseEvent) => {
       const c = controls.current;
       if (!c) return;
+      markCameraActivity("zoom");
       zoomAtCursor(c, cam, dom, e.clientX, e.clientY, 0.6, true);
       setPin(null);
     };
@@ -482,7 +604,11 @@ export function StarryNightV2Model() {
       const c = controls.current;
       if (!c) return;
       e.preventDefault();
-      const k = Math.pow(0.95, -e.deltaY * 0.01 * WHEEL_ZOOM_SPEED);
+      markCameraActivity("zoom");
+      const k = Math.pow(
+        0.95,
+        -e.deltaY * 0.01 * WHEEL_ZOOM_SPEED * useSceneStore.getState().snv2.zoomSpeed,
+      );
       zoomAtCursor(c, cam, dom, e.clientX, e.clientY, k, false);
     };
 
@@ -511,10 +637,58 @@ export function StarryNightV2Model() {
     };
   }, [gl, cam]);
 
+  // Imperative tilt command (Camera panel → this model). Re-pitch to an absolute look-down angle,
+  // keeping azimuth / distance / target, so the panel's "Tilt°" slider can set the pose the drag
+  // produces. Clamped to the mode's tilt floor (perspective: Min tilt; ortho: 0 = no looking up).
+  // The store's orbit.elevationDeg is updated in step so the slider tracks without waiting for the
+  // ~10/s pose write-back. Registered while this model is mounted; cleared on unmount.
+  useEffect(() => {
+    cameraCommand.setTiltDeg = (deg: number, smooth: boolean) => {
+      const c = controls.current;
+      if (!c) return;
+      c.getPosition(_eye);
+      c.getTarget(_tgt);
+      _dir.subVectors(_eye, _tgt); // eye offset from the target
+      const R = _dir.length() || 1e-3;
+      const az = Math.atan2(_dir.x, _dir.z); // preserve heading
+      const st = useSceneStore.getState();
+      const floorDeg = st.projection === "perspective" ? st.snv2.tiltFloorDeg : 0;
+      const elDeg = THREE.MathUtils.clamp(deg, floorDeg, MAX_ORBIT_EL / DEG);
+      const el = elDeg * DEG;
+      const rh = R * Math.cos(el); // horizontal radius at the new elevation
+      void c.setLookAt(
+        _tgt.x + rh * Math.sin(az),
+        _tgt.y + R * Math.sin(el),
+        _tgt.z + rh * Math.cos(az),
+        _tgt.x,
+        _tgt.y,
+        _tgt.z,
+        smooth,
+      );
+      st.setOrbit({ elevationDeg: elDeg });
+    };
+    return () => {
+      cameraCommand.setTiltDeg = null;
+    };
+  }, []);
+
   // ~10/s pose write-back so fog / moon-follow / panel readout track the live view.
   useFrame((state) => {
     const c = controls.current;
     if (!c || mode !== "orbit") return;
+
+    // Skyline Mode framing (v2-local Screen Y): a vertical focal-offset lens-shift that moves the city
+    // up/down on screen without re-aiming. Target = the RMB-set rest point in Skyline, else 0 (centred).
+    // Eased every frame so entering/leaving Skyline glides instead of snapping the city. Ortho-only, so
+    // the focal-plane half-height is the ortho half-height (orthoSize · framing) — matches the shared
+    // Screen-Y convention (offY = (frac − 0.5) · 2 · halfH) without touching the persisted Screen Y.
+    const st = useSceneStore.getState();
+    const oeff = st.orthoSize * orbitFramingFactor((state.camera as THREE.PerspectiveCamera).aspect);
+    const targetOffY = isSkylineMode(state.camera) ? (skylineScreenY.current - 0.5) * 2 * oeff : 0;
+    const curOffY = c.getFocalOffset(_focalOff).y;
+    const nextOffY = curOffY + (targetOffY - curOffY) * 0.35;
+    if (Math.abs(nextOffY - curOffY) > 0.5) c.setFocalOffset(0, nextOffY, 0, false);
+
     const tt = state.clock.elapsedTime;
     if (tt - lastWrite.current >= 0.1) {
       lastWrite.current = tt;

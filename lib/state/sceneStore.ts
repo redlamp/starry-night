@@ -164,10 +164,18 @@ export const DEFAULT_DRIFT: DriftConfig = {
 export interface Snv2Config {
   minDist: number; // closest the camera may get to its target (world metres)
   maxDist: number; // farthest the camera may get (world metres)
+  orbitSpeed: number; // tilt / rotate drag sensitivity (× base). 1 = default
+  zoomSpeed: number; // wheel zoom rate (× base). 1 = default
+  // Perspective: lowest the view may tilt. 0 = level (no looking up); negative lets the camera drop
+  // into a low vantage looking up; positive keeps it angled down. Down-tilt still caps near vertical.
+  tiltFloorDeg: number;
 }
 export const DEFAULT_SNV2: Snv2Config = {
   minDist: 1,
   maxDist: 20000,
+  orbitSpeed: 1,
+  zoomSpeed: 1,
+  tiltFloorDeg: 0,
 };
 
 // Turntable camera-model tunables (the showcase spin). Live-editable in
@@ -502,7 +510,7 @@ export const DEFAULT_CITY_SHAPE_SCALE = 1.0;
 export const DEFAULT_FLY_SPEED = 14;
 // 360 at the 3 km default notch (half 1500); base scales with the size knob via CITY_SCALE.
 export const DEFAULT_ORTHO_SIZE = 160 * CITY_SCALE;
-export const DEFAULT_PROJECTION = "orthographic" as const;
+export const DEFAULT_PROJECTION = "perspective" as "perspective" | "orthographic";
 
 // Perspective's default dolly (the hero-shot distance). 1500 × CITY_SCALE = 3000 at the
 // default tier. DISTANCE is the "slack" value: in perspective it sets the dolly, in
@@ -713,6 +721,7 @@ type SavedConfig = {
   // Optional so configs saved before the camera-model selector still load.
   cameraModel?: CameraModelId;
   drift?: DriftConfig;
+  snv2?: Snv2Config;
   turntable?: TurntableConfig;
   orbitPaused?: boolean;
   intro?: SceneState["intro"];
@@ -798,6 +807,7 @@ function readSavedConfig(): SavedConfig | null {
     if (parsed.stars) parsed.stars = { ...DEFAULT_STARS, ...parsed.stars };
     if (parsed.windowAA) parsed.windowAA = { ...DEFAULT_WINDOW_AA, ...parsed.windowAA };
     if (parsed.facade) parsed.facade = { ...DEFAULT_FACADE, ...parsed.facade };
+    if (parsed.snv2) parsed.snv2 = { ...DEFAULT_SNV2, ...parsed.snv2 };
     if (parsed.fog) {
       // 2026-06-06 fog re-anchor: old saves carry absolute near/far metres —
       // drop them and fill the new fractional brackets so a stale save can't
@@ -1331,7 +1341,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   cameraTweenRequest: null,
   projection: DEFAULT_PROJECTION,
   orthoSize: DEFAULT_ORTHO_SIZE,
-  projectionBlend: 1,
+  projectionBlend: DEFAULT_PROJECTION === "orthographic" ? 1 : 0,
   setProjection: (projection) => set({ projection }),
   setOrthoSize: (orthoSize) => set({ orthoSize }),
   setProjectionBlend: (projectionBlend) => set({ projectionBlend }),
