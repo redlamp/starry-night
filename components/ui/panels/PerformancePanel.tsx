@@ -74,7 +74,7 @@ export function ResolutionSection() {
             size="sm"
             className="bg-background/50 text-foreground hover:bg-background/60 w-full"
           >
-            <SelectValue />
+            <SelectValue>{(v) => labelOf(String(v))}</SelectValue>
           </SelectTrigger>
           <SelectContent>
             {opts.map((v) => (
