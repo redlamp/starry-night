@@ -9,6 +9,9 @@ reference notes that describe how the running system behaves.
 - [[fable-codebase-survey-2026-07-02]] — full-project survey (architecture,
   performance, security, determinism, docs health) with a prioritized action
   backlog; determinism contract verified end-to-end
+- [[window-lod-moire-diagnosis]] — NVIDIA-visible window speckle root-caused to
+  a lodNear default regression + band-pane jitter under sub-resolution; probe
+  table, capture metric, and the shipped fix
 
 ## Rendering & animation
 
