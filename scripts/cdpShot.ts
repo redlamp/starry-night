@@ -17,7 +17,7 @@
  */
 import { chromium } from "playwright";
 import { spawn, type ChildProcess } from "node:child_process";
-import { mkdtempSync, existsSync, writeFileSync } from "node:fs";
+import { mkdtempSync, existsSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -25,6 +25,9 @@ const PORT = 9333;
 const W = Number(process.env.SHOT_W ?? 1600);
 const H = Number(process.env.SHOT_H ?? 1000);
 const SETTLE = Number(process.env.SHOT_SETTLE ?? 3500);
+// Post-SHOT_SETUP wait (ms). Default 2200 suits uniform nudges; setups that
+// reload or re-generate the city (e.g. localStorage config + reload) need more.
+const SETUP_WAIT = Number(process.env.SHOT_SETUP_WAIT ?? 2200);
 const url = process.argv[2] ?? "http://localhost:7827/?capture=1&intro=instant";
 const out = process.argv[3] ?? "samples/_shot.png";
 
@@ -133,10 +136,14 @@ try {
     mobile: false,
   });
   await new Promise((res) => setTimeout(res, SETTLE));
-  const setup = process.env.SHOT_SETUP;
+  // SHOT_SETUP: inline JS; SHOT_SETUP_FILE: path to a JS file (for setups too
+  // large or quote-heavy for an env var, e.g. a full saved-config JSON).
+  const setup =
+    process.env.SHOT_SETUP ??
+    (process.env.SHOT_SETUP_FILE ? readFileSync(process.env.SHOT_SETUP_FILE, "utf8") : undefined);
   if (setup) {
     await client.send("Runtime.evaluate", { expression: setup, returnByValue: true });
-    await new Promise((res) => setTimeout(res, 2200)); // let the pose settle after the setup nudge
+    await new Promise((res) => setTimeout(res, SETUP_WAIT)); // let the pose settle after the setup nudge
   }
   const shot = await client.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false });
   writeFileSync(out, Buffer.from(String(shot.data), "base64"));
