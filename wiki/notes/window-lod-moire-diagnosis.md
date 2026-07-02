@@ -52,6 +52,13 @@ speckle per 1000 lit px):
 **Rerun the loop**: `bun scripts/cdpShot.ts "<url>?capture=1&intro=instant&seed=moire-hunt-1" out.png`
 then `bun scripts/moireMetric.ts out.png`.
 
-**Open** — user's live confirmation at their original close-range pose; if a
-mullion-class artifact survives there, next lever is a sub-pixel `fracW` snap
-to 1.0 on curtain floors (P2 suggests it won't be needed).
+**Round 2 (same day)** — user still saw artifacts at a **telephoto** pose
+(2.77 km, fov 24.6): windows there span 1–3 px, which is inherent binary
+cell-state aliasing the wash only partially covers. Reproduced exactly via
+saved-config injection (`SHOT_SETUP_FILE`). Ruled out with data: placement
+overlaps (scanCoplanar: 0 pairs at mm tolerance), z-fighting (13× depth-
+precision change via dynamic-near prototype → pattern unchanged), DPR
+resampling alone (persists at native DPR 2). Remaining work tracked in
+[#82](https://github.com/redlamp/starry-night/issues/82) — preferred fix is
+analytic cell supersampling in the transition band; the dynamic-near patch is
+preserved there for the separate grazing-facade precision ceiling.
