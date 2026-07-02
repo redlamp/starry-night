@@ -56,4 +56,4 @@ Lead with the next concrete step for the current concept (what to try next, desi
 
 - Formal artefacts (specs, PRDs) → `docs/`.
 - Project state, decisions, daily logs → `wiki/` per `wiki/CLAUDE.md`.
-- Code comments only when the *why* is non-obvious.
+- Code comments only when the _why_ is non-obvious.

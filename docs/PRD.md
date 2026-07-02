@@ -120,6 +120,7 @@ Full grammar: `wiki/notes/decision-streets-first-city-generation.md`. Glossary: 
 - **Hosting**: Vercel
 
   _Superseded: hosting is GitHub Pages static export (`.github/workflows/deploy-pages.yml`, `NEXT_OUTPUT_EXPORT`). Vercel was planned here but never adopted (corrected 2026-07-02)._
+
 - **Persistence (deferred)**: Supabase
 
 ### 4.1 Performance budget
