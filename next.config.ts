@@ -21,10 +21,41 @@ try {
   /* no node_modules yet — nothing to special-case */
 }
 
+// Security headers — served on Vercel deploys only. GitHub Pages (static
+// export) ignores headers(); Next also warns if headers() is set alongside
+// output:"export", so the block is skipped for static builds and in dev
+// (HMR/turbopack need eval + relaxed policies).
+const securityHeaders = [
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "X-Frame-Options", value: "DENY" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  {
+    key: "Content-Security-Policy",
+    value: [
+      "default-src 'self'",
+      "script-src 'self' 'unsafe-inline'",
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data: blob:",
+      "font-src 'self' data:",
+      "connect-src 'self' data: blob:",
+      "worker-src 'self' blob:",
+      "object-src 'none'",
+      "base-uri 'self'",
+      "frame-ancestors 'none'",
+    ].join("; "),
+  },
+];
+const serveHeaders = !isStatic && process.env.NODE_ENV === "production";
+
 const nextConfig: NextConfig = {
   reactStrictMode: false,
   ...(turbopackRoot ? { turbopack: { root: turbopackRoot } } : {}),
   ...(isStatic ? { output: "export" as const } : {}),
+  ...(serveHeaders
+    ? {
+        headers: async () => [{ source: "/(.*)", headers: securityHeaders }],
+      }
+    : {}),
   ...(basePath ? { basePath, assetPrefix: basePath } : {}),
   trailingSlash: true,
   images: { unoptimized: true },
