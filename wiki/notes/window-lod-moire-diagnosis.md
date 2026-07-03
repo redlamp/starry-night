@@ -33,15 +33,16 @@ same NVIDIA stack.
 `scripts/cdpShot.ts` + `scripts/moireMetric.ts`, metric = median-deviation
 speckle per 1000 lit px):
 
-| Probe | Overall | Top / Mid / Bottom | Verdict |
-| --- | --- | --- | --- |
-| Baseline (lodNear 0.4) | 429.9 | 454 / 480 / 390 | artifact |
-| P1: lodNear 0.12 | 265.7 | 231 / 209 / 312 | fixes far/mid but washes skyline flat |
-| P2: curtainW 1.0 | 427.7 | 453 / 479 / 387 | null — mullions not the driver |
-| P3: edge AA 2.2 | 375.8 | 402 / 457 / 315 | minor — edge AA can't fix cell-state noise |
-| **Fix** (lodNear 0.2 + jitter fade) | **369.0** | 390 / 358 / 378 | texture kept, crunch gone |
+| Probe                               | Overall   | Top / Mid / Bottom | Verdict                                    |
+| ----------------------------------- | --------- | ------------------ | ------------------------------------------ |
+| Baseline (lodNear 0.4)              | 429.9     | 454 / 480 / 390    | artifact                                   |
+| P1: lodNear 0.12                    | 265.7     | 231 / 209 / 312    | fixes far/mid but washes skyline flat      |
+| P2: curtainW 1.0                    | 427.7     | 453 / 479 / 387    | null — mullions not the driver             |
+| P3: edge AA 2.2                     | 375.8     | 402 / 457 / 315    | minor — edge AA can't fix cell-state noise |
+| **Fix** (lodNear 0.2 + jitter fade) | **369.0** | 390 / 358 / 378    | texture kept, crunch gone                  |
 
 **Fix** (`ee9e79f`):
+
 - `cityInstanced`: fade the band-pane brightness jitter toward its mean over
   `relSpan` 0.15→0.35 cells/px (fixed constants, independent of LOD sliders so
   detail knobs can't reintroduce the noise). `relSpan` hoisted next to
@@ -62,3 +63,45 @@ resampling alone (persists at native DPR 2). Remaining work tracked in
 [#82](https://github.com/redlamp/starry-night/issues/82) — preferred fix is
 analytic cell supersampling in the transition band; the dynamic-near patch is
 preserved there for the separate grazing-facade precision ceiling.
+
+**Round 3 (same day, from screen recordings)** — two videos analysed by frame
+extraction + native-res crops (ffmpeg → per-region zooms). New signatures:
+vertical stripe combs inside band/curtain floors and window groups on
+near-upright facades; diagonal per-pixel churn inside large windows on
+hard-grazing faces; ragged fringes at band top/bottom edges (partly H.264
+ringing stacked on the real comb). All one mechanism: **anisotropic footprint
+aliasing**. `relSpan = min(fwidth(cell.x), fwidth(cell.y))` gates the LOD wash,
+by design ("max would wash whole panels at grazing" — the comment documents the
+trade-off). At grazing incidence the resolved axis wins the `min`, so the wash
+never engages at ANY `uLodNear`, and the sub-pixel axis renders raw per-cell
+state noise — organized into vertical streaks (Y resolved) or diagonal flow
+(rotated grid). Explains perspective-only, pose/machine dependence
+(pixel-grid phase, DPR, vendor derivative rounding), and why lodNear tuning
+never fully fixed it. Fix spec updated on #82: **per-axis** treatment —
+analytically average the mask along the sub-resolved axis
+(`mix(wMaskX, fracW, lodX)`; the cell-mean of the mask is just the fraction)
+and footprint-average the binary state along the compressed axis; keep
+distantGlow for the both-axes case. Chrome config ruled out via chrome://gpu
+report (hardware WebGL, ANGLE D3D11, no relevant workarounds).
+
+**Fix (round 3, `feat/window-supersample`)** — `36a3b70`, with a permanent
+harness first (`scripts/moireGym.ts`, `60fbc5e`: four named poses driven
+post-boot through `__sceneStore` — capture boot resets the camera, so
+savedConfig injection can't work — captured via cdpShot, scored by
+moireMetric; `GYM_INTENT` env for ad-hoc pose probes):
+
+1. Per-cell window state extracted into `windowCellState()` (single source:
+   atlas classification, TV/band brightness, wake + duty cycle, fractional-band
+   gating); the lit path averages 4 taps along the dominant screen axis once it
+   goes sub-resolved (fixed ramp 0.3→0.9 cells/px). Resolved axis keeps detail.
+2. **Feature-size mask mean** — the real barcode driver: the mask's thinnest
+   feature (lit run or mullion gap) in px, not the cell size. A 1% curtain
+   mullion is sub-pixel even on a 40px cell. Under ~2px the mask converges to
+   its analytic cell-mean (`mix(wMaskX, fracW, …)`).
+
+Gym scores (before → after, lodNear 0.4): telephoto 366 → **122**,
+street-graze 177 → **83**, band-close 423 → **107**, near-guard bottom third
+49 → 40 with pixel-crisp before/after crops (no detail washed). gate1
+determinism PASS. Live look + fps judgement pending (the telephoto range now
+reads as calm banded facades instead of shimmering pseudo-detail; the fixed
+ramp constants are the tuning knob).

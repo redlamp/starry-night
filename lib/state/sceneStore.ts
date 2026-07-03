@@ -1,9 +1,6 @@
 import { create } from "zustand";
 
-import {
-  CITY_TIERS,
-  setCityTier,
-} from "@/lib/seed/topology";
+import { CITY_TIERS, setCityTier } from "@/lib/seed/topology";
 import type { CityTier, TopologyKind } from "@/lib/seed/topology";
 import type { CityShapeSetting } from "@/lib/seed/cityShape";
 import type { Archetype } from "@/lib/seed/cityGen";
@@ -194,6 +191,7 @@ type AnySettingEntry =
   | SettingEntry<"facade">
   | SettingEntry<"windowLights">
   | SettingEntry<"windowMode">
+  | SettingEntry<"windowRenderMode">
   | SettingEntry<"windowSimple">
   | SettingEntry<"windowProfiles">
   | SettingEntry<"fog">
@@ -228,6 +226,7 @@ type AnySettingEntry =
   | SettingEntry<"citySize">
   | SettingEntry<"cropLock">
   | SettingEntry<"fpsHud">
+  | SettingEntry<"liveViewLink">
   | SettingEntry<"fieldDeviation">
   | SettingEntry<"densityProfile">
   | SettingEntry<"antialias">
@@ -260,6 +259,10 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   // reload / Reset can't leave the city mysteriously dark.
   { key: "windowLights", defaultValue: true, persist: false },
   { key: "windowMode", defaultValue: "advanced" as const, persist: true },
+  // Far-field strategy (#82, lab-validated 2026-07-03): hybrid = per-building
+  // mean-lit wash (confetti-free); classic = per-cell distantGlow gating,
+  // kept for live A/B.
+  { key: "windowRenderMode", defaultValue: "hybrid" as const, persist: true },
   { key: "windowSimple", defaultValue: DEFAULT_WINDOW_SIMPLE, persist: true },
   { key: "windowProfiles", defaultValue: DEFAULT_WINDOW_PROFILES, persist: true },
   { key: "fog", defaultValue: DEFAULT_FOG, persist: true },
@@ -300,6 +303,9 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "cropLock", defaultValue: DEFAULT_CROP_LOCK, persist: true },
   // On-screen FPS badge — persisted so a perf pass survives reloads.
   { key: "fpsHud", defaultValue: false as const, persist: true },
+  // Live view link: mirror the camera pose into the address bar (?seed=&cam=)
+  // as it moves, Google-Maps style. Persisted; off by default.
+  { key: "liveViewLink", defaultValue: false as const, persist: true },
   // Tensor-field deviation scale (#51) — gen input, persisted.
   { key: "fieldDeviation", defaultValue: 1.5, persist: true },
   // Population profile (#49) — gen input, persisted.
@@ -361,6 +367,8 @@ type SceneState = {
   setWindowLights: (v: boolean) => void;
   windowMode: "simple" | "advanced";
   setWindowMode: (mode: "simple" | "advanced") => void;
+  windowRenderMode: "classic" | "hybrid";
+  setWindowRenderMode: (mode: "classic" | "hybrid") => void;
   windowSimple: WindowRange;
   setWindowSimple: (patch: Partial<WindowRange>) => void;
   windowProfiles: Record<Archetype, WindowProfile>;
@@ -401,6 +409,13 @@ type SceneState = {
   setTurntable: (patch: Partial<TurntableConfig>) => void;
   cameraIntent: CameraIntent;
   cameraLive: CameraLive;
+  // Transient camera handoff: a pose the next orbit model should ADOPT when it
+  // takes over (release-in-place from a parked ?cam= view / still mode) —
+  // without it camera-controls keeps the eye but re-derives its target,
+  // yanking the aim. Set by CameraControls' still-mode release, consumed and
+  // cleared by the active model on the still→orbit transition. Never persisted.
+  cameraHandoff: { position: Vec3; lookAt: Vec3 } | null;
+  setCameraHandoff: (h: { position: Vec3; lookAt: Vec3 } | null) => void;
   // Transient UI signal: true while the user drags the atmosphere near/far
   // sliders — FogBoundsMarkers draws the in-world bracket rings while set.
   fogAdjusting: boolean;
@@ -606,6 +621,7 @@ type SceneState = {
   setTileOverlay: (v: boolean) => void;
   setTileFreeze: (v: boolean) => void;
   setShowPinPlane: (v: boolean) => void;
+  setWindowDebugView: (v: "final" | "atlas" | "field") => void;
   // Organic city footprint (#14) — gen input; changing it regenerates the city.
   cityShape: CityShapeSetting;
   setCityShape: (cityShape: CityShapeSetting) => void;
@@ -623,6 +639,9 @@ type SceneState = {
   // On-screen FPS badge (FpsHud) — toggled from the Performance section.
   fpsHud: boolean;
   setFpsHud: (fpsHud: boolean) => void;
+  // Live view link (CaptureBoot URL sync): address bar tracks the camera.
+  liveViewLink: boolean;
+  setLiveViewLink: (liveViewLink: boolean) => void;
   // Tensor-field deviation scale (#51) — gen input; 1 = the seeded default,
   // <1 calms every city, >1 deforms harder. Changing it regenerates.
   fieldDeviation: number;
@@ -691,6 +710,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setWindowLights: (windowLights) => set({ windowLights }),
   windowMode: "advanced",
   setWindowMode: (windowMode) => set({ windowMode }),
+  windowRenderMode: "hybrid",
+  setWindowRenderMode: (windowRenderMode) => set({ windowRenderMode }),
   windowSimple: DEFAULT_WINDOW_SIMPLE,
   setWindowSimple: (patch) => set((s) => ({ windowSimple: { ...s.windowSimple, ...patch } })),
   windowProfiles: DEFAULT_WINDOW_PROFILES,
@@ -850,6 +871,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setTileOverlay: (v) => set((s) => ({ debug: { ...s.debug, tileOverlay: v } })),
   setTileFreeze: (v) => set((s) => ({ debug: { ...s.debug, tileFreeze: v } })),
   setShowPinPlane: (v) => set((s) => ({ debug: { ...s.debug, showPinPlane: v } })),
+  setWindowDebugView: (v) => set((s) => ({ debug: { ...s.debug, windowView: v } })),
   cityShape: DEFAULT_CITY_SHAPE,
   setCityShape: (cityShape) => set({ cityShape }),
   cityShapeScale: DEFAULT_CITY_SHAPE_SCALE,
@@ -872,6 +894,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setCitySketch: (citySketch) => set({ citySketch }),
   fpsHud: false,
   setFpsHud: (fpsHud) => set({ fpsHud }),
+  liveViewLink: false,
+  setLiveViewLink: (liveViewLink) => set({ liveViewLink }),
   fieldDeviation: 1.5,
   setFieldDeviation: (fieldDeviation) => set({ fieldDeviation }),
   densityProfile: DEFAULT_DENSITY_PROFILE,
@@ -904,6 +928,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       },
     })),
   setCameraLive: (cameraLive) => set({ cameraLive }),
+  cameraHandoff: null,
+  setCameraHandoff: (cameraHandoff) => set({ cameraHandoff }),
   fogAdjusting: false,
   setFogAdjusting: (fogAdjusting) => set({ fogAdjusting }),
   fogBoundsAlways: false,

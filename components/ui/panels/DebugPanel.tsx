@@ -184,6 +184,8 @@ export function DebugSection() {
   const setTileFreeze = useSceneStore((s) => s.setTileFreeze);
   const showPinPlane = useSceneStore((s) => s.debug.showPinPlane);
   const setShowPinPlane = useSceneStore((s) => s.setShowPinPlane);
+  const windowDebugView = useSceneStore((s) => s.debug.windowView);
+  const setWindowDebugView = useSceneStore((s) => s.setWindowDebugView);
   const cityShape = useSceneStore((s) => s.cityShape);
   const setCityShape = useSceneStore((s) => s.setCityShape);
   const cityShapeScale = useSceneStore((s) => s.cityShapeScale);
@@ -301,6 +303,28 @@ export function DebugSection() {
             onChange={(v) => setRenderMode(g, v as RenderMode)}
           />
         ))}
+      </SubGroup>
+
+      {/* Windows texture layers (2026-07-03) — the same layer views the Window
+          Lab's texture dropdowns give, on the production buildings. */}
+      <SubGroup
+        label="Windows layers"
+        action={
+          <HelpHint>
+            Render the window pipeline&apos;s layers instead of the composite: the raw one-texel-
+            per-window cell atlas each fragment samples, or the field view, which follows the
+            render mode — classic draws its mask in grayscale (its mid-range dither was the #82
+            stipple), hybrid draws the analytic pane field in the Window Lab&apos;s blue Atlas+SDF
+            style. Toggling classic/hybrid while in field view flips gray/blue instantly.
+          </HelpHint>
+        }
+      >
+        <ModeSelect
+          label="view"
+          value={windowDebugView}
+          modes={["final", "atlas", "field"] as const}
+          onChange={(v) => setWindowDebugView(v as "final" | "atlas" | "field")}
+        />
       </SubGroup>
 
       {/* Header switch = the overlay toggle itself (Windows-lights pattern) —

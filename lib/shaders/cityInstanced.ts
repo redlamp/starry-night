@@ -18,6 +18,13 @@ attribute float aBuildingHash;
 attribute vec4 aMisc;
 // Debug-view tint (Slice A): the parcel's plan colour (matches DistrictShells).
 attribute vec3 aDebugDistrictColor;
+// Hybrid far field (#82, lab-validated 2026-07-03): xyz = the building's
+// on-weighted mean lit colour (same decoded+boosted space the lit path
+// outputs), w = expected on-fraction of its cells (duty + TV statistics).
+// Computed at build time from the same atlas data. NOTE: this is the 16th
+// vertex attribute (instanceMatrix 4 + built-ins 3 + 9 customs) — exactly at
+// the GL_MAX_VERTEX_ATTRIBS floor of 16. There is no headroom left.
+attribute vec4 aMeanLit;
 
 varying vec2 vUv;
 varying vec3 vNormalLocal;     // pre-instance normal — face direction in geometry-local space
@@ -27,7 +34,26 @@ varying vec2 vAtlasSize;
 varying vec3 vGrid;
 varying vec3 vFacadeColor;
 varying float vFacadeGlow;
-varying float vBuildingHash;
+// Per-building hash rolls, computed HERE from the exact attribute value — never
+// in the fragment shader from an interpolated vBuildingHash. Rasterizers
+// reconstruct a perspective-corrected varying with a few ulps of per-pixel
+// wobble; at aBuildingHash's ~1e3 magnitude that is ~2e-4, and hash11 amplifies
+// input error ~480x, so fragment-side hashing turned invisible interpolation
+// noise into +/-0.03 on every roll — per-pixel salt-and-pepper on window edges
+// at far telephoto poses (the "field view dithering", diagnosed 2026-07-03).
+// Hashing per-vertex reads the attribute exactly; the [0,1) results interpolate
+// between identical endpoints and are consumed linearly, so the noise path is
+// gone for BOTH render modes. Components:
+//   vSizeRolls: x = width roll, y = height roll (window fraction mixes),
+//               z = curtain-share gate roll, w = full-curtain roll
+//   vSeedRolls: x = curtain spandrel-height roll,
+//               y = cell seed for per-cell timing/brightness hashes — an
+//                   INTEGER 0..4095 so the fragment can snap interpolation
+//                   ulps away exactly; those hashes feed binary on/off
+//                   thresholds, where any residual noise shows as
+//                   full-contrast per-pixel flips on knife-edge cells
+varying vec4 vSizeRolls;
+varying vec2 vSeedRolls;
 varying float vDistrictIdx;
 varying float vCorrelationMode;
 varying vec3 vBuildingCenter;  // world-space centre of this instance
@@ -39,8 +65,19 @@ varying float vPopulation;      // people-equivalent 0..1, for the population ti
 // BoxGeometry's per-face normal duplication. Drives a per-face shift of which
 // atlas pixels each vertical face samples so the 4 sides aren't identical.
 varying float vFaceId;
+varying vec4 vMeanLit;
+// Same Hoskins fract hash as the fragment shader (and bakeCommon's float32
+// mirror) — the rolls must be bit-comparable to what the fragment used to
+// compute so window sizes do not re-roll.
+float hash11(float p) {
+  p = fract(p * 0.1031);
+  p *= p + 33.33;
+  p *= p + p;
+  return fract(p);
+}
 void main() {
   vUv = uv;
+  vMeanLit = aMeanLit;
   vNormalLocal = normal;
   vFaceId = 0.0;
   if (abs(normal.x) > 0.5) {
@@ -61,7 +98,13 @@ void main() {
   vGrid = aGrid;
   vFacadeColor = aFacadeColor;
   vFacadeGlow = aFacadeGlow;
-  vBuildingHash = aBuildingHash;
+  vSizeRolls = vec4(
+    hash11(aBuildingHash * 2.3 + 13.0),
+    hash11(aBuildingHash * 3.7 + 29.0),
+    hash11(aBuildingHash * 4.1 + 67.0),
+    hash11(aBuildingHash * 8.3 + 147.0)
+  );
+  vSeedRolls = vec2(hash11(aBuildingHash * 6.7 + 31.0), floor(hash11(aBuildingHash) * 4096.0));
   vDistrictIdx = aMisc.x;
   vCorrelationMode = aMisc.y;
   vLayerIdx = aMisc.z;
@@ -115,6 +158,7 @@ uniform float uStagger;     // share of correlated floors that switch on in bank
 uniform float uCurtainShare; // share of correlated office towers with full-glass facades
 uniform float uCurtainWidth; // pane fill on curtain towers; 1.0 = seamless one-window floors
 uniform float uLightsOn;    // 1 = normal; 0 = every window dark (facade debug switch)
+uniform float uRenderMode;  // far-field strategy: 0 = classic distantGlow, 1 = hybrid mean-lit (#82)
 uniform float uOrthoBlend;      // 0 = perspective, 1 = orthographic; LOD bypass scales by (1-this)
 uniform float uAaEdge;          // fwidth edge-AA multiplier (window-quality panel)
 uniform float uLodNear;         // cells-per-pixel where distance wash starts
@@ -134,6 +178,12 @@ uniform vec3 uDepthPalette[3];
 // edges read against the dark night background instead of the near-black facade.
 uniform float uWireframe;
 uniform vec3 uWireColor;
+// Texture-layer debug view (window-lab parity, 2026-07-03): 0 = final render,
+// 1 = cell atlas (the raw per-window texel this fragment samples, full-bleed),
+// 2 = window field (the pane mask as grayscale — aliasing shows here as
+// dither, which is how the #82 mid-range stipple was isolated). Raw output,
+// no fog, so the layers read as data, not as scene.
+uniform float uWinDebugView;
 
 varying vec2 vUv;
 varying vec3 vNormalLocal;
@@ -143,7 +193,11 @@ varying vec2 vAtlasSize;
 varying vec3 vGrid;
 varying vec3 vFacadeColor;
 varying float vFacadeGlow;
-varying float vBuildingHash;
+// Per-building rolls hashed in the VERTEX shader from the exact attribute (see
+// the vertex-side comment): fragment-side hash11(vBuildingHash * k + c) turned
+// varying-interpolation ulps into per-pixel window-size noise at far poses.
+varying vec4 vSizeRolls; // x=width roll, y=height roll, z=curtain gate, w=full-curtain
+varying vec2 vSeedRolls; // x=curtain spandrel-height roll, y=cell timing seed [0,64)
 varying float vDistrictIdx;
 varying float vCorrelationMode;
 varying vec3 vBuildingCenter;
@@ -152,6 +206,7 @@ varying vec3 vDebugDistrictColor;
 varying float vLayerIdx;
 varying float vBuildingHeight;
 varying float vPopulation;
+varying vec4 vMeanLit;
 float hash11(float p) {
   p = fract(p * 0.1031);
   p *= p + 33.33;
@@ -197,6 +252,188 @@ vec3 debugTintColor() {
   return c;
 }
 
+// Complete per-cell window state at an arbitrary point on the facade grid:
+// rgb = the lit colour (atlas tint x emissive boost x TV/band brightness),
+// a   = windowOn (wake + duty cycle + fractional-band segment gating).
+// Extracted from main so the anisotropic supersample (#82) can average it at
+// several points along a sub-resolved screen axis — every per-cell decision
+// (atlas state, hashes, cycle clocks) lives HERE and nowhere else. cellF is the
+// continuous grid coord of the sample point; bandFade is the precomputed
+// sub-resolution fade for the band-pane brightness jitter.
+vec4 windowCellState(vec2 cellF, float bandFade) {
+  // Integer-valued varyings snapped to EXACT integers before any hash: the
+  // rasterizer reconstructs even a constant varying with ulp wobble, and the
+  // cycle hashes below feed binary on/off thresholds — knife-edge cells would
+  // otherwise flip per pixel at far poses (same family as the vSizeRolls fix).
+  float faceId = floor(vFaceId + 0.5);
+  float cellSeed = floor(vSeedRolls.y + 0.5);
+  // grid snapped too: mod(cellId, grid) sits ON a discontinuity whenever a
+  // shifted column index is an exact multiple of cols (guaranteed for cols <=
+  // 21 on faces 1-3) — grid wobbling +/-ulp flips the atlas sample between
+  // column 0 and column cols-1 per pixel: static-filled panes at far poses.
+  vec2 grid = floor(vGrid.xy + 0.5);
+  float rowCoherent = step(1.5, vCorrelationMode);
+  float fracFloor = rowCoherent * (1.0 - step(2.5, vCorrelationMode)); // mode 2 exactly
+  vec2 cellId = floor(cellF) + vec2(faceId * 7.0, faceId * 11.0 * (1.0 - rowCoherent));
+  vec2 atlasCell = mod(cellId, grid);
+  vec2 cellCentreUv = (atlasCell + 0.5) / grid;
+  vec4 state = texture2D(uWindowAtlas, vAtlasOffset + cellCentreUv * vAtlasSize);
+  bool isBand = state.a > 0.7 && state.a < 0.9;
+  bool isTv = state.a > 0.2 && state.a < 0.7;
+  float isCurtain = 0.0;
+  if (rowCoherent > 0.5 && vGrid.z > 4.5 && isBand &&
+      vSizeRolls.z < uCurtainShare) {
+    isCurtain = 1.0;
+  }
+
+  // Correlated band cells share their timing: a whole-floor band uses one
+  // clock for the row on EVERY face (jx = 0); fractional bands AND curtain
+  // floors key per face, so each side wakes and cycles on its own. Per-window
+  // cells keep per-cell timing via the column term.
+  float faceClock = max(fracFloor, isCurtain);
+  float jx = isBand ? faceId * 31.0 * faceClock : cellId.x;
+  float seed = hash11(jx + cellId.y * 17.0 + cellSeed);
+
+  vec3 lit;
+  if (state.a > 0.2) {
+    float brightness = 1.0;
+    if (isTv) {
+      // 3 Hz — matches the typical scan rate of a real TV at this distance.
+      float tick = floor(uTime * 3.0);
+      float n = hash11(tick + seed * 100.0);
+      brightness = 0.4 + n * 0.6;
+    } else if (isBand) {
+      // Static per-pane luminance jitter (±18%) so a lit floor reads as glass
+      // panels over one interior; fades toward its mean as panes go
+      // sub-resolved (bandFade, fixed constants — see main).
+      brightness = 0.82 + 0.36 * hash11(cellId.x * 9.1 + cellId.y * 4.3 + cellSeed + 151.0);
+      brightness = mix(brightness, 1.0, bandFade);
+      brightness *= 1.0 + 0.15 * isCurtain;
+    }
+    lit = state.rgb * uEmissiveBoost * brightness;
+  } else {
+    // Atlas-unlit cells: default warm tungsten for the wake-up sweep — dimmer
+    // than the average lit window so full-lit moments still read as a city.
+    lit = vec3(1.0, 0.82, 0.55) * uEmissiveBoost * 0.55;
+  }
+
+  // After-Dark wake-and-cycle. Step 1: order cells by intro mode, pick a
+  // per-cell wake time in [0, uIntroDuration]. Step 2: after wake, alternate
+  // ON (uOffCycle ±30%) / OFF (uRetrigger ±30%) with per-cell jitter so the
+  // city doesn't pulse in unison. TV cells skip the cycle once they wake.
+  float baseline = 0.0;
+  if (uIntroMode == 0) {
+    baseline = seed;
+  } else if (uIntroMode == 1) {
+    baseline = vDistrictIdx / 3.0;
+  } else if (uIntroMode == 2) {
+    vec2 d = vBuildingCenter.xz - uIntroCityCenter.xz;
+    float r = clamp(length(d) / max(1.0, uIntroMaxRadius), 0.0, 1.0);
+    baseline = 1.0 - r;
+  } else if (uIntroMode == 3) {
+    float farD = distance(vBuildingCenter, uIntroCamPos);
+    float r = clamp(farD / max(1.0, uIntroMaxRadius * 2.0), 0.0, 1.0);
+    baseline = 1.0 - r;
+  } else {
+    vec2 d = vBuildingCenter.xz - uIntroCityCenter.xz;
+    float r = clamp(length(d) / max(1.0, uIntroMaxRadius), 0.0, 1.0);
+    baseline = r;
+  }
+  float wakeJitter = hash11(jx * 1.31 + cellId.y * 11.7 + cellSeed + 41.0);
+  float onJitter = hash11(jx * 5.7 + cellId.y * 3.1 + cellSeed + 71.0);
+  float offJitter = hash11(jx * 1.7 + cellId.y * 23.0 + cellSeed + 19.0);
+  float t0 = clamp(baseline, 0.0, 1.0) * uIntroDuration +
+             wakeJitter * min(uIntroDuration * 0.04, 4.0);
+  float wakeTime = uIntroStartTime + t0;
+
+  // Switch-bank stagger: a share (uStagger) of correlated floors light up in
+  // 2..4 column banks, 0.6–1.6 s apart — banks of switches down the hall.
+  if (isBand && hash11(cellId.y * 23.0 + cellSeed + 211.0) < uStagger) {
+    float banks = 2.0 + floor(hash11(cellId.y * 3.3 + cellSeed + 61.0) * 2.999);
+    float bank = floor(floor(cellF.x) / max(1.0, ceil(grid.x / banks)));
+    if (hash11(cellId.y * 7.7 + cellSeed + 97.0) < 0.5) bank = banks - 1.0 - bank;
+    wakeTime += bank * (0.6 + hash11(cellId.y * 5.1 + cellSeed + 23.0));
+  }
+
+  float windowOn;
+  if (uTime < wakeTime) {
+    windowOn = 0.0;
+  } else if (isTv) {
+    windowOn = 1.0;
+  } else {
+    // (1 - jitter) .. (1 + jitter) — at jitter=0 every window cycles in
+    // lockstep; at jitter=1 multipliers span 0..2.
+    float onSec = max(0.5, uOffCycle * (1.0 - uCycleJitter + onJitter * uCycleJitter * 2.0));
+    float offSec = max(0.5, uRetrigger * (1.0 - uCycleJitter + offJitter * uCycleJitter * 2.0));
+    // Curtain ribbons hold their light 4x longer — trading floors and cleaning
+    // crews, not apartment lamps.
+    if (isCurtain > 0.5) onSec *= 4.0;
+    float elapsed = uTime - wakeTime;
+    float period = onSec + offSec;
+    float phase = mod(elapsed, period);
+    windowOn = phase < onSec ? 1.0 : 0.0;
+  }
+
+  // Fractional-floor band: only a per-(face, floor) SEGMENT of the row lights —
+  // length and position hashed independently per face. Curtain floors are
+  // exempt (a curtain ribbon spans its whole face).
+  if (fracFloor > 0.5 && isBand && isCurtain < 0.5) {
+    float col = floor(cellF.x);
+    float u1 = hash11(faceId * 3.7 + cellId.y * 13.1 + cellSeed + 101.0);
+    float u2 = hash11(faceId * 9.3 + cellId.y * 5.7 + cellSeed + 137.0);
+    float litCount = floor(pow(u1, 1.6) * (grid.x + 0.999));
+    float start = floor(u2 * (grid.x - litCount + 1.0));
+    if (col < start || col > start + litCount - 1.0) windowOn = 0.0;
+  }
+
+  return vec4(lit, windowOn);
+}
+
+// Analytic box-filtered pane coverage along one axis (#82, the zoomed-in
+// "distressed" stipple): the EXACT mean of the pane/mullion square wave over
+// this fragment's footprint, in closed form. F(x) = integral of the unit
+// cell's pane indicator; coverage = (F(x1) - F(x0)) / footprint. Replaces the
+// smoothstep edge pair + the sub-pixel feature guard on the hybrid path:
+// those half-draw a 0.3-1px mullion (the guard only fully engages under
+// 0.5px), and the half-drawn line beats against the pixel grid as per-pixel
+// dither across every 3-7px-cell facade. The integral has no such band —
+// sharp ~1-footprint edges when magnified, smooth monotonic fade to the pane
+// fraction as features go sub-pixel.
+//   x         continuous cell-space coordinate at the fragment
+//   footprint cell-space width of one pixel (fwidth), AA-scaled
+//   lo        pane start inside the unit cell (0.5 - halfPane)
+//   paneW     pane width fraction (full-bleed 1.0 gives coverage 1 — the
+//             phantom-mullion fade falls out for free)
+float paneCoverage(float x, float footprint, float lo, float paneW) {
+  float x0 = x - 0.5 * footprint;
+  float x1 = x + 0.5 * footprint;
+  float F0 = floor(x0) * paneW + clamp(fract(x0) - lo, 0.0, paneW);
+  float F1 = floor(x1) * paneW + clamp(fract(x1) - lo, 0.0, paneW);
+  return (F1 - F0) / max(footprint, 1e-5);
+}
+
+// Building-level wake ramp for the hybrid far field: per-cell windowOn used to
+// carry the intro into the far wash; the mean-lit path needs an aggregate.
+// Same baseline ordering as windowCellState, seed term replaced by its mean
+// (0.5), ramping over ~20% of the cascade around the building's slot.
+float buildingIntroOn() {
+  float baseline = 0.5;
+  if (uIntroMode == 1) {
+    baseline = vDistrictIdx / 3.0;
+  } else if (uIntroMode == 2) {
+    vec2 d = vBuildingCenter.xz - uIntroCityCenter.xz;
+    baseline = 1.0 - clamp(length(d) / max(1.0, uIntroMaxRadius), 0.0, 1.0);
+  } else if (uIntroMode == 3) {
+    float farD = distance(vBuildingCenter, uIntroCamPos);
+    baseline = 1.0 - clamp(farD / max(1.0, uIntroMaxRadius * 2.0), 0.0, 1.0);
+  } else if (uIntroMode == 4) {
+    vec2 d = vBuildingCenter.xz - uIntroCityCenter.xz;
+    baseline = clamp(length(d) / max(1.0, uIntroMaxRadius), 0.0, 1.0);
+  }
+  float wakeTime = uIntroStartTime + clamp(baseline, 0.0, 1.0) * uIntroDuration;
+  return clamp((uTime - wakeTime) / max(uIntroDuration * 0.2, 1.0), 0.0, 1.0);
+}
+
 void main() {
   // Wireframe (Slice B): flat stroke, no window math, no fog. Colour matches the
   // building tint mode — blue default (uWireColor) when no mode is active, else
@@ -223,10 +460,31 @@ void main() {
 
   vec2 cell = vUv * vGrid.xy;
   vec2 cellLocal = fract(cell);
-  // Cells-per-pixel from the CONTINUOUS grid coord (see the LOD block below for
-  // why not atlasUv). Hoisted here because the band-jitter fade needs it before
-  // the LOD wash does. min: only counts as sub-resolved when BOTH axes are.
-  float relSpan = min(fwidth(cell.x), fwidth(cell.y));
+  // Cells-per-pixel PER AXIS from the CONTINUOUS grid coord (see the LOD block
+  // below for why not atlasUv). relSpan (min) drives the isotropic distance
+  // wash: sub-resolved in BOTH axes = genuinely far.
+  float spanX = fwidth(cell.x);
+  float spanY = fwidth(cell.y);
+  float relSpan = min(spanX, spanY);
+  // Anisotropic sub-resolution (#82): a grazing facade collapses ONE axis
+  // (several cells per pixel column) while the other stays resolved, so the
+  // min-gated wash never engages and per-cell state renders as stripe/churn
+  // noise. Per-axis ramps drive (a) the window-mask cell-mean below and (b) the
+  // footprint-averaged cell state in the lit path. Fixed constants like the
+  // band-jitter fade — this is aliasing control, not a detail knob, so the LOD
+  // sliders can't reintroduce it. Ortho has uniform derivatives and no grazing
+  // perspective; scale out like the wash does.
+  // Ramp start 0.35 (~2.9px cells): the first cut started at 0.3 and the
+  // partial tap-average dimmed/muddied mid-range windows (avgOn < 1 on floors
+  // that read fully lit) — user 2026-07-03. Grazing churn lives at spans
+  // ≥0.5, still fully covered.
+  float lodAnisoX = smoothstep(0.35, 0.9, spanX) * (1.0 - uOrthoBlend);
+  float lodAnisoY = smoothstep(0.35, 0.9, spanY) * (1.0 - uOrthoBlend);
+  // Band-pane brightness jitter fade (2026-07-02): reads as interior depth up
+  // close, aliases into speckle under ~4px panes — fade toward the mean on the
+  // WORST axis (max: a grazed band is sub-resolved along the row even when
+  // floors stay resolved).
+  float bandFade = smoothstep(0.15, 0.35, max(spanX, spanY));
   // #25 per-face uniqueness: shift cellId by (faceId*7, faceId*11) BEFORE all
   // per-cell math (atlas sample, hashes, breathing seed, intro wake). Using
   // the shifted id everywhere means each face has its own atlas pattern AND
@@ -241,25 +499,29 @@ void main() {
   // every edge. X keeps its shift (band rows are uniform across the row, so
   // it has nothing to desync there).
   float rowCoherent = step(1.5, vCorrelationMode);
-  float fracFloor = rowCoherent * (1.0 - step(2.5, vCorrelationMode)); // mode 2 exactly
-  vec2 cellId = floor(cell) + vec2(vFaceId * 7.0, vFaceId * 11.0 * (1.0 - rowCoherent));
-  vec2 atlasCell = mod(cellId, vGrid.xy);
-  vec2 cellCentreUv = (atlasCell + 0.5) / vGrid.xy;
+  // Snapped like windowCellState's copies — see the notes there.
+  float faceId = floor(vFaceId + 0.5);
+  vec2 grid = floor(vGrid.xy + 0.5);
+  vec2 cellId = floor(cell) + vec2(faceId * 7.0, faceId * 11.0 * (1.0 - rowCoherent));
+  vec2 atlasCell = mod(cellId, grid);
+  vec2 cellCentreUv = (atlasCell + 0.5) / grid;
   vec2 atlasUv = vAtlasOffset + cellCentreUv * vAtlasSize;
   vec4 state = texture2D(uWindowAtlas, atlasUv);
   // Correlated band cell (atlas alpha ≈ 0.78): part of a row painted as one
-  // lit unit. Sampled this early because both the curtain treatment (fraction
-  // pinning below) and the wake/cycle timing key off it.
+  // lit unit. Sampled here (redundantly with windowCellState — same cached
+  // texel) because the curtain FRACTION override below feeds the mask, which
+  // is main's job; timing/colour per-cell logic lives in windowCellState.
   bool isBand = state.a > 0.7 && state.a < 0.9;
 
   // Per-archetype window fraction, selected by archetype index. A constant-
   // bounded loop (not dynamic uniform indexing) keeps this GLSL ES 1.00 safe.
   // Width AND height each roll ONE seeded value per building inside the
-  // panel's [min, max] ranges — vBuildingHash is per-instance, so every window
-  // on a building shares the size while neighbours differ. Independent hashes
-  // decorrelate the two dimensions. Deterministic (seeded hash, no time input).
-  float wRoll = hash11(vBuildingHash * 2.3 + 13.0);
-  float hRoll = hash11(vBuildingHash * 3.7 + 29.0);
+  // panel's [min, max] ranges — rolled per-instance in the VERTEX shader (see
+  // vSizeRolls), so every window on a building shares the size while
+  // neighbours differ. Independent hashes decorrelate the two dimensions.
+  // Deterministic (seeded hash, no time input).
+  float wRoll = vSizeRolls.x;
+  float hRoll = vSizeRolls.y;
   float fracW;
   float fracH;
   if (uWindowMode < 0.5) {
@@ -309,51 +571,135 @@ void main() {
   // 2026-06-06). Live uniforms; override the panel ranges for those cells.
   float isCurtain = 0.0;
   if (rowCoherent > 0.5 && vGrid.z > 4.5 && isBand &&
-      hash11(vBuildingHash * 4.1 + 67.0) < uCurtainShare) {
+      vSizeRolls.z < uCurtainShare) {
     isCurtain = 1.0;
     // 1 in 5 curtain towers goes FULL curtain — exact 1.0 — so true curtains
     // occur occasionally without touching the knobs (an rng roll alone never
     // lands exactly on 1.0). The rest take the crt-width knob.
-    float fullRoll = hash11(vBuildingHash * 8.3 + 147.0);
+    float fullRoll = vSizeRolls.w;
     fracW = fullRoll < 0.2 ? 1.0 : uCurtainWidth;
-    fracH = mix(0.72, 0.92, hash11(vBuildingHash * 6.7 + 31.0));
+    fracH = mix(0.72, 0.92, vSeedRolls.x);
     // Corner piers: the outermost column on each face keeps a reduced pane,
     // terminating each face's ribbon at a visible structural pier instead of
     // letting the glass wrap the corner as one continuous window.
     float pierCol = floor(cell.x);
-    if (pierCol < 0.5 || pierCol > vGrid.x - 1.5) fracW = min(fracW, 0.78);
+    if (pierCol < 0.5 || pierCol > grid.x - 1.5) fracW = min(fracW, 0.78);
   }
   float halfW = fracW * 0.5;
   float halfH = fracH * 0.5;
-  // Screen-space derivatives smooth the window/facade edge by ~1px regardless
-  // of distance: crisp up close, anti-aliased at range.
-  // fwidth on the CONTINUOUS grid coord, not fract(cell): fract jumps 1→0 at
-  // every cell boundary so its derivative spikes there, blowing up the AA band
-  // into a visible facade seam line at each window edge.
-  float fwX = max(fwidth(cell.x) * uAaEdge, 0.001);
-  float fwY = max(fwidth(cell.y) * uAaEdge, 0.001);
-  // Cap the AA band at 90% of the half-window in BOTH projections. Uncapped, a
-  // grazing facade (huge fwidth from foreshortening) widens the mask past the
-  // cell and lights the whole panel — window + border. Capped, the window keeps
-  // its size with a soft edge; genuine far-field wash is handled by the LOD.
-  float aaX = min(fwX, halfW * 0.9);
-  float aaY = min(fwY, halfH * 0.9);
-  float wMaskX =
-    smoothstep(0.5 - halfW - aaX, 0.5 - halfW + aaX, cellLocal.x) *
-    (1.0 - smoothstep(0.5 + halfW - aaX, 0.5 + halfW + aaX, cellLocal.x));
-  float wMaskY =
-    smoothstep(0.5 - halfH - aaY, 0.5 - halfH + aaY, cellLocal.y) *
-    (1.0 - smoothstep(0.5 + halfH - aaY, 0.5 + halfH + aaY, cellLocal.y));
-  // Full-bleed panes: the smoothstep pair pins the window edge ON the cell
-  // boundary, so even at fraction 1.0 the mask dips to 0.5 there — a phantom
-  // mullion line. Fade the dip out over the LAST ~1% only (0.991 → 0.999), so
-  // 0.99 keeps hairline mullions and exactly 1.0 reads as truly continuous
-  // glass — the "whole floor is one window" curtain look is opt-in at 1.0,
-  // never an accident of a high slider.
-  wMaskX = mix(wMaskX, 1.0, smoothstep(0.4955, 0.4995, halfW));
-  wMaskY = mix(wMaskY, 1.0, smoothstep(0.4955, 0.4995, halfH));
+  float wMaskX;
+  float wMaskY;
+  if (uRenderMode > 0.5) {
+    // HYBRID mask (#82 zoomed-in stipple, diagnosed 2026-07-03 at the user's
+    // pose): exact box-filtered coverage of the pane pattern per axis — see
+    // paneCoverage. The classic branch's smoothstep + feature guard dithers
+    // wherever a mullion sits between 0.5 and 1.1px (3-7px cells, i.e. most
+    // mid-range facades at a telephoto pose); the integral is dither-free at
+    // every scale, needs no phantom-mullion fade and no guard, and converges
+    // to fracW/fracH on its own as features go sub-pixel.
+    float footX = max(spanX * uAaEdge, 1e-4);
+    float footY = max(spanY * uAaEdge, 1e-4);
+    wMaskX = paneCoverage(cell.x, footX, 0.5 - halfW, fracW);
+    wMaskY = paneCoverage(cell.y, footY, 0.5 - halfH, fracH);
+  } else {
+    // CLASSIC mask — the pre-hybrid reference, byte-identical for A/B.
+    // Screen-space derivatives smooth the window/facade edge by ~1px regardless
+    // of distance: crisp up close, anti-aliased at range.
+    // fwidth on the CONTINUOUS grid coord, not fract(cell): fract jumps 1→0 at
+    // every cell boundary so its derivative spikes there, blowing up the AA band
+    // into a visible facade seam line at each window edge.
+    float fwX = max(spanX * uAaEdge, 0.001);
+    float fwY = max(spanY * uAaEdge, 0.001);
+    // Cap the AA band at 90% of the half-window in BOTH projections. Uncapped, a
+    // grazing facade (huge fwidth from foreshortening) widens the mask past the
+    // cell and lights the whole panel — window + border. Capped, the window keeps
+    // its size with a soft edge; genuine far-field wash is handled by the LOD.
+    float aaX = min(fwX, halfW * 0.9);
+    float aaY = min(fwY, halfH * 0.9);
+    wMaskX =
+      smoothstep(0.5 - halfW - aaX, 0.5 - halfW + aaX, cellLocal.x) *
+      (1.0 - smoothstep(0.5 + halfW - aaX, 0.5 + halfW + aaX, cellLocal.x));
+    wMaskY =
+      smoothstep(0.5 - halfH - aaY, 0.5 - halfH + aaY, cellLocal.y) *
+      (1.0 - smoothstep(0.5 + halfH - aaY, 0.5 + halfH + aaY, cellLocal.y));
+    // Full-bleed panes: the smoothstep pair pins the window edge ON the cell
+    // boundary, so even at fraction 1.0 the mask dips to 0.5 there — a phantom
+    // mullion line. Fade the dip out over the LAST ~1% only (0.991 → 0.999), so
+    // 0.99 keeps hairline mullions and exactly 1.0 reads as truly continuous
+    // glass — the "whole floor is one window" curtain look is opt-in at 1.0,
+    // never an accident of a high slider.
+    wMaskX = mix(wMaskX, 1.0, smoothstep(0.4955, 0.4995, halfW));
+    wMaskY = mix(wMaskY, 1.0, smoothstep(0.4955, 0.4995, halfH));
+    // Anisotropic mask mean (#82): once an axis's thinnest mask FEATURE — the
+    // lit run (frac) or the gap between runs (1 - frac), whichever is smaller —
+    // drops under ~a pixel, it cannot be drawn faithfully: NEAREST-phase
+    // quantisation lands it on occasional whole pixel columns (the irregular
+    // "barcode" stripes on curtain/band floors, whose 1% mullions go sub-pixel
+    // even on 40px cells). The analytic mean of the mask over a cell is just the
+    // fraction, so converge to it as the feature crosses 2px → 1px. Also engages
+    // via the cell-level aniso ramp (grazing) — whichever fires first. Free: no
+    // extra samples, exact in the limit.
+    // Engage only when the feature genuinely cannot be drawn (<~1px). The first
+    // cut used 1-2px and read as windows SWELLING to fill their tile while still
+    // plainly visible ("doesn't look like windows anymore" — user 2026-07-03):
+    // a 70%-wide window's gap crosses 2px while cells are still ~7px. Keeping
+    // gaps crisp down to the last drawable pixel wins over early averaging.
+    float featX = min(fracW, 1.0 - fracW) / max(spanX, 1e-4); // thinnest X feature in px
+    float featY = min(fracH, 1.0 - fracH) / max(spanY, 1e-4);
+    float maskLodX = max(lodAnisoX, 1.0 - smoothstep(0.5, 1.1, featX));
+    float maskLodY = max(lodAnisoY, 1.0 - smoothstep(0.5, 1.1, featY));
+    wMaskX = mix(wMaskX, fracW, maskLodX);
+    wMaskY = mix(wMaskY, fracH, maskLodY);
+  }
   float wMask = wMaskX * wMaskY;
   bool inWindow = wMask > 0.01;
+
+  // Texture-layer debug views — see the uniform note. The field view follows
+  // the render mode, matching the Window Lab convention: classic shows its
+  // smoothstep mask as grayscale (its 3-7px-cell dither is visible here —
+  // that WAS the #82 stipple), hybrid shows the analytic pane field it
+  // box-filters, in the lab's Atlas+SDF palette (blue inside, white iso-line
+  // at the pane edge). Toggling classic/hybrid in this view flips
+  // gray <-> blue instantly — a one-look check that the toggle reaches the GPU.
+  if (uWinDebugView > 1.5) {
+    if (uRenderMode > 0.5) {
+      vec2 dxy = abs(cellLocal - 0.5) - vec2(halfW, halfH);
+      float dd = max(dxy.x, dxy.y); // signed box distance, cell units
+      // Iso-line width: 0.05 cells up close (the lab-bench look), floored at
+      // ~1.2px on screen — a fixed cell-space width goes sub-pixel at range
+      // and dithers exactly like a sub-pixel mullion (user 2026-07-03,
+      // spotted in this very view). Energy-conserving: when the floor widens
+      // the line past its true size, dim by the ratio so distant grids read
+      // as faint lattice, not noise.
+      float lineW = max(0.05, fwidth(dd) * 1.2);
+      float edge = (1.0 - smoothstep(0.0, lineW, abs(dd))) * (0.05 / lineW);
+      vec3 c = dd < 0.0
+        ? mix(vec3(0.85, 0.92, 1.0), vec3(0.15, 0.4, 0.9), clamp(-dd * 3.0, 0.0, 1.0))
+        : vec3(0.12, 0.12, 0.14) * (1.0 - clamp(dd * 1.5, 0.0, 0.8));
+      c = mix(c, vec3(1.0), edge);
+      // Sub-pixel cells: NO unfiltered pattern survives minification — the
+      // bright rim gradient dithers just like the iso-line did. Converge the
+      // viz to its area average via the SAME box-filtered coverage the render
+      // uses (wMask) — the debug view demonstrating its own cure.
+      // Converge on whichever fires first: cell size (rim + line go sub-pixel
+      // together) or the narrowest pattern feature in PIXELS — high pane
+      // fractions leave a sub-pixel dark gap while cells are still 5-8px, and
+      // that gap dithers exactly like a sub-pixel mullion.
+      float sp = max(spanX, spanY);
+      float narrowFeat = min(min(halfW, 0.5 - halfW), min(halfH, 0.5 - halfH)) * 2.0;
+      float featPx = narrowFeat / max(sp, 1e-4);
+      float vizLod = max(smoothstep(0.15, 0.4, sp), 1.0 - smoothstep(0.9, 1.8, featPx));
+      vec3 filteredViz = mix(vec3(0.08, 0.08, 0.1), vec3(0.5, 0.66, 0.97), wMask);
+      c = mix(c, filteredViz, vizLod);
+      gl_FragColor = vec4(c, 1.0);
+    } else {
+      gl_FragColor = vec4(vec3(wMask), 1.0);
+    }
+    return;
+  } else if (uWinDebugView > 0.5) {
+    gl_FragColor = vec4(state.rgb, 1.0);
+    return;
+  }
 
   vec3 color = facade;
 
@@ -362,123 +708,57 @@ void main() {
   // existing flicker / twinkle behaviour stays scoped to the atlas-lit subset
   // (alpha encoding 128 = TV-blue, 255 = steady).
   if (inWindow) {
-    // Correlated band cells share their timing: a whole-floor band uses one
-    // clock for the row on EVERY face (jx = 0); fractional bands AND curtain
-    // floors key per face, so each side wakes and cycles on its own — a lit
-    // curtain floor lights face-by-face instead of snapping on as a ring
-    // around the building. Per-window / per-block cells keep per-cell timing
-    // via the column term.
-    float faceClock = max(fracFloor, isCurtain);
-    float jx = isBand ? vFaceId * 31.0 * faceClock : cellId.x;
-    float seed = hash11(jx + cellId.y * 17.0 + vBuildingHash);
+    // Per-cell state (atlas classification, brightness, wake + duty cycle,
+    // fractional-band gating) — single source in windowCellState above.
+    vec4 cw = windowCellState(cell, bandFade);
+    vec3 lit = cw.rgb;
+    float windowOn = cw.a;
 
-    bool isTv = state.a > 0.2 && state.a < 0.7;
-    vec3 lit;
-    if (state.a > 0.2) {
-      float brightness = 1.0;
-      if (isTv) {
-        // 3 Hz — calmer than the original 8 Hz and matches the typical scan
-        // rate of a real TV at this perceived distance.
-        float tick = floor(uTime * 3.0);
-        float n = hash11(tick + seed * 100.0);
-        brightness = 0.4 + n * 0.6;
-      } else if (isBand) {
-        // Texture within a band: static per-pane luminance jitter (±18%) so a
-        // lit floor reads as glass panels over one interior — furniture,
-        // blinds, depth — rather than a uniform glowing strip. Curtain panes
-        // get a 15% lift: more glass lets more light out, and it keeps the
-        // ribbons legible at orbit distance where their hairline mullions
-        // are sub-pixel.
-        brightness = 0.82 + 0.36 * hash11(cellId.x * 9.1 + cellId.y * 4.3 + vBuildingHash + 151.0);
-        // The ±18% per-pane jitter reads as interior depth up close but aliases
-        // into moiré speckle once panes drop under ~4px (NVIDIA-visible
-        // "distressed" bands, 2026-07-02). Fade it toward its mean (1.0) as
-        // cells go sub-resolved — fixed constants, deliberately NOT tied to the
-        // LOD sliders so detail knobs can't reintroduce the noise.
-        brightness = mix(brightness, 1.0, smoothstep(0.15, 0.35, relSpan));
-        brightness *= 1.0 + 0.15 * isCurtain;
+    // Anisotropic footprint average (#82): when the DOMINANT screen axis spans
+    // multiple cells per pixel while the other stays resolved (grazing facade),
+    // per-cell state flips column-to-column — vertical stripe combs / diagonal
+    // churn. Average the cell state at 4 points across the footprint along the
+    // compressed axis and blend it in by the aniso ramp. The resolved axis
+    // keeps full detail (floors/columns stay readable) — this is what neither
+    // min() (never engages) nor max() (whole-panel glow) could do.
+    float lodTap = max(lodAnisoX, lodAnisoY);
+    if (lodTap > 0.001) {
+      vec2 tapDir = spanX >= spanY ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
+      // Cap the averaging window: past ~6 cells/px 4 taps undersample anyway
+      // and the isotropic wash below is close behind.
+      float tapSpan = min(max(spanX, spanY), 6.0);
+      vec3 litAcc = vec3(0.0);
+      float onAcc = 0.0;
+      for (int k = 0; k < 4; k++) {
+        float t = (float(k) + 0.5) * 0.25 - 0.5; // -0.375, -0.125, +0.125, +0.375
+        vec4 s = windowCellState(cell + tapDir * (t * tapSpan), bandFade);
+        litAcc += s.rgb * s.a;
+        onAcc += s.a;
       }
-      lit = state.rgb * uEmissiveBoost * brightness;
-    } else {
-      // Atlas-unlit cells get a default warm tungsten — slightly dimmer than
-      // the average atlas-lit window so a full-lit moment still reads as a
-      // city rather than a billboard.
-      lit = vec3(1.0, 0.82, 0.55) * uEmissiveBoost * 0.55;
-    }
+      // On-weighted mean colour + mean coverage: a half-lit footprint reads as
+      // the average lit colour at half strength, not as noise.
+      vec3 avgLit = litAcc / max(onAcc, 0.001);
+      float avgOn = onAcc * 0.25;
+      lit = mix(lit, avgLit, lodTap);
+      windowOn = mix(windowOn, avgOn, lodTap);
 
-    // After-Dark wake-and-cycle. Step 1: order cells by intro mode, pick a
-    // per-cell wake time in [0, uIntroDuration]. Step 2: after wake, alternate
-    // ON (uOffCycle ±30%) / OFF (uRetrigger ±30%) using per-cell jitter so the
-    // city doesn't pulse in unison. TV cells skip the cycle once they wake.
-    float baseline = 0.0;
-    if (uIntroMode == 0) {
-      baseline = seed;
-    } else if (uIntroMode == 1) {
-      baseline = vDistrictIdx / 3.0;
-    } else if (uIntroMode == 2) {
-      vec2 d = vBuildingCenter.xz - uIntroCityCenter.xz;
-      float r = clamp(length(d) / max(1.0, uIntroMaxRadius), 0.0, 1.0);
-      baseline = 1.0 - r;
-    } else if (uIntroMode == 3) {
-      float farD = distance(vBuildingCenter, uIntroCamPos);
-      float r = clamp(farD / max(1.0, uIntroMaxRadius * 2.0), 0.0, 1.0);
-      baseline = 1.0 - r;
-    } else {
-      vec2 d = vBuildingCenter.xz - uIntroCityCenter.xz;
-      float r = clamp(length(d) / max(1.0, uIntroMaxRadius), 0.0, 1.0);
-      baseline = r;
-    }
-    float wakeJitter = hash11(jx * 1.31 + cellId.y * 11.7 + vBuildingHash + 41.0);
-    float onJitter = hash11(jx * 5.7 + cellId.y * 3.1 + vBuildingHash + 71.0);
-    float offJitter = hash11(jx * 1.7 + cellId.y * 23.0 + vBuildingHash + 19.0);
-    float t0 = clamp(baseline, 0.0, 1.0) * uIntroDuration +
-               wakeJitter * min(uIntroDuration * 0.04, 4.0);
-    float wakeTime = uIntroStartTime + t0;
-
-    // Switch-bank stagger: a share (uStagger) of correlated floors light up
-    // in 2..4 column banks, 0.6–1.6 s apart, sweeping left or right — banks
-    // of light switches being flipped down the hall. Shifting wakeTime moves
-    // the whole schedule, so the sweep re-plays on every breathing re-on.
-    if (isBand && hash11(cellId.y * 23.0 + vBuildingHash + 211.0) < uStagger) {
-      float banks = 2.0 + floor(hash11(cellId.y * 3.3 + vBuildingHash + 61.0) * 2.999);
-      float bank = floor(floor(cell.x) / max(1.0, ceil(vGrid.x / banks)));
-      if (hash11(cellId.y * 7.7 + vBuildingHash + 97.0) < 0.5) bank = banks - 1.0 - bank;
-      wakeTime += bank * (0.6 + hash11(cellId.y * 5.1 + vBuildingHash + 23.0));
-    }
-
-    float windowOn;
-    if (uTime < wakeTime) {
-      windowOn = 0.0;
-    } else if (isTv) {
-      windowOn = 1.0;
-    } else {
-      // (1 - jitter) .. (1 + jitter) — at jitter=0 every window cycles in
-      // lockstep; at jitter=1 multipliers span 0..2.
-      float onSec = max(0.5, uOffCycle * (1.0 - uCycleJitter + onJitter * uCycleJitter * 2.0));
-      float offSec = max(0.5, uRetrigger * (1.0 - uCycleJitter + offJitter * uCycleJitter * 2.0));
-      // Curtain ribbons hold their light 4x longer — trading floors and
-      // cleaning crews, not apartment lamps. Keeps the city's statement
-      // pieces visible instead of duty-cycling them away 1/3 of the time.
-      if (isCurtain > 0.5) onSec *= 4.0;
-      float elapsed = uTime - wakeTime;
-      float period = onSec + offSec;
-      float phase = mod(elapsed, period);
-      windowOn = phase < onSec ? 1.0 : 0.0;
-    }
-
-    // Fractional-floor band: only a per-(face, floor) SEGMENT of the row
-    // actually lights — length and position hashed independently per face, so
-    // the sides are deliberately uneven: a quarter here, the full row there,
-    // nothing on the back. pow() skews the length roll toward partial fills.
-    // Curtain floors are exempt — a curtain ribbon spans its whole face (the
-    // per-face unevenness they keep is the independent wake clock).
-    if (fracFloor > 0.5 && isBand && isCurtain < 0.5) {
-      float col = floor(cell.x);
-      float u1 = hash11(vFaceId * 3.7 + cellId.y * 13.1 + vBuildingHash + 101.0);
-      float u2 = hash11(vFaceId * 9.3 + cellId.y * 5.7 + vBuildingHash + 137.0);
-      float litCount = floor(pow(u1, 1.6) * (vGrid.x + 0.999));
-      float start = floor(u2 * (vGrid.x - litCount + 1.0));
-      if (col < start || col > start + litCount - 1.0) windowOn = 0.0;
+      // Deep-graze statistics convergence (#82, the zoomed-in "distressed"
+      // stipple): past ~1 cell/px on the compressed axis a 4-tap mean of
+      // BINARY per-column states quantises to 5 levels, and the tap set
+      // shifts per fragment — adjacent pixels jump ±0.25 coverage, which is
+      // exactly the residual salt-and-pepper on grazing facades. The true
+      // limit of the row average for per-window/TV cells is the building's
+      // duty statistics (aMeanLit), which is analytic and noise-free —
+      // converge there as columns pass sub-pixel. Band/curtain rows are
+      // excluded: their state is row-coherent (already clean under the taps)
+      // and their floor identity — lit ribbon vs dark floor — is real
+      // structure the building mean would erase. Hybrid-gated so classic
+      // stays the untouched pre-hybrid reference.
+      if (uRenderMode > 0.5 && !isBand) {
+        float deepStat = smoothstep(0.8, 2.2, max(spanX, spanY));
+        lit = mix(lit, vMeanLit.rgb, deepStat);
+        windowOn = mix(windowOn, vMeanLit.a * buildingIntroOn(), deepStat);
+      }
     }
 
     // Derivative-based LOD: when one fragment covers a sizeable chunk of an
@@ -493,8 +773,9 @@ void main() {
     // min, not max: a grazing facade has one foreshortened axis with huge
     // cells/pixel while the other stays resolved. max would force a full wash on
     // grazing alone (whole panel glows); min only engages when the window is
-    // sub-resolved in BOTH dimensions, i.e. genuinely far. (relSpan itself is
-    // hoisted next to cellLocal — the band-jitter fade reads it earlier.)
+    // sub-resolved in BOTH dimensions, i.e. genuinely far. The single-axis
+    // grazing case is handled UPSTREAM by the anisotropic footprint average
+    // (lodAnisoX/Y + windowCellState taps), which keeps the resolved axis.
     // 0 below 0.12 (close, crisp), 1 above 0.45 (far / grazing, smooth glow).
     // Disabled in ortho — fwidth(atlasUv) is uniform across the ortho frustum
     // so the LOD path would mask the entire scene; ortho also doesn't have the
@@ -516,10 +797,24 @@ void main() {
     windowOn *= uLightsOn;
 
     // Up close (lod=0): per-cell render with binary on/off gating.
-    // Far (lod=1): per-cell sampling drops out, distantGlow takes over,
-    // also gated by windowOn so a building reads dark before its windows wake.
+    // Far (lod=1): per-cell sampling drops out.
     vec3 nearColor = mix(facade, lit, windowOn * wMask);
-    vec3 farColor = mix(facade, distantGlow, windowOn);
+    vec3 farColor;
+    if (uRenderMode > 0.5) {
+      // HYBRID (#82, lab-validated 2026-07-03): the far wash must not depend
+      // on per-cell state — gating distantGlow by this pixel's windowOn kept
+      // flipping colour per cell at full wash (the residual confetti). Use the
+      // building's statistics instead: mean lit colour × expected on-fraction
+      // × the pane coverage this shader already knows. This is the true
+      // screen-space average of the near path, so the near→far blend is a
+      // continuous brightness ramp, not a look change.
+      float farOn = vMeanLit.a * fracW * fracH * uLightsOn * buildingIntroOn();
+      farColor = mix(facade, vMeanLit.rgb, farOn);
+    } else {
+      // CLASSIC: generic warm glow gated by per-cell windowOn (kept for A/B —
+      // this is the pre-hybrid look, confetti and all).
+      farColor = mix(facade, distantGlow, windowOn);
+    }
     color = mix(nearColor, farColor, lod);
   }
 

@@ -272,6 +272,39 @@ export function StarryNightV2Model() {
     }
   }, [projection]);
 
+  // Adopt a camera handoff on the still→orbit transition (release-in-place from
+  // a parked ?cam= view): camera-controls keeps the eye on takeover but
+  // re-derives its target, which yanks the aim off the shared view (measured
+  // 12.8dB PSNR vs the parked frame). setLookAt with the handed-off pose keeps
+  // the exact framing; ortho matches its size to the pose so the faked-ortho
+  // zoom doesn't jump (same continuity as the mount framing below).
+  useEffect(() => {
+    if (mode !== "orbit") return;
+    const s = useSceneStore.getState();
+    const h = s.cameraHandoff;
+    const c = controls.current;
+    if (!h || !c) return;
+    void c.setLookAt(
+      h.position[0],
+      h.position[1],
+      h.position[2],
+      h.lookAt[0],
+      h.lookAt[1],
+      h.lookAt[2],
+      false,
+    );
+    s.setCameraHandoff(null);
+    if (s.projection === "orthographic") {
+      const dist = Math.hypot(
+        h.position[0] - h.lookAt[0],
+        h.position[1] - h.lookAt[1],
+        h.position[2] - h.lookAt[2],
+      );
+      const half = dist * Math.tan((s.cameraIntent.fov * DEG) / 2);
+      s.setOrthoSize(THREE.MathUtils.clamp(half, ORTHO_SIZE_MIN, ORTHO_SIZE_MAX));
+    }
+  }, [mode]);
+
   // Frame the city + control config. ALL mouse input is custom (below) — including the wheel, so
   // its zoom curve matches Google Earth; native touch is left on for the mobile gestures.
   useEffect(() => {
@@ -628,9 +661,7 @@ export function StarryNightV2Model() {
         // looking up; negative lets the camera drop into a low, upward vantage). ORTHO is hard-capped
         // at 0° (parallel to ground) — never looks up (that would show the ground's underside).
         const floor =
-          useSceneStore.getState().projection === "perspective"
-            ? cfg.tiltFloorDeg * DEG
-            : 0;
+          useSceneStore.getState().projection === "perspective" ? cfg.tiltFloorDeg * DEG : 0;
         const applied = lookDown - THREE.MathUtils.clamp(desired, floor, MAX_ORBIT_EL);
         _q.setFromAxisAngle(orbitAxis.current, applied);
         _e2.copy(_eye).sub(_grab).applyQuaternion(_q).add(_grab);
@@ -686,8 +717,7 @@ export function StarryNightV2Model() {
         // Cap how far up the aim may go. PERSPECTIVE honours the user's Min tilt (0° = no looking up;
         // negative lets it look up from a low vantage). ORTHO is hard-capped at 0° (parallel to ground)
         // — never looks up (that would show the ground's underside).
-        const maxUpY =
-          st.projection === "perspective" ? -Math.sin(st.snv2.tiltFloorDeg * DEG) : 0;
+        const maxUpY = st.projection === "perspective" ? -Math.sin(st.snv2.tiltFloorDeg * DEG) : 0;
         if (_look.y > maxUpY) {
           _look.y = maxUpY;
           if (_look.lengthSq() > 1e-9) _look.normalize();

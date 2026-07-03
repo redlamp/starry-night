@@ -333,6 +333,10 @@ export const DEFAULT_DEBUG = {
   // focal pin, perpendicular to the view axis, with the ortho view's footprint
   // outlined on it — adjust perspective fov/distance until the frame matches.
   showPinPlane: false,
+  // Windows texture-layer view (2026-07-03, window-lab parity): render the
+  // buildings' raw cell atlas or the pane-mask field instead of the final
+  // composite — the same layer debugging the lab's texture dropdowns give.
+  windowView: "final" as "final" | "atlas" | "field",
 };
 
 // Default wireframe stroke colour — a bright blue used where a group has no
