@@ -10,6 +10,7 @@ Top-level Map of Content. See `CLAUDE.md` for conventions.
 
 ## Active
 
+- [[projects/window-lab]] — `/window-lab` render bench; Atlas+SDF construction shipped as the hybrid window mode (`v2026.07.03`)
 - [[fable-codebase-survey-2026-07-02]] — **2026-07-02 survey:** codebase health B+, determinism contract verified, ranked perf/security/hygiene backlog
 - [[projects/v1-still-frame]] — Milestone 1: the still composition *(stub)*
 - [[projects/stage-1-streets-first]] — M2: streets-first city generation, file-level migration plan
@@ -24,6 +25,7 @@ Top-level Map of Content. See `CLAUDE.md` for conventions.
 
 Daily logs live in `wiki/daily/YYYY-MM-DD.md`. Latest:
 
+- [[2026-07-03]]
 - [[2026-07-02]]
 - [[2026-06-08]]
 - [[2026-06-07]]

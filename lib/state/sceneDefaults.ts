@@ -193,7 +193,12 @@ export const DEFAULT_STARS = {
 //             full curtain look — opt-in because it reads as a neon tube).
 export const DEFAULT_WINDOW_AA = {
   edge: 1.1,
-  lodEnabled: true, // window distance-wash LOD; header toggle in the LOD group
+  // Window distance-wash LOD; header toggle in the LOD group. OFF by default
+  // (user 2026-07-03): the current per-cell render is cheap enough to run at
+  // every distance, so the wash is reserved headroom — when the near-field
+  // window shader grows complex/nuanced, re-enable so distance graduates to
+  // the cheaper filtered path (now the mip-atlas far field, not a flat mean).
+  lodEnabled: false,
   // 0.4 = wash starts at ~2.5px windows — the user's pick (2026-07-02, live
   // A/B vs 0.2): keeps mid-range window detail and accepts some speckle in
   // the 2.5-8px band. The band-jitter sub-resolution fade in cityInstanced

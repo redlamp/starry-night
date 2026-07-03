@@ -33,6 +33,7 @@ type Item = {
   label: string;
   sub?: string;
   affordance?: "pin" | "move" | "eye"; // right-aligned scene-affordance icon (mirrors the on-screen glyph)
+  action?: CameraAction; // which live activity signal lights this row (explicit — labels are copy, not ids)
 };
 
 // Focal Height's one-button twin uses Ctrl on Windows/Linux, ⌘ on macOS — resolve to the user's
@@ -45,21 +46,21 @@ const MOD = IS_MAC ? "⌘" : "Ctrl";
 
 // Map model — the full hands-on controller (the original sheet).
 const MAP_MOUSE: Item[] = [
-  { icon: "mouse-left", motion: "all", label: "Rotate & Tilt" },
-  { icon: "mouse-right", motion: "all", label: "Move", sub: "Shift + LMB" },
-  { icon: "mouse-wheel", motion: "ud", label: "Zoom", sub: "z: cursor ↔ pin" },
-  { icon: "mouse-both", motion: "ud", label: "Focal Height", sub: `${MOD} + LMB` },
-  { icon: "mouse-left", badge: "×2", label: "Reset", sub: "double-click" },
+  { icon: "mouse-left", motion: "all", label: "Rotate & Tilt", action: "rotate" },
+  { icon: "mouse-right", motion: "all", label: "Move", sub: "Shift + LMB", action: "pan" },
+  { icon: "mouse-wheel", motion: "ud", label: "Zoom", sub: "z: cursor ↔ pin", action: "zoom" },
+  { icon: "mouse-both", motion: "ud", label: "Focal Height", sub: `${MOD} + LMB`, action: "focalY" },
+  { icon: "mouse-left", badge: "×2", label: "Reset", sub: "double-click", action: "reset" },
 ];
 const MAP_TOUCH: Item[] = [
-  { icon: "finger-1", motion: "all", label: "Rotate & Tilt" },
-  { icon: "finger-2", motion: "all", label: "Move" },
-  { icon: "pinch", label: "Zoom", sub: "pinch in / out" },
-  { icon: "pin", motion: "ud", label: "Focal Height", sub: "drag the pin" },
-  { icon: "finger-1", badge: "×2", label: "Reset", sub: "double-tap" },
+  { icon: "finger-1", motion: "all", label: "Rotate & Tilt", action: "rotate" },
+  { icon: "finger-2", motion: "all", label: "Move", action: "pan" },
+  { icon: "pinch", label: "Zoom", sub: "pinch in / out", action: "zoom" },
+  { icon: "pin", motion: "ud", label: "Focal Height", sub: "drag the pin", action: "focalY" },
+  { icon: "finger-1", badge: "×2", label: "Reset", sub: "double-tap", action: "reset" },
 ];
 
-type KeyRow = { cap: string; label: string };
+type KeyRow = { cap: string; label: string; action?: CameraAction };
 type GuideSpec = {
   mouse: Item[];
   touch: Item[];
@@ -103,70 +104,78 @@ const MODEL_GUIDE: Record<CameraModelId, GuideSpec> = {
     ],
     touch: [{ icon: "finger-1", motion: "all", label: "Look", sub: "drag" }],
     keys: [
-      { cap: "W A S D", label: "Fly / strafe" },
-      { cap: "E / Q", label: "Up / down" },
+      { cap: "W A S D", label: "Fly / Strafe" },
+      { cap: "E / Q", label: "Up / Down" },
       { cap: "Shift", label: "Sprint" },
     ],
     hotkeys: ["settings"],
   },
   snv2: {
     mouse: [
-      { icon: "mouse-left", motion: "all", label: "Rotate & Tilt", affordance: "pin" },
-      { icon: "mouse-right", motion: "all", label: "Move", sub: "or Shift + LMB", affordance: "move" },
+      { icon: "mouse-left", motion: "all", label: "Rotate & Tilt", affordance: "pin", action: "rotate" },
+      {
+        icon: "mouse-right",
+        motion: "all",
+        label: "Move",
+        sub: "or Shift + LMB",
+        affordance: "move",
+        action: "pan",
+      },
       {
         icon: "mouse-both",
         motion: "all",
         label: "Look Around",
         sub: `or ${MOD} + LMB`,
         affordance: "eye",
+        action: "look",
       },
-      { icon: "mouse-wheel", motion: "ud", label: "Zoom" },
-      { icon: "mouse-left", badge: "×2", label: "Zoom in", sub: "double-click" },
+      { icon: "mouse-wheel", motion: "ud", label: "Zoom", action: "zoom" },
+      { icon: "mouse-left", badge: "×2", label: "Zoom In", sub: "double-click", action: "zoomIn" },
     ],
     touch: [
-      { icon: "finger-1", motion: "all", label: "Move" },
-      { icon: "pinch", label: "Zoom + rotate", sub: "two fingers" },
+      { icon: "finger-1", motion: "all", label: "Move", action: "pan" },
+      { icon: "pinch", label: "Zoom + Rotate", sub: "two fingers", action: "zoom" },
     ],
-    keys: [{ cap: "R", label: "Reset camera" }],
+    keys: [{ cap: "R", label: "Reset Camera", action: "reset" }],
     hotkeys: ["projection", "settings"],
   },
   googleearth: {
     mouse: [
-      { icon: "mouse-left", motion: "all", label: "Move", sub: "drag the ground" },
-      { icon: "mouse-right", motion: "all", label: "Orbit + Tilt", sub: "or Shift + LMB" },
-      { icon: "mouse-wheel", motion: "ud", label: "Zoom" },
-      { icon: "mouse-left", badge: "×2", label: "Zoom in", sub: "double-click" },
+      { icon: "mouse-left", motion: "all", label: "Move", sub: "drag the ground", action: "pan" },
+      { icon: "mouse-right", motion: "all", label: "Orbit + Tilt", sub: "or Shift + LMB", action: "rotate" },
+      { icon: "mouse-wheel", motion: "ud", label: "Zoom", action: "zoom" },
+      { icon: "mouse-left", badge: "×2", label: "Zoom In", sub: "double-click", action: "zoomIn" },
     ],
     touch: [
-      { icon: "finger-1", motion: "all", label: "Move" },
-      { icon: "pinch", label: "Zoom + rotate", sub: "two fingers" },
+      { icon: "finger-1", motion: "all", label: "Move", action: "pan" },
+      { icon: "pinch", label: "Zoom + Rotate", sub: "two fingers", action: "zoom" },
     ],
     note: "Google Earth reference controls (perspective only).",
     hotkeys: ["settings"],
   },
   dreimap: {
     mouse: [
-      { icon: "mouse-left", motion: "all", label: "Pan", sub: "drag the ground" },
-      { icon: "mouse-right", motion: "all", label: "Orbit" },
-      { icon: "mouse-wheel", motion: "ud", label: "Zoom" },
+      { icon: "mouse-left", motion: "all", label: "Pan", sub: "drag the ground", action: "pan" },
+      { icon: "mouse-right", motion: "all", label: "Orbit", action: "rotate" },
+      { icon: "mouse-wheel", motion: "ud", label: "Zoom", action: "zoom" },
     ],
     touch: [
-      { icon: "finger-1", motion: "all", label: "Pan" },
-      { icon: "finger-2", motion: "all", label: "Orbit" },
-      { icon: "pinch", label: "Zoom", sub: "pinch in / out" },
+      { icon: "finger-1", motion: "all", label: "Pan", action: "pan" },
+      { icon: "finger-2", motion: "all", label: "Orbit", action: "rotate" },
+      { icon: "pinch", label: "Zoom", sub: "pinch in / out", action: "zoom" },
     ],
     note: "Vanilla drei MapControls — perspective only.",
     hotkeys: ["settings"],
   },
   dreicamera: {
     mouse: [
-      { icon: "mouse-left", motion: "all", label: "Orbit" },
-      { icon: "mouse-right", motion: "all", label: "Move", sub: "truck" },
-      { icon: "mouse-wheel", motion: "ud", label: "Dolly", sub: "zoom" },
+      { icon: "mouse-left", motion: "all", label: "Orbit", action: "rotate" },
+      { icon: "mouse-right", motion: "all", label: "Move", sub: "truck", action: "pan" },
+      { icon: "mouse-wheel", motion: "ud", label: "Dolly", sub: "zoom", action: "zoom" },
     ],
     touch: [
-      { icon: "finger-1", motion: "all", label: "Orbit" },
-      { icon: "pinch", label: "Zoom + pan", sub: "two fingers" },
+      { icon: "finger-1", motion: "all", label: "Orbit", action: "rotate" },
+      { icon: "pinch", label: "Zoom + Pan", sub: "two fingers", action: "zoom" },
     ],
     note: "Vanilla camera-controls — perspective only.",
     hotkeys: ["settings"],
@@ -184,16 +193,6 @@ const HOTKEYS: { k: string; label: string; icon?: string; id: HotkeyId }[] = [
   { k: "Z", label: "Zoom", id: "zoom" },
   { k: "H", label: "Settings", id: "settings" },
 ];
-
-// which row each live action maps to (label-matched, so the highlight lands in either tab)
-const ACTION_LABEL: Record<CameraAction, string> = {
-  rotate: "Rotate & Tilt",
-  focalY: "Focal Height",
-  pan: "Move",
-  look: "Look Around",
-  zoom: "Zoom",
-  reset: "Reset",
-};
 
 function Glyph({
   icon,
@@ -238,11 +237,11 @@ function AffordanceIcon({ kind }: { kind: NonNullable<Item["affordance"]> }) {
   return <Icon aria-hidden className="ml-auto size-6 shrink-0 text-sky-300" strokeWidth={2.5} />;
 }
 
-function Rows({ items, active }: { items: Item[]; active: string | null }) {
+function Rows({ items, active }: { items: Item[]; active: CameraAction | null }) {
   return (
     <div className="flex flex-col">
       {items.map((it, i) => {
-        const on = it.label === active;
+        const on = active != null && it.action === active;
         return (
           <div
             key={i}
@@ -271,19 +270,33 @@ function Rows({ items, active }: { items: Item[]; active: string | null }) {
   );
 }
 
-// Keyboard rows (Fly's WASD / E·Q / Shift). No glyph assets for keys, so render keycaps in
-// the same amber style as the hotkey switches below.
-function KeyRows({ rows }: { rows: KeyRow[] }) {
+// Keyboard rows (Fly's WASD / E·Q / Shift, snv2's R). No glyph assets for keys, so render keycaps
+// in the same amber style as the hotkey switches below. Rows with an action highlight like the
+// gesture rows do — e.g. "Reset Camera" stays lit for the whole R flight.
+function KeyRows({ rows, active }: { rows: KeyRow[]; active: CameraAction | null }) {
   return (
     <div className="flex flex-col gap-1.5 py-1">
-      {rows.map((r, i) => (
-        <div key={i} className="flex items-center gap-3 px-1.5">
-          <kbd className="inline-flex min-w-[4.5rem] justify-center rounded bg-amber-400 px-2 py-1 font-mono text-sm font-semibold text-black">
-            {r.cap}
-          </kbd>
-          <span className="text-foreground/90 text-base">{r.label}</span>
-        </div>
-      ))}
+      {rows.map((r, i) => {
+        const on = active != null && r.action === active;
+        return (
+          <div
+            key={i}
+            className={cn(
+              "flex h-10 items-center gap-3 rounded px-1.5 transition-colors",
+              on ? "bg-amber-500/15" : "hover:bg-foreground/5",
+            )}
+          >
+            <kbd className="inline-flex min-w-[4.5rem] justify-center rounded bg-amber-400 px-2 py-1 font-mono text-sm font-semibold text-black">
+              {r.cap}
+            </kbd>
+            <span
+              className={cn("text-base", on ? "font-medium text-amber-300" : "text-foreground/90")}
+            >
+              {r.label}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -343,7 +356,7 @@ export function ControlsGuide() {
       ? "touch"
       : "mouse",
   );
-  const [activeLabel, setActiveLabel] = useState<string | null>(null);
+  const [activeAction, setActiveAction] = useState<CameraAction | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
 
@@ -362,8 +375,7 @@ export function ControlsGuide() {
     let raf = 0;
     const tick = () => {
       const fresh = performance.now() - cameraActivity.at < 260 ? cameraActivity.action : null;
-      const label = fresh ? ACTION_LABEL[fresh] : null;
-      setActiveLabel((prev) => (prev === label ? prev : label));
+      setActiveAction((prev) => (prev === fresh ? prev : fresh));
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
@@ -427,8 +439,8 @@ export function ControlsGuide() {
               </TabsTrigger>
             </TabsList>
           </Tabs>
-          {items.length > 0 && <Rows items={items} active={activeLabel} />}
-          {mode === "mouse" && guide.keys && <KeyRows rows={guide.keys} />}
+          {items.length > 0 && <Rows items={items} active={activeAction} />}
+          {mode === "mouse" && guide.keys && <KeyRows rows={guide.keys} active={activeAction} />}
           {guide.note && (
             <p className="text-foreground/55 px-1.5 py-1.5 text-sm leading-snug">{guide.note}</p>
           )}

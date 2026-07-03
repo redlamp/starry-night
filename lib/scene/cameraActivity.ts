@@ -5,7 +5,7 @@
 //
 // Display-only (a UI affordance, NOT scene state), so the performance.now() stamp is fine under the
 // determinism contract — same basis as the FPS meter. A plain mutable singleton, never React state.
-export type CameraAction = "rotate" | "focalY" | "pan" | "look" | "zoom" | "reset";
+export type CameraAction = "rotate" | "focalY" | "pan" | "look" | "zoom" | "zoomIn" | "reset";
 
 export const cameraActivity: { action: CameraAction | null; at: number } = { action: null, at: 0 };
 
