@@ -424,6 +424,12 @@ type SceneState = {
   // not only while dragging the near/far sliders. Session-scoped runtime flag.
   fogBoundsAlways: boolean;
   setFogBoundsAlways: (v: boolean) => void;
+  // Transient UI hover (#69): the archetype whose Windows-panel icon is under
+  // the pointer. InstancedCity eases each archetype mesh's uHighlight toward
+  // lift (match) / dim (rest). Runtime tier only — never in SETTINGS_REGISTRY,
+  // SavedConfig, or share codes.
+  highlightArchetype: Archetype | null;
+  setHighlightArchetype: (a: Archetype | null) => void;
   cameraTweenRequest: TweenRequest | null;
   // Projection model. We keep a single perspective camera under the hood; ortho
   // is implemented by overriding camera.projectionMatrix each frame using an
@@ -934,6 +940,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setFogAdjusting: (fogAdjusting) => set({ fogAdjusting }),
   fogBoundsAlways: false,
   setFogBoundsAlways: (fogBoundsAlways) => set({ fogBoundsAlways }),
+  highlightArchetype: null,
+  setHighlightArchetype: (highlightArchetype) => set({ highlightArchetype }),
   resetCamera: () => {
     // Derive reset patch from the registry: every entry goes back to its
     // hardcoded defaultValue. Runtime readouts (cityPlanning.topologyKind /

@@ -185,6 +185,11 @@ uniform vec3 uWireColor;
 // dither, which is how the #82 mid-range stipple was isolated). Raw output,
 // no fog, so the layers read as data, not as scene.
 uniform float uWinDebugView;
+// #69 archetype hover highlight — per-MESH state in one float (buildings are
+// one InstancedMesh per archetype): 0 = idle, 0.5 = ANOTHER archetype is
+// hovered (dim for contrast), 1 = THIS mesh's archetype is hovered (emissive
+// lift). Eased CPU-side (~150ms), so in-between values must blend sensibly.
+uniform float uHighlight;
 
 varying vec2 vUv;
 varying vec3 vNormalLocal;
@@ -251,6 +256,17 @@ vec3 debugTintColor() {
   c = mix(c, vec3(0.93, 0.41, 0.15), smoothstep(0.30, 0.70, t));
   c = mix(c, vec3(0.99, 0.91, 0.64), smoothstep(0.65, 1.0, t));
   return c;
+}
+
+// Hover-highlight brightness multiplier: 1 at idle, dips to a slight dim as
+// uHighlight approaches 0.5 (another archetype hovered), lifts >1 toward 1
+// (self hovered — HDR headroom is fine, the chain blooms it). Applied AFTER
+// the debug tint so a hover layers over an active Building Tint mode instead
+// of replacing it.
+float highlightMul() {
+  float dim = clamp(uHighlight * 2.0, 0.0, 1.0);
+  float self = clamp(uHighlight * 2.0 - 1.0, 0.0, 1.0);
+  return mix(mix(1.0, 0.7, dim), 1.8, self);
 }
 
 // Complete per-cell window state at an arbitrary point on the facade grid:
@@ -454,6 +470,7 @@ void main() {
   if (upDotLocal > 0.5) {
     vec3 topc = facade;
     if (uDebugTint > 0.0001) topc = mix(topc, debugTintColor(), uDebugTint);
+    topc *= highlightMul();
     gl_FragColor = vec4(topc, 1.0);
     #include <fog_fragment>
     return;
@@ -831,6 +848,7 @@ void main() {
   }
 
   if (uDebugTint > 0.0001) color = mix(color, debugTintColor(), uDebugTint);
+  color *= highlightMul();
   gl_FragColor = vec4(color, 1.0);
   #include <fog_fragment>
 }

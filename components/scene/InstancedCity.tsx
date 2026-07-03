@@ -83,6 +83,7 @@ const TINT_DEPTH = ["#ff5a5a", "#ffd24a", "#5a9bff"].map((c) => new THREE.Color(
 
 type TiledMesh = {
   mesh: THREE.InstancedMesh;
+  archetype: Archetype;
   partition: TilePartition;
   channels: CompactChannel[];
   // Facade recolor (live sliders): tile-major building list + the facade
@@ -122,6 +123,9 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
   const lastWindowSimple = useRef<object | null>(null);
   const lastWindowProfiles = useRef<object | null>(null);
   const lastDebug = useRef<object | null>(null);
+  // #69 hover highlight: per-mesh eased uHighlight value. Per-MESH values
+  // differ (self vs rest), so this sits outside the shared scalar cache.
+  const hlEase = useRef<number[]>([]);
   useEffect(() => {
     lastSigs.current = entries.map(() => "");
     // Rebuilt meshes carry creation-DEFAULT uniforms (not store values), so a
@@ -132,6 +136,9 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
     lastWindowSimple.current = null;
     lastWindowProfiles.current = null;
     lastDebug.current = null;
+    // Matches the rebuilt materials' creation-default uHighlight of 0; if a
+    // hover is live the ease below walks them back up next frame.
+    hlEase.current = entries.map(() => 0);
   }, [entries]);
 
   // Facade recolor: sliders rewrite the per-instance colour SOURCE arrays
@@ -172,8 +179,13 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
   // Per-frame: refresh the intro-related uniforms that depend on live state
   // (camera pose for far-to-near mode, orbit centre, mode int). progress/mode
   // values themselves point at sharedIntro singletons so no per-frame work.
-  useFrame((state) => {
+  useFrame((state, delta) => {
     const s = useSceneStore.getState();
+
+    // #69 hover highlight: per-mesh target — 1 self / 0.5 other / 0 idle —
+    // eased linearly over ~150ms (transient UI presentation, not seed-derived
+    // scene state). Writes stop once a mesh settles on its target.
+    const hl = s.highlightArchetype;
 
     // #55 per-tile culling: lower each archetype mesh's instance count to the
     // frustum-visible tiles. Instance copies fire only when a mesh's visible
@@ -182,7 +194,16 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
     let tilesTot = 0;
     let drawn = 0;
     for (let e = 0; e < entries.length; e++) {
-      const { mesh, partition, channels } = entries[e];
+      const { mesh, partition, channels, archetype } = entries[e];
+      const hlTarget = hl === null ? 0 : archetype === hl ? 1 : 0.5;
+      const hlCur = hlEase.current[e] ?? 0;
+      if (hlCur !== hlTarget) {
+        const step = delta / 0.15;
+        const next =
+          hlCur < hlTarget ? Math.min(hlTarget, hlCur + step) : Math.max(hlTarget, hlCur - step);
+        hlEase.current[e] = next;
+        (mesh.material as THREE.ShaderMaterial).uniforms.uHighlight.value = next;
+      }
       tilesTot += partition.tiles.length;
       if (s.lod.tiles && partition.tiles.length > 1) {
         const sig = visibleTiles(partition, state.camera, frustum.current, visible.current);
@@ -407,7 +428,7 @@ function buildMeshes(
   const euler = new THREE.Euler();
   const color = new THREE.Color();
 
-  for (const rawList of byArchetype.values()) {
+  for (const [archetype, rawList] of byArchetype) {
     // #55: store instances TILE-MAJOR (each world tile's buildings contiguous)
     // so the frame loop can materialise visible tiles with plain slice copies.
     // The atlas above is packed once over ALL buildings — per-building windows
@@ -483,6 +504,7 @@ function buildMeshes(
           uDepthPalette: { value: [] },
           uWireframe: { value: 0 },
           uWireColor: { value: new THREE.Color() },
+          uHighlight: { value: 0 },
         },
       ]),
       fog: true,
@@ -627,7 +649,7 @@ function buildMeshes(
         itemSize: 4,
       },
     ];
-    entries.push({ mesh, partition, channels, list, facadeChannel });
+    entries.push({ mesh, archetype, partition, channels, list, facadeChannel });
   }
 
   return { entries, maxRadius };
