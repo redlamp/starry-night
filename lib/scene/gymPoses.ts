@@ -1,10 +1,11 @@
 // moire-gym poses — the canonical camera setups that reproduce the window
 // aliasing artifact families (#82), shared by the headless runner
-// (scripts/moireGym.ts) and the live `?gym=<name>` URL parameter (CaptureBoot).
+// (scripts/moireGym.ts) and the `?cam=<name>` view-link parameter (a named
+// pose is accepted anywhere a comma-encoded view is — lib/scene/viewLink).
 // One source of truth: a scenario added here is immediately scoreable headless
 // AND viewable in a browser.
 //
-// Live viewing: http://localhost:7827/?gym=band-close&seed=starry-night
+// Live viewing: http://localhost:7827/?cam=band-close&seed=starry-night
 // parks the camera at the pose in Still mode with the normal UI available —
 // tweak sliders and watch; pick a camera model in the panel to fly away from it.
 

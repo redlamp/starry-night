@@ -31,9 +31,9 @@ import { GYM_POSES, GYM_SEED, type GymPose } from "../lib/scene/gymPoses";
 const OUT_DIR = "samples/gym";
 const PREFIX = process.env.GYM_PREFIX ?? "";
 
-// Poses live in lib/scene/gymPoses.ts — shared with the app's ?gym=<name> URL
-// parameter, so every scenario here is also a live link:
-//   http://localhost:7827/?gym=<name>&seed=starry-night
+// Poses live in lib/scene/gymPoses.ts — shared with the app's ?cam= view-link
+// parameter (named form), so every scenario here is also a live link:
+//   http://localhost:7827/?cam=<name>&seed=starry-night
 const SCENARIOS: Record<string, GymPose> = { ...GYM_POSES };
 
 function runScenario(name: string, sc: GymPose): string {
@@ -95,7 +95,7 @@ for (const name of names) {
     process.exit(1);
   }
   console.log(`\n=== ${name} — expects: ${sc.expects}`);
-  console.log(`    view live: http://localhost:7827/?gym=${name}&seed=${GYM_SEED}`);
+  console.log(`    view live: http://localhost:7827/?cam=${name}&seed=${GYM_SEED}`);
   const png = runScenario(name, sc);
   console.log(score(png));
 }
