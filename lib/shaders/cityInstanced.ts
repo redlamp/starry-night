@@ -363,8 +363,12 @@ void main() {
   // band-jitter fade — this is aliasing control, not a detail knob, so the LOD
   // sliders can't reintroduce it. Ortho has uniform derivatives and no grazing
   // perspective; scale out like the wash does.
-  float lodAnisoX = smoothstep(0.3, 0.9, spanX) * (1.0 - uOrthoBlend);
-  float lodAnisoY = smoothstep(0.3, 0.9, spanY) * (1.0 - uOrthoBlend);
+  // Ramp start 0.35 (~2.9px cells): the first cut started at 0.3 and the
+  // partial tap-average dimmed/muddied mid-range windows (avgOn < 1 on floors
+  // that read fully lit) — user 2026-07-03. Grazing churn lives at spans
+  // ≥0.5, still fully covered.
+  float lodAnisoX = smoothstep(0.35, 0.9, spanX) * (1.0 - uOrthoBlend);
+  float lodAnisoY = smoothstep(0.35, 0.9, spanY) * (1.0 - uOrthoBlend);
   // Band-pane brightness jitter fade (2026-07-02): reads as interior depth up
   // close, aliases into speckle under ~4px panes — fade toward the mean on the
   // WORST axis (max: a grazed band is sub-resolved along the row even when
@@ -504,10 +508,15 @@ void main() {
   // fraction, so converge to it as the feature crosses 2px → 1px. Also engages
   // via the cell-level aniso ramp (grazing) — whichever fires first. Free: no
   // extra samples, exact in the limit.
+  // Engage only when the feature genuinely cannot be drawn (<~1px). The first
+  // cut used 1-2px and read as windows SWELLING to fill their tile while still
+  // plainly visible ("doesn't look like windows anymore" — user 2026-07-03):
+  // a 70%-wide window's gap crosses 2px while cells are still ~7px. Keeping
+  // gaps crisp down to the last drawable pixel wins over early averaging.
   float featX = min(fracW, 1.0 - fracW) / max(spanX, 1e-4); // thinnest X feature in px
   float featY = min(fracH, 1.0 - fracH) / max(spanY, 1e-4);
-  float maskLodX = max(lodAnisoX, 1.0 - smoothstep(1.0, 2.0, featX));
-  float maskLodY = max(lodAnisoY, 1.0 - smoothstep(1.0, 2.0, featY));
+  float maskLodX = max(lodAnisoX, 1.0 - smoothstep(0.5, 1.1, featX));
+  float maskLodY = max(lodAnisoY, 1.0 - smoothstep(0.5, 1.1, featY));
   wMaskX = mix(wMaskX, fracW, maskLodX);
   wMaskY = mix(wMaskY, fracH, maskLodY);
   float wMask = wMaskX * wMaskY;
