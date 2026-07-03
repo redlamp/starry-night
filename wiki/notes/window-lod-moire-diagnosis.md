@@ -105,3 +105,65 @@ street-graze 177 → **83**, band-close 423 → **107**, near-guard bottom third
 determinism PASS. Live look + fps judgement pending (the telephoto range now
 reads as calm banded facades instead of shimmering pseudo-detail; the fixed
 ramp constants are the tuning knob).
+
+**Round 4 (2026-07-03, `feat/window-hybrid`)** — the [[window-lab]] Atlas+SDF
+finding ported to production as a **hybrid render mode** (classic|hybrid
+toggle, Settings → Buildings → Windows; classic byte-preserved for A/B):
+
+1. **Box-filtered coverage mask** (`paneCoverage()`): the exact integral of the
+   pane/mullion square wave over the pixel footprint, in closed form
+   (`F(x) = floor(x)·paneW + clamp(fract(x) − lo, 0, paneW)`). Replaces the
+   smoothstep pair + feature guard whose 0.5–1.1 px mullion band half-rendered
+   and beat against the pixel grid — THE zoomed-in "distressed" stipple
+   (mullions on 3–7 px cells, i.e. most mid-range facades at telephoto). Sharp
+   when magnified, dither-free minified, converges to `fracW` naturally — no
+   phantom-mullion fade, no guard.
+2. **Far-field mean-lit**: per-building on-weighted mean colour + on-fraction
+   (`aMeanLit`, computed from the atlas at build time — the 16th and LAST
+   vertex attribute; no headroom left) replaces per-cell confetti past the LOD
+   gate; deep-graze tap statistics converge to the same mean. Ortho/Skyline
+   bypasses all of it (`(1 − uOrthoBlend)` gate).
+3. **Metric bias lesson**: moireMetric scored the fix WORSE (76 → 95) because
+   median-deviation counts sharp correct mullions as speckle. Adjudicated with
+   **supersampled ground truth** (3200×2000 capture, lanczos downsample, MSE
+   vs reference — headless DSF 2 black-screens WebGL, use a big window at
+   DSF 1): hybrid won every pose, −23 % to −39 % error. Speckle metrics reward
+   blur; keep them for triage, never for verdicts.
+
+**Round 5 (2026-07-03, same branch)** — with round 4 in, a "major dithering"
+report at a NEW far pose exposed a third, unrelated family:
+**varying-interpolation ulp noise**, three organs, one disease (full write-up:
+[[decision-shader-varying-precision]]):
+
+1. `hash11(vBuildingHash · k + c)` in the fragment shader — rasterizers
+   reconstruct even a constant varying with per-pixel ulp wobble (~2e-4 at
+   magnitude 1e3), and the hash amplifies input error ~×480 → window-size
+   rolls flipped between discrete values pixel-by-pixel. Every gradient
+   speckled; flats stayed clean (saturation hides it). Affected BOTH modes,
+   always had — far + telephoto just makes the wobble visible.
+2. The same ulps through **binary on/off thresholds** (duty-cycle seeds) —
+   knife-edge cells flip at full contrast.
+3. `mod(cellId, vGrid)` sits ON a discontinuity when a face-shifted column
+   index is an exact multiple of cols (guaranteed for cols ≤ 21 on faces 1–3):
+   ±ulp in vGrid flips the atlas sample between column 0 and cols−1 —
+   whole panes filled with two-tone static.
+
+Fixes: per-building rolls hashed in the **vertex stage** from the exact
+attribute (also moves ~2M/frame fragment hash evals to ~150k vertex ones);
+timing seeds quantised to an integer lattice vertex-side and snapped
+fragment-side; `vGrid`/`vFaceId` snapped before discontinuous consumption.
+30,716 → 634 strong deviants at the reported pose; pane layout pixel-identical
+(no re-roll); shipped `v2026.07.03`, user-confirmed live.
+
+**Probe kit that cracked round 5** (all scratchpad, CDP + paused clock):
+coordinate-integrity stripes (`fract(cell·8)` — proved the UV clean), derived-
+value stripes (`fract(halfW·64)` — showed the roll flipping), 3×3-median
+deviant counter with (x%2, y%2) parity tally (rules derivative quads in/out),
+instance-identity fingerprint (two interleaved populations = depth fight — but
+see the pitfall: `fract(attr·53)` near a byte-rounding edge dithers ONE
+surface into two populations; confirm geometrically before believing it).
+A fresh-context research agent quantitatively rejected rasterizer-precision
+theories and contributed the depth-LSB math (`d²·LSB/near` ≈ 0.076 m at
+d = 800, near = 0.5): an angle-tolerant scan found only 2 near-coincident wall
+pairs city-wide (both far south, gaps 0.03/0.14 m) — parked as a possible
+`city-gen` backlog item, not the reported artifact.
