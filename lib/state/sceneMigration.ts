@@ -159,6 +159,7 @@ export type SavedConfig = {
   citySize?: CityTier;
   cropLock?: boolean;
   fpsHud?: boolean;
+  liveViewLink?: boolean;
   fieldDeviation?: number;
   densityProfile?: DensityProfile;
   antialias?: boolean;

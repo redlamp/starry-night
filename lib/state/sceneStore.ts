@@ -1,9 +1,6 @@
 import { create } from "zustand";
 
-import {
-  CITY_TIERS,
-  setCityTier,
-} from "@/lib/seed/topology";
+import { CITY_TIERS, setCityTier } from "@/lib/seed/topology";
 import type { CityTier, TopologyKind } from "@/lib/seed/topology";
 import type { CityShapeSetting } from "@/lib/seed/cityShape";
 import type { Archetype } from "@/lib/seed/cityGen";
@@ -228,6 +225,7 @@ type AnySettingEntry =
   | SettingEntry<"citySize">
   | SettingEntry<"cropLock">
   | SettingEntry<"fpsHud">
+  | SettingEntry<"liveViewLink">
   | SettingEntry<"fieldDeviation">
   | SettingEntry<"densityProfile">
   | SettingEntry<"antialias">
@@ -300,6 +298,9 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "cropLock", defaultValue: DEFAULT_CROP_LOCK, persist: true },
   // On-screen FPS badge — persisted so a perf pass survives reloads.
   { key: "fpsHud", defaultValue: false as const, persist: true },
+  // Live view link: mirror the camera pose into the address bar (?seed=&cam=)
+  // as it moves, Google-Maps style. Persisted; off by default.
+  { key: "liveViewLink", defaultValue: false as const, persist: true },
   // Tensor-field deviation scale (#51) — gen input, persisted.
   { key: "fieldDeviation", defaultValue: 1.5, persist: true },
   // Population profile (#49) — gen input, persisted.
@@ -623,6 +624,9 @@ type SceneState = {
   // On-screen FPS badge (FpsHud) — toggled from the Performance section.
   fpsHud: boolean;
   setFpsHud: (fpsHud: boolean) => void;
+  // Live view link (CaptureBoot URL sync): address bar tracks the camera.
+  liveViewLink: boolean;
+  setLiveViewLink: (liveViewLink: boolean) => void;
   // Tensor-field deviation scale (#51) — gen input; 1 = the seeded default,
   // <1 calms every city, >1 deforms harder. Changing it regenerates.
   fieldDeviation: number;
@@ -872,6 +876,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setCitySketch: (citySketch) => set({ citySketch }),
   fpsHud: false,
   setFpsHud: (fpsHud) => set({ fpsHud }),
+  liveViewLink: false,
+  setLiveViewLink: (liveViewLink) => set({ liveViewLink }),
   fieldDeviation: 1.5,
   setFieldDeviation: (fieldDeviation) => set({ fieldDeviation }),
   densityProfile: DEFAULT_DENSITY_PROFILE,

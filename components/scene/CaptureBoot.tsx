@@ -5,7 +5,7 @@ import { useSceneStore, QUALITY_TIERS, type QualityTier } from "@/lib/state/scen
 import { CITY_SHAPES, type CityShapeSetting } from "@/lib/seed/cityShape";
 import { readTileCull } from "@/lib/scene/tileCullDebug";
 import { applyDeviceFit } from "@/lib/perf/applyDeviceFit";
-import { parseCamParam } from "@/lib/scene/viewLink";
+import { parseCamParam, encodeCamParam, liveViewPose } from "@/lib/scene/viewLink";
 
 /**
  * Reads URL params and hash on mount + keeps URL hash in sync with the seed.
@@ -103,10 +103,31 @@ export function CaptureBoot() {
       });
     }
 
-    // Sync hash on every seed change (skip while capture mode is on — we don't
-    // want the headless screenshot URL to be a moving target).
+    // URL sync (skip while capture mode is on — we don't want the headless
+    // screenshot URL to be a moving target). Two regimes:
+    //  - liveViewLink OFF: hash tracks the seed only (`#seed=`, the original
+    //    shareable-seed behavior).
+    //  - liveViewLink ON: the address bar IS a view link — `?seed=&cam=`
+    //    follows the camera, Google-Maps style. Trailing 500ms throttle keeps
+    //    replaceState off the pose write-back hot path (~10/s while moving);
+    //    replaceState adds no history entries, so back/forward stay sane.
+    let urlTimer: ReturnType<typeof setTimeout> | null = null;
+    const writeViewUrl = () => {
+      urlTimer = null;
+      const s = useSceneStore.getState();
+      if (s.captureMode || !s.liveViewLink) return;
+      const next = `${window.location.pathname}?seed=${encodeURIComponent(s.masterSeed)}&cam=${encodeCamParam(liveViewPose())}`;
+      if (`${window.location.pathname}${window.location.search}` !== next) {
+        history.replaceState(null, "", next); // drops any #seed — query wins on boot anyway
+      }
+    };
     const unsub = useSceneStore.subscribe((s, prev) => {
       if (s.captureMode) return;
+      if (s.liveViewLink) {
+        if (!urlTimer) urlTimer = setTimeout(writeViewUrl, 500);
+        return;
+      }
+      if (prev.liveViewLink) return; // just toggled off — leave the last link in place
       if (s.masterSeed === prev.masterSeed) return;
       const next = `#seed=${encodeURIComponent(s.masterSeed)}`;
       if (window.location.hash !== next) {
@@ -125,6 +146,7 @@ export function CaptureBoot() {
 
     return () => {
       unsub();
+      if (urlTimer) clearTimeout(urlTimer);
       window.removeEventListener("hashchange", onHashChange);
     };
   }, []);
