@@ -113,12 +113,38 @@ export function FacadeSection() {
 export function WindowsSection() {
   const mode = useSceneStore((s) => s.windowMode);
   const setWindowMode = useSceneStore((s) => s.setWindowMode);
+  const renderMode = useSceneStore((s) => s.windowRenderMode);
+  const setWindowRenderMode = useSceneStore((s) => s.setWindowRenderMode);
   const stagger = useSceneStore((s) => s.windowAA.stagger);
   const curtain = useSceneStore((s) => s.windowAA.curtain);
   const curtainW = useSceneStore((s) => s.windowAA.curtainW);
   const setWindowAA = useSceneStore((s) => s.setWindowAA);
   return (
     <>
+      <div className="flex items-center gap-1">
+        {(["classic", "hybrid"] as const).map((m) => (
+          <Button
+            key={m}
+            variant="secondary"
+            size="sm"
+            onClick={() => setWindowRenderMode(m)}
+            title={m === "classic" ? "Classic far field" : "Hybrid far field"}
+            className={cn(
+              "flex-1 capitalize",
+              renderMode === m
+                ? "bg-foreground text-background hover:bg-foreground"
+                : "bg-foreground/10 text-foreground hover:bg-foreground/20",
+            )}
+          >
+            {m}
+          </Button>
+        ))}
+        <HelpHint>
+          Far-field strategy. Hybrid replaces the distant per-cell wash with each building&apos;s
+          mean lit colour and coverage — removes the sub-pixel confetti (#82), validated in
+          /window-lab. Classic is the previous look, kept for comparison.
+        </HelpHint>
+      </div>
       <div className="flex items-center gap-1">
         {(["simple", "advanced"] as const).map((m) => (
           <Button

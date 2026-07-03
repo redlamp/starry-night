@@ -105,6 +105,7 @@ export type SavedConfig = {
     coolHueMax: number;
   };
   windowMode?: "simple" | "advanced";
+  windowRenderMode?: "classic" | "hybrid";
   windowSimple?: WindowRange;
   windowProfiles?: Record<Archetype, WindowProfile>;
   moonHalo?: { radiusMul: number; innerRadius: number; intensity: number };

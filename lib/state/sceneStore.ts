@@ -191,6 +191,7 @@ type AnySettingEntry =
   | SettingEntry<"facade">
   | SettingEntry<"windowLights">
   | SettingEntry<"windowMode">
+  | SettingEntry<"windowRenderMode">
   | SettingEntry<"windowSimple">
   | SettingEntry<"windowProfiles">
   | SettingEntry<"fog">
@@ -258,6 +259,10 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   // reload / Reset can't leave the city mysteriously dark.
   { key: "windowLights", defaultValue: true, persist: false },
   { key: "windowMode", defaultValue: "advanced" as const, persist: true },
+  // Far-field strategy (#82, lab-validated 2026-07-03): hybrid = per-building
+  // mean-lit wash (confetti-free); classic = per-cell distantGlow gating,
+  // kept for live A/B.
+  { key: "windowRenderMode", defaultValue: "hybrid" as const, persist: true },
   { key: "windowSimple", defaultValue: DEFAULT_WINDOW_SIMPLE, persist: true },
   { key: "windowProfiles", defaultValue: DEFAULT_WINDOW_PROFILES, persist: true },
   { key: "fog", defaultValue: DEFAULT_FOG, persist: true },
@@ -362,6 +367,8 @@ type SceneState = {
   setWindowLights: (v: boolean) => void;
   windowMode: "simple" | "advanced";
   setWindowMode: (mode: "simple" | "advanced") => void;
+  windowRenderMode: "classic" | "hybrid";
+  setWindowRenderMode: (mode: "classic" | "hybrid") => void;
   windowSimple: WindowRange;
   setWindowSimple: (patch: Partial<WindowRange>) => void;
   windowProfiles: Record<Archetype, WindowProfile>;
@@ -614,6 +621,7 @@ type SceneState = {
   setTileOverlay: (v: boolean) => void;
   setTileFreeze: (v: boolean) => void;
   setShowPinPlane: (v: boolean) => void;
+  setWindowDebugView: (v: "final" | "atlas" | "field") => void;
   // Organic city footprint (#14) — gen input; changing it regenerates the city.
   cityShape: CityShapeSetting;
   setCityShape: (cityShape: CityShapeSetting) => void;
@@ -702,6 +710,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setWindowLights: (windowLights) => set({ windowLights }),
   windowMode: "advanced",
   setWindowMode: (windowMode) => set({ windowMode }),
+  windowRenderMode: "hybrid",
+  setWindowRenderMode: (windowRenderMode) => set({ windowRenderMode }),
   windowSimple: DEFAULT_WINDOW_SIMPLE,
   setWindowSimple: (patch) => set((s) => ({ windowSimple: { ...s.windowSimple, ...patch } })),
   windowProfiles: DEFAULT_WINDOW_PROFILES,
@@ -861,6 +871,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setTileOverlay: (v) => set((s) => ({ debug: { ...s.debug, tileOverlay: v } })),
   setTileFreeze: (v) => set((s) => ({ debug: { ...s.debug, tileFreeze: v } })),
   setShowPinPlane: (v) => set((s) => ({ debug: { ...s.debug, showPinPlane: v } })),
+  setWindowDebugView: (v) => set((s) => ({ debug: { ...s.debug, windowView: v } })),
   cityShape: DEFAULT_CITY_SHAPE,
   setCityShape: (cityShape) => set({ cityShape }),
   cityShapeScale: DEFAULT_CITY_SHAPE_SCALE,

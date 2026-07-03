@@ -26,6 +26,7 @@ import {
   generateWindowTexture,
 } from "@/lib/seed/lightingGen";
 import { packWindowAtlas, type PackInput } from "@/lib/scene/atlasPacker";
+import { meanLitStats } from "@/lib/scene/windowStats";
 import { buildingPopulation } from "@/lib/seed/population";
 import { cityVertexShader, cityFragmentShader } from "@/lib/shaders/cityInstanced";
 import { sharedTime } from "@/lib/shaders/sharedTime";
@@ -233,6 +234,7 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
     const curtainWidth = wa.curtainW;
     const lightsOn = s.windowLights ? 1 : 0;
     const windowMode = s.windowMode === "advanced" ? 1 : 0;
+    const renderMode = s.windowRenderMode === "hybrid" ? 1 : 0;
     const tint = dbg.buildingTint;
     const debugMode = tint.enabled ? (TINT_MODE_IDX[tint.mode] ?? 0) : 0;
     const debugTint = tint.enabled ? tint.intensity : 0;
@@ -242,6 +244,7 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
     const orthoChanged = orthoBlend !== uc.orthoBlend;
     const lightsChanged = lightsOn !== uc.lightsOn;
     const modeChanged = windowMode !== uc.windowMode;
+    const renderModeChanged = renderMode !== uc.renderMode;
 
     for (const m of meshes) {
       const mat = m.material as THREE.ShaderMaterial;
@@ -268,6 +271,7 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
       }
       if (lightsChanged) mat.uniforms.uLightsOn.value = lightsOn;
       if (modeChanged) mat.uniforms.uWindowMode.value = windowMode;
+      if (renderModeChanged) mat.uniforms.uRenderMode.value = renderMode;
       if (wsChanged) {
         mat.uniforms.uWinSimpleWMin.value = ws.wMin;
         mat.uniforms.uWinSimpleWMax.value = ws.wMax;
@@ -295,11 +299,14 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
         mat.uniforms.uDebugTint.value = debugTint;
         mat.wireframe = wire;
         mat.uniforms.uWireframe.value = wireframe;
+        mat.uniforms.uWinDebugView.value =
+          dbg.windowView === "field" ? 2 : dbg.windowView === "atlas" ? 1 : 0;
       }
     }
     uc.orthoBlend = orthoBlend;
     uc.lightsOn = lightsOn;
     uc.windowMode = windowMode;
+    uc.renderMode = renderMode;
   });
 
   return (
@@ -341,10 +348,14 @@ function buildMeshes(
   const parcelColor = new Map<string, string>();
   for (const d of tensorDistrictField(masterSeed).districts) parcelColor.set(d.id, d.color);
 
-  // 1. Generate per-building window pixels.
+  // 1. Generate per-building window pixels. While the data is in hand, fold
+  // each building's cells into the hybrid far-field statistics (#82) — see
+  // lib/scene/windowStats for the weighting.
+  const meanLitById = new Map<number, [number, number, number, number]>();
   const windowItems: PackInput[] = buildings.map((b) => {
     const tex = generateWindowTexture(masterSeed, b);
     const data = tex.texture.image.data as Uint8Array;
+    meanLitById.set(b.id, meanLitStats(data, tex.cols * tex.rows));
     // We have what we need from the DataTexture wrapper; let the GPU upload happen
     // through the atlas instead.
     tex.texture.dispose();
@@ -404,6 +415,9 @@ function buildMeshes(
     // built-ins (3) + the 8 customs already sit at 15 of the ~16-slot cap.
     const aMisc = new Float32Array(N * 4);
     const aDebugDistrictColor = new Float32Array(N * 3);
+    // Hybrid far field (#82): xyz = mean lit colour, w = expected on-fraction.
+    // 16th and FINAL attribute slot (GL_MAX_VERTEX_ATTRIBS floor is 16).
+    const aMeanLit = new Float32Array(N * 4);
 
     const material = new THREE.ShaderMaterial({
       vertexShader: cityVertexShader,
@@ -437,6 +451,8 @@ function buildMeshes(
           uRetrigger: { value: 30 },
           uCycleJitter: { value: 0.3 },
           uOrthoBlend: { value: 0 },
+          uRenderMode: { value: 1 },
+          uWinDebugView: { value: 0 },
           uAaEdge: { value: 1.1 },
           uLodNear: { value: 0.2 },
           uLodRange: { value: 0.4 },
@@ -491,6 +507,13 @@ function buildMeshes(
 
       aFacadeGlow[i] = facadeGlowFor(b);
       aBuildingHash[i] = b.windowSeed * 1000;
+      const ml = meanLitById.get(b.id);
+      if (ml) {
+        aMeanLit[i * 4 + 0] = ml[0];
+        aMeanLit[i * 4 + 1] = ml[1];
+        aMeanLit[i * 4 + 2] = ml[2];
+        aMeanLit[i * 4 + 3] = ml[3];
+      }
       aMisc[i * 4 + 0] = DISTRICT_TO_IDX[b.district] ?? 0;
       aMisc[i * 4 + 1] = correlationModeFor(b);
       aMisc[i * 4 + 2] = LAYER_TO_IDX[b.layer] ?? 1;
@@ -524,6 +547,7 @@ function buildMeshes(
       "aDebugDistrictColor",
       new THREE.InstancedBufferAttribute(aDebugDistrictColor, 3),
     );
+    geo.setAttribute("aMeanLit", new THREE.InstancedBufferAttribute(aMeanLit, 4));
 
     mesh.instanceMatrix.needsUpdate = true;
     mesh.frustumCulled = false; // we cull per TILE (#55), finer than a whole-mesh test.
@@ -576,6 +600,11 @@ function buildMeshes(
         src: aDebugDistrictColor.slice(),
         dst: geo.getAttribute("aDebugDistrictColor") as THREE.InstancedBufferAttribute,
         itemSize: 3,
+      },
+      {
+        src: aMeanLit.slice(),
+        dst: geo.getAttribute("aMeanLit") as THREE.InstancedBufferAttribute,
+        itemSize: 4,
       },
     ];
     entries.push({ mesh, partition, channels, list, facadeChannel });
