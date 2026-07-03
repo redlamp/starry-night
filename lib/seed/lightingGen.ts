@@ -285,7 +285,19 @@ export function generateWindowTexture(masterSeed: string, building: Building): W
   const data = new Uint8Array(cols * rows * 4);
   const mode = correlationModeFor(building);
 
-  // Unlit cells stay at the Uint8Array's zero fill (alpha 0 = unlit).
+  // Far-field mip parity: unlit cells keep alpha 0 (the kind gate every
+  // consumer branches on) but carry the dim-tungsten RGB the shader draws for
+  // them — sRGB((1.0, 0.82, 0.55) × 0.55) — so the mipped far-atlas twin
+  // averages lit AND unlit cells into what the near render actually shows.
+  // NEAREST near-field sampling never reads alpha-0 RGB, so this is inert up
+  // close.
+  for (let i = 0; i < data.length; i += 4) {
+    data[i] = 196;
+    data[i + 1] = 179;
+    data[i + 2] = 149;
+  }
+
+  // Unlit cells stay at the prefill (alpha 0 = unlit).
   // alpha encodes the cell kind: 128 = TV (flickers), 200 = correlated band
   // (steady — the shader wakes/cycles band rows together and cuts per-face
   // segments out of fractional ones), 255 = steady per-window lit. Band cells

@@ -162,6 +162,8 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
         const mat = m.material as THREE.ShaderMaterial;
         const tex = mat.uniforms.uWindowAtlas?.value as THREE.Texture | undefined;
         tex?.dispose();
+        const farTex = mat.uniforms.uWindowAtlasFar?.value as THREE.Texture | undefined;
+        farTex?.dispose();
         mat.dispose();
       }
     };
@@ -375,6 +377,18 @@ function buildMeshes(
   atlasTex.wrapT = THREE.ClampToEdgeWrapping;
   atlasTex.colorSpace = THREE.SRGBColorSpace;
   atlasTex.needsUpdate = true;
+  // 2b. Trilinear-mipped twin for the hybrid far field (lab approach-4's far
+  // construction): minification returns the box-filtered average of exactly
+  // the cells a pixel covers — the real lit pattern, softening with distance,
+  // stable under motion. Same buffer, its own GPU copy + mip chain (+33%).
+  const atlasFarTex = new THREE.DataTexture(pack.atlas, pack.width, pack.height, THREE.RGBAFormat);
+  atlasFarTex.generateMipmaps = true;
+  atlasFarTex.minFilter = THREE.LinearMipmapLinearFilter;
+  atlasFarTex.magFilter = THREE.LinearFilter;
+  atlasFarTex.wrapS = THREE.ClampToEdgeWrapping;
+  atlasFarTex.wrapT = THREE.ClampToEdgeWrapping;
+  atlasFarTex.colorSpace = THREE.SRGBColorSpace;
+  atlasFarTex.needsUpdate = true;
 
   // 3. Group buildings by archetype.
   const byArchetype = new Map<Archetype, Building[]>();
@@ -430,6 +444,7 @@ function buildMeshes(
         THREE.UniformsLib.fog,
         {
           uWindowAtlas: { value: null },
+          uWindowAtlasFar: { value: null },
           uWinFracWMin: { value: ARCHETYPE_ORDER.map((a) => DEFAULT_WINDOW_PROFILES[a].wMin) },
           uWinFracWMax: { value: ARCHETYPE_ORDER.map((a) => DEFAULT_WINDOW_PROFILES[a].wMax) },
           uWinFracHMin: { value: ARCHETYPE_ORDER.map((a) => DEFAULT_WINDOW_PROFILES[a].hMin) },
@@ -475,6 +490,7 @@ function buildMeshes(
     // UniformsUtils.merge breaks the texture / shared singletons + clones the
     // debug palette arrays; restore all by reference.
     material.uniforms.uWindowAtlas.value = atlasTex;
+    material.uniforms.uWindowAtlasFar.value = atlasFarTex;
     material.uniforms.uTime = sharedTime;
     material.uniforms.uIntroMode = sharedIntroMode;
     material.uniforms.uIntroStartTime = sharedIntroStartTime;

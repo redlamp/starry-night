@@ -67,6 +67,7 @@ export function CurrentShaderRack({
       mesh.geometry.dispose();
       const mat = mesh.material as THREE.ShaderMaterial;
       (mat.uniforms.uWindowAtlas.value as THREE.Texture | null)?.dispose();
+      (mat.uniforms.uWindowAtlasFar.value as THREE.Texture | null)?.dispose();
       mat.dispose();
     };
   }, [mesh]);
@@ -114,6 +115,17 @@ function buildRackMesh(specimens: RackProps["specimens"], seed: string): THREE.I
   atlasTex.wrapT = THREE.ClampToEdgeWrapping;
   atlasTex.colorSpace = THREE.SRGBColorSpace;
   atlasTex.needsUpdate = true;
+  // Trilinear-mipped twin — the production hybrid's far field (see
+  // InstancedCity 2b); the rack must carry it or the shared shader samples
+  // black at distance.
+  const atlasFarTex = new THREE.DataTexture(pack.atlas, pack.width, pack.height, THREE.RGBAFormat);
+  atlasFarTex.generateMipmaps = true;
+  atlasFarTex.minFilter = THREE.LinearMipmapLinearFilter;
+  atlasFarTex.magFilter = THREE.LinearFilter;
+  atlasFarTex.wrapS = THREE.ClampToEdgeWrapping;
+  atlasFarTex.wrapT = THREE.ClampToEdgeWrapping;
+  atlasFarTex.colorSpace = THREE.SRGBColorSpace;
+  atlasFarTex.needsUpdate = true;
 
   const N = specimens.length;
   const geo = new THREE.BoxGeometry(1, 1, 1);
@@ -134,6 +146,7 @@ function buildRackMesh(specimens: RackProps["specimens"], seed: string): THREE.I
       THREE.UniformsLib.fog,
       {
         uWindowAtlas: { value: null },
+        uWindowAtlasFar: { value: null },
         uWinFracWMin: { value: ARCHETYPE_ORDER.map((a) => DEFAULT_WINDOW_PROFILES[a].wMin) },
         uWinFracWMax: { value: ARCHETYPE_ORDER.map((a) => DEFAULT_WINDOW_PROFILES[a].wMax) },
         uWinFracHMin: { value: ARCHETYPE_ORDER.map((a) => DEFAULT_WINDOW_PROFILES[a].hMin) },
@@ -183,6 +196,7 @@ function buildRackMesh(specimens: RackProps["specimens"], seed: string): THREE.I
   });
   // merge clones/breaks object values — restore by reference.
   material.uniforms.uWindowAtlas.value = atlasTex;
+  material.uniforms.uWindowAtlasFar.value = atlasFarTex;
   material.uniforms.uLandusePalette.value = BLACK4;
   material.uniforms.uArchetypePalette.value = BLACK7;
   material.uniforms.uDepthPalette.value = BLACK3;

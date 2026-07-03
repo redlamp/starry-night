@@ -124,6 +124,7 @@ export const cityFragmentShader = /* glsl */ `
 #include <fog_pars_fragment>
 
 uniform sampler2D uWindowAtlas;
+uniform sampler2D uWindowAtlasFar; // trilinear-mipped twin — hybrid far field (box-filtered cell average)
 uniform float uWinFracWMin[7];  // per-archetype window ranges (advanced mode) —
 uniform float uWinFracWMax[7];  //   each building rolls ONE seeded width and ONE
 uniform float uWinFracHMin[7];  //   seeded height inside its archetype's
@@ -801,15 +802,26 @@ void main() {
     vec3 nearColor = mix(facade, lit, windowOn * wMask);
     vec3 farColor;
     if (uRenderMode > 0.5) {
-      // HYBRID (#82, lab-validated 2026-07-03): the far wash must not depend
-      // on per-cell state — gating distantGlow by this pixel's windowOn kept
-      // flipping colour per cell at full wash (the residual confetti). Use the
-      // building's statistics instead: mean lit colour × expected on-fraction
-      // × the pane coverage this shader already knows. This is the true
-      // screen-space average of the near path, so the near→far blend is a
-      // continuous brightness ramp, not a look change.
+      // HYBRID far field v2 (#82; "orange columns" 2026-07-03): the far wash
+      // must not POINT-SAMPLE per-cell state (confetti), but a flat per-
+      // building mean erases all fenestration structure. Sample the mipped
+      // atlas twin at the CONTINUOUS cell coordinate instead: trilinear
+      // minification returns the box-filtered average of exactly the cells
+      // this pixel covers — the building's real lit pattern, softening with
+      // distance, stable under motion because it averages instead of picking.
+      // Unshifted coordinate (no per-face atlas shift): a shifted CONTINUOUS
+      // uv would wrap mid-facade and linear filtering would blend the seam;
+      // face desync is invisible at wash range anyway. Unlit cells carry
+      // their dim-tungsten RGB in the atlas (see generateWindowTexture), so
+      // the average includes what the near path actually draws for them.
+      // Deep limit: cross to the per-building mean once the footprint
+      // outgrows the low mips — also caps packed-atlas neighbour bleed,
+      // which grows with mip level.
+      vec2 farUv = vAtlasOffset + clamp(cell / grid, 0.0, 1.0) * vAtlasSize;
+      vec3 farPattern = texture2D(uWindowAtlasFar, farUv).rgb * uEmissiveBoost;
+      vec3 farLit = mix(farPattern, vMeanLit.rgb, smoothstep(4.0, 8.0, relSpan));
       float farOn = vMeanLit.a * fracW * fracH * uLightsOn * buildingIntroOn();
-      farColor = mix(facade, vMeanLit.rgb, farOn);
+      farColor = mix(facade, farLit, farOn);
     } else {
       // CLASSIC: generic warm glow gated by per-cell windowOn (kept for A/B —
       // this is the pre-hybrid look, confetti and all).
