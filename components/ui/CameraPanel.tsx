@@ -1,14 +1,7 @@
 "use client";
 
-import {
-  useEffect,
-  useState,
-  type ReactNode,
-} from "react";
-import {
-  useSceneStore,
-  type Vec3,
-} from "@/lib/state/sceneStore";
+import { useEffect, useState, type ReactNode } from "react";
+import { useSceneStore, type Vec3 } from "@/lib/state/sceneStore";
 import { randomSeedForReroll } from "@/lib/seed/rng";
 import { cn, isTypingTarget } from "@/lib/utils";
 import { useIdle } from "@/lib/useIdle";
@@ -69,7 +62,13 @@ import {
   RoadHighlightAction,
 } from "@/components/ui/RoadsPanel";
 import { fmt, RAD2DEG, Section, SubGroup } from "@/components/ui/panels/shared";
-import { PoseSection, CameraHeaderActions, PinPlaneReadout, focalLengthMm, lensName } from "@/components/ui/panels/PosePanel";
+import {
+  PoseSection,
+  CameraHeaderActions,
+  PinPlaneReadout,
+  focalLengthMm,
+  lensName,
+} from "@/components/ui/panels/PosePanel";
 import { OrbitSection, OrbitHeaderActions } from "@/components/ui/panels/OrbitPanel";
 import { StarsSection } from "@/components/ui/panels/StarsPanel";
 import { BuildingsSection } from "@/components/ui/panels/BuildingsPanel";

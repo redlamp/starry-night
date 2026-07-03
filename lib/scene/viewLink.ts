@@ -70,11 +70,7 @@ export function liveViewPose(): ViewLinkPose {
     // Fly (and anything else): derive the aim from the live euler.
     _euler.set(live.rotation[0], live.rotation[1], live.rotation[2]);
     _fwd.set(0, 0, -1).applyEuler(_euler);
-    lookAt = [
-      position[0] + _fwd.x * 200,
-      position[1] + _fwd.y * 200,
-      position[2] + _fwd.z * 200,
-    ];
+    lookAt = [position[0] + _fwd.x * 200, position[1] + _fwd.y * 200, position[2] + _fwd.z * 200];
   }
   const ortho = s.projection === "orthographic";
   return {
