@@ -1,14 +1,7 @@
 "use client";
 
-import {
-  useEffect,
-  useState,
-  type ReactNode,
-} from "react";
-import {
-  useSceneStore,
-  type Vec3,
-} from "@/lib/state/sceneStore";
+import { useEffect, useState, type ReactNode } from "react";
+import { useSceneStore, type Vec3 } from "@/lib/state/sceneStore";
 import { randomSeedForReroll } from "@/lib/seed/rng";
 import { cn, isTypingTarget } from "@/lib/utils";
 import { useIdle } from "@/lib/useIdle";
@@ -22,6 +15,7 @@ import {
   Copy,
   Gauge,
   Info,
+  Link2,
   Map as MapIcon,
   Moon,
   MoonStar,
@@ -46,6 +40,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { CAMERA_MODELS, getCameraModelMeta } from "@/components/scene/camera-models/catalog";
+import { buildViewLink } from "@/lib/scene/viewLink";
 import type { CameraModelId } from "@/lib/state/sceneStore";
 import { Accordion } from "@/components/ui/accordion";
 import {
@@ -67,7 +62,13 @@ import {
   RoadHighlightAction,
 } from "@/components/ui/RoadsPanel";
 import { fmt, RAD2DEG, Section, SubGroup } from "@/components/ui/panels/shared";
-import { PoseSection, CameraHeaderActions, PinPlaneReadout, focalLengthMm, lensName } from "@/components/ui/panels/PosePanel";
+import {
+  PoseSection,
+  CameraHeaderActions,
+  PinPlaneReadout,
+  focalLengthMm,
+  lensName,
+} from "@/components/ui/panels/PosePanel";
 import { OrbitSection, OrbitHeaderActions } from "@/components/ui/panels/OrbitPanel";
 import { StarsSection } from "@/components/ui/panels/StarsPanel";
 import { BuildingsSection } from "@/components/ui/panels/BuildingsPanel";
@@ -711,6 +712,7 @@ export function CameraPanel() {
             )}
           </div>
           <div className="ml-auto flex flex-wrap items-center gap-1.5">
+            <CopyViewLinkButton />
             <CopyButton />
             <FooterAction
               label="Save Settings"
@@ -795,6 +797,41 @@ function CopyButton() {
       />
       <TooltipContent side="top">
         {copyState === "copied" ? "Copied!" : "Copy Settings"}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+// Google-Maps-style "link to what I'm looking at": a ?seed=&cam= URL of the
+// LIVE camera (lib/scene/viewLink). Same copied-feedback idiom as CopyButton.
+function CopyViewLinkButton() {
+  const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
+  const onCopy = () => {
+    void navigator.clipboard.writeText(buildViewLink());
+    setCopyState("copied");
+    setTimeout(() => setCopyState("idle"), 1200);
+  };
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            variant="secondary"
+            size="icon"
+            aria-label="Copy View Link"
+            onClick={onCopy}
+            className="bg-foreground/10 text-foreground hover:bg-foreground/20"
+          >
+            {copyState === "copied" ? (
+              <Check className="size-4 text-emerald-400" />
+            ) : (
+              <Link2 className="size-4" />
+            )}
+          </Button>
+        }
+      />
+      <TooltipContent side="top">
+        {copyState === "copied" ? "Copied!" : "Copy View Link"}
       </TooltipContent>
     </Tooltip>
   );

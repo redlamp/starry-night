@@ -105,6 +105,7 @@ export type SavedConfig = {
     coolHueMax: number;
   };
   windowMode?: "simple" | "advanced";
+  windowRenderMode?: "classic" | "hybrid";
   windowSimple?: WindowRange;
   windowProfiles?: Record<Archetype, WindowProfile>;
   moonHalo?: { radiusMul: number; innerRadius: number; intensity: number };
@@ -159,6 +160,7 @@ export type SavedConfig = {
   citySize?: CityTier;
   cropLock?: boolean;
   fpsHud?: boolean;
+  liveViewLink?: boolean;
   fieldDeviation?: number;
   densityProfile?: DensityProfile;
   antialias?: boolean;

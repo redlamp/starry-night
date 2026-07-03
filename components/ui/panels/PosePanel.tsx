@@ -1,17 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import {
-  useSceneStore,
-  DEFAULT_INTENT,
-  DEFAULT_PROJECTION,
-} from "@/lib/state/sceneStore";
+import { useSceneStore, DEFAULT_INTENT, DEFAULT_PROJECTION } from "@/lib/state/sceneStore";
 import { tweenOrbitToDefault, tweenOrbitTowards, tweenProjectionTo } from "@/lib/scene/cameraView";
 import { cn } from "@/lib/utils";
 import { Box, Crosshair, Telescope } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Switch } from "@/components/ui/switch";
 import { ValueSlider } from "@/components/ui/value-slider";
 import { fmt } from "./shared";
 
@@ -54,7 +51,27 @@ export function PoseSection({ flying }: { flying: boolean }) {
       <ProjectionRow />
       <FovOrSizeSlider />
       {flying ? <FlySpeedSlider /> : null}
+      <LiveViewLinkRow />
     </>
+  );
+}
+
+// Google-Maps-style URL following: while on, the address bar mirrors the live
+// camera as a shareable ?seed=&cam= view link (CaptureBoot URL sync). The
+// footer's Copy View Link works either way — this just keeps the URL current
+// without clicking.
+export function LiveViewLinkRow() {
+  const on = useSceneStore((s) => s.liveViewLink);
+  const setLiveViewLink = useSceneStore((s) => s.setLiveViewLink);
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <span className="text-foreground/40 text-xs tracking-wide uppercase">live view link</span>
+      <Switch
+        checked={on}
+        onCheckedChange={setLiveViewLink}
+        title="Address bar follows the camera"
+      />
+    </div>
   );
 }
 
