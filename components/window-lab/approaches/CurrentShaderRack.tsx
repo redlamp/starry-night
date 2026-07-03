@@ -11,6 +11,7 @@ import {
   generateWindowTexture,
 } from "@/lib/seed/lightingGen";
 import { packWindowAtlas, type PackInput } from "@/lib/scene/atlasPacker";
+import { meanLitStats } from "@/lib/scene/windowStats";
 import { cityVertexShader, cityFragmentShader } from "@/lib/shaders/cityInstanced";
 import {
   DEFAULT_FACADE,
@@ -33,8 +34,33 @@ const BLACK4 = [0, 0, 0, 0].map(() => new THREE.Color(0));
 const BLACK7 = [0, 0, 0, 0, 0, 0, 0].map(() => new THREE.Color(0));
 const BLACK3 = [0, 0, 0].map(() => new THREE.Color(0));
 
-export function CurrentShaderRack({ specimens, seed }: RackProps) {
+export function CurrentShaderRack({
+  specimens,
+  seed,
+  windows,
+  texView,
+  onHover,
+  onFocus,
+}: RackProps) {
   const mesh = useMemo(() => buildRackMesh(specimens, seed), [specimens, seed]);
+
+  // Lab window sliders drive the shader's SIMPLE window mode (one shared range,
+  // like the main app's Windows panel in simple mode) — uniform writes only, no
+  // rebuild. Advanced per-archetype profiles stay available in the main app.
+  useEffect(() => {
+    const u = (mesh.material as THREE.ShaderMaterial).uniforms;
+    u.uWinSimpleWMin.value = windows.wMin;
+    u.uWinSimpleWMax.value = windows.wMax;
+    u.uWinSimpleHMin.value = windows.hMin;
+    u.uWinSimpleHMax.value = windows.hMax;
+  }, [mesh, windows]);
+
+  // Texture-layer view — the production shader's own debug uniform (shared
+  // with the main app's Debug → Windows layers control).
+  useEffect(() => {
+    const u = (mesh.material as THREE.ShaderMaterial).uniforms;
+    u.uWinDebugView.value = texView === "field" ? 2 : texView === "atlas" ? 1 : 0;
+  }, [mesh, texView]);
 
   useEffect(() => {
     return () => {
@@ -52,14 +78,31 @@ export function CurrentShaderRack({ specimens, seed }: RackProps) {
     mat.uniforms.uIntroCamPos.value.copy(state.camera.position);
   });
 
-  return <primitive object={mesh} />;
+  return (
+    <primitive
+      object={mesh}
+      onPointerMove={(e: { stopPropagation: () => void; instanceId?: number }) => {
+        e.stopPropagation();
+        onHover?.(e.instanceId != null ? (specimens[e.instanceId]?.id ?? null) : null);
+      }}
+      onPointerOut={() => onHover?.(null)}
+      onDoubleClick={(e: { stopPropagation: () => void; instanceId?: number }) => {
+        e.stopPropagation();
+        const b = e.instanceId != null ? specimens[e.instanceId] : undefined;
+        if (b) onFocus?.(b.id);
+      }}
+    />
+  );
 }
 
 function buildRackMesh(specimens: RackProps["specimens"], seed: string): THREE.InstancedMesh {
-  // 1. Per-building window pixels → shared atlas (identical to InstancedCity).
+  // 1. Per-building window pixels → shared atlas (identical to InstancedCity),
+  // folding the hybrid far-field statistics (#82) as production does.
+  const meanLitById = new Map<number, [number, number, number, number]>();
   const windowItems: PackInput[] = specimens.map((b) => {
     const tex = generateWindowTexture(seed, b);
     const data = tex.texture.image.data as Uint8Array;
+    meanLitById.set(b.id, meanLitStats(data, tex.cols * tex.rows));
     tex.texture.dispose();
     return { id: b.id, cols: tex.cols, rows: tex.rows, data };
   });
@@ -82,6 +125,7 @@ function buildRackMesh(specimens: RackProps["specimens"], seed: string): THREE.I
   const aBuildingHash = new Float32Array(N);
   const aMisc = new Float32Array(N * 4);
   const aDebugDistrictColor = new Float32Array(N * 3); // unused (uDebugMode 0), zeros
+  const aMeanLit = new Float32Array(N * 4); // hybrid far-field statistics (#82)
 
   const material = new THREE.ShaderMaterial({
     vertexShader: cityVertexShader,
@@ -94,7 +138,7 @@ function buildRackMesh(specimens: RackProps["specimens"], seed: string): THREE.I
         uWinFracWMax: { value: ARCHETYPE_ORDER.map((a) => DEFAULT_WINDOW_PROFILES[a].wMax) },
         uWinFracHMin: { value: ARCHETYPE_ORDER.map((a) => DEFAULT_WINDOW_PROFILES[a].hMin) },
         uWinFracHMax: { value: ARCHETYPE_ORDER.map((a) => DEFAULT_WINDOW_PROFILES[a].hMax) },
-        uWindowMode: { value: 1 },
+        uWindowMode: { value: 0 }, // simple mode: the lab's window sliders drive one shared range
         uWinSimpleWMin: { value: DEFAULT_WINDOW_SIMPLE.wMin },
         uWinSimpleWMax: { value: DEFAULT_WINDOW_SIMPLE.wMax },
         uWinSimpleHMin: { value: DEFAULT_WINDOW_SIMPLE.hMin },
@@ -117,11 +161,16 @@ function buildRackMesh(specimens: RackProps["specimens"], seed: string): THREE.I
         uRetrigger: { value: 30 },
         uCycleJitter: { value: 0.3 },
         uOrthoBlend: { value: 0 },
+        // Hybrid far field + analytic coverage mask — the shipped default. The
+        // classic reference look is available on the main app's toggle; here
+        // the rack tracks what production actually renders.
+        uRenderMode: { value: 1 },
         uAaEdge: { value: DEFAULT_WINDOW_AA.edge },
         uLodNear: { value: DEFAULT_WINDOW_AA.lodEnabled ? DEFAULT_WINDOW_AA.lodNear : 1e9 },
         uLodRange: { value: DEFAULT_WINDOW_AA.lodRange },
         uDebugMode: { value: 0 },
         uDebugTint: { value: 0 },
+        uWinDebugView: { value: 0 },
         uMaxHeight: { value: 1 },
         uLandusePalette: { value: [] },
         uArchetypePalette: { value: [] },
@@ -171,6 +220,13 @@ function buildRackMesh(specimens: RackProps["specimens"], seed: string): THREE.I
 
     aFacadeGlow[i] = facadeGlowFor(b);
     aBuildingHash[i] = b.windowSeed * 1000;
+    const ml = meanLitById.get(b.id);
+    if (ml) {
+      aMeanLit[i * 4 + 0] = ml[0];
+      aMeanLit[i * 4 + 1] = ml[1];
+      aMeanLit[i * 4 + 2] = ml[2];
+      aMeanLit[i * 4 + 3] = ml[3];
+    }
     aMisc[i * 4 + 0] = 0;
     aMisc[i * 4 + 1] = correlationModeFor(b);
     aMisc[i * 4 + 2] = 1;
@@ -196,6 +252,7 @@ function buildRackMesh(specimens: RackProps["specimens"], seed: string): THREE.I
     "aDebugDistrictColor",
     new THREE.InstancedBufferAttribute(aDebugDistrictColor, 3),
   );
+  geo.setAttribute("aMeanLit", new THREE.InstancedBufferAttribute(aMeanLit, 4));
   mesh.instanceMatrix.needsUpdate = true;
   mesh.frustumCulled = false; // instances extend far beyond the unit box's bounds
 
