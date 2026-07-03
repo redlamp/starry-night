@@ -167,3 +167,25 @@ theories and contributed the depth-LSB math (`d²·LSB/near` ≈ 0.076 m at
 d = 800, near = 0.5): an angle-tolerant scan found only 2 near-coincident wall
 pairs city-wide (both far south, gaps 0.03/0.14 m) — parked as a possible
 `city-gen` backlog item, not the reported artifact.
+
+**Far field v2 (2026-07-03 evening)** — the hybrid wash's flat per-building
+mean erased all fenestration structure ("orange columns instead of buildings").
+A synthetic 4×3 group-banding patch was rejected (patchwork). The design
+question "what does the LOD buy us?" clarified the system: the wash is NOT a
+performance LOD (nothing gets cheaper) — it exists solely for temporal
+stability where per-cell state is sub-Nyquist. So the far field now filters
+the REAL data instead of replacing it: a **trilinear-mipped twin of the packed
+window atlas**, sampled at the continuous (unsnapped, unshifted) facade
+coordinate — minification returns the box-filtered average of exactly the
+cells each pixel covers. Unlit cells carry dim-tungsten RGB in the atlas
+(alpha-0 RGB was unused by every consumer) so averages match the near render;
+deep ranges crossfade to `aMeanLit`, which also caps packed-atlas neighbour
+bleed. Pan-churn check: violent flips at parity with classic (14 % vs 15 %
+at Δ>60) while linear filtering is continuous in camera position by
+construction — what changes slides, never flickers.
+
+**Status** — [[decision-window-lod-headroom]]: the window LOD now defaults
+**OFF** (per-cell render at every distance; the current shader is cheap
+enough). The mip far field is the LOD-on path, reserved for when a richer
+near-field window shader needs distance graduation — at which point it can
+also become a genuine perf early-out.

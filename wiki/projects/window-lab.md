@@ -36,12 +36,16 @@ another, so the lab isolates the rendering question from the city.
 
 ## Outcome
 
-Approach 4's construction shipped to production 2026-07-03 as the hybrid
-window mode (`paneCoverage()` box-filter mask + `aMeanLit` far field), tagged
-`v2026.07.03` — details in [[window-lod-moire-diagnosis]] round 4 and
-[[decision-shader-varying-precision]]. The baked routes (2/3) stay in the lab
-as references; the lab itself remains the sandbox for future window/facade
-experiments.
+Approach 4's construction shipped to production 2026-07-03 in two waves: the
+morning port (hybrid mode: `paneCoverage()` box-filter mask + `aMeanLit` far
+field, tagged `v2026.07.03`) and the evening far-field v2 (the flat mean
+replaced by approach 4's OTHER half — a trilinear-mipped twin of the packed
+atlas, so the LOD-on far field shows the real lit pattern box-filtered).
+Details: [[window-lod-moire-diagnosis]] rounds 4–5 + "Far field v2",
+[[decision-shader-varying-precision]], [[decision-window-lod-headroom]] (the
+window LOD now defaults off — reserved for a future complex near shader).
+The baked routes (2/3) stay in the lab as references; the lab itself remains
+the sandbox for future window/facade experiments.
 
 ## Gotchas collected
 
