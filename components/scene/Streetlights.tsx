@@ -4,6 +4,7 @@ import { useMemo, useRef, useEffect } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 import { generateStreetlights } from "@/lib/seed/cityGen";
+import { CITY_CENTER } from "@/lib/seed/topology";
 import { kelvinToColor } from "@/lib/color/kelvin";
 import { SCENE_WB_GAIN } from "@/lib/color/whiteBalance";
 import { sharedStreetlightIntroProgress } from "@/lib/shaders/sharedIntro";
@@ -216,7 +217,10 @@ export function Streetlights({ masterSeed }: { masterSeed: string }) {
 
   useFrame((state) => {
     const s = useSceneStore.getState();
-    material.uniforms.uIntroCityCenter.value.set(s.orbit.centerX, 0, s.orbit.centerZ);
+    // The wake radiates from the CITY's centre — a world constant. (This once
+    // read s.orbit.center*, which writeOrbitPose now tracks to the live camera
+    // aim ~10/s, so the "centre" followed the camera — user 2026-07-03.)
+    material.uniforms.uIntroCityCenter.value.set(CITY_CENTER.x, 0, CITY_CENTER.z);
     material.uniforms.uIntroMaxRadius.value = maxRadius;
     // size + brightness are live multipliers (no regen) — base sprite is 6px.
     material.uniforms.uBaseSize.value = 6 * s.streetlights.size;

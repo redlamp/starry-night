@@ -19,6 +19,7 @@ import {
   type Building,
 } from "@/lib/seed/cityGen";
 import type { CityShapeSetting } from "@/lib/seed/cityShape";
+import { CITY_CENTER } from "@/lib/seed/topology";
 import {
   correlationModeFor,
   facadeColorFor,
@@ -250,7 +251,10 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
       const mat = m.material as THREE.ShaderMaterial;
 
       // Always write: camera position changes every frame during any camera motion.
-      mat.uniforms.uIntroCityCenter.value.set(s.orbit.centerX, 0, s.orbit.centerZ);
+      // City centre is the WORLD constant, not the orbit target — writeOrbitPose
+      // tracks orbit.center* to the live camera aim, which made the radial intro
+      // modes (outside-in / inside-out) follow the camera (user 2026-07-03).
+      mat.uniforms.uIntroCityCenter.value.set(CITY_CENTER.x, 0, CITY_CENTER.z);
       mat.uniforms.uIntroMaxRadius.value = maxRadius;
       const camPos = s.cameraLive.position;
       mat.uniforms.uIntroCamPos.value.set(camPos[0], camPos[1], camPos[2]);
