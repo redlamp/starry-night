@@ -5,6 +5,7 @@ import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { useSceneStore, type CameraIntent, type Vec3 } from "@/lib/state/sceneStore";
 import { enterFlyMode, enterOrbitMode } from "@/lib/scene/cameraView";
+import { liveViewPose } from "@/lib/scene/viewLink";
 import { CITY_SCALE } from "@/lib/seed/topology";
 import { isTypingTarget } from "@/lib/utils";
 
@@ -155,6 +156,30 @@ export function CameraControls() {
     camera.fov = intent.fov;
     camera.updateProjectionMatrix();
   }, [mode, intent, camera]);
+
+  // Release-in-place from a parked view (?cam= link, tween-still): grabbing the
+  // canvas hands the camera to the active orbit model AT the parked pose via
+  // cameraHandoff — without it the incoming camera-controls keeps the eye but
+  // re-derives its target, yanking the aim off the shared view. First press
+  // releases; the next drag interacts. Skipped for fly (its own entry flow)
+  // and capture mode (headless stills must stay parked).
+  useEffect(() => {
+    if (mode !== "still") return;
+    const dom = gl.domElement;
+    const release = () => {
+      const s = useSceneStore.getState();
+      if (s.captureMode || s.cameraModel === "fly") return;
+      const p = liveViewPose();
+      s.setCameraHandoff({ position: p.position, lookAt: p.lookAt });
+      s.setCameraMode("orbit");
+    };
+    dom.addEventListener("pointerdown", release);
+    dom.addEventListener("wheel", release, { passive: true });
+    return () => {
+      dom.removeEventListener("pointerdown", release);
+      dom.removeEventListener("wheel", release);
+    };
+  }, [mode, gl]);
 
   // Boot directly into fly mode (cameraMode persists since 2026-06-08): spawn
   // at the saved intent pose — only the "still" effect above applies intent,

@@ -402,6 +402,13 @@ type SceneState = {
   setTurntable: (patch: Partial<TurntableConfig>) => void;
   cameraIntent: CameraIntent;
   cameraLive: CameraLive;
+  // Transient camera handoff: a pose the next orbit model should ADOPT when it
+  // takes over (release-in-place from a parked ?cam= view / still mode) —
+  // without it camera-controls keeps the eye but re-derives its target,
+  // yanking the aim. Set by CameraControls' still-mode release, consumed and
+  // cleared by the active model on the still→orbit transition. Never persisted.
+  cameraHandoff: { position: Vec3; lookAt: Vec3 } | null;
+  setCameraHandoff: (h: { position: Vec3; lookAt: Vec3 } | null) => void;
   // Transient UI signal: true while the user drags the atmosphere near/far
   // sliders — FogBoundsMarkers draws the in-world bracket rings while set.
   fogAdjusting: boolean;
@@ -910,6 +917,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       },
     })),
   setCameraLive: (cameraLive) => set({ cameraLive }),
+  cameraHandoff: null,
+  setCameraHandoff: (cameraHandoff) => set({ cameraHandoff }),
   fogAdjusting: false,
   setFogAdjusting: (fogAdjusting) => set({ fogAdjusting }),
   fogBoundsAlways: false,
