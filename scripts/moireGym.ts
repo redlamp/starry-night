@@ -24,72 +24,36 @@
  * score table on stdout. GYM_PREFIX env prefixes filenames (e.g. "base-").
  */
 import { spawnSync } from "node:child_process";
-import { mkdirSync, writeFileSync, readFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { GYM_POSES, GYM_SEED, type GymPose } from "../lib/scene/gymPoses";
 
 const OUT_DIR = "samples/gym";
 const PREFIX = process.env.GYM_PREFIX ?? "";
-const SEED = "starry-night"; // the seed both user recordings ran
 
-type Intent = {
-  position: [number, number, number];
-  lookAt: [number, number, number];
-  fov: number;
-};
+// Poses live in lib/scene/gymPoses.ts — shared with the app's ?gym=<name> URL
+// parameter, so every scenario here is also a live link:
+//   http://localhost:7827/?gym=<name>&seed=starry-night
+const SCENARIOS: Record<string, GymPose> = { ...GYM_POSES };
 
-interface Scenario {
-  intent: Intent;
-  /** what the pose is meant to show — printed alongside the score */
-  expects: string;
-  overrides?: Record<string, unknown>;
-}
-
-const SCENARIOS: Record<string, Scenario> = {
-  telephoto: {
-    // The round-2 user pose (Copy Settings, 2026-07-02): ~2.77km out, fov 24.6.
-    intent: { position: [-108.66, 160.1, -2801], lookAt: [-27, 211, -38], fov: 24.6 },
-    expects: "isotropic sub-pixel speckle on distant facades",
-  },
-  "street-graze": {
-    // Among the mid-rises looking through to downtown (video-2 regime): near
-    // faces resolved and clean, mid-field faces angled away -> X sub-resolved
-    // while Y stays resolved (vertical stripe combs / grazing churn).
-    intent: { position: [120, 70, 350], lookAt: [-40, 110, -900], fov: 55 },
-    expects: "grazing churn on angled faces; bottom third stays clean",
-  },
-  "band-close": {
-    // Elevated mid-range toward downtown (video-1 regime): band/curtain
-    // floors at a few px per pane.
-    intent: { position: [700, 260, 1500], lookAt: [-100, 180, -100], fov: 40 },
-    expects: "stripe/beat inside band and curtain floors",
-  },
-  "near-guard": {
-    // Regression guard: frame-filling near building (huge crisp windows) with
-    // downtown behind. The BOTTOM third must stay low and visually crisp — a
-    // fix that washes it flat is a fail; the top third should improve.
-    intent: { position: [40, 80, 150], lookAt: [-60, 95, -30], fov: 45 },
-    expects: "bottom third clean/crisp (guard); top third = artifact to fix",
-  },
-};
-
-function runScenario(name: string, sc: Scenario): string {
+function runScenario(name: string, sc: GymPose): string {
   // ?capture=1 boots into "still" mode, which applies cameraIntent reactively —
   // so the pose is driven POST-boot through __sceneStore (capture boot runs
   // resetCamera, so a localStorage savedConfig would be wiped before it took).
-  const wa = { lodNear: 0.4, lodRange: 0.4, ...((sc.overrides?.windowAA as object) ?? {}) };
+  const intent = { position: sc.position, lookAt: sc.lookAt, fov: sc.fov, orient: "lookAt" };
   const setup = [
     `const st = window.__sceneStore.getState();`,
-    `st.setWindowAA(${JSON.stringify(wa)});`,
+    `st.setWindowAA({ lodNear: 0.4, lodRange: 0.4 });`,
     // Stars off entirely: static star points read as speckle to the metric and
     // pollute any scenario that frames sky. Windows are the subject here.
     `st.setStars({ count: 0, twinkle: 0, meteorsEnabled: false });`,
     `if (st.setTraffic) st.setTraffic({ enabled: false });`,
-    `st.setCameraIntent(${JSON.stringify({ ...sc.intent, orient: "lookAt" })});`,
+    `st.setCameraIntent(${JSON.stringify(intent)});`,
   ].join("\n");
   const setupPath = join(OUT_DIR, `_setup-${name}.js`);
   writeFileSync(setupPath, setup);
   const png = join(OUT_DIR, `${PREFIX}${name}.png`);
-  const url = `http://localhost:7827/?capture=1&intro=instant&seed=${SEED}`;
+  const url = `http://localhost:7827/?capture=1&intro=instant&seed=${GYM_SEED}`;
   const r = spawnSync("bun", ["scripts/cdpShot.ts", url, png], {
     env: {
       ...process.env,
@@ -117,7 +81,8 @@ function score(png: string): string {
 // Ad-hoc pose probing without editing the file:
 //   GYM_INTENT='{"position":[x,y,z],"lookAt":[x,y,z],"fov":55}' bun scripts/moireGym.ts probe
 if (process.env.GYM_INTENT) {
-  SCENARIOS.probe = { intent: JSON.parse(process.env.GYM_INTENT) as Intent, expects: "ad-hoc probe" };
+  const p = JSON.parse(process.env.GYM_INTENT) as Omit<GymPose, "expects">;
+  SCENARIOS.probe = { ...p, expects: "ad-hoc probe" };
 }
 
 mkdirSync(OUT_DIR, { recursive: true });
@@ -130,6 +95,7 @@ for (const name of names) {
     process.exit(1);
   }
   console.log(`\n=== ${name} — expects: ${sc.expects}`);
+  console.log(`    view live: http://localhost:7827/?gym=${name}&seed=${GYM_SEED}`);
   const png = runScenario(name, sc);
   console.log(score(png));
 }

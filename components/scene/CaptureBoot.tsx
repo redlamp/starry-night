@@ -5,6 +5,7 @@ import { useSceneStore, QUALITY_TIERS, type QualityTier } from "@/lib/state/scen
 import { CITY_SHAPES, type CityShapeSetting } from "@/lib/seed/cityShape";
 import { readTileCull } from "@/lib/scene/tileCullDebug";
 import { applyDeviceFit } from "@/lib/perf/applyDeviceFit";
+import { GYM_POSES } from "@/lib/scene/gymPoses";
 
 /**
  * Reads URL params and hash on mount + keeps URL hash in sync with the seed.
@@ -16,6 +17,9 @@ import { applyDeviceFit } from "@/lib/perf/applyDeviceFit";
  *   ?quality=low|med|high|ultra — sets + LOCKS the quality tier (DPR cap + star
  *                          count); suppresses the boot device-fit (#53)
  *   ?shape=auto|square|circle|blob|coastline — forces the city footprint shape
+ *   ?gym=<pose>          — parks the camera at a moire-gym pose (lib/scene/gymPoses)
+ *                          in Still mode; works with the normal UI so artifact
+ *                          poses can be eyeballed live. Pair with ?seed=.
  *   #seed=<masterSeed>   — shareable URL hash for the live app (preferred for users)
  *
  * Query-string `?seed=` wins over hash if both present.
@@ -78,6 +82,22 @@ export function CaptureBoot() {
     // on boot (the real controls live in Performance → Adaptive quality / Stats).
     if (params.has("adaptive")) state.setAdaptive(true);
     if (params.has("perf")) state.setPerfStats(true);
+
+    // ?gym=<pose>: park the camera at a moire-gym pose. AFTER the capture
+    // block — resetCamera there would clobber the intent. Still mode applies
+    // cameraIntent reactively (CameraControls), so this works in both live and
+    // capture boots; in live mode pick a camera model in the panel to fly away.
+    const gym = params.get("gym");
+    if (gym && GYM_POSES[gym]) {
+      const pose = GYM_POSES[gym];
+      state.setCameraMode("still");
+      state.setCameraIntent({
+        position: pose.position,
+        lookAt: pose.lookAt,
+        fov: pose.fov,
+        orient: "lookAt",
+      });
+    }
 
     // Sync hash on every seed change (skip while capture mode is on — we don't
     // want the headless screenshot URL to be a moving target).
