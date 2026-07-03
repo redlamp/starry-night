@@ -440,9 +440,23 @@ export function StarryNightV2Model() {
       const homePhi = Math.acos(THREE.MathUtils.clamp(_e2.y / homeRadius, -1, 1));
       const TWO_PI = Math.PI * 2;
       const nearTheta = homeTheta + Math.round((c.azimuthAngle - homeTheta) / TWO_PI) * TWO_PI;
-      void c.moveTo(tx, ty, tz, true);
-      void c.rotateTo(nearTheta, homePhi, true);
-      void c.dollyTo(homeRadius, true); // smooth return to the hero pose, short way round
+      // Smooth return to the hero pose, short way round. Keep the guide's
+      // "Reset Camera" row lit for the whole flight: the transitions resolve
+      // on rest, so pulse the activity signal until then (the guide clears
+      // ~260ms after the last mark).
+      const settled = Promise.all([
+        c.moveTo(tx, ty, tz, true),
+        c.rotateTo(nearTheta, homePhi, true),
+        c.dollyTo(homeRadius, true),
+      ]);
+      let resetting = true;
+      void settled.finally(() => (resetting = false));
+      const pulse = () => {
+        if (!resetting) return;
+        markCameraActivity("reset");
+        requestAnimationFrame(pulse);
+      };
+      pulse();
     };
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Control" || e.key === "Meta") {
@@ -756,7 +770,7 @@ export function StarryNightV2Model() {
     const onDbl = (e: MouseEvent) => {
       const c = controls.current;
       if (!c) return;
-      markCameraActivity("zoom");
+      markCameraActivity("zoomIn"); // its own guide row (double-click), distinct from wheel Zoom
       zoomAtCursor(c, cam, dom, e.clientX, e.clientY, 0.6, true);
       setPin(null);
     };
