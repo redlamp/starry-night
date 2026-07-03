@@ -428,7 +428,21 @@ export function StarryNightV2Model() {
       hideGlyph();
       const [px, py, pz] = DEFAULT_INTENT.position;
       const [tx, ty, tz] = DEFAULT_INTENT.lookAt;
-      void c.setLookAt(px, py, pz, tx, ty, tz, true); // smooth return to the hero pose
+      // setLookAt would tween the azimuth numerically from the CURRENT theta
+      // (unbounded — drag accumulates whole turns) to atan2's (-pi, pi] home
+      // value, which often reads as the camera revolving the long way round.
+      // Rebuild the same transition from moveTo/rotateTo/dollyTo with the home
+      // azimuth unwrapped to the winding nearest the current one, so R always
+      // takes the short arc.
+      _e2.set(px - tx, py - ty, pz - tz);
+      const homeRadius = _e2.length();
+      const homeTheta = Math.atan2(_e2.x, _e2.z);
+      const homePhi = Math.acos(THREE.MathUtils.clamp(_e2.y / homeRadius, -1, 1));
+      const TWO_PI = Math.PI * 2;
+      const nearTheta = homeTheta + Math.round((c.azimuthAngle - homeTheta) / TWO_PI) * TWO_PI;
+      void c.moveTo(tx, ty, tz, true);
+      void c.rotateTo(nearTheta, homePhi, true);
+      void c.dollyTo(homeRadius, true); // smooth return to the hero pose, short way round
     };
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Control" || e.key === "Meta") {
