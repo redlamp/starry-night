@@ -33,25 +33,34 @@ type ClassCfg = {
 // Beacon period held equal across classes (a rotating anti-collision beacon's
 // rate doesn't vary by aircraft size); everything else — spread, strobe
 // pattern/period, brightness — carries the class identity per the brief.
+//
+// #67 visibility pass: beacon/nav intensities raised (~20-25%) so the STEADY
+// lights — the shader's MIN_PX screen-size floor is what actually guarantees
+// they never go sub-pixel — also punch through the ACES bloom against city
+// glow at the 5-12 km slant ranges the full-transit corridor covers.
+// Round 2 (user 2026-07-04): the white strobe is NOT a size lever — it keeps
+// a modest brightness bump but its point size (see the kind===2 multiplier
+// below) sits BELOW the original, tighter/brief rather than a bigger flash.
+// Relative ordering (strobe > beacon > nav, airliner > lightGA) is unchanged.
 const CLASS_CFG: Record<FlightClass, ClassCfg> = {
   airliner: {
     spreadHalf: 17.5, // ~35 m wingspan
     beaconPeriod: 1.1,
-    beaconIntensity: 4.5,
-    navIntensity: 2.4,
-    strobePeriod: 1.2, // proposal: 1.2 s period, two ~60 ms pulses
+    beaconIntensity: 5.5,
+    navIntensity: 2.9,
+    strobePeriod: 1.2, // proposal: 1.2 s period, two ~60 ms pulses (shader widens the pulse itself)
     strobePulses: 2,
-    strobeIntensity: 7.5, // proposal: HDR ~6-8 for ACES bloom
+    strobeIntensity: 9,
     pointSize: 5,
   },
   lightGA: {
     spreadHalf: 5.5, // ~11 m wingspan
     beaconPeriod: 1.1,
-    beaconIntensity: 2.6,
-    navIntensity: 1.4,
+    beaconIntensity: 3.2,
+    navIntensity: 1.7,
     strobePeriod: 1.7, // slower, single flash — the brief's "relative movement/pattern" cue
     strobePulses: 1,
-    strobeIntensity: 4.5,
+    strobeIntensity: 5.5,
     pointSize: 3.5,
   },
 };
@@ -132,7 +141,7 @@ export function Flights({ masterSeed }: { masterSeed: string }) {
           kind === 0 ? cfg.beaconIntensity : kind === 1 ? cfg.navIntensity : cfg.strobeIntensity;
         aFlashPeriod[c] = kind === 0 ? cfg.beaconPeriod : kind === 2 ? cfg.strobePeriod : 1;
         aPulses[c] = kind === 2 ? cfg.strobePulses : 0;
-        aSize[c] = kind === 2 ? cfg.pointSize * 1.1 : cfg.pointSize;
+        aSize[c] = kind === 2 ? cfg.pointSize * 0.8 : cfg.pointSize; // strobe stays tighter/brief than beacon/nav (#67 round 2) — spotting comes from the floor + brightness, not a bigger strobe
         aFadeFrac[c] = fadeFrac;
         aOneShot[c] = oneShot;
         c += 1;

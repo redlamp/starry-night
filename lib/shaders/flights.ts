@@ -18,6 +18,22 @@
 // loop back around afterward. aFadeFrac moved from a uniform to a per-vertex
 // attribute so each corridor (v2 adds a second, for arrivals) can carry its
 // own fade width.
+//
+// #67 visibility pass: at 5-12 km slant range the old plain 1/d point size
+// (clamp(...,1.5,10.0), no pixel-ratio floor on the low end) fell under a
+// pixel and lost the plane against city glow. The flash envelope also moved
+// from the fragment stage into the vertex stage here (vLevel replaces
+// vFlashPeriod/vPulses/vKind as what crosses the vertex/fragment boundary) —
+// per-vertex is cheaper than the old per-fragment recompute, and it leaves one
+// place to read the strobe's brightness pulse.
+//
+// #67 visibility pass, round 2 (user 2026-07-04): a first pass also grew the
+// white strobe's POINT SIZE at the flash peak — user feedback was that it then
+// read too large. Spotting now comes from size (the MIN_PX floor, applied to
+// every light including the steady beacon/nav) and brightness only; the
+// strobe does not swell — see the size multiplier in Flights.tsx CLASS_CFG,
+// which sits BELOW 1.0 (tighter than beacon/nav), and vLevel's ceiling below,
+// which stayed at the original 1.0 rather than the round-1 1.4.
 
 export const flightsVertexShader = /* glsl */ `
 uniform float uTime;
@@ -41,9 +57,16 @@ attribute float aOneShot;    // 0 ambient loop, 1 debug one-shot spawn (#67 foll
 varying vec3 vColor;
 varying float vAlpha;
 varying float vIntensity;
-varying float vFlashPeriod;
-varying float vPulses;
-varying float vKind;
+varying float vLevel; // flash envelope, 0..1 — see #67 visibility pass note above
+
+// Screen-space (CSS-pixel) floor/ceiling on point size, so a plane light
+// reads at any corridor distance without either bound silently re-shrinking
+// on a hi-DPI screen — both are multiplied by uPixelRatio at use, unlike the
+// old flat device-pixel clamp(1.5, 10.0). Applies to every light kind alike
+// (beacon/nav/strobe) — this is the spotting fix; the strobe gets no extra
+// size on top of it (brightness is its lever, see vLevel below).
+const float MIN_PX = 4.0;
+const float MAX_PX = 10.0;
 
 void main() {
   // Ambient slots loop forever via fract(). A one-shot debug spawn instead
@@ -75,23 +98,46 @@ void main() {
       ? mix(vec3(1.0, 0.15, 0.1), vec3(0.15, 1.0, 0.35), step(0.0, aSide))   // nav: port red / starboard green
       : vec3(1.0, 1.0, 1.0);                                                // strobe: white
   vIntensity = aIntensity;
-  vFlashPeriod = aFlashPeriod;
-  vPulses = aPulses;
-  vKind = aKind;
+
+  // Flash envelope (moved here from the fragment stage — see file header).
+  float level = 1.0; // nav lights: steady, port-red / starboard-green (proposal)
+  if (aKind < 0.5) {
+    // Beacon: the SAME soft/wide envelope as the tower obstruction lights
+    // (Beacons.tsx:46-48), but mostly dark between flashes — a rotating
+    // anti-collision beacon, not a steady-burning obstruction light.
+    float ph = fract(uTime / aFlashPeriod);
+    float flash = smoothstep(0.0, 0.06, ph) * (1.0 - smoothstep(0.18, 0.5, ph));
+    level = mix(0.12, 1.0, flash);
+  } else if (aKind > 1.5) {
+    // Strobe: sharp pulse(s) — single (light GA) or double (airliner). A
+    // slightly wider pulse than the original ~60 ms proposal so it catches
+    // the eye a touch longer, but the peak ceiling (1.0) matches the steady
+    // lights — brightness comes from aIntensity (Flights.tsx CLASS_CFG)
+    // alone, not a second multiplier stacked on top (round 1 of the #67
+    // visibility pass did that plus a size-pop and read too big/blown out).
+    float period = aFlashPeriod;
+    float phSec = fract(uTime / period) * period;
+    float w = 0.08;
+    float p1 = smoothstep(0.0, w * 0.5, phSec) * (1.0 - smoothstep(w, w * 1.5, phSec));
+    float gap = w * 3.0;
+    float p2 = step(1.5, aPulses) *
+      smoothstep(gap, gap + w * 0.5, phSec) * (1.0 - smoothstep(gap + w, gap + w * 1.5, phSec));
+    level = mix(0.02, 1.0, max(p1, p2));
+  }
+  vLevel = level;
 
   float d = -mv.z;
-  gl_PointSize = clamp(aSize * uPixelRatio * (3600.0 / max(d, 1.0)), 1.5, 10.0);
+  float sizePx = aSize * uPixelRatio * (3600.0 / max(d, 1.0));
+  sizePx = max(sizePx, MIN_PX * uPixelRatio); // screen-size floor — never sub-pixel, at any range
+  gl_PointSize = min(sizePx, MAX_PX * uPixelRatio);
 }
 `;
 
 export const flightsFragmentShader = /* glsl */ `
-uniform float uTime;
 varying vec3 vColor;
 varying float vAlpha;
 varying float vIntensity;
-varying float vFlashPeriod;
-varying float vPulses;
-varying float vKind;
+varying float vLevel;
 
 void main() {
   vec2 uv = gl_PointCoord - 0.5;
@@ -99,27 +145,7 @@ void main() {
   if (d > 0.5) discard;
   float core = smoothstep(0.5, 0.0, d);
 
-  float level = 1.0; // nav lights: steady, port-red / starboard-green (proposal)
-  if (vKind < 0.5) {
-    // Beacon: the SAME soft/wide envelope as the tower obstruction lights
-    // (Beacons.tsx:46-48), but mostly dark between flashes — a rotating
-    // anti-collision beacon, not a steady-burning obstruction light.
-    float ph = fract(uTime / vFlashPeriod);
-    float flash = smoothstep(0.0, 0.06, ph) * (1.0 - smoothstep(0.18, 0.5, ph));
-    level = mix(0.12, 1.0, flash);
-  } else if (vKind > 1.5) {
-    // Strobe: sharp ~60 ms pulse(s) — single (light GA) or double (airliner).
-    float period = vFlashPeriod;
-    float phSec = fract(uTime / period) * period;
-    float w = 0.06;
-    float p1 = smoothstep(0.0, w * 0.5, phSec) * (1.0 - smoothstep(w, w * 1.5, phSec));
-    float gap = w * 3.0;
-    float p2 = step(1.5, vPulses) *
-      smoothstep(gap, gap + w * 0.5, phSec) * (1.0 - smoothstep(gap + w, gap + w * 1.5, phSec));
-    level = mix(0.02, 1.0, max(p1, p2));
-  }
-
-  float intensity = pow(core, 1.3) * vIntensity * level;
-  gl_FragColor = vec4(vColor * intensity, core * vAlpha * level);
+  float intensity = pow(core, 1.3) * vIntensity * vLevel;
+  gl_FragColor = vec4(vColor * intensity, core * vAlpha * vLevel);
 }
 `;
