@@ -98,6 +98,17 @@ void main() {
   gl_Position.xy += pushDir * (2.0 * uHairlinePx * gate / physPxHeight) * gl_Position.w;
 
   #include <fog_vertex>
+
+  // #87 pick / #69 hover: a NON-outlined instance (gate 0) leaves its shell
+  // exactly coincident with the facade, which z-fights it at the silhouette
+  // edge — a stray hairline on every building of the hovered building's
+  // archetype, invisible under bright windows but obvious with windows off.
+  // Collapse those instances to a degenerate off-screen point so only the
+  // outlined instance(s) ever rasterize. Whole-mesh archetype hover sets
+  // uOutlineWhole = 1, so gate is 1 everywhere there and nothing collapses.
+  if (gate < 0.5) {
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+  }
 }
 `;
 
