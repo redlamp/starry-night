@@ -26,6 +26,7 @@ import { IntroTicker } from "./IntroTicker";
 import { FogTicker } from "./FogTicker";
 import { FogBoundsMarkers } from "./FogBoundsMarkers";
 import { PinPlaneMarker } from "./PinPlaneMarker";
+import { BuildingPin } from "./BuildingPin";
 import { GroundHaze } from "./GroundHaze";
 import { Roads } from "./Roads";
 import { DistrictShells } from "./DistrictShells";
@@ -169,6 +170,9 @@ export function Scene() {
             <TileCullOverlay masterSeed={masterSeed} />
           </CityReveal>
         )}
+        {/* #87: marker pin above the selected building (renders null until a
+          selection exists; gated on cityReady so its lookup hits the warm cache). */}
+        {cityReady && <BuildingPin />}
         {/* old controller's store-based indicator; the drei bridge renders its own
           live one (tracks the camera-controls target with no throttle lag) */}
         {oldController && <FocalIndicator />}

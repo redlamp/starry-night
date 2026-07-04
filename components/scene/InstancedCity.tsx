@@ -140,10 +140,13 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
   }, [masterSeed, cityShape, cityShapeScale, citySize, citySketch]);
   const meshes = useMemo(() => entries.map((e) => e.mesh), [entries]);
   const hidden = useSceneStore((s) => s.debug.renderModes.buildings === "hidden");
-  // #87 "Pick Hovered" switch: gates whether the pointer handlers below are
-  // attached at all, so raycasting the (potentially thousands of visible)
-  // building instances only costs anything while the feature is opted in.
-  const pickEnabled = useSceneStore((s) => s.debug.hoverHighlight.pick);
+  // Inspect mode (the Info button) is the user-facing driver; the "Pick
+  // Hovered" debug switch is a hover-only aid. Either one attaches the pointer
+  // handlers below — raycasting the (potentially thousands of visible) building
+  // instances only costs anything while one of them is on.
+  const inspectMode = useSceneStore((s) => s.inspectMode);
+  const pickHoverDebug = useSceneStore((s) => s.debug.hoverHighlight.pick);
+  const pickEnabled = inspectMode || pickHoverDebug;
   const size = useThree((s) => s.size);
   const gl = useThree((s) => s.gl);
 
@@ -525,7 +528,10 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
           // drag that starts on a building and ends elsewhere never selects.
           onClick={(ev: ThreeEvent<MouseEvent>) => {
             ev.stopPropagation();
-            if (hidden || ev.instanceId == null) return;
+            // Only select in inspect mode (the Info button); outside it, clicks
+            // on the city do nothing. Double-click-to-zoom lands with the camera
+            // transition work (#83/#84) so it can reuse the smooth tween.
+            if (!inspectMode || hidden || ev.instanceId == null) return;
             // ev.instanceId is the volatile DRAW slot #55 compaction just
             // rewrote; stableIndex (the ride-along compaction channel, never
             // GPU-bound) maps it back to the tile-major index into e.list —

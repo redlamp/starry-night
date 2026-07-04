@@ -458,6 +458,12 @@ type SceneState = {
   // Cleared on regen, an empty-space click, and Escape.
   selectedBuildingId: number | null;
   setSelectedBuildingId: (id: number | null) => void;
+  // Inspect mode (user-facing, toggled by the Info button). When on, buildings
+  // highlight on hover and a click selects one (info panel + outline + pin);
+  // when off, pointer picking is inert. Turning it off clears any selection.
+  // Runtime tier only — not persisted/shared.
+  inspectMode: boolean;
+  setInspectMode: (on: boolean) => void;
   cameraTweenRequest: TweenRequest | null;
   // Projection model. We keep a single perspective camera under the hood; ortho
   // is implemented by overriding camera.projectionMatrix each frame using an
@@ -1013,6 +1019,9 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setPickHover: (pickArchetype, pickInstance) => set({ pickArchetype, pickInstance }),
   selectedBuildingId: null,
   setSelectedBuildingId: (selectedBuildingId) => set({ selectedBuildingId }),
+  inspectMode: false,
+  setInspectMode: (on) =>
+    set(on ? { inspectMode: true } : { inspectMode: false, selectedBuildingId: null }),
   resetCamera: () => {
     // Derive reset patch from the registry: every entry goes back to its
     // hardcoded defaultValue. Runtime readouts (cityPlanning.topologyKind /
