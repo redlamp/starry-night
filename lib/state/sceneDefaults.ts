@@ -369,6 +369,11 @@ export const DEFAULT_TRAFFIC = {
   lightSize: 1,
 };
 
+// Ambient departure corridor (#67 v1) — off-map airport anchor, 2-3 plane
+// slots. On by default; modeled on DEFAULT_TRAFFIC's enabled flag. v1 has no
+// other tunables (density/count are seed-baked, not live knobs).
+export const DEFAULT_FLIGHTS = { enabled: true };
+
 // Streetlights along the road network. On by default; toggled from the Roads panel.
 // `size` scales the point sprite (×base 6 px); `brightness` scales emissive gain.
 // Defaults dialled below 1.0 — on high-DPR mobile the sprite pinned the clamp

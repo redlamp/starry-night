@@ -65,6 +65,7 @@ export {
   DEFAULT_DEBUG,
   DEBUG_WIRE_COLOR,
   DEFAULT_TRAFFIC,
+  DEFAULT_FLIGHTS,
   DEFAULT_STREETLIGHTS,
   DEFAULT_LOD,
   DEFAULT_CITY_SHAPE,
@@ -124,6 +125,7 @@ import {
   DEFAULT_CITY_PLANNING_VIS,
   DEFAULT_DEBUG,
   DEFAULT_TRAFFIC,
+  DEFAULT_FLIGHTS,
   DEFAULT_STREETLIGHTS,
   DEFAULT_LOD,
   DEFAULT_CITY_SHAPE,
@@ -219,6 +221,7 @@ type AnySettingEntry =
   | SettingEntry<"starIntro">
   | SettingEntry<"debug">
   | SettingEntry<"traffic">
+  | SettingEntry<"flights">
   | SettingEntry<"streetlights">
   | SettingEntry<"lod">
   | SettingEntry<"cityShape">
@@ -295,6 +298,7 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   // default. Reset still clears them (resetCamera iterates every entry).
   { key: "debug", defaultValue: DEFAULT_DEBUG, persist: false },
   { key: "traffic", defaultValue: DEFAULT_TRAFFIC, persist: true },
+  { key: "flights", defaultValue: DEFAULT_FLIGHTS, persist: true },
   { key: "streetlights", defaultValue: DEFAULT_STREETLIGHTS, persist: true },
   { key: "lod", defaultValue: DEFAULT_LOD, persist: true },
   { key: "cityShape", defaultValue: DEFAULT_CITY_SHAPE, persist: true },
@@ -657,6 +661,9 @@ type SceneState = {
   // Ambient traffic (research D) — opt-in car head/tail-lights.
   traffic: typeof DEFAULT_TRAFFIC;
   setTraffic: (patch: Partial<typeof DEFAULT_TRAFFIC>) => void;
+  // Ambient departure corridor (#67) — off-map airport anchor, lights-only planes.
+  flights: typeof DEFAULT_FLIGHTS;
+  setFlights: (patch: Partial<typeof DEFAULT_FLIGHTS>) => void;
   streetlights: typeof DEFAULT_STREETLIGHTS;
   setStreetlights: (patch: Partial<typeof DEFAULT_STREETLIGHTS>) => void;
   lod: typeof DEFAULT_LOD;
@@ -904,6 +911,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setDensityProfileDraft: (densityProfileDraft) => set({ densityProfileDraft }),
   traffic: DEFAULT_TRAFFIC,
   setTraffic: (patch) => set((s) => ({ traffic: { ...s.traffic, ...patch } })),
+  flights: DEFAULT_FLIGHTS,
+  setFlights: (patch) => set((s) => ({ flights: { ...s.flights, ...patch } })),
   streetlights: DEFAULT_STREETLIGHTS,
   setStreetlights: (patch) => set((s) => ({ streetlights: { ...s.streetlights, ...patch } })),
   lod: DEFAULT_LOD,

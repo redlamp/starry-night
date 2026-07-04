@@ -171,6 +171,29 @@ export function TrafficGroup() {
   );
 }
 
+// Flights — ambient departure corridor (#67), enable switch on header (no
+// other v1 tunables — the corridor and slot count are seed-baked, not live knobs).
+export function FlightsGroup() {
+  const enabled = useSceneStore((s) => s.flights.enabled);
+  const setFlights = useSceneStore((s) => s.setFlights);
+  return (
+    <SubGroup
+      label="Flights"
+      action={
+        <Switch
+          checked={enabled}
+          onCheckedChange={(v) => setFlights({ enabled: v })}
+          title="Ambient plane layer on / off"
+        />
+      }
+    >
+      <p className="text-foreground/55 text-[11px]">
+        One seeded departure corridor; airliner + light-GA classes read by light pattern + speed.
+      </p>
+    </SubGroup>
+  );
+}
+
 // Debug View (#39): building tint (Slice A) + per-group render mode (Slice B).
 export function DebugSection() {
   const renderModes = useSceneStore((s) => s.debug.renderModes);

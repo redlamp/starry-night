@@ -75,7 +75,12 @@ import { BuildingsSection } from "@/components/ui/panels/BuildingsPanel";
 import { MoonSection } from "@/components/ui/panels/MoonPanel";
 import { FogSection, AtmosphereToggle } from "@/components/ui/panels/AtmospherePanel";
 import { IntroSection } from "@/components/ui/panels/IntroPanel";
-import { DebugSection, StreetlightsGroup, TrafficGroup } from "@/components/ui/panels/DebugPanel";
+import {
+  DebugSection,
+  StreetlightsGroup,
+  TrafficGroup,
+  FlightsGroup,
+} from "@/components/ui/panels/DebugPanel";
 import {
   PerfReadout,
   AdaptiveGroup,
@@ -585,14 +590,15 @@ export function CameraPanel() {
 
             {/* Roads (user 2026-06-08): each block is its own expandable
                 sub-group — Highlight (tri-switch on header), Streetlights,
-                Traffic — all collapsed by default. (Distance LOD moved to
-                Performance → Level of Detail, user 2026-06-13.) */}
+                Traffic, Flights (#67) — all collapsed by default. (Distance LOD
+                moved to Performance → Level of Detail, user 2026-06-13.) */}
             <Section value="roads" icon={Route} label="Roads" hidden={!show("roads")}>
               <SubGroup label="Highlight" action={<RoadHighlightAction />}>
                 <RoadHighlightTiers />
               </SubGroup>
               <StreetlightsGroup />
               <TrafficGroup />
+              <FlightsGroup />
             </Section>
 
             <Section
