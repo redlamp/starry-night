@@ -49,9 +49,12 @@
 // visibility gate. Each PASS (one full cycle) also gets a small lateral +
 // altitude wander off the baked A->B line, hashed from (passIndex, aPhase) and
 // scaled by uFlightDeviation, so repeat passes of the same slot read as
-// slightly different lines. Debug one-shot spawns (aOneShot) are untouched:
-// same clamp-based single-transit formula as before, no gap, no deviation —
-// there's only ever one pass to vary.
+// slightly different lines. Debug one-shot spawns (aOneShot) keep the clamp-
+// based single-transit formula (no gap — they fire on demand), but DO take a
+// per-spawn lateral+altitude offset hashed from aPhase (their unique launch
+// identity — a one-shot has no passIndex to vary on), scaled by the same
+// uFlightDeviation, so spamming the debug buttons fans the planes into
+// separate lanes instead of stacking them on one baked line.
 
 export const flightsVertexShader = /* glsl */ `
 uniform float uTime;
@@ -112,12 +115,19 @@ void main() {
   float t;
   vec3 basePos;
   if (aOneShot > 0.5) {
-    // Debug one-shot spawn: unchanged — clamp (not fract/gap) so it flies once
-    // and parks at the end (raw keeps climbing past 1 once uTime does, but t
-    // pins at 1 where the fade below is already fully closed — no separate
-    // "kill" flag needed). No deviation either: there's only ever one pass.
+    // Debug one-shot spawn: clamp (not fract/gap) so it flies once and parks at
+    // the end (raw keeps climbing past 1 once uTime does, but t pins at 1 where
+    // the fade below is already fully closed — no separate "kill" flag needed).
+    // Each spawn takes its OWN lateral+altitude lane, hashed from aPhase (its
+    // unique launch identity — no passIndex to vary on) and scaled by the same
+    // uFlightDeviation as ambient, so spammed planes fan out instead of
+    // stacking on one line.
     t = clamp(uTime / aTransit + aPhase, 0.0, 1.0);
+    float devLat = (hash11(aPhase * 131.0 + 3.0) - 0.5) * 2.0;
+    float devAlt = (hash11(aPhase * 131.0 + 41.0) - 0.5) * 2.0;
     basePos = mix(aA, aB, t);
+    basePos += vec3(perp.x, 0.0, perp.y) * (devLat * DEVIATION_LATERAL_M * uFlightDeviation);
+    basePos.y += devAlt * DEVIATION_ALT_M * uFlightDeviation;
   } else {
     // Ambient slot: a TRANSIT+GAP cycle. gapSec is seeded per-plane, UNIFORMLY
     // in [uGapMin, uGapMax], via a hash of aPhase (the plane's identity) so
@@ -165,7 +175,7 @@ void main() {
   vIntensity = aIntensity;
 
   // Flash envelope (moved here from the fragment stage — see file header).
-  float level = 1.0; // nav lights: steady, port-red / starboard-green (proposal)
+  float level = 1.0;
   if (aKind < 0.5) {
     // Beacon: the SAME soft/wide envelope as the tower obstruction lights
     // (Beacons.tsx:46-48), but mostly dark between flashes — a rotating
@@ -173,7 +183,23 @@ void main() {
     float ph = fract(uTime / aFlashPeriod);
     float flash = smoothstep(0.0, 0.06, ph) * (1.0 - smoothstep(0.18, 0.5, ph));
     level = mix(0.12, 1.0, flash);
-  } else if (aKind > 1.5) {
+  } else if (aKind < 1.5) {
+    // Nav lights: red port / green starboard, but DIRECTIONAL like a real
+    // position light (user 2026-07-04) — each is bright when the camera is on
+    // its own side of the fuselage and only DIMS (not off) when you're looking
+    // at the other side, so the dominant colour reads which side of the plane
+    // you're seeing. Kept as two separate lights rather than one colour-blended
+    // point like the cars. Decision is HORIZONTAL only (camera bearing vs the
+    // wing axis), so camera elevation doesn't shift it — same reasoning as
+    // Traffic's head/tail split (traffic.ts:82-91). perp is the starboard
+    // bearing (xz); aSide flips it to each light's own side. cameraPosition is a
+    // three.js built-in (also used by Traffic's LOD).
+    vec2 toCam = cameraPosition.xz - basePos.xz;
+    float cl = length(toCam);
+    vec2 toCamDir = cl > 1e-3 ? toCam / cl : vec2(0.0);
+    float facing = dot(toCamDir, perp) * aSide; // >0 = camera on this light's side
+    level = mix(0.15, 1.0, smoothstep(-0.4, 0.4, facing));
+  } else {
     // Strobe: sharp pulse(s) — single (light GA) or double (airliner). A
     // slightly wider pulse than the original ~60 ms proposal so it catches
     // the eye a touch longer, but the peak ceiling (1.0) matches the steady

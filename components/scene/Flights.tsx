@@ -73,16 +73,24 @@ const ROLE_KIND = [0, 1, 1, 2, 2]; // 0 beacon, 1 nav, 2 strobe
 const ROLE_SIDE = [0, -1, 1, -1, 1];
 const VERTS_PER_PLANE = ROLE_KIND.length;
 
-// Debug spawn triggers (#67 follow-up): one reserved instance per class,
-// appended after the seeded ambient slots so their buffer offsets are stable
-// for the lifetime of a given seed/geometry. Riding the departure corridor
-// (corridors[0] — the only one in v1.5) keeps them on the same axis the
-// ambient traffic uses; v2's second (arrival) corridor can give debug spawns
-// their own corridor choice later without touching this reserve mechanic.
+// Debug spawn triggers (#67 follow-up): a fixed POOL of reserved instances per
+// class, appended after the seeded ambient slots so their buffer offsets are
+// stable for the lifetime of a given seed/geometry. Each Spawn click launches
+// the NEXT instance in the pool (round-robin on the monotonic trigger counter,
+// see the effects below), so the buttons stack — spam them and the airborne
+// count climbs, then falls as each one-shot completes its transit and parks.
+// DEBUG_POOL_PER_CLASS is the ceiling on simultaneous debug planes per class;
+// past it the round-robin wraps and recycles the oldest still-flying instance
+// (its transit restarts from the corridor start). Riding the departure corridor
+// (corridors[0] — the only one in v1.5) keeps them on the same axis the ambient
+// traffic uses; v2's second (arrival) corridor can give debug spawns their own
+// corridor choice later without touching this mechanic.
 const DEBUG_CLASSES: FlightClass[] = ["airliner", "lightGA"];
+const DEBUG_POOL_PER_CLASS = 24;
 // Any phase that keeps `uTime/aTransit + aPhase` comfortably above 1 from
-// boot, so the reserved instance reads as "already landed" (see aOneShot in
-// lib/shaders/flights.ts) and stays invisible until a trigger rewrites it.
+// boot, so a not-yet-launched pool instance reads as "already landed" (see
+// aOneShot in lib/shaders/flights.ts) and stays invisible + uncounted until a
+// trigger rewrites it.
 const DEBUG_PARKED_PHASE = 1e6;
 
 // JS mirror of the shader's hash11 (lib/shaders/flights.ts) + fract, so the
@@ -112,7 +120,8 @@ export function Flights({ masterSeed }: { masterSeed: string }) {
   const { geometry, material, debugBase, slotMeta } = useMemo(() => {
     void citySize; // tier drives the module-level gen extent (#58) — a switch must rebuild
     const data = buildFlights(masterSeed);
-    const n = (data.slots.length + DEBUG_CLASSES.length) * VERTS_PER_PLANE;
+    const n =
+      (data.slots.length + DEBUG_CLASSES.length * DEBUG_POOL_PER_CLASS) * VERTS_PER_PLANE;
 
     const position = new Float32Array(n * 3);
     const aA = new Float32Array(n * 3);
@@ -180,24 +189,28 @@ export function Flights({ masterSeed }: { masterSeed: string }) {
       );
     }
 
-    // Debug spawn reserve — parked invisible (DEBUG_PARKED_PHASE) until a
-    // Debug-panel trigger rewrites this instance's phase (see the effects
-    // below). No jitter on speed: a debug spawn should behave exactly like
-    // an ambient plane of its class, just on demand.
+    // Debug spawn reserve — a POOL per class, all parked invisible
+    // (DEBUG_PARKED_PHASE) until a Debug-panel trigger rewrites one instance's
+    // phase (see the effects below). No jitter on speed: a debug spawn should
+    // behave exactly like an ambient plane of its class, just on demand.
+    // debugBase[cls] is the vertex offset of the pool's FIRST instance; pool
+    // instance i sits at debugBase[cls] + i * VERTS_PER_PLANE.
     const debugCorridor = data.corridors[0];
     const debugSegLen = corridorLength(debugCorridor);
     const debugBase: Record<FlightClass, number> = { airliner: 0, lightGA: 0 };
     for (const cls of DEBUG_CLASSES) {
       debugBase[cls] = c;
-      writePlane(
-        debugCorridor.aA,
-        debugCorridor.aB,
-        debugCorridor.fadeFrac,
-        DEBUG_PARKED_PHASE,
-        debugSegLen / CLASS_SPEED[cls],
-        cls,
-        1,
-      );
+      for (let i = 0; i < DEBUG_POOL_PER_CLASS; i++) {
+        writePlane(
+          debugCorridor.aA,
+          debugCorridor.aB,
+          debugCorridor.fadeFrac,
+          DEBUG_PARKED_PHASE,
+          debugSegLen / CLASS_SPEED[cls],
+          cls,
+          1,
+        );
+      }
     }
 
     const geo = new THREE.BufferGeometry();
@@ -286,7 +299,11 @@ export function Flights({ masterSeed }: { masterSeed: string }) {
     if (spawnAirliner === 0) return;
     const aPhase = geometry.getAttribute("aPhase") as THREE.BufferAttribute;
     const aTransit = geometry.getAttribute("aTransit") as THREE.BufferAttribute;
-    const base = debugBase.airliner;
+    // Round-robin over the pool on the monotonic trigger counter so each click
+    // launches a fresh instance (stacking), wrapping to recycle the oldest once
+    // the pool is full.
+    const slot = (spawnAirliner - 1) % DEBUG_POOL_PER_CLASS;
+    const base = debugBase.airliner + slot * VERTS_PER_PLANE;
     const phase = -sharedTime.value / aTransit.getX(base);
     for (let j = 0; j < VERTS_PER_PLANE; j++) aPhase.setX(base + j, phase);
     aPhase.needsUpdate = true;
@@ -297,7 +314,8 @@ export function Flights({ masterSeed }: { masterSeed: string }) {
     if (spawnLightGA === 0) return;
     const aPhase = geometry.getAttribute("aPhase") as THREE.BufferAttribute;
     const aTransit = geometry.getAttribute("aTransit") as THREE.BufferAttribute;
-    const base = debugBase.lightGA;
+    const slot = (spawnLightGA - 1) % DEBUG_POOL_PER_CLASS;
+    const base = debugBase.lightGA + slot * VERTS_PER_PLANE;
     const phase = -sharedTime.value / aTransit.getX(base);
     for (let j = 0; j < VERTS_PER_PLANE; j++) aPhase.setX(base + j, phase);
     aPhase.needsUpdate = true;
@@ -327,6 +345,25 @@ export function Flights({ masterSeed }: { masterSeed: string }) {
         if (frac(now / cycle + m.phase) < m.transitSec / cycle) {
           if (m.cls === "airliner") airliner += 1;
           else lightGA += 1;
+        }
+      }
+      // Debug spawns (one-shot): a spawned plane you can see crossing the sky
+      // is a plane in the air, so it counts too — and the pool stacks, so sum
+      // every in-flight instance. Read the LIVE aPhase (a Spawn button rewrites
+      // it) and mirror the shader's clamp — airborne while raw = now/aTransit +
+      // aPhase is in [0, 1); it parks at ≥1 after the single transit, and the
+      // pre-spawn sentinel (DEBUG_PARKED_PHASE ≫ 1) reads as parked too, so a
+      // not-yet-launched pool instance never counts.
+      const aPhaseAttr = geometry.getAttribute("aPhase") as THREE.BufferAttribute;
+      const aTransitAttr = geometry.getAttribute("aTransit") as THREE.BufferAttribute;
+      for (const cls of DEBUG_CLASSES) {
+        for (let i = 0; i < DEBUG_POOL_PER_CLASS; i++) {
+          const base = debugBase[cls] + i * VERTS_PER_PLANE;
+          const raw = now / aTransitAttr.getX(base) + aPhaseAttr.getX(base);
+          if (raw >= 0 && raw < 1) {
+            if (cls === "airliner") airliner += 1;
+            else lightGA += 1;
+          }
         }
       }
     }
