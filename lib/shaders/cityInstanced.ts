@@ -190,6 +190,10 @@ uniform float uWinDebugView;
 // hovered (dim for contrast), 1 = THIS mesh's archetype is hovered (emissive
 // lift). Eased CPU-side (~150ms), so in-between values must blend sensibly.
 uniform float uHighlight;
+// #69 hover strength (live-tunable via debug.hoverHighlight): matched-archetype
+// lift + non-matched dim, read by highlightMul.
+uniform float uHiLift;
+uniform float uHiDim;
 
 varying vec2 vUv;
 varying vec3 vNormalLocal;
@@ -266,7 +270,7 @@ vec3 debugTintColor() {
 float highlightMul() {
   float dim = clamp(uHighlight * 2.0, 0.0, 1.0);
   float self = clamp(uHighlight * 2.0 - 1.0, 0.0, 1.0);
-  return mix(mix(1.0, 0.7, dim), 1.8, self);
+  return mix(mix(1.0, uHiDim, dim), uHiLift, self);
 }
 
 // Complete per-cell window state at an arbitrary point on the facade grid:

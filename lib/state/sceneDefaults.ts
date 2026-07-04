@@ -342,6 +342,10 @@ export const DEFAULT_DEBUG = {
   // buildings' raw cell atlas or the pane-mask field instead of the final
   // composite — the same layer debugging the lab's texture dropdowns give.
   windowView: "final" as "final" | "atlas" | "field",
+  // #69 hover highlight — live-tunable outline width (m) + matched-brightness
+  // lift + non-matched dim. Mirrors HIGHLIGHT_OUTLINE_WIDTH_M and the shader's
+  // idle lift/dim (below). Transient (debug bucket): never saved/copied/shared.
+  hoverHighlight: { outline: 2, lift: 1.8, dim: 0.7 },
 };
 
 // Default wireframe stroke colour — a bright blue used where a group has no

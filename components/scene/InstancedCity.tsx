@@ -47,7 +47,6 @@ import {
   DEFAULT_WINDOW_SIMPLE,
   DEBUG_WIRE_COLOR,
   HIGHLIGHT_OUTLINE_COLOR,
-  HIGHLIGHT_OUTLINE_WIDTH_M,
 } from "@/lib/state/sceneStore";
 
 const DISTRICT_TO_IDX: Record<string, number> = {
@@ -211,6 +210,7 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
     // eased linearly over ~150ms (transient UI presentation, not seed-derived
     // scene state). Writes stop once a mesh settles on its target.
     const hl = s.highlightArchetype;
+    const hh = s.debug.hoverHighlight; // #69 live-tunable lift / dim / outline width
 
     // #55 per-tile culling: lower each archetype mesh's instance count to the
     // frustum-visible tiles. Instance copies fire only when a mesh's visible
@@ -229,6 +229,12 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
         hlEase.current[e] = next;
         (mesh.material as THREE.ShaderMaterial).uniforms.uHighlight.value = next;
       }
+      // #69 hover-highlight strength (global, live-tunable): the matched lift +
+      // non-matched dim that the shader's highlightMul reads. Cheap scalars —
+      // only bite when uHighlight > 0, i.e. while an archetype is hovered.
+      const cu = (mesh.material as THREE.ShaderMaterial).uniforms;
+      cu.uHiLift.value = hh.lift;
+      cu.uHiDim.value = hh.dim;
       // #69 outline shell: draw only THIS archetype's mesh while it's the
       // hovered one (skips 6 idle draw calls) and grow the border in from the
       // SAME eased value the facade lift uses, so the two read as one motion.
@@ -239,7 +245,7 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
       outlineMesh.visible = isSelf;
       if (isSelf) {
         (outlineMesh.material as THREE.ShaderMaterial).uniforms.uOutlineWidth.value =
-          HIGHLIGHT_OUTLINE_WIDTH_M * hlEase.current[e];
+          hh.outline * hlEase.current[e];
       }
       tilesTot += partition.tiles.length;
       if (s.lod.tiles && partition.tiles.length > 1) {
@@ -550,6 +556,8 @@ function buildMeshes(
           uWireframe: { value: 0 },
           uWireColor: { value: new THREE.Color() },
           uHighlight: { value: 0 },
+          uHiLift: { value: 1.8 }, // #69 idle default; overwritten per-frame from debug.hoverHighlight
+          uHiDim: { value: 0.7 },
         },
       ]),
       fog: true,

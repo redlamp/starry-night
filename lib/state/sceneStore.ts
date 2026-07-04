@@ -622,6 +622,7 @@ type SceneState = {
   setBuildingTint: (
     patch: Partial<{ mode: BuildingTintMode; intensity: number; enabled: boolean }>,
   ) => void;
+  setHoverHighlight: (patch: Partial<{ outline: number; lift: number; dim: number }>) => void;
   setRenderMode: (group: RenderGroup, mode: RenderMode) => void;
   setAllRenderModes: (mode: RenderMode) => void;
   setRenderModes: (modes: Record<RenderGroup, RenderMode>) => void;
@@ -865,6 +866,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   debug: DEFAULT_DEBUG,
   setBuildingTint: (patch) =>
     set((s) => ({ debug: { ...s.debug, buildingTint: { ...s.debug.buildingTint, ...patch } } })),
+  setHoverHighlight: (patch) =>
+    set((s) => ({ debug: { ...s.debug, hoverHighlight: { ...s.debug.hoverHighlight, ...patch } } })),
   setRenderMode: (group, mode) =>
     set((s) => ({ debug: { ...s.debug, renderModes: { ...s.debug.renderModes, [group]: mode } } })),
   setAllRenderModes: (mode) =>
