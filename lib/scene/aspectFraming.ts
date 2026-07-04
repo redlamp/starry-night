@@ -18,9 +18,17 @@ function curve(aspect: number): number {
 
 // Gated factor: only the still / orbit skyline framing gets the portrait widening. Top-down already
 // computes its own city-fit framing (H / min(1, aspect)) and fly is free perspective — both stay 1×
-// so they aren't double-adjusted.
+// so they aren't double-adjusted. `cameraModel === "topdown"` is the LIVE top-down path (#83/#84);
+// `orbitRestore !== null` is the older, still-present top-down concept (the dead cameraView.ts
+// tweenOrbitTopDown flow) — both count as top-down here so a `p` press while resting in either one
+// isn't double-widened by the portrait curve.
 export function orbitFramingFactor(aspect: number): number {
   const s = useSceneStore.getState();
-  if (s.cameraMode === "fly" || (s.cameraMode === "orbit" && s.orbitRestore !== null)) return 1;
+  if (
+    s.cameraMode === "fly" ||
+    s.cameraModel === "topdown" ||
+    (s.cameraMode === "orbit" && s.orbitRestore !== null)
+  )
+    return 1;
   return curve(aspect);
 }

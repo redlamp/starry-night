@@ -32,6 +32,7 @@ export type {
   Snv2Config,
   TurntableConfig,
   TweenRequest,
+  TopDownEntry,
   WindowRange,
   WindowProfile,
   BuildingTintMode,
@@ -101,6 +102,7 @@ import type {
   Snv2Config,
   TurntableConfig,
   TweenRequest,
+  TopDownEntry,
   WindowRange,
   WindowProfile,
   BuildingTintMode,
@@ -221,6 +223,8 @@ type AnySettingEntry =
   | SettingEntry<"turntable">
   | SettingEntry<"orbitRestore">
   | SettingEntry<"topDownTip">
+  | SettingEntry<"topDownEntry">
+  | SettingEntry<"topDownExiting">
   | SettingEntry<"intro">
   | SettingEntry<"starIntro">
   | SettingEntry<"debug">
@@ -295,6 +299,10 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "turntable", defaultValue: DEFAULT_TURNTABLE, persist: true },
   { key: "orbitRestore", defaultValue: null as SceneState["orbitRestore"], persist: false },
   { key: "topDownTip", defaultValue: 0, persist: false },
+  // Transient — the `t` hotkey's Top-down sweep state (#83), same bucket as orbitRestore/
+  // topDownTip: resetCamera clears it, but it never belongs in a Saved/Copied config.
+  { key: "topDownEntry", defaultValue: null as SceneState["topDownEntry"], persist: false },
+  { key: "topDownExiting", defaultValue: false as const, persist: false },
   { key: "intro", defaultValue: DEFAULT_INTRO, persist: true },
   { key: "starIntro", defaultValue: DEFAULT_STAR_INTRO, persist: true },
   // persist:false — debug view modes are transient inspection state (wireframe /
@@ -626,6 +634,16 @@ type SceneState = {
   // elevation-keyed tip so manual high-elevation orbit still avoids gimbal.
   topDownTip: number;
   setTopDownTip: (v: number) => void;
+  // Snapshot of the model + pose the `t` hotkey's Top-down sweep is tweening FROM (#83) —
+  // consumed by TopDownModel's exit tween to return there. null when top-down isn't active.
+  // Deliberately separate from orbitRestore (which feeds the older, still-present
+  // tweenOrbitTopDown/CameraTab path) — the two top-down concepts don't share state.
+  topDownEntry: TopDownEntry | null;
+  setTopDownEntry: (v: SceneState["topDownEntry"]) => void;
+  // True while TopDownModel's outro (exit tween) is playing. Set by the `t` hotkey via
+  // toggleTopDown when already in top-down; toggling it again mid-outro reverses the tween.
+  topDownExiting: boolean;
+  setTopDownExiting: (v: boolean) => void;
   // Streets-first city-planning layer visibility + readouts (Stage 1).
   // Gated in the UI behind the ?stage1=1 flag until the rewrite is default.
   cityPlanning: {
@@ -873,6 +891,10 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setOrbitRestore: (orbitRestore) => set({ orbitRestore }),
   topDownTip: 0,
   setTopDownTip: (topDownTip) => set({ topDownTip }),
+  topDownEntry: null,
+  setTopDownEntry: (topDownEntry) => set({ topDownEntry }),
+  topDownExiting: false,
+  setTopDownExiting: (topDownExiting) => set({ topDownExiting }),
   cityPlanning: {
     // Planning overlays are review aids, not part of the ambient screensaver —
     // the streets-first network still shapes the city, it just isn't drawn over

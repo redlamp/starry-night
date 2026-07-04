@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { useSceneStore } from "@/lib/state/sceneStore";
@@ -22,6 +23,9 @@ const _persp = new THREE.Matrix4();
 const _ortho = new THREE.Matrix4();
 const _trans = new THREE.Matrix4();
 const _blended = new THREE.Matrix4();
+// Frozen perspective-end anchor for the framing bridge (#84) — see the capture site (the
+// pure-perspective early return) and the read site (perspK) below.
+let restPerspK: number | null = null;
 
 export function ProjectionBlender() {
   const camera = useThree((s) => s.camera) as THREE.PerspectiveCamera;
@@ -30,6 +34,15 @@ export function ProjectionBlender() {
   const orthoSize = useSceneStore((s) => s.orthoSize);
   const fov = useSceneStore((s) => s.cameraIntent.fov);
   const radius = useSceneStore((s) => s.orbit.radius);
+
+  // Debug exposure (capture mode only): the #84 size-invariance verify script reads the
+  // ACTUAL projectionMatrix baked below each frame — a black-box measurement of apparent
+  // size, not a re-derivation of the framing-bridge math. See
+  // scripts/verifyProjectionSizeInvariance.ts.
+  useEffect(() => {
+    if (!useSceneStore.getState().captureMode) return;
+    (window as unknown as Record<string, unknown>).__projectionDebug = { camera };
+  }, [camera]);
 
   useFrame(() => {
     if (!(camera as THREE.Camera & { isPerspectiveCamera?: boolean }).isPerspectiveCamera) return;
@@ -46,7 +59,15 @@ export function ProjectionBlender() {
     // doesn't keep rendering with the last-computed override.
     camera.fov = f === 1 ? fov : (Math.atan(f * Math.tan(fovRad / 2)) * 2 * 180) / Math.PI;
     camera.updateProjectionMatrix();
-    if (blend <= 0.0001) return; // pure perspective
+    if (blend <= 0.0001) {
+      // At rest in pure perspective: (re)capture the un-widened focal-plane half-height as the
+      // anchor perspK freezes to once a blend starts (see below). Recaptured every frame spent
+      // here, so zooming while at rest keeps it current — it only goes stale (on purpose) the
+      // moment blend leaves 0, which is what stops radius drift during a blend from reading as
+      // the apparent size "breathing" (#84).
+      restPerspK = Math.max(1, radius) * Math.tan(fovRad / 2);
+      return; // pure perspective
+    }
 
     const near = camera.near;
     const far = camera.far;
@@ -92,7 +113,13 @@ export function ProjectionBlender() {
     // popping the instant blend leaves 0. When the two views are already K-matched
     // (d·tan(fov/2) == orthoSize) Hb is constant and this is byte-for-byte the old
     // orthoSize-only matrix. (2026-06-14)
-    const perspK = d * Math.tan(fovRad / 2) * f; // aspect-widened perspective end
+    // Frozen at the last rest-in-perspective anchor (above), NOT live off `d` — a radius that
+    // tweens alongside blend (tweenProjectionTo, or top-down's remembered-radius gap vs its
+    // K-matched anchor) would otherwise drag perspK with it, so the bridge no longer returns to
+    // the SAME value it started from and the apparent size visibly breathes mid-blend. Null only
+    // on a frame that blends before any pure-perspective frame ever ran (e.g. booting straight
+    // into a blend) — fall back to the live d for that one frame.
+    const perspK = (restPerspK ?? d * Math.tan(fovRad / 2)) * f; // aspect-widened perspective end
     const Hb = perspK + (oeff - perspK) * blend; // both ends widened by f → morph stays consistent
     const top = (nearV * Hb) / E;
     const right = top * aspect;

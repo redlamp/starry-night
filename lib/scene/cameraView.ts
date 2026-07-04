@@ -13,7 +13,7 @@ import {
 } from "@/lib/state/sceneStore";
 import { maxHalfExtent } from "@/lib/seed/topology";
 import { getCameraModelMeta } from "@/lib/scene/cameraModelCatalog";
-import type { CameraModelId } from "@/lib/state/sceneStore";
+import type { CameraModelId, Vec3 } from "@/lib/state/sceneStore";
 
 // Apply a model's transport default (Map paused, Drift/Turntable playing) on a
 // user-initiated switch — mirrors the selector's pickCamera. See catalog.startsPaused.
@@ -201,13 +201,52 @@ export function setCameraTab(tab: CameraTab) {
   else enterTopDownMode();
 }
 
-// `t` hotkey: toggle the Top-down camera MODEL on/off (back to Map when leaving).
+// `t` hotkey: tween into the Top-down camera MODEL along the shortest arc, and tween back
+// out to whichever model + pose was active before (#83). The actual sweep animation lives
+// in TopDownModel (CameraModelHost unmounts/remounts on cameraModel change, so it can't
+// live here) — this only snapshots the outgoing model/pose, does the mode/model switch
+// that mounts TopDownModel, and — once already mounted — toggles the outro.
 export function toggleTopDown() {
   const s = useSceneStore.getState();
+  if (s.cameraModel === "topdown") {
+    // Already in top-down: toggle the outro. Pressing `t` again mid-outro reverses it
+    // (TopDownModel plays the same tween the other way instead of restarting one).
+    s.setTopDownExiting(!s.topDownExiting);
+    return;
+  }
+  // Snapshot the model + pose we're leaving. position/lookAt are reconstructed from
+  // cameraLive — this is a plain module with no live camera ref — using the same
+  // convention as snapIntentToLive (10 units ahead of the camera along its facing).
+  const live = s.cameraLive;
+  const pos = live.position;
+  const yaw = live.rotation[1];
+  const pitch = live.rotation[0];
+  const dist = 10;
+  const lookAt: Vec3 = [
+    pos[0] - Math.sin(yaw) * Math.cos(pitch) * dist,
+    pos[1] + Math.sin(pitch) * dist,
+    pos[2] - Math.cos(yaw) * Math.cos(pitch) * dist,
+  ];
+  s.setTopDownEntry({
+    modelId: s.cameraModel,
+    orbit: {
+      azimuthDeg: s.orbit.azimuthDeg,
+      elevationDeg: s.orbit.elevationDeg,
+      radius: s.orbit.radius,
+      centerX: s.orbit.centerX,
+      centerZ: s.orbit.centerZ,
+      lookAtY: s.orbit.lookAtY,
+    },
+    position: pos,
+    lookAt,
+    fov: live.fov,
+    orthoSize: s.orthoSize,
+    paused: s.orbitPaused,
+  });
+  s.setTopDownExiting(false); // defensive: guarantees a fresh mount never reads a stale outro flag
   s.setCameraMode("orbit");
-  const next = s.cameraModel === "topdown" ? "map" : "topdown";
-  s.setCameraModel(next);
-  applyTransportDefault(next);
+  s.setCameraModel("topdown");
+  applyTransportDefault("topdown");
 }
 
 // `f` hotkey: toggle the Fly camera MODEL on/off (back to Map when leaving).
@@ -246,7 +285,8 @@ let homeTween: gsap.core.Tween | null = null;
 // shortest-way + elevation), position (orbit centre + focal height), framing (radius / orthoSize /
 // fov) AND projection (morph back to the default) all together. Lands paused (auto-orbit is off by
 // default). (user 2026-06-16)
-const HOME_TWEEN_SEC = 1.6;
+// Exported so TopDownModel's entry/exit sweep (#83) reuses the same tween feel.
+export const HOME_TWEEN_SEC = 1.6;
 
 export function tweenOrbitToHome() {
   const s = useSceneStore.getState();

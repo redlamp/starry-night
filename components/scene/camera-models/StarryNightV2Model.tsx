@@ -247,6 +247,11 @@ export function StarryNightV2Model() {
   const grabP = useRef(new THREE.Vector3()); // free-look grab handle (a fixed world point)
   const orbitAxis = useRef(new THREE.Vector3(1, 0, 0)); // carried tilt axis (stable through straight-down)
   const skylineScreenY = useRef(0.5); // Skyline Mode framing: city rest point up from bottom (0.5 = centred)
+  // Captured once, at render — BEFORE the handoff-adoption effect below can consume + clear
+  // cameraHandoff — so the framing effect further down can tell a restore pose (leaving
+  // top-down back to this model, #83) was pending at mount. A live getState() read INSIDE
+  // that effect would already see it cleared (the handoff effect runs first) and stomp it.
+  const hadHandoffOnMount = useRef(useSceneStore.getState().cameraHandoff !== null);
   const [pin, setPin] = useState<[number, number, number] | null>(null); // shift-orbit pivot marker
 
   // v2 supports BOTH projections (perspective + faked-ortho via ProjectionBlender). Honor the current
@@ -310,18 +315,23 @@ export function StarryNightV2Model() {
   useEffect(() => {
     const c = controls.current;
     if (!c) return;
-    // Open to the curated default pose (DEFAULT_INTENT) — the hero establishing shot. v2 always
-    // opens here on mount; it doesn't restore a saved pose (the old computed framing didn't either).
-    const [px, py, pz] = DEFAULT_INTENT.position;
-    const [tx, ty, tz] = DEFAULT_INTENT.lookAt;
-    void c.setLookAt(px, py, pz, tx, ty, tz, false);
-    // Ortho continuity: if we boot in ortho, match orthoSize to this pose's framing so the faked-
-    // ortho render shows the same content the perspective pose would (no zoom mismatch on entry).
-    const st = useSceneStore.getState();
-    if (st.projection === "orthographic") {
-      const dist = Math.hypot(px - tx, py - ty, pz - tz);
-      const half = dist * Math.tan((st.cameraIntent.fov * DEG) / 2);
-      st.setOrthoSize(THREE.MathUtils.clamp(half, ORTHO_SIZE_MIN, ORTHO_SIZE_MAX));
+    if (!hadHandoffOnMount.current) {
+      // Open to the curated default pose (DEFAULT_INTENT) — the hero establishing shot. v2 opens
+      // here on mount UNLESS a restore handoff (leaving top-down back to this model, #83) was
+      // already pending — the effect above adopts that pose instead, and this step must not
+      // stomp it. Absent a handoff, it doesn't restore a saved pose either (the old computed
+      // framing didn't).
+      const [px, py, pz] = DEFAULT_INTENT.position;
+      const [tx, ty, tz] = DEFAULT_INTENT.lookAt;
+      void c.setLookAt(px, py, pz, tx, ty, tz, false);
+      // Ortho continuity: if we boot in ortho, match orthoSize to this pose's framing so the faked-
+      // ortho render shows the same content the perspective pose would (no zoom mismatch on entry).
+      const st = useSceneStore.getState();
+      if (st.projection === "orthographic") {
+        const dist = Math.hypot(px - tx, py - ty, pz - tz);
+        const half = dist * Math.tan((st.cameraIntent.fov * DEG) / 2);
+        st.setOrthoSize(THREE.MathUtils.clamp(half, ORTHO_SIZE_MIN, ORTHO_SIZE_MAX));
+      }
     }
     // No tight polar clamp: free-look re-aims via setTarget (moving the target around a fixed eye),
     // which legitimately drives the eye→target polar past 90°. A tight clamp would "correct" that by
