@@ -345,7 +345,10 @@ export const DEFAULT_DEBUG = {
   // #69 hover highlight — live-tunable outline width (m) + matched-brightness
   // lift + non-matched dim. Mirrors HIGHLIGHT_OUTLINE_WIDTH_M and the shader's
   // idle lift/dim (below). Transient (debug bucket): never saved/copied/shared.
-  hoverHighlight: { outline: 2, lift: 1.8, dim: 0.7 },
+  // #87 pick: "Pick Hovered" switch — when on, hovering ANY building in the 3D
+  // view highlights just that one instance (see sceneStore's pickArchetype /
+  // pickInstance), independent of the archetype-icon hover.
+  hoverHighlight: { outline: 2, lift: 1.8, dim: 0.7, pick: false },
 };
 
 // Default wireframe stroke colour — a bright blue used where a group has no

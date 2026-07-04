@@ -194,6 +194,18 @@ uniform float uHighlight;
 // lift + non-matched dim, read by highlightMul.
 uniform float uHiLift;
 uniform float uHiDim;
+// #87 single-instance pick: the picked building's WORLD-SPACE centre, or a
+// sentinel far outside the city when nothing is picked (see InstancedCity's
+// PICK_SENTINEL). Compared against vBuildingCenter (below) rather than an
+// instance-index attribute: this material already sits at the
+// GL_MAX_VERTEX_ATTRIBS floor of 16 (see aMeanLit's comment above) — there is
+// no free attribute slot for an identity channel, but every instance's world
+// centre is already computed for the intro wake, and building footprints
+// never overlap, so a distance test is exactly as selective as a slot-index
+// match, at zero extra attribute cost. Broadcast identically to all 7
+// archetype meshes — only the one actually containing a building at that
+// position ever lights up.
+uniform vec3 uPickPosition;
 
 varying vec2 vUv;
 varying vec3 vNormalLocal;
@@ -270,7 +282,19 @@ vec3 debugTintColor() {
 float highlightMul() {
   float dim = clamp(uHighlight * 2.0, 0.0, 1.0);
   float self = clamp(uHighlight * 2.0 - 1.0, 0.0, 1.0);
-  return mix(mix(1.0, uHiDim, dim), uHiLift, self);
+  float m = mix(mix(1.0, uHiDim, dim), uHiLift, self);
+  // #87 single-instance pick: independent of the archetype-icon hover above —
+  // lifts just the picked instance to the same uHiLift brightness even while
+  // the rest of this mesh sits dimmed (another archetype hovered) or idle.
+  // vBuildingCenter is a per-instance CONSTANT (same value at every vertex of
+  // a given instance) but still a varying, so the rasterizer's perspective-
+  // correct interpolation carries a few ulps of wobble — irrelevant at world-
+  // coordinate scale against a 0.5 m gate, which only ever matches the one
+  // instance actually sitting at uPickPosition.
+  if (distance(vBuildingCenter, uPickPosition) < 0.5) {
+    m = max(m, uHiLift);
+  }
+  return m;
 }
 
 // Complete per-cell window state at an arbitrary point on the facade grid:

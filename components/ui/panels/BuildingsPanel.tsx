@@ -45,6 +45,18 @@ export function BuildingTintGroup() {
           lifts matching buildings, dims the rest, and strokes an outline. These
           tune that lift/dim and the outline width. Transient debug state. */}
       <SubGroup label="Hover Highlight">
+        {/* #87: independent of the archetype-icon hover above — while on,
+            hovering ANY building in the 3D view highlights just that one
+            instance (lift + outline), reusing the outline/lift/dim tuning
+            below. Clears on pointer-out and whenever this flips off. */}
+        <div className="flex items-center justify-between gap-2 text-xs">
+          <span className="text-foreground/70">Pick Hovered</span>
+          <Switch
+            checked={hover.pick}
+            onCheckedChange={(pick) => setHoverHighlight({ pick })}
+            title="Pick Hovered"
+          />
+        </div>
         <ValueSlider
           label="outline"
           value={hover.outline}
