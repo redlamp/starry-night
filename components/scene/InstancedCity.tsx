@@ -30,6 +30,7 @@ import { packWindowAtlas, type PackInput } from "@/lib/scene/atlasPacker";
 import { meanLitStats } from "@/lib/scene/windowStats";
 import { buildingPopulation } from "@/lib/seed/population";
 import { cityVertexShader, cityFragmentShader } from "@/lib/shaders/cityInstanced";
+import { cityOutlineVertexShader, cityOutlineFragmentShader } from "@/lib/shaders/cityOutline";
 import { sharedTime } from "@/lib/shaders/sharedTime";
 import {
   sharedIntroMode,
@@ -45,6 +46,8 @@ import {
   DEFAULT_WINDOW_PROFILES,
   DEFAULT_WINDOW_SIMPLE,
   DEBUG_WIRE_COLOR,
+  HIGHLIGHT_OUTLINE_COLOR,
+  HIGHLIGHT_OUTLINE_WIDTH_M,
 } from "@/lib/state/sceneStore";
 
 const DISTRICT_TO_IDX: Record<string, number> = {
@@ -81,8 +84,25 @@ const TINT_ARCHETYPE = [
 ].map((c) => new THREE.Color(c)); // ARCHETYPE_ORDER index
 const TINT_DEPTH = ["#ff5a5a", "#ffd24a", "#5a9bff"].map((c) => new THREE.Color(c)); // front / mid / back
 
+// #69 outline colour, parsed straight to 0..1 components via setRGB (no
+// colorSpace argument, so no sRGB->linear conversion) — DISPLAY space, like
+// facadeColorFor's setHSL calls. new THREE.Color(hex)/.set(hex) default to
+// SRGBColorSpace and would darken it before it ever reaches the raw-output
+// outline shader (see wiki/notes/decision-facade-display-space-color.md).
+function displayColor(hex: string): THREE.Color {
+  const n = parseInt(hex.slice(1), 16);
+  return new THREE.Color().setRGB(((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255);
+}
+const OUTLINE_COLOR = displayColor(HIGHLIGHT_OUTLINE_COLOR);
+
 type TiledMesh = {
   mesh: THREE.InstancedMesh;
+  // #69 hover-highlight stroke: companion InstancedMesh, SAME geometry and
+  // SAME instanceMatrix object as `mesh` (assigned by reference below) so #55
+  // tile compaction — which writes into mesh.instanceMatrix — updates both
+  // for free. Only `count` and the material's uOutlineWidth/visible are
+  // mesh-local and need their own per-frame sync (see the useFrame loop).
+  outlineMesh: THREE.InstancedMesh;
   archetype: Archetype;
   partition: TilePartition;
   channels: CompactChannel[];
@@ -161,10 +181,14 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
     }
   }, [entries, facade]);
 
-  // Dispose old GPU resources when seed changes / unmounts.
+  // Dispose old GPU resources when seed changes / unmounts. Geometry is
+  // disposed once here even though outlineMesh shares the same object (three
+  // no-ops a repeat dispose) — only the outline's own material needs its own
+  // cleanup call.
   useEffect(() => {
     return () => {
-      for (const m of meshes) {
+      for (const e of entries) {
+        const m = e.mesh;
         m.geometry.dispose();
         const mat = m.material as THREE.ShaderMaterial;
         const tex = mat.uniforms.uWindowAtlas?.value as THREE.Texture | undefined;
@@ -172,9 +196,10 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
         const farTex = mat.uniforms.uWindowAtlasFar?.value as THREE.Texture | undefined;
         farTex?.dispose();
         mat.dispose();
+        (e.outlineMesh.material as THREE.ShaderMaterial).dispose();
       }
     };
-  }, [meshes]);
+  }, [entries]);
 
   // Per-frame: refresh the intro-related uniforms that depend on live state
   // (camera pose for far-to-near mode, orbit centre, mode int). progress/mode
@@ -194,7 +219,7 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
     let tilesTot = 0;
     let drawn = 0;
     for (let e = 0; e < entries.length; e++) {
-      const { mesh, partition, channels, archetype } = entries[e];
+      const { mesh, outlineMesh, partition, channels, archetype } = entries[e];
       const hlTarget = hl === null ? 0 : archetype === hl ? 1 : 0.5;
       const hlCur = hlEase.current[e] ?? 0;
       if (hlCur !== hlTarget) {
@@ -203,6 +228,18 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
           hlCur < hlTarget ? Math.min(hlTarget, hlCur + step) : Math.max(hlTarget, hlCur - step);
         hlEase.current[e] = next;
         (mesh.material as THREE.ShaderMaterial).uniforms.uHighlight.value = next;
+      }
+      // #69 outline shell: draw only THIS archetype's mesh while it's the
+      // hovered one (skips 6 idle draw calls) and grow the border in from the
+      // SAME eased value the facade lift uses, so the two read as one motion.
+      // No fade-out on un-hover (visible flips off immediately) — the facade
+      // dim/lift still eases, only the stroke pops; acceptable for a transient
+      // hover cue, revisit if it reads as a glitch in practice.
+      const isSelf = archetype === hl;
+      outlineMesh.visible = isSelf;
+      if (isSelf) {
+        (outlineMesh.material as THREE.ShaderMaterial).uniforms.uOutlineWidth.value =
+          HIGHLIGHT_OUTLINE_WIDTH_M * hlEase.current[e];
       }
       tilesTot += partition.tiles.length;
       if (s.lod.tiles && partition.tiles.length > 1) {
@@ -219,6 +256,11 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
         }
         tilesVis += partition.tiles.length;
       }
+      // #55 tile compaction shares mesh.instanceMatrix with outlineMesh (same
+      // object, written above via compactVisible), but `count` is a per-mesh
+      // property — sync it every frame so the shell's draw call matches the
+      // main mesh's visible instance set exactly.
+      outlineMesh.count = mesh.count;
       drawn += mesh.count;
     }
     // #55 debug readout (Debug View → Tile culling) — cheap counter writes.
@@ -340,6 +382,9 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
     <group visible={!hidden}>
       {meshes.map((m, i) => (
         <primitive key={i} object={m} />
+      ))}
+      {entries.map((e, i) => (
+        <primitive key={`outline-${i}`} object={e.outlineMesh} />
       ))}
     </group>
   );
@@ -528,6 +573,39 @@ function buildMeshes(
 
     const mesh = new THREE.InstancedMesh(geo, material, N);
 
+    // #69 hover-highlight outline shell: same geometry (unit box — the vertex
+    // shader offsets by a per-axis WORLD-space constant, see cityOutline.ts),
+    // BackSide inverted-hull so only the silhouette fringe shows past the real
+    // facade. instanceMatrix is reassigned to the MAIN mesh's own attribute
+    // object right below (not copied) so #55 tile compaction — which writes
+    // into mesh.instanceMatrix — updates this mesh for free; `count` stays
+    // per-mesh and is synced every frame in the useFrame loop.
+    const outlineMaterial = new THREE.ShaderMaterial({
+      vertexShader: cityOutlineVertexShader,
+      fragmentShader: cityOutlineFragmentShader,
+      uniforms: THREE.UniformsUtils.merge([
+        THREE.UniformsLib.fog,
+        {
+          uOutlineWidth: { value: 0 },
+          uOutlineColor: { value: OUTLINE_COLOR },
+        },
+      ]),
+      side: THREE.BackSide,
+      fog: true,
+    });
+    const outlineMesh = new THREE.InstancedMesh(geo, outlineMaterial, N);
+    outlineMesh.instanceMatrix = mesh.instanceMatrix;
+    outlineMesh.frustumCulled = false;
+    outlineMesh.visible = false;
+    // #87 (per-instance highlight, future): this archetype-level `visible`
+    // gate + single uOutlineWidth uniform only support "the whole mesh is
+    // selected." A per-instance variant would add an instance attribute (e.g.
+    // aOutlineSelect 0/1, or reuse a spare component if one opens up) driving
+    // per-instance width/discard in cityOutline's vertex shader, and swap this
+    // mesh-level `visible` for "is any instance selected." The shared-
+    // instanceMatrix wiring above needs no change — it already tracks
+    // whatever subset #55 compaction has materialised.
+
     for (let i = 0; i < N; i++) {
       const b = list[i];
       const entry = pack.entries.get(b.id);
@@ -649,7 +727,7 @@ function buildMeshes(
         itemSize: 4,
       },
     ];
-    entries.push({ mesh, archetype, partition, channels, list, facadeChannel });
+    entries.push({ mesh, outlineMesh, archetype, partition, channels, list, facadeChannel });
   }
 
   return { entries, maxRadius };
