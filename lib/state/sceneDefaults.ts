@@ -285,7 +285,7 @@ export const DEFAULT_HAZE = {
 };
 
 // Intro wake-up sequence defaults. Durations are the "Default" speed preset
-// (windows 240s / stars 360s); the panel's Fast preset drops both to 30s.
+// (windows 240s / stars 120s); the panel's Fast preset drops both to 30s.
 // Persisted via the settings registry so Reset/Save/Copy/Revert cover them.
 export const DEFAULT_INTRO = {
   progress: 0,
@@ -302,7 +302,11 @@ export const DEFAULT_INTRO = {
 export const DEFAULT_STAR_INTRO = {
   progress: 0,
   playing: false,
-  durationSec: 240,
+  // 240 -> 120 (user 2026-07-04): stars were coming in slow relative to the
+  // building-light wake (windows 240s, streetlights 60s). Half the duration
+  // lets the sky establish while the city keeps lighting up. The #77 boot
+  // boost still front-loads the wake before cityReady on top of this.
+  durationSec: 120,
   mode: "random" as "random" | "bright-first" | "horizon-first" | "zenith-first",
 };
 

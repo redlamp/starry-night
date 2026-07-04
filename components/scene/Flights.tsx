@@ -44,7 +44,7 @@ type ClassCfg = {
 // Relative ordering (strobe > beacon > nav, airliner > lightGA) is unchanged.
 const CLASS_CFG: Record<FlightClass, ClassCfg> = {
   airliner: {
-    spreadHalf: 17.5, // ~35 m wingspan
+    spreadHalf: 10, // ~20 m apparent half-span (tightened 2026-07-04: real 35 m read too wide at range)
     beaconPeriod: 1.1,
     beaconIntensity: 5.5,
     navIntensity: 2.9,
@@ -54,7 +54,7 @@ const CLASS_CFG: Record<FlightClass, ClassCfg> = {
     pointSize: 5,
   },
   lightGA: {
-    spreadHalf: 5.5, // ~11 m wingspan
+    spreadHalf: 3.5, // ~7 m apparent half-span (tightened with the airliner)
     beaconPeriod: 1.1,
     beaconIntensity: 3.2,
     navIntensity: 1.7,
