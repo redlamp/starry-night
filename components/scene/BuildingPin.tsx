@@ -1,23 +1,21 @@
 "use client";
 
-import { useMemo, useRef } from "react";
-import { useFrame } from "@react-three/fiber";
-import * as THREE from "three";
-import { useSceneStore, SELECT_OUTLINE_COLOR } from "@/lib/state/sceneStore";
+import { useMemo } from "react";
+import { Html } from "@react-three/drei";
+import { MapPin } from "lucide-react";
+import { useSceneStore } from "@/lib/state/sceneStore";
 import { generateCity } from "@/lib/seed/cityGen";
 
-// #87 follow-up: a marker pin floating 5 m above the SELECTED building's roof.
-// A teardrop (bulb on top, tapering to a point at the bottom) whose tip sits at
-// (x, height + 5, z) — pointing down at the roof. Distance-scaled each frame so
-// it stays a readable size across the whole zoom range (a fixed-size pin would
-// vanish city-wide, or dwarf a low-rise up close). Emissive select-blue to
-// match the selection outline. Mounted only once the city is ready, so its
-// generateCity() lookup always hits the warm cache (never stalls first paint).
-const CONE_H = 6;
-const CONE_R = 2.5;
-const SPHERE_R = 2.5;
+// #87 follow-up: a lucide MapPin marker anchored 5 m above the SELECTED
+// building's roof, rendered via drei <Html> as a crisp 2D icon at constant
+// screen size. Deliberately IDENTICAL to the focal map-pin shown while dragging
+// the camera (DreiSceneControls' pinRef, line ~1694): unfilled MapPin size 28 /
+// strokeWidth 2.5, colour #7dd3fc, tip anchored on the point via
+// translate(-50%,-100%) + transform-origin bottom-centre. Kept MOUNTED with the
+// icon `display`-toggled (mounting/unmounting drei <Html> flashes at the origin
+// for a frame) and parked off-screen when nothing is selected.
 const ROOF_GAP_M = 5;
-const PIN_COLOR_BASE = "#04121f"; // near-black; the emissive is what reads
+const PARKED: [number, number, number] = [0, -100000, 0];
 
 export function BuildingPin() {
   const selectedBuildingId = useSceneStore((s) => s.selectedBuildingId);
@@ -34,46 +32,24 @@ export function BuildingPin() {
     return new Map(buildings.map((b) => [b.id, b]));
   }, [masterSeed, cityShape, cityShapeScale, citySize, citySketch]);
 
-  const group = useRef<THREE.Group>(null);
-
-  useFrame((state) => {
-    const g = group.current;
-    if (!g) return;
-    const b = selectedBuildingId !== null ? idToBuilding.get(selectedBuildingId) : undefined;
-    if (!b) {
-      g.visible = false;
-      return;
-    }
-    g.visible = true;
-    g.position.set(b.x, b.height + ROOF_GAP_M, b.z);
-    // Constant-ish screen size: scale ~ camera distance, clamped so it neither
-    // vanishes zoomed way out nor dwarfs a small building up close. The tip is
-    // at the group origin, so scaling grows the pin UPWARD and keeps the 5 m
-    // roof gap fixed.
-    const d = state.camera.position.distanceTo(g.position);
-    g.scale.setScalar(THREE.MathUtils.clamp(d / 250, 1, 40));
-  });
+  const building = selectedBuildingId !== null ? idToBuilding.get(selectedBuildingId) : undefined;
+  const pos: [number, number, number] = building
+    ? [building.x, building.height + ROOF_GAP_M, building.z]
+    : PARKED;
 
   return (
-    <group ref={group} visible={false}>
-      <mesh rotation-x={Math.PI} position-y={CONE_H / 2}>
-        <coneGeometry args={[CONE_R, CONE_H, 6]} />
-        <meshStandardMaterial
-          color={PIN_COLOR_BASE}
-          emissive={SELECT_OUTLINE_COLOR}
-          emissiveIntensity={2.6}
-          roughness={0.5}
-        />
-      </mesh>
-      <mesh position-y={CONE_H}>
-        <sphereGeometry args={[SPHERE_R, 14, 10]} />
-        <meshStandardMaterial
-          color={PIN_COLOR_BASE}
-          emissive={SELECT_OUTLINE_COLOR}
-          emissiveIntensity={2.6}
-          roughness={0.5}
-        />
-      </mesh>
-    </group>
+    <Html position={pos} center={false} zIndexRange={[20, 0]} style={{ pointerEvents: "none" }}>
+      <div
+        style={{
+          transform: "translate(-50%, -100%)",
+          transformOrigin: "50% 100%", // tip (bottom centre) sits on the point
+          color: "#7dd3fc",
+          filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.7))",
+          display: building ? undefined : "none",
+        }}
+      >
+        <MapPin size={28} strokeWidth={2.5} />
+      </div>
+    </Html>
   );
 }

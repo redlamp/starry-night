@@ -180,6 +180,18 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
   // idToBuilding map rather than a draw-slot read, so it needs no per-frame
   // re-read from a (possibly recompacted) draw buffer.
   const selectScratch = useRef(new THREE.Vector3());
+  // Click-vs-drag guard for building selection: record where each press starts,
+  // so a click that ends far from its press (an orbit drag that begins and ends
+  // over the same building) does NOT select. R3F's onClick only checks that
+  // press+release hit the SAME object, not how far the pointer travelled.
+  const downPos = useRef<{ x: number; y: number } | null>(null);
+  useEffect(() => {
+    const onDown = (e: PointerEvent) => {
+      downPos.current = { x: e.clientX, y: e.clientY };
+    };
+    window.addEventListener("pointerdown", onDown);
+    return () => window.removeEventListener("pointerdown", onDown);
+  }, []);
   useEffect(() => {
     lastSigs.current = entries.map(() => "");
     // Rebuilt meshes carry creation-DEFAULT uniforms (not store values), so a
@@ -276,7 +288,7 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
     // the same "valid for the current frame" caveat the raycasted instanceId
     // already carries, not a new one.
     let hasPick = false;
-    if (hh.pick && s.pickArchetype !== null && s.pickInstance >= 0) {
+    if ((s.inspectMode || hh.pick) && s.pickArchetype !== null && s.pickInstance >= 0) {
       const target = entries.find((e) => e.archetype === s.pickArchetype);
       if (target && s.pickInstance < target.mesh.count) {
         const arr = target.mesh.instanceMatrix.array as Float32Array;
@@ -522,16 +534,26 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
           key={i}
           object={e.mesh}
           // #87 click-to-select: UNCONDITIONAL (unlike the hover handlers
-          // below, which stay opt-in debug aids) — this is the real feature.
-          // R3F only calls onClick when pointerdown and the click land on the
-          // SAME object (its `initialHits` bookkeeping), so a camera-orbit
-          // drag that starts on a building and ends elsewhere never selects.
+          // below, which stay opt-in debug aids) — this is the real feature,
+          // gated inside the handler to inspect mode + a near-stationary
+          // press+release. R3F's onClick fires on same-object press+release
+          // regardless of travel, so the drag guard below is what rejects orbits.
           onClick={(ev: ThreeEvent<MouseEvent>) => {
             ev.stopPropagation();
             // Only select in inspect mode (the Info button); outside it, clicks
             // on the city do nothing. Double-click-to-zoom lands with the camera
             // transition work (#83/#84) so it can reuse the smooth tween.
             if (!inspectMode || hidden || ev.instanceId == null) return;
+            // Reject drags: R3F's onClick only checks that press+release hit the
+            // SAME object, not how far the pointer travelled — so an orbit drag
+            // that begins and ends over one building would select it. Require a
+            // near-stationary press+release (a real click) instead.
+            const d = downPos.current;
+            if (d) {
+              const dx = ev.nativeEvent.clientX - d.x;
+              const dy = ev.nativeEvent.clientY - d.y;
+              if (dx * dx + dy * dy > 36) return; // > ~6 px of travel = a drag
+            }
             // ev.instanceId is the volatile DRAW slot #55 compaction just
             // rewrote; stableIndex (the ride-along compaction channel, never
             // GPU-bound) maps it back to the tile-major index into e.list —
