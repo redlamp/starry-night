@@ -120,7 +120,13 @@ void main() {
   float pushLen = length(viewDir.xy);
   vec2 pushDir = pushLen > 1e-5 ? viewDir.xy / pushLen : vec2(0.0);
   float physPxHeight = max(uViewportHeight * uDpr, 1.0);
-  gl_Position.xy += pushDir * (2.0 * uHairlinePx * gate / physPxHeight) * gl_Position.w;
+  // Fade the push out as the world-space border widens: because it pushes each
+  // FACE along its OWN normal, adjacent faces separate at the box's shared
+  // vertical edges — a visible seam once the border is thicker than a hairline.
+  // Kept in full at width 0 (there the hairline IS this push); gone by ~0.5 m,
+  // so a normal-width border's faces stay joined at the corners.
+  float pushFade = 1.0 - smoothstep(0.0, 0.5, uOutlineWidth * gate);
+  gl_Position.xy += pushDir * (2.0 * uHairlinePx * gate * pushFade / physPxHeight) * gl_Position.w;
 
   #include <fog_vertex>
 
