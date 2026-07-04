@@ -44,3 +44,7 @@ reference notes that describe how the running system behaves.
 - [[decision-additive-growth-citygen]] — generate-at-max + crop
 - [[decision-tile-cull-materialisation]] — per-tile culling via buffer compaction
 - [[decision-road-reveal-cascade]] — the reveal model this MOC's choreography note describes
+
+## Maintenance
+
+- [[deferred-followups]] — watchlist of upstream-gated / parked fixes (R3F 10 Clock, KTX2, bloom tier gating, CI gate, stars tier mismatch); add to it when closing an issue as "gated on X"
