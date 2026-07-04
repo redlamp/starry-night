@@ -10,6 +10,7 @@ Top-level Map of Content. See `CLAUDE.md` for conventions.
 
 ## Active
 
+- [[plan-issue-clearout-2026-07-04]] — **2026-07-04 morning session plan:** verify-and-close sweep (#79/#61/#53/#43), decision batch, build slot (#69), arc ranking
 - [[projects/window-lab]] — `/window-lab` render bench; Atlas+SDF construction shipped as the hybrid window mode (`v2026.07.03`)
 - [[fable-codebase-survey-2026-07-02]] — **2026-07-02 survey:** codebase health B+, determinism contract verified, ranked perf/security/hygiene backlog
 - [[projects/v1-still-frame]] — Milestone 1: the still composition *(stub)*

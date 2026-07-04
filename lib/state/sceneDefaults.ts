@@ -152,7 +152,8 @@ export const DEFAULT_STARS = {
   // density rich. Tunable via the Stars slider (persisted configs keep their old
   // value until reverted). Points are cheap; revisit under device-adaptive quality.
   count: 120000,
-  factor: 36,
+  // 36 → 48 (user, 2026-07-04): bigger base sprite reads better at the hero framing.
+  factor: 48,
   // Twinkle AMPLITUDE (the σ scale of the log-normal scintillation; see
   // wiki/research/star-twinkle-scintillation.md). 0 = dead steady, 1 ≈ σ 0.1 at
   // zenith, up to 3 = dramatic. The shader scales this by (sec z)^1.5, so horizon

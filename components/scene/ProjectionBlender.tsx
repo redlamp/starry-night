@@ -54,7 +54,24 @@ export function ProjectionBlender() {
 
     if (blend >= 0.9999) {
       // Pure orthographic — exact, and avoids the huge virtual-eye numbers.
-      _ortho.makeOrthographic(-aspect * oeff, aspect * oeff, oeff, -oeff, near, far);
+      // #88: camera.near (0.5, tuned for the PERSPECTIVE lens) used to double as the
+      // ortho near plane too, clipping anything within 0.5 world units of the real
+      // eye. That's fine for perspective (the eye is a real vanishing point) but
+      // wrong for a true ortho matrix: there's no perspective divide, so the near
+      // plane can sit far BEHIND the eye without moving the image at all. At a
+      // shallow, oblique tilt with a wide frustum (large oeff), the bottom rows of
+      // the frame project to world points that are behind the eye along the view
+      // axis — camera.near excluded them, which read as close buildings sliced by a
+      // plane parallel to the image, and the ground clipped at the frame's bottom
+      // edge. Mirror `far` behind the eye instead: it's already sized to the scene
+      // with generous headroom, so it covers the worst case without a new constant.
+      // Left untouched: the partial-blend branch below (0 < blend < 1) — its dz-shifted
+      // near/far already keep the near-clip plane fixed in world space (E + near·F)
+      // for the whole tween, and swapping in a very negative near there would need a
+      // much larger dz to stay positive inside makePerspective, which it doesn't have
+      // early in the tween.
+      const nearOrtho = -far;
+      _ortho.makeOrthographic(-aspect * oeff, aspect * oeff, oeff, -oeff, nearOrtho, far);
       camera.projectionMatrix.copy(_ortho);
       camera.projectionMatrixInverse.copy(_ortho).invert();
       return;
