@@ -373,6 +373,13 @@ export const DEBUG_WIRE_COLOR = "#4d9fff";
 export const HIGHLIGHT_OUTLINE_COLOR = "#ffe9c4";
 export const HIGHLIGHT_OUTLINE_WIDTH_M = 2;
 
+// #87 click-to-select outline — a distinct COOL BLUE, clearly different from
+// the #69 hover cream above, so a click-selection reads differently from a
+// pointer hover even when both could hit the same building at once (the
+// select colour wins ties — see cityOutline's vColorMix). Shares the #69
+// outline's width knob (hh.outline) by design — no separate width setting.
+export const SELECT_OUTLINE_COLOR = "#4fc3ff";
+
 // Ambient traffic (research D): car head/tail-lights flowing along the roads.
 // On by default. `density` is the global car-count multiplier; highway/arterial/
 // minor are per-tier multipliers layered on each tier's base usage rate (base

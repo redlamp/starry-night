@@ -206,6 +206,13 @@ uniform float uHiDim;
 // archetype meshes — only the one actually containing a building at that
 // position ever lights up.
 uniform vec3 uPickPosition;
+// #87 click-to-select: the SELECTED building's world-space centre, or the
+// same PICK_SENTINEL when nothing is selected. Independent of uPickPosition
+// above (that's the transient hover-pick debug aid) — a click sets this one,
+// and it's keyed by the STABLE Building.id, not a frame-volatile draw slot,
+// so it stays correct across #55 tile eviction/re-admission. See
+// InstancedCity's selectScratch comment.
+uniform vec3 uSelectPosition;
 
 varying vec2 vUv;
 varying vec3 vNormalLocal;
@@ -292,6 +299,13 @@ float highlightMul() {
   // coordinate scale against a 0.5 m gate, which only ever matches the one
   // instance actually sitting at uPickPosition.
   if (distance(vBuildingCenter, uPickPosition) < 0.5) {
+    m = max(m, uHiLift);
+  }
+  // #87 click-select: same lift treatment as the hover-pick above, keyed off
+  // the persistently SELECTED building instead of the transient hover pick —
+  // both can be lit at once (a selected building stays lifted while you hover
+  // pick elsewhere).
+  if (distance(vBuildingCenter, uSelectPosition) < 0.5) {
     m = max(m, uHiLift);
   }
   return m;

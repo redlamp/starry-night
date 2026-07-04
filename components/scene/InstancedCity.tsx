@@ -47,6 +47,7 @@ import {
   DEFAULT_WINDOW_SIMPLE,
   DEBUG_WIRE_COLOR,
   HIGHLIGHT_OUTLINE_COLOR,
+  SELECT_OUTLINE_COLOR,
 } from "@/lib/state/sceneStore";
 
 const DISTRICT_TO_IDX: Record<string, number> = {
@@ -93,10 +94,15 @@ function displayColor(hex: string): THREE.Color {
   return new THREE.Color().setRGB(((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255);
 }
 const OUTLINE_COLOR = displayColor(HIGHLIGHT_OUTLINE_COLOR);
+// #87 click-to-select outline colour — same display-space parsing, kept
+// visually distinct from OUTLINE_COLOR (the #69 hover cream) so a selection
+// never reads as "just another hover".
+const SELECT_COLOR = displayColor(SELECT_OUTLINE_COLOR);
 
 // #87 single-instance pick: "no pick" sentinel fed as uPickPosition, far
 // outside any city tier's extent (max half-extent ~4000 m — see CITY_TIERS)
-// so it can never coincide with a real building centre.
+// so it can never coincide with a real building centre. Reused as-is for
+// uSelectPosition's "nothing selected" sentinel below.
 const PICK_SENTINEL = 1e8;
 
 type TiledMesh = {
@@ -114,6 +120,12 @@ type TiledMesh = {
   // channel whose src array is the stable copy compaction reads from.
   list: Building[];
   facadeChannel: CompactChannel;
+  // #87 click-to-select: a ride-along compaction channel mapping DRAW slot ->
+  // tile-major index into `list` — never geo.setAttribute'd (CPU-only, no GPU
+  // binding), but #55's compactVisible copies it for free alongside the real
+  // GPU channels above. entry.stableIndex.array[ev.instanceId] gives the
+  // tile-major index; entry.list[idx] is the Building. See buildMeshes.
+  stableIndex: THREE.InstancedBufferAttribute;
 };
 
 export function InstancedCity({ masterSeed }: { masterSeed: string }) {
@@ -121,7 +133,7 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
   const cityShapeScale = useSceneStore((s) => s.cityShapeScale);
   const citySize = useSceneStore((s) => s.citySize);
   const citySketch = useSceneStore((s) => s.citySketch);
-  const { entries, maxRadius } = useMemo(() => {
+  const { entries, maxRadius, idToBuilding } = useMemo(() => {
     void citySize; // tier drives the module-level gen extent (#58) — a switch must rebuild
     void citySketch; // a registered sketch is a different city (#40) — likewise
     return buildMeshes(masterSeed, cityShape, cityShapeScale);
@@ -160,6 +172,11 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
   // position fed to every mesh's uPickPosition each frame (see useFrame) —
   // avoids a per-frame allocation.
   const pickScratch = useRef(new THREE.Vector3());
+  // #87 click-to-select: same idea as pickScratch, for the PERSISTENT
+  // selection's world position (uSelectPosition) — resolved from the stable
+  // idToBuilding map rather than a draw-slot read, so it needs no per-frame
+  // re-read from a (possibly recompacted) draw buffer.
+  const selectScratch = useRef(new THREE.Vector3());
   useEffect(() => {
     lastSigs.current = entries.map(() => "");
     // Rebuilt meshes carry creation-DEFAULT uniforms (not store values), so a
@@ -173,6 +190,10 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
     // Matches the rebuilt materials' creation-default uHighlight of 0; if a
     // hover is live the ease below walks them back up next frame.
     hlEase.current = entries.map(() => 0);
+    // #87: a regen is a DIFFERENT city — Building ids are re-rolled, so a
+    // stale selection could silently resolve to an unrelated building (or
+    // none). Clear instantly, no fade (decision: regen always drops selection).
+    useSceneStore.getState().setSelectedBuildingId(null);
   }, [entries]);
 
   // Facade recolor: sliders rewrite the per-instance colour SOURCE arrays
@@ -263,6 +284,29 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
     }
     if (!hasPick) pickScratch.current.set(PICK_SENTINEL, PICK_SENTINEL, PICK_SENTINEL);
 
+    // #87 click-select: resolve selectedBuildingId (a STABLE Building.id) to
+    // a world position via the idToBuilding map built once at regen — NOT a
+    // draw-slot read like the hover-pick block above. Building position is
+    // immutable post-generation, so this needs no per-frame re-read from a
+    // draw buffer: the selection outline survives #55 tile eviction/
+    // re-admission for free, where the hover pick's pickInstance would go
+    // stale (by design — that one's a transient hover cue, not a persistent
+    // selection).
+    let hasSelect = false;
+    let selectedBuilding: Building | undefined;
+    if (s.selectedBuildingId !== null) {
+      selectedBuilding = idToBuilding.get(s.selectedBuildingId);
+      if (selectedBuilding) {
+        selectScratch.current.set(
+          selectedBuilding.x,
+          selectedBuilding.height / 2,
+          selectedBuilding.z,
+        );
+        hasSelect = true;
+      }
+    }
+    if (!hasSelect) selectScratch.current.set(PICK_SENTINEL, PICK_SENTINEL, PICK_SENTINEL);
+
     // #55 per-tile culling: lower each archetype mesh's instance count to the
     // frustum-visible tiles. Instance copies fire only when a mesh's visible
     // tile set changes; a still camera costs only the AABB tests.
@@ -290,6 +334,9 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
       // city material — only the mesh actually containing that instance (if
       // any) will light up, via cityInstanced's highlightMul().
       cu.uPickPosition.value.copy(pickScratch.current);
+      // #87 click-select: same broadcast-to-every-mesh treatment as the pick
+      // position above.
+      cu.uSelectPosition.value.copy(selectScratch.current);
       // #69 outline shell: draw only THIS archetype's mesh while it's the
       // hovered one (skips 6 idle draw calls) and grow the border in from the
       // SAME eased value the facade lift uses, so the two read as one motion.
@@ -301,17 +348,23 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
       // one picked instance shows) when the pick lives in this archetype,
       // independent of the archetype-icon hover above.
       const isPickMesh = hasPick && archetype === s.pickArchetype;
+      // #87 click-select: same idea, for whichever mesh holds the SELECTED
+      // building — reuses the selectedBuilding this frame's select-position
+      // block above already resolved.
+      const isSelectMesh = hasSelect && archetype === selectedBuilding?.archetype;
       const ou = (outlineMesh.material as THREE.ShaderMaterial).uniforms;
-      outlineMesh.visible = isSelf || isPickMesh;
+      outlineMesh.visible = isSelf || isPickMesh || isSelectMesh;
       ou.uPickPosition.value.copy(pickScratch.current);
+      ou.uSelectPosition.value.copy(selectScratch.current);
       if (isSelf) {
         // Whole-mesh archetype hover wins if both are somehow live at once —
-        // it already outlines every instance, including any picked one.
+        // it already outlines every instance, including any picked/selected one.
         ou.uOutlineWidth.value = hh.outline * hlEase.current[e];
         ou.uOutlineWhole.value = 1;
-      } else if (isPickMesh) {
-        // Pick is instantaneous (no ease) — a hover cue, not a smoothed
-        // transition like the archetype-icon case.
+      } else if (isPickMesh || isSelectMesh) {
+        // Pick/select are both instantaneous (no ease) — cityOutline picks
+        // the outline COLOUR per-instance (uSelectColor wins ties), so a
+        // hover-pick and a selection can coexist on the same mesh here.
         ou.uOutlineWidth.value = hh.outline;
         ou.uOutlineWhole.value = 0;
       }
@@ -453,11 +506,35 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
   });
 
   return (
-    <group visible={!hidden}>
+    <group
+      visible={!hidden}
+      // #87 empty-space click clears the selection. onPointerMissed fires
+      // only on a true miss (nothing hit anywhere, gated by R3F itself on
+      // <=2px of pointer movement since pointerdown) — a camera-orbit drag
+      // that happens to end over open sky/ground does not trip this.
+      onPointerMissed={() => useSceneStore.getState().setSelectedBuildingId(null)}
+    >
       {entries.map((e, i) => (
         <primitive
           key={i}
           object={e.mesh}
+          // #87 click-to-select: UNCONDITIONAL (unlike the hover handlers
+          // below, which stay opt-in debug aids) — this is the real feature.
+          // R3F only calls onClick when pointerdown and the click land on the
+          // SAME object (its `initialHits` bookkeeping), so a camera-orbit
+          // drag that starts on a building and ends elsewhere never selects.
+          onClick={(ev: ThreeEvent<MouseEvent>) => {
+            ev.stopPropagation();
+            if (hidden || ev.instanceId == null) return;
+            // ev.instanceId is the volatile DRAW slot #55 compaction just
+            // rewrote; stableIndex (the ride-along compaction channel, never
+            // GPU-bound) maps it back to the tile-major index into e.list —
+            // the STABLE identity that survives the next recompaction.
+            const stableIdx = Math.round(e.stableIndex.array[ev.instanceId]);
+            const b = e.list[stableIdx];
+            if (!b) return; // defensive: a bad slot -> index should never happen, but never crash on a click
+            useSceneStore.getState().setSelectedBuildingId(b.id);
+          }}
           // #87 "Pick Hovered": handlers are only ATTACHED while the switch is
           // on, so raycasting the visible-tile-compacted instances (up to
           // thousands across 7 meshes) costs nothing while the feature is off
@@ -493,9 +570,14 @@ function buildMeshes(
   masterSeed: string,
   shape: CityShapeSetting,
   shapeScale: number,
-): { entries: TiledMesh[]; maxRadius: number } {
+): { entries: TiledMesh[]; maxRadius: number; idToBuilding: Map<number, Building> } {
   const { buildings } = generateCity(masterSeed, shape, shapeScale);
-  if (buildings.length === 0) return { entries: [], maxRadius: 1 };
+  // #87: every building by id, for the click-select useFrame block to resolve
+  // a world position + archetype from a bare selectedBuildingId. Built once
+  // over the FULL list (before the per-archetype grouping below) since ids
+  // are unique city-wide, not per-archetype.
+  const idToBuilding = new Map(buildings.map((b) => [b.id, b]));
+  if (buildings.length === 0) return { entries: [], maxRadius: 1, idToBuilding };
 
   // Build-time snapshot; the recolor effect re-applies live slider changes.
   const facadeRanges = useSceneStore.getState().facade;
@@ -587,6 +669,20 @@ function buildMeshes(
     const N = list.length;
     const geo = new THREE.BoxGeometry(1, 1, 1);
 
+    // #87 click-to-select: identity ride-along channel — tile-major position
+    // IS the stable index into `list` (list is already in partition.order /
+    // tile-major order, from the line above). aStableIndex is the untouched
+    // SOURCE #55 compaction reads from; `stableIndex` is its CPU-only
+    // destination buffer — never geo.setAttribute'd, so it rides along
+    // compaction for free without costing a real GPU attribute slot (the city
+    // material already sits at the GL_MAX_VERTEX_ATTRIBS floor — see aMeanLit
+    // below). Seeded with the SAME identity values so the initial draw order
+    // (already tile-major, matching mesh.setMatrixAt below) resolves
+    // correctly even before the first useFrame tick runs compactVisible.
+    const aStableIndex = new Float32Array(N);
+    for (let i = 0; i < N; i++) aStableIndex[i] = i;
+    const stableIndex = new THREE.InstancedBufferAttribute(aStableIndex.slice(), 1);
+
     const aAtlasOffset = new Float32Array(N * 2);
     const aAtlasSize = new Float32Array(N * 2);
     const aGrid = new Float32Array(N * 3); // cols, rows, archetypeIdx
@@ -654,6 +750,9 @@ function buildMeshes(
           // #87 single-instance pick: world-space centre of the picked building,
           // or PICK_SENTINEL when nothing is picked. Fed per-frame (see useFrame).
           uPickPosition: { value: new THREE.Vector3(PICK_SENTINEL, PICK_SENTINEL, PICK_SENTINEL) },
+          // #87 click-to-select: world-space centre of the SELECTED building,
+          // or PICK_SENTINEL when nothing is selected. Fed per-frame (see useFrame).
+          uSelectPosition: { value: new THREE.Vector3(PICK_SENTINEL, PICK_SENTINEL, PICK_SENTINEL) },
         },
       ]),
       fog: true,
@@ -695,6 +794,11 @@ function buildMeshes(
           // #87 single-instance pick — see the matching uPickPosition comment
           // on the city material above.
           uPickPosition: { value: new THREE.Vector3(PICK_SENTINEL, PICK_SENTINEL, PICK_SENTINEL) },
+          // #87 click-to-select — see the matching uSelectPosition comment on
+          // the city material above; uSelectColor is the distinct cool-blue
+          // stroke colour (vs uOutlineColor's #69 hover cream).
+          uSelectPosition: { value: new THREE.Vector3(PICK_SENTINEL, PICK_SENTINEL, PICK_SENTINEL) },
+          uSelectColor: { value: SELECT_COLOR },
           uOutlineWhole: { value: 0 }, // #87: 1 = whole-mesh (archetype hover), 0 = pick-only
           // #69 hairline floor — uHairlinePx is a fixed constant (device px);
           // uViewportHeight/uDpr are placeholders synced from useThree below
@@ -843,9 +947,21 @@ function buildMeshes(
         dst: geo.getAttribute("aMeanLit") as THREE.InstancedBufferAttribute,
         itemSize: 4,
       },
+      // #87: CPU-only — compactVisible's dst.needsUpdate = true is a no-op
+      // here since this attribute is never bound to the geometry/GPU.
+      { src: aStableIndex, dst: stableIndex, itemSize: 1 },
     ];
-    entries.push({ mesh, outlineMesh, archetype, partition, channels, list, facadeChannel });
+    entries.push({
+      mesh,
+      outlineMesh,
+      archetype,
+      partition,
+      channels,
+      list,
+      facadeChannel,
+      stableIndex,
+    });
   }
 
-  return { entries, maxRadius };
+  return { entries, maxRadius, idToBuilding };
 }

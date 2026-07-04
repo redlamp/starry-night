@@ -20,7 +20,9 @@ import { RangeSlider, ValueSlider } from "@/components/ui/value-slider";
 import { HelpHint } from "@/components/ui/tooltip";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
-const ARCHETYPE_LABELS: Record<Archetype, string> = {
+// Exported for the #87 building info panel (BuildingInfoPanel.tsx), which
+// mirrors this label/icon convention in its specimen-format header line.
+export const ARCHETYPE_LABELS: Record<Archetype, string> = {
   "low-rise": "Low-rise",
   warehouse: "Warehouse",
   "mid-rise": "Mid-rise",
@@ -30,7 +32,7 @@ const ARCHETYPE_LABELS: Record<Archetype, string> = {
   spire: "Spire",
 };
 
-const ARCHETYPE_ICONS: Record<Archetype | "all", LucideIcon> = {
+export const ARCHETYPE_ICONS: Record<Archetype | "all", LucideIcon> = {
   all: LayoutGrid,
   "low-rise": Home,
   warehouse: Warehouse,

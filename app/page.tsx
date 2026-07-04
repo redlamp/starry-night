@@ -1,6 +1,7 @@
 import { Scene } from "@/components/scene/Scene";
 import { CameraPanel } from "@/components/ui/CameraPanel";
 import { SeedControls } from "@/components/ui/SeedControls";
+import { BuildingInfoPanel } from "@/components/ui/BuildingInfoPanel";
 import { FpsHud } from "@/components/ui/FpsHud";
 import { PerfOverlay } from "@/components/ui/PerfOverlay";
 import { CaptureBoot } from "@/components/scene/CaptureBoot";
@@ -17,6 +18,8 @@ export default function Page() {
       <div className="pointer-events-none absolute inset-0">
         <CameraPanel />
         <SeedControls />
+        {/* #87: single-click building info panel, docked above SeedControls. */}
+        <BuildingInfoPanel />
         <FpsHud />
         <PerfOverlay />
         <CameraSideView />

@@ -28,6 +28,17 @@ export type TilePartition = {
   total: number;
 };
 
+// World-space tile edge length, metres — the grid partitionByTile buckets
+// items into. Exported (with tileKeyFor below) so callers OUTSIDE this module
+// — e.g. the #87 building info panel's tile-id readout — can derive the same
+// tile id for an arbitrary (x, z) without duplicating the bucketing formula.
+export const TILE_SIZE = 500;
+
+/** Tile-grid key for a world (x, z) position — the same bucketing partitionByTile uses. */
+export function tileKeyFor(x: number, z: number, tileSize: number = TILE_SIZE): string {
+  return `${Math.floor(x / tileSize)},${Math.floor(z / tileSize)}`;
+}
+
 /**
  * Partition `n` items into square world tiles of `tileSize` metres.
  * `getY` (optional) reports an item's max height so tall buildings keep their
@@ -39,12 +50,12 @@ export function partitionByTile(
   getX: (i: number) => number,
   getZ: (i: number) => number,
   getY: ((i: number) => number) | null = null,
-  tileSize = 500,
+  tileSize: number = TILE_SIZE,
   margin = 80,
 ): TilePartition {
   const byTile = new Map<string, number[]>();
   for (let i = 0; i < n; i++) {
-    const k = `${Math.floor(getX(i) / tileSize)},${Math.floor(getZ(i) / tileSize)}`;
+    const k = tileKeyFor(getX(i), getZ(i), tileSize);
     const list = byTile.get(k);
     if (list) list.push(i);
     else byTile.set(k, [i]);

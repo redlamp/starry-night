@@ -67,6 +67,7 @@ export {
   DEBUG_WIRE_COLOR,
   HIGHLIGHT_OUTLINE_COLOR,
   HIGHLIGHT_OUTLINE_WIDTH_M,
+  SELECT_OUTLINE_COLOR,
   DEFAULT_TRAFFIC,
   DEFAULT_FLIGHTS,
   DEFAULT_STREETLIGHTS,
@@ -448,6 +449,15 @@ type SceneState = {
   pickArchetype: Archetype | null;
   pickInstance: number;
   setPickHover: (pickArchetype: Archetype | null, pickInstance: number) => void;
+  // #87 click-to-select: the STABLE building id (Building.id — not a
+  // frame-volatile draw-slot index like pickInstance above) of the single
+  // building the user clicked in the 3D view. Building position is immutable
+  // post-generation, so this survives #55 tile eviction/re-admission for
+  // free — see InstancedCity's stableIndex ride-along channel + selectScratch.
+  // Runtime tier only — never in SETTINGS_REGISTRY/SavedConfig/share codes.
+  // Cleared on regen, an empty-space click, and Escape.
+  selectedBuildingId: number | null;
+  setSelectedBuildingId: (id: number | null) => void;
   cameraTweenRequest: TweenRequest | null;
   // Projection model. We keep a single perspective camera under the hood; ortho
   // is implemented by overriding camera.projectionMatrix each frame using an
@@ -1001,6 +1011,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   pickArchetype: null,
   pickInstance: -1,
   setPickHover: (pickArchetype, pickInstance) => set({ pickArchetype, pickInstance }),
+  selectedBuildingId: null,
+  setSelectedBuildingId: (selectedBuildingId) => set({ selectedBuildingId }),
   resetCamera: () => {
     // Derive reset patch from the registry: every entry goes back to its
     // hardcoded defaultValue. Runtime readouts (cityPlanning.topologyKind /
