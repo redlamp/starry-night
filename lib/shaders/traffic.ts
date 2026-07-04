@@ -2,6 +2,12 @@
 // shared clock — each car slides along its baked segment via fract(uTime·speed +
 // phase) — so there is zero per-frame CPU and the motion is deterministic for a
 // seed. Rendered additively as soft round glows; fog off so they stay crisp.
+//
+// #57: aWinStart/aWinEnd/aRoadEnd generalise a single instance's segment into a
+// WINDOW within a shared cycle (lib/seed/traffic.ts journeys). Highway/arterial
+// instances carry aWinStart=0, aWinEnd=1, aRoadEnd=1 — the window math below
+// then reduces exactly to the original single-segment fract() loop (localT ==
+// t, inWindow always true, fade widths == the original 0.06/0.08 constants).
 
 export const trafficVertexShader = /* glsl */ `
 uniform float uTime;
@@ -25,12 +31,15 @@ uniform float uOrthoSizeScale;  // ortho zoom ratio (refOrthoSize / orthoSize)
 attribute vec3 aA;     // travel-start (lane-offset world point)
 attribute vec3 aB;     // travel-end
 attribute float aPhase;
-attribute float aSpeed; // segment-fractions per second
+attribute float aSpeed; // cycle-fractions per second (whole journey, or a legacy segment)
 attribute vec3 aColor;  // headlight colour (bulb-pool pick)
 attribute vec3 aTail;   // taillight colour
 attribute float aHead;  // 1 = flows headlight-first (top-down ribbon fallback)
 attribute float aReveal; // per-car intro reveal time 0..1 (density ramp)
 attribute float aSize;
+attribute float aWinStart; // #57: this instance's visible window, as a fraction of the shared cycle
+attribute float aWinEnd;
+attribute float aRoadEnd;  // #57: traverse-only fraction of the cycle (1 = legacy, no respawn gap)
 
 varying vec3 vColor;
 varying float vAlpha;
@@ -38,12 +47,26 @@ varying float vEmit;
 varying float vLodBright;
 
 void main() {
-  float t = fract(uTime * aSpeed + aPhase);
-  vec3 p = mix(aA, aB, t);
+  // u sweeps the WHOLE shared cycle (one journey, or one legacy segment);
+  // localT is this instance's own progress across just its window, so its
+  // position freezes at its window's start/end point outside that window
+  // (harmless — inWin gates it invisible then).
+  float u = fract(uTime * aSpeed + aPhase);
+  float span = max(1e-5, aWinEnd - aWinStart);
+  float localT = clamp((u - aWinStart) / span, 0.0, 1.0);
+  float inWin = step(aWinStart, u) * step(u, aWinEnd);
+
+  vec3 p = mix(aA, aB, localT);
   vec4 mv = modelViewMatrix * vec4(p, 1.0);
   gl_Position = projectionMatrix * mv;
-  // Fade in/out at the segment ends so the loop wrap doesn't pop.
-  vAlpha = smoothstep(0.0, 0.06, t) * (1.0 - smoothstep(0.92, 1.0, t));
+  // Fade in/out at the JOURNEY's start/end (not at every macro-segment join —
+  // only the first/last window in a journey ever nears u=0 / u=aRoadEnd), so
+  // a multi-segment journey hands off segment-to-segment at full brightness.
+  // Legacy instances (aRoadEnd=1) reduce this to the original 0.06/0.08-wide
+  // fade at the single segment's own start/end.
+  float fadeInW = 0.06 * aRoadEnd;
+  float fadeOutW = 0.08 * aRoadEnd;
+  vAlpha = inWin * smoothstep(0.0, fadeInW, u) * (1.0 - smoothstep(aRoadEnd - fadeOutW, aRoadEnd, u));
 
   // Intro density ramp, sharing the streetlights' progress (#45 follow-up):
   // each car has its own reveal time = a center-out radial term plus a random
