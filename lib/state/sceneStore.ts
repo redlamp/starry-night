@@ -11,6 +11,7 @@ import {
   type DensityProfile,
 } from "@/lib/seed/density";
 import type { SketchTensorSource } from "@/lib/sketch/orientationField";
+import type { FlightClass } from "@/lib/seed/flights";
 
 // ---------------------------------------------------------------------------
 // Re-export everything from the sub-files so existing importers of
@@ -67,6 +68,7 @@ export {
   HIGHLIGHT_OUTLINE_COLOR,
   HIGHLIGHT_OUTLINE_WIDTH_M,
   DEFAULT_TRAFFIC,
+  DEFAULT_FLIGHTS,
   DEFAULT_STREETLIGHTS,
   DEFAULT_LOD,
   DEFAULT_CITY_SHAPE,
@@ -126,6 +128,7 @@ import {
   DEFAULT_CITY_PLANNING_VIS,
   DEFAULT_DEBUG,
   DEFAULT_TRAFFIC,
+  DEFAULT_FLIGHTS,
   DEFAULT_STREETLIGHTS,
   DEFAULT_LOD,
   DEFAULT_CITY_SHAPE,
@@ -221,6 +224,7 @@ type AnySettingEntry =
   | SettingEntry<"starIntro">
   | SettingEntry<"debug">
   | SettingEntry<"traffic">
+  | SettingEntry<"flights">
   | SettingEntry<"streetlights">
   | SettingEntry<"lod">
   | SettingEntry<"cityShape">
@@ -297,6 +301,7 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   // default. Reset still clears them (resetCamera iterates every entry).
   { key: "debug", defaultValue: DEFAULT_DEBUG, persist: false },
   { key: "traffic", defaultValue: DEFAULT_TRAFFIC, persist: true },
+  { key: "flights", defaultValue: DEFAULT_FLIGHTS, persist: true },
   { key: "streetlights", defaultValue: DEFAULT_STREETLIGHTS, persist: true },
   { key: "lod", defaultValue: DEFAULT_LOD, persist: true },
   { key: "cityShape", defaultValue: DEFAULT_CITY_SHAPE, persist: true },
@@ -644,6 +649,7 @@ type SceneState = {
   setTileFreeze: (v: boolean) => void;
   setShowPinPlane: (v: boolean) => void;
   setWindowDebugView: (v: "final" | "atlas" | "field") => void;
+  setShowFlightRoutes: (v: boolean) => void;
   // Organic city footprint (#14) — gen input; changing it regenerates the city.
   cityShape: CityShapeSetting;
   setCityShape: (cityShape: CityShapeSetting) => void;
@@ -679,6 +685,17 @@ type SceneState = {
   // Ambient traffic (research D) — opt-in car head/tail-lights.
   traffic: typeof DEFAULT_TRAFFIC;
   setTraffic: (patch: Partial<typeof DEFAULT_TRAFFIC>) => void;
+  // Ambient departure corridor (#67) — off-map airport anchor, lights-only planes.
+  flights: typeof DEFAULT_FLIGHTS;
+  setFlights: (patch: Partial<typeof DEFAULT_FLIGHTS>) => void;
+  // Debug: one-shot flight spawn triggers (#67 follow-up). Monotonically
+  // increasing per class — Flights.tsx watches each counter and rewrites the
+  // matching reserved debug instance's phase on every increment (the
+  // standard consume pattern for a fire-once counter). Never persisted / not
+  // in SETTINGS_REGISTRY, same treatment as highlightDistrictId: a debug
+  // convenience, not a look-and-feel setting.
+  flightsSpawn: Record<FlightClass, number>;
+  triggerFlightSpawn: (cls: FlightClass) => void;
   streetlights: typeof DEFAULT_STREETLIGHTS;
   setStreetlights: (patch: Partial<typeof DEFAULT_STREETLIGHTS>) => void;
   lod: typeof DEFAULT_LOD;
@@ -903,6 +920,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setTileFreeze: (v) => set((s) => ({ debug: { ...s.debug, tileFreeze: v } })),
   setShowPinPlane: (v) => set((s) => ({ debug: { ...s.debug, showPinPlane: v } })),
   setWindowDebugView: (v) => set((s) => ({ debug: { ...s.debug, windowView: v } })),
+  setShowFlightRoutes: (v) => set((s) => ({ debug: { ...s.debug, showFlightRoutes: v } })),
   cityShape: DEFAULT_CITY_SHAPE,
   setCityShape: (cityShape) => set({ cityShape }),
   cityShapeScale: DEFAULT_CITY_SHAPE_SCALE,
@@ -935,6 +953,11 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setDensityProfileDraft: (densityProfileDraft) => set({ densityProfileDraft }),
   traffic: DEFAULT_TRAFFIC,
   setTraffic: (patch) => set((s) => ({ traffic: { ...s.traffic, ...patch } })),
+  flights: DEFAULT_FLIGHTS,
+  setFlights: (patch) => set((s) => ({ flights: { ...s.flights, ...patch } })),
+  flightsSpawn: { airliner: 0, lightGA: 0 },
+  triggerFlightSpawn: (cls) =>
+    set((s) => ({ flightsSpawn: { ...s.flightsSpawn, [cls]: s.flightsSpawn[cls] + 1 } })),
   streetlights: DEFAULT_STREETLIGHTS,
   setStreetlights: (patch) => set((s) => ({ streetlights: { ...s.streetlights, ...patch } })),
   lod: DEFAULT_LOD,

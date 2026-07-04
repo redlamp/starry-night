@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useSceneStore, QUALITY_TIERS, type QualityTier } from "@/lib/state/sceneStore";
 import { CITY_SHAPES, type CityShapeSetting } from "@/lib/seed/cityShape";
 import { readTileCull } from "@/lib/scene/tileCullDebug";
+import { sharedTime } from "@/lib/shaders/sharedTime";
 import { applyDeviceFit } from "@/lib/perf/applyDeviceFit";
 import { parseCamParam, encodeCamParam, liveViewPose } from "@/lib/scene/viewLink";
 
@@ -61,6 +62,11 @@ export function CaptureBoot() {
       (window as unknown as Record<string, unknown>).__sceneStore = useSceneStore;
       // #55: live tile-cull counters for verification scripts (same caveat).
       (window as unknown as Record<string, unknown>).__tileCullDebug = { readTileCull };
+      // #67: the shared clock every shader-animated layer (traffic/flights/
+      // beacons) reads uTime from. Pausing (setPaused) stops TimeTicker from
+      // advancing it, so a verification script can pin an exact uTime and get
+      // a reproducible frame — e.g. a plane at a known point along its corridor.
+      (window as unknown as Record<string, unknown>).__sharedTime = sharedTime;
     }
     if (params.get("intro") === "instant") {
       // Wake everything within ~1s and park the on/off cycle so a still a few
