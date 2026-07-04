@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
-import { useFrame } from "@react-three/fiber";
+import { useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import {
   partitionByTile,
   visibleTiles,
@@ -30,6 +30,7 @@ import { packWindowAtlas, type PackInput } from "@/lib/scene/atlasPacker";
 import { meanLitStats } from "@/lib/scene/windowStats";
 import { buildingPopulation } from "@/lib/seed/population";
 import { cityVertexShader, cityFragmentShader } from "@/lib/shaders/cityInstanced";
+import { cityOutlineVertexShader, cityOutlineFragmentShader } from "@/lib/shaders/cityOutline";
 import { sharedTime } from "@/lib/shaders/sharedTime";
 import {
   sharedIntroMode,
@@ -45,6 +46,7 @@ import {
   DEFAULT_WINDOW_PROFILES,
   DEFAULT_WINDOW_SIMPLE,
   DEBUG_WIRE_COLOR,
+  HIGHLIGHT_OUTLINE_COLOR,
 } from "@/lib/state/sceneStore";
 
 const DISTRICT_TO_IDX: Record<string, number> = {
@@ -81,8 +83,31 @@ const TINT_ARCHETYPE = [
 ].map((c) => new THREE.Color(c)); // ARCHETYPE_ORDER index
 const TINT_DEPTH = ["#ff5a5a", "#ffd24a", "#5a9bff"].map((c) => new THREE.Color(c)); // front / mid / back
 
+// #69 outline colour, parsed straight to 0..1 components via setRGB (no
+// colorSpace argument, so no sRGB->linear conversion) — DISPLAY space, like
+// facadeColorFor's setHSL calls. new THREE.Color(hex)/.set(hex) default to
+// SRGBColorSpace and would darken it before it ever reaches the raw-output
+// outline shader (see wiki/notes/decision-facade-display-space-color.md).
+function displayColor(hex: string): THREE.Color {
+  const n = parseInt(hex.slice(1), 16);
+  return new THREE.Color().setRGB(((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255);
+}
+const OUTLINE_COLOR = displayColor(HIGHLIGHT_OUTLINE_COLOR);
+
+// #87 single-instance pick: "no pick" sentinel fed as uPickPosition, far
+// outside any city tier's extent (max half-extent ~4000 m — see CITY_TIERS)
+// so it can never coincide with a real building centre.
+const PICK_SENTINEL = 1e8;
+
 type TiledMesh = {
   mesh: THREE.InstancedMesh;
+  // #69 hover-highlight stroke: companion InstancedMesh, SAME geometry and
+  // SAME instanceMatrix object as `mesh` (assigned by reference below) so #55
+  // tile compaction — which writes into mesh.instanceMatrix — updates both
+  // for free. Only `count` and the material's uOutlineWidth/visible are
+  // mesh-local and need their own per-frame sync (see the useFrame loop).
+  outlineMesh: THREE.InstancedMesh;
+  archetype: Archetype;
   partition: TilePartition;
   channels: CompactChannel[];
   // Facade recolor (live sliders): tile-major building list + the facade
@@ -103,6 +128,12 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
   }, [masterSeed, cityShape, cityShapeScale, citySize, citySketch]);
   const meshes = useMemo(() => entries.map((e) => e.mesh), [entries]);
   const hidden = useSceneStore((s) => s.debug.renderModes.buildings === "hidden");
+  // #87 "Pick Hovered" switch: gates whether the pointer handlers below are
+  // attached at all, so raycasting the (potentially thousands of visible)
+  // building instances only costs anything while the feature is opted in.
+  const pickEnabled = useSceneStore((s) => s.debug.hoverHighlight.pick);
+  const size = useThree((s) => s.size);
+  const gl = useThree((s) => s.gl);
 
   // #55 per-frame tile cull state — one signature per archetype mesh, reset on
   // regen so the first frame always materialises.
@@ -122,6 +153,13 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
   const lastWindowSimple = useRef<object | null>(null);
   const lastWindowProfiles = useRef<object | null>(null);
   const lastDebug = useRef<object | null>(null);
+  // #69 hover highlight: per-mesh eased uHighlight value. Per-MESH values
+  // differ (self vs rest), so this sits outside the shared scalar cache.
+  const hlEase = useRef<number[]>([]);
+  // #87 single-instance pick: reused scratch vector for the resolved world
+  // position fed to every mesh's uPickPosition each frame (see useFrame) —
+  // avoids a per-frame allocation.
+  const pickScratch = useRef(new THREE.Vector3());
   useEffect(() => {
     lastSigs.current = entries.map(() => "");
     // Rebuilt meshes carry creation-DEFAULT uniforms (not store values), so a
@@ -132,6 +170,9 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
     lastWindowSimple.current = null;
     lastWindowProfiles.current = null;
     lastDebug.current = null;
+    // Matches the rebuilt materials' creation-default uHighlight of 0; if a
+    // hover is live the ease below walks them back up next frame.
+    hlEase.current = entries.map(() => 0);
   }, [entries]);
 
   // Facade recolor: sliders rewrite the per-instance colour SOURCE arrays
@@ -154,10 +195,27 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
     }
   }, [entries, facade]);
 
-  // Dispose old GPU resources when seed changes / unmounts.
+  // #69 hairline floor: keep every outline material's viewport-size uniforms
+  // current on mount, on resize, and after a regen (fresh materials carry
+  // creation-default placeholders). Not per-frame — resize/DPR changes are
+  // rare, unlike the hover/pick uniforms below.
+  useEffect(() => {
+    const dpr = gl.getPixelRatio();
+    for (const e of entries) {
+      const ou = (e.outlineMesh.material as THREE.ShaderMaterial).uniforms;
+      ou.uViewportHeight.value = size.height;
+      ou.uDpr.value = dpr;
+    }
+  }, [entries, size, gl]);
+
+  // Dispose old GPU resources when seed changes / unmounts. Geometry is
+  // disposed once here even though outlineMesh shares the same object (three
+  // no-ops a repeat dispose) — only the outline's own material needs its own
+  // cleanup call.
   useEffect(() => {
     return () => {
-      for (const m of meshes) {
+      for (const e of entries) {
+        const m = e.mesh;
         m.geometry.dispose();
         const mat = m.material as THREE.ShaderMaterial;
         const tex = mat.uniforms.uWindowAtlas?.value as THREE.Texture | undefined;
@@ -165,15 +223,45 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
         const farTex = mat.uniforms.uWindowAtlasFar?.value as THREE.Texture | undefined;
         farTex?.dispose();
         mat.dispose();
+        (e.outlineMesh.material as THREE.ShaderMaterial).dispose();
       }
     };
-  }, [meshes]);
+  }, [entries]);
 
   // Per-frame: refresh the intro-related uniforms that depend on live state
   // (camera pose for far-to-near mode, orbit centre, mode int). progress/mode
   // values themselves point at sharedIntro singletons so no per-frame work.
-  useFrame((state) => {
+  useFrame((state, delta) => {
     const s = useSceneStore.getState();
+
+    // #69 hover highlight: per-mesh target — 1 self / 0.5 other / 0 idle —
+    // eased linearly over ~150ms (transient UI presentation, not seed-derived
+    // scene state). Writes stop once a mesh settles on its target.
+    const hl = s.highlightArchetype;
+    const hh = s.debug.hoverHighlight; // #69 live-tunable lift / dim / outline width; #87 .pick
+
+    // #87 single-instance pick: resolve {pickArchetype, pickInstance} (a JS-
+    // facing archetype + CURRENT draw-slot pair, set by the pointer handlers
+    // below) to a world position ONCE per frame, then broadcast that SAME
+    // position to every archetype's shaders — see uPickPosition's comment in
+    // cityInstanced.ts for why position rather than a slot-index attribute.
+    // Reading straight from the mesh's instanceMatrix array means this always
+    // reflects whatever building #55 tile-cull compaction currently has in
+    // that slot: if a recompaction since the last pointer move swapped a
+    // DIFFERENT building in, the highlight silently follows THAT building —
+    // the same "valid for the current frame" caveat the raycasted instanceId
+    // already carries, not a new one.
+    let hasPick = false;
+    if (hh.pick && s.pickArchetype !== null && s.pickInstance >= 0) {
+      const target = entries.find((e) => e.archetype === s.pickArchetype);
+      if (target && s.pickInstance < target.mesh.count) {
+        const arr = target.mesh.instanceMatrix.array as Float32Array;
+        const o = s.pickInstance * 16;
+        pickScratch.current.set(arr[o + 12], arr[o + 13], arr[o + 14]);
+        hasPick = true;
+      }
+    }
+    if (!hasPick) pickScratch.current.set(PICK_SENTINEL, PICK_SENTINEL, PICK_SENTINEL);
 
     // #55 per-tile culling: lower each archetype mesh's instance count to the
     // frustum-visible tiles. Instance copies fire only when a mesh's visible
@@ -182,7 +270,51 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
     let tilesTot = 0;
     let drawn = 0;
     for (let e = 0; e < entries.length; e++) {
-      const { mesh, partition, channels } = entries[e];
+      const { mesh, outlineMesh, partition, channels, archetype } = entries[e];
+      const hlTarget = hl === null ? 0 : archetype === hl ? 1 : 0.5;
+      const hlCur = hlEase.current[e] ?? 0;
+      if (hlCur !== hlTarget) {
+        const step = delta / 0.15;
+        const next =
+          hlCur < hlTarget ? Math.min(hlTarget, hlCur + step) : Math.max(hlTarget, hlCur - step);
+        hlEase.current[e] = next;
+        (mesh.material as THREE.ShaderMaterial).uniforms.uHighlight.value = next;
+      }
+      // #69 hover-highlight strength (global, live-tunable): the matched lift +
+      // non-matched dim that the shader's highlightMul reads. Cheap scalars —
+      // only bite when uHighlight > 0, i.e. while an archetype is hovered.
+      const cu = (mesh.material as THREE.ShaderMaterial).uniforms;
+      cu.uHiLift.value = hh.lift;
+      cu.uHiDim.value = hh.dim;
+      // #87: broadcast the SAME resolved pick position to every archetype's
+      // city material — only the mesh actually containing that instance (if
+      // any) will light up, via cityInstanced's highlightMul().
+      cu.uPickPosition.value.copy(pickScratch.current);
+      // #69 outline shell: draw only THIS archetype's mesh while it's the
+      // hovered one (skips 6 idle draw calls) and grow the border in from the
+      // SAME eased value the facade lift uses, so the two read as one motion.
+      // No fade-out on un-hover (visible flips off immediately) — the facade
+      // dim/lift still eases, only the stroke pops; acceptable for a transient
+      // hover cue, revisit if it reads as a glitch in practice.
+      const isSelf = archetype === hl;
+      // #87: this mesh ALSO needs to draw (whole mesh stays hidden, just the
+      // one picked instance shows) when the pick lives in this archetype,
+      // independent of the archetype-icon hover above.
+      const isPickMesh = hasPick && archetype === s.pickArchetype;
+      const ou = (outlineMesh.material as THREE.ShaderMaterial).uniforms;
+      outlineMesh.visible = isSelf || isPickMesh;
+      ou.uPickPosition.value.copy(pickScratch.current);
+      if (isSelf) {
+        // Whole-mesh archetype hover wins if both are somehow live at once —
+        // it already outlines every instance, including any picked one.
+        ou.uOutlineWidth.value = hh.outline * hlEase.current[e];
+        ou.uOutlineWhole.value = 1;
+      } else if (isPickMesh) {
+        // Pick is instantaneous (no ease) — a hover cue, not a smoothed
+        // transition like the archetype-icon case.
+        ou.uOutlineWidth.value = hh.outline;
+        ou.uOutlineWhole.value = 0;
+      }
       tilesTot += partition.tiles.length;
       if (s.lod.tiles && partition.tiles.length > 1) {
         const sig = visibleTiles(partition, state.camera, frustum.current, visible.current);
@@ -198,6 +330,11 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
         }
         tilesVis += partition.tiles.length;
       }
+      // #55 tile compaction shares mesh.instanceMatrix with outlineMesh (same
+      // object, written above via compactVisible), but `count` is a per-mesh
+      // property — sync it every frame so the shell's draw call matches the
+      // main mesh's visible instance set exactly.
+      outlineMesh.count = mesh.count;
       drawn += mesh.count;
     }
     // #55 debug readout (Debug View → Tile culling) — cheap counter writes.
@@ -317,8 +454,36 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
 
   return (
     <group visible={!hidden}>
-      {meshes.map((m, i) => (
-        <primitive key={i} object={m} />
+      {entries.map((e, i) => (
+        <primitive
+          key={i}
+          object={e.mesh}
+          // #87 "Pick Hovered": handlers are only ATTACHED while the switch is
+          // on, so raycasting the visible-tile-compacted instances (up to
+          // thousands across 7 meshes) costs nothing while the feature is off
+          // (the common case). onPointerMove stopPropagation()s so only the
+          // FRONT-MOST building (nearest hit across all 7 archetype meshes)
+          // claims the pick; R3F still fires onPointerOut on whichever mesh
+          // was PREVIOUSLY hovered before the new hit's handler runs, so
+          // switching between two overlapping buildings can't leave both (or
+          // neither) lit.
+          onPointerMove={
+            pickEnabled
+              ? (ev: ThreeEvent<PointerEvent>) => {
+                  ev.stopPropagation();
+                  useSceneStore
+                    .getState()
+                    .setPickHover(ev.instanceId != null ? e.archetype : null, ev.instanceId ?? -1);
+                }
+              : undefined
+          }
+          onPointerOut={
+            pickEnabled ? () => useSceneStore.getState().setPickHover(null, -1) : undefined
+          }
+        />
+      ))}
+      {entries.map((e, i) => (
+        <primitive key={`outline-${i}`} object={e.outlineMesh} />
       ))}
     </group>
   );
@@ -407,7 +572,7 @@ function buildMeshes(
   const euler = new THREE.Euler();
   const color = new THREE.Color();
 
-  for (const rawList of byArchetype.values()) {
+  for (const [archetype, rawList] of byArchetype) {
     // #55: store instances TILE-MAJOR (each world tile's buildings contiguous)
     // so the frame loop can materialise visible tiles with plain slice copies.
     // The atlas above is packed once over ALL buildings — per-building windows
@@ -483,6 +648,12 @@ function buildMeshes(
           uDepthPalette: { value: [] },
           uWireframe: { value: 0 },
           uWireColor: { value: new THREE.Color() },
+          uHighlight: { value: 0 },
+          uHiLift: { value: 1.8 }, // #69 idle default; overwritten per-frame from debug.hoverHighlight
+          uHiDim: { value: 0.7 },
+          // #87 single-instance pick: world-space centre of the picked building,
+          // or PICK_SENTINEL when nothing is picked. Fed per-frame (see useFrame).
+          uPickPosition: { value: new THREE.Vector3(PICK_SENTINEL, PICK_SENTINEL, PICK_SENTINEL) },
         },
       ]),
       fog: true,
@@ -505,6 +676,52 @@ function buildMeshes(
     material.uniforms.uWireColor.value.set(DEBUG_WIRE_COLOR);
 
     const mesh = new THREE.InstancedMesh(geo, material, N);
+
+    // #69 hover-highlight outline shell: same geometry (unit box — the vertex
+    // shader offsets by a per-axis WORLD-space constant, see cityOutline.ts),
+    // BackSide inverted-hull so only the silhouette fringe shows past the real
+    // facade. instanceMatrix is reassigned to the MAIN mesh's own attribute
+    // object right below (not copied) so #55 tile compaction — which writes
+    // into mesh.instanceMatrix — updates this mesh for free; `count` stays
+    // per-mesh and is synced every frame in the useFrame loop.
+    const outlineMaterial = new THREE.ShaderMaterial({
+      vertexShader: cityOutlineVertexShader,
+      fragmentShader: cityOutlineFragmentShader,
+      uniforms: THREE.UniformsUtils.merge([
+        THREE.UniformsLib.fog,
+        {
+          uOutlineWidth: { value: 0 },
+          uOutlineColor: { value: OUTLINE_COLOR },
+          // #87 single-instance pick — see the matching uPickPosition comment
+          // on the city material above.
+          uPickPosition: { value: new THREE.Vector3(PICK_SENTINEL, PICK_SENTINEL, PICK_SENTINEL) },
+          uOutlineWhole: { value: 0 }, // #87: 1 = whole-mesh (archetype hover), 0 = pick-only
+          // #69 hairline floor — uHairlinePx is a fixed constant (device px);
+          // uViewportHeight/uDpr are placeholders synced from useThree below
+          // (on mount and on resize) so they're never stale.
+          uHairlinePx: { value: 1.5 },
+          uViewportHeight: { value: 1000 },
+          uDpr: { value: 1 },
+        },
+      ]),
+      side: THREE.BackSide,
+      fog: true,
+    });
+    const outlineMesh = new THREE.InstancedMesh(geo, outlineMaterial, N);
+    outlineMesh.instanceMatrix = mesh.instanceMatrix;
+    outlineMesh.frustumCulled = false;
+    outlineMesh.visible = false;
+    // #87 per-instance highlight ("Pick Hovered", Buildings > Debug Highlight
+    // > Hover Highlight): reuses this exact outline shell. The archetype-level
+    // `visible` gate above widens to "isSelf OR this mesh holds the pick";
+    // which SINGLE instance gets the border is decided in cityOutline's vertex
+    // shader by comparing each instance's world centre against uPickPosition
+    // (see the frame loop below) rather than a new instance attribute — the
+    // city material already sits at the GL_MAX_VERTEX_ATTRIBS floor of 16
+    // (aMeanLit below is the 16th and final slot), so there was no free slot
+    // for an identity channel. The shared-instanceMatrix wiring above needs no
+    // change — it already tracks whatever subset #55 compaction has
+    // materialised.
 
     for (let i = 0; i < N; i++) {
       const b = list[i];
@@ -627,7 +844,7 @@ function buildMeshes(
         itemSize: 4,
       },
     ];
-    entries.push({ mesh, partition, channels, list, facadeChannel });
+    entries.push({ mesh, outlineMesh, archetype, partition, channels, list, facadeChannel });
   }
 
   return { entries, maxRadius };

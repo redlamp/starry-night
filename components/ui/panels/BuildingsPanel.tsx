@@ -15,9 +15,11 @@ const TINT_MODES = ["archetype", "depth", "district", "height", "landuse", "popu
 export function BuildingTintGroup() {
   const tint = useSceneStore((s) => s.debug.buildingTint);
   const setBuildingTint = useSceneStore((s) => s.setBuildingTint);
+  const hover = useSceneStore((s) => s.debug.hoverHighlight);
+  const setHoverHighlight = useSceneStore((s) => s.setHoverHighlight);
   return (
     <SubGroup
-      label="Debug tint"
+      label="Debug Highlight"
       action={
         <Switch
           checked={tint.enabled}
@@ -39,6 +41,47 @@ export function BuildingTintGroup() {
         step={0.05}
         onChange={(intensity) => setBuildingTint({ intensity })}
       />
+      {/* #69 hover highlight: hovering an archetype icon (Windows > advanced)
+          lifts matching buildings, dims the rest, and strokes an outline. These
+          tune that lift/dim and the outline width. Transient debug state. */}
+      <SubGroup label="Hover Highlight">
+        {/* #87: independent of the archetype-icon hover above — while on,
+            hovering ANY building in the 3D view highlights just that one
+            instance (lift + outline), reusing the outline/lift/dim tuning
+            below. Clears on pointer-out and whenever this flips off. */}
+        <div className="flex items-center justify-between gap-2 text-xs">
+          <span className="text-foreground/70">Pick Hovered</span>
+          <Switch
+            checked={hover.pick}
+            onCheckedChange={(pick) => setHoverHighlight({ pick })}
+            title="Pick Hovered"
+          />
+        </div>
+        <ValueSlider
+          label="outline"
+          value={hover.outline}
+          min={0}
+          max={8}
+          step={0.5}
+          onChange={(outline) => setHoverHighlight({ outline })}
+        />
+        <ValueSlider
+          label="lift"
+          value={hover.lift}
+          min={1}
+          max={3}
+          step={0.1}
+          onChange={(lift) => setHoverHighlight({ lift })}
+        />
+        <ValueSlider
+          label="dim"
+          value={hover.dim}
+          min={0.2}
+          max={1}
+          step={0.05}
+          onChange={(dim) => setHoverHighlight({ dim })}
+        />
+      </SubGroup>
     </SubGroup>
   );
 }
@@ -63,8 +106,9 @@ export function BuildingsSection() {
       <SubGroup label="Facade">
         <FacadeSection />
       </SubGroup>
-      {/* Debug tint (moved from Debug View, user 2026-06-08): header switch
-          gates the wash, dropdown picks the category. */}
+      {/* Debug Highlight (was "Debug tint", user 2026-07-04): header switch
+          gates the tint wash + dropdown picks the category; nested Hover
+          Highlight section tunes the #69 archetype-hover lift/dim + outline. */}
       <BuildingTintGroup />
     </>
   );

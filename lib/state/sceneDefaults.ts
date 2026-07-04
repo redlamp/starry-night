@@ -343,6 +343,13 @@ export const DEFAULT_DEBUG = {
   // buildings' raw cell atlas or the pane-mask field instead of the final
   // composite — the same layer debugging the lab's texture dropdowns give.
   windowView: "final" as "final" | "atlas" | "field",
+  // #69 hover highlight — live-tunable outline width (m) + matched-brightness
+  // lift + non-matched dim. Mirrors HIGHLIGHT_OUTLINE_WIDTH_M and the shader's
+  // idle lift/dim (below). Transient (debug bucket): never saved/copied/shared.
+  // #87 pick: "Pick Hovered" switch — when on, hovering ANY building in the 3D
+  // view highlights just that one instance (see sceneStore's pickArchetype /
+  // pickInstance), independent of the archetype-icon hover.
+  hoverHighlight: { outline: 2, lift: 1.8, dim: 0.7, pick: false },
 };
 
 // Default wireframe stroke colour — a bright blue used where a group has no
@@ -350,6 +357,14 @@ export const DEFAULT_DEBUG = {
 // (Buildings with a tint mode stroke in that mode's colour; road tiers stroke
 // in their highlight colours; the moon strokes in its own material colour.)
 export const DEBUG_WIRE_COLOR = "#4d9fff";
+
+// #69 archetype hover-highlight stroke outline (InstancedCity's per-archetype
+// outline shell — see the inverted-hull comment there). Warm white so it reads
+// as a spotlight pick, not a debug artefact. Width is a constant WORLD-space
+// offset (metres) added per axis before the instance transform, so the border
+// stays the same visual thickness on a low-rise and a spire.
+export const HIGHLIGHT_OUTLINE_COLOR = "#ffe9c4";
+export const HIGHLIGHT_OUTLINE_WIDTH_M = 2;
 
 // Ambient traffic (research D): car head/tail-lights flowing along the roads.
 // On by default. `density` is the global car-count multiplier; highway/arterial/
