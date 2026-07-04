@@ -350,6 +350,9 @@ export const DEFAULT_DEBUG = {
   // view highlights just that one instance (see sceneStore's pickArchetype /
   // pickInstance), independent of the archetype-icon hover.
   hoverHighlight: { outline: 2, lift: 1.8, dim: 0.7, pick: false },
+  // Air-route corridor overlay (#67 follow-up): 3D polyline of each seeded
+  // flight corridor. Off by default — a debug aid, not scene art.
+  showFlightRoutes: false,
 };
 
 // Default wireframe stroke colour — a bright blue used where a group has no
@@ -384,6 +387,11 @@ export const DEFAULT_TRAFFIC = {
   // make all car lights bigger. Live uniform — no regen.
   lightSize: 1,
 };
+
+// Ambient departure corridor (#67 v1) — off-map airport anchor, 2-3 plane
+// slots. On by default; modeled on DEFAULT_TRAFFIC's enabled flag. v1 has no
+// other tunables (density/count are seed-baked, not live knobs).
+export const DEFAULT_FLIGHTS = { enabled: true };
 
 // Streetlights along the road network. On by default; toggled from the Roads panel.
 // `size` scales the point sprite (×base 6 px); `brightness` scales emissive gain.

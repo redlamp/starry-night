@@ -75,7 +75,12 @@ import { BuildingsSection } from "@/components/ui/panels/BuildingsPanel";
 import { MoonSection } from "@/components/ui/panels/MoonPanel";
 import { FogSection, AtmosphereToggle } from "@/components/ui/panels/AtmospherePanel";
 import { IntroSection } from "@/components/ui/panels/IntroPanel";
-import { DebugSection, StreetlightsGroup, TrafficGroup } from "@/components/ui/panels/DebugPanel";
+import {
+  DebugSection,
+  StreetlightsGroup,
+  TrafficGroup,
+  FlightsGroup,
+} from "@/components/ui/panels/DebugPanel";
 import {
   PerfReadout,
   AdaptiveGroup,
@@ -193,9 +198,9 @@ const SETTINGS_SECTIONS: { value: string; label: string; keywords: string }[] = 
   },
   {
     value: "roads",
-    label: "Roads",
+    label: "Transport",
     keywords:
-      "highways arterials streets traffic cars headlights taillights planning tier ribbons network highlight",
+      "highways arterials streets traffic cars headlights taillights planning tier ribbons network highlight flights airliner cessna corridor runway spawn",
   },
   {
     value: "window-profiles",
@@ -583,16 +588,19 @@ export function CameraPanel() {
               <IntroSection />
             </Section>
 
-            {/* Roads (user 2026-06-08): each block is its own expandable
-                sub-group — Highlight (tri-switch on header), Streetlights,
-                Traffic — all collapsed by default. (Distance LOD moved to
-                Performance → Level of Detail, user 2026-06-13.) */}
-            <Section value="roads" icon={Route} label="Roads" hidden={!show("roads")}>
+            {/* Transport (user 2026-06-08; relabelled from "Roads" 2026-07-04 once
+                Flights landed alongside the road layers): each block is its own
+                expandable sub-group — Highlight (tri-switch on header), Streetlights,
+                Traffic, Flights (#67) — all collapsed by default. (Distance LOD
+                moved to Performance → Level of Detail, user 2026-06-13.) Internal
+                section key stays "roads" — only the visible label changed. */}
+            <Section value="roads" icon={Route} label="Transport" hidden={!show("roads")}>
               <SubGroup label="Highlight" action={<RoadHighlightAction />}>
                 <RoadHighlightTiers />
               </SubGroup>
               <StreetlightsGroup />
               <TrafficGroup />
+              <FlightsGroup />
             </Section>
 
             <Section

@@ -145,6 +145,7 @@ export type SavedConfig = {
     popCoupling: number;
     lightSize: number;
   };
+  flights?: { enabled: boolean };
   streetlights?: { enabled: boolean; size: number; brightness: number };
   lod?: {
     enabled: boolean;
