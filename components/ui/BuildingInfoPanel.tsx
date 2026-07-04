@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, type ReactNode } from "react";
-import { MapPin, X } from "lucide-react";
+import { Crosshair, MapPin, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import { focusBuilding } from "@/lib/scene/focusBuilding";
 import { useSceneStore } from "@/lib/state/sceneStore";
 import { generateCity } from "@/lib/seed/cityGen";
 import { buildingPopulation } from "@/lib/seed/population";
@@ -112,9 +113,20 @@ export function BuildingInfoPanel() {
             </div>
           )}
         </div>
-        <Button variant="ghost" size="icon-sm" onClick={close} aria-label="Close building info">
-          <X />
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => focusBuilding(building)}
+            title="Focus this building (also: double-click it)"
+          >
+            <Crosshair />
+            Focus
+          </Button>
+          <Button variant="ghost" size="icon-sm" onClick={close} aria-label="Close building info">
+            <X />
+          </Button>
+        </div>
       </div>
 
       <Separator />

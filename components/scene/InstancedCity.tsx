@@ -11,6 +11,7 @@ import {
   type TilePartition,
 } from "@/lib/scene/tileCull";
 import { reportTileCull } from "@/lib/scene/tileCullDebug";
+import { focusBuilding } from "@/lib/scene/focusBuilding";
 import {
   generateCity,
   ARCHETYPE_ORDER,
@@ -562,6 +563,17 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
             const b = e.list[stableIdx];
             if (!b) return; // defensive: a bad slot -> index should never happen, but never crash on a click
             useSceneStore.getState().setSelectedBuildingId(b.id);
+          }}
+          // #87 focus: double-click a building (inspect mode) to select AND
+          // glide the camera to orbit its ground centre. A double-click already
+          // implies two co-located clicks, so no extra drag guard is needed.
+          onDoubleClick={(ev: ThreeEvent<MouseEvent>) => {
+            ev.stopPropagation();
+            if (!inspectMode || hidden || ev.instanceId == null) return;
+            const b = e.list[Math.round(e.stableIndex.array[ev.instanceId])];
+            if (!b) return;
+            useSceneStore.getState().setSelectedBuildingId(b.id);
+            focusBuilding(b);
           }}
           // #87 "Pick Hovered": handlers are only ATTACHED while the switch is
           // on, so raycasting the visible-tile-compacted instances (up to

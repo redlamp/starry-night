@@ -310,6 +310,28 @@ export function StarryNightV2Model() {
     }
   }, [mode]);
 
+  // #87 focus: glide the pivot onto a focus request's target (a building's
+  // ground centre) at its framing distance, keeping the current viewing
+  // direction. enableTransition=true eases camera-controls there and leaves the
+  // user orbiting AROUND the target afterward (the Unity-F feel). Consumed once.
+  useEffect(() => {
+    const eye = new THREE.Vector3();
+    const dir = new THREE.Vector3();
+    const unsub = useSceneStore.subscribe((s, p) => {
+      const f = s.focusRequest;
+      if (f === p.focusRequest || !f) return;
+      const c = controls.current;
+      if (!c || s.cameraMode !== "orbit") return;
+      c.getPosition(eye);
+      dir.set(eye.x - f.x, eye.y - f.y, eye.z - f.z);
+      const len = dir.length() || 1;
+      dir.multiplyScalar(f.dist / len);
+      void c.setLookAt(f.x + dir.x, f.y + dir.y, f.z + dir.z, f.x, f.y, f.z, true);
+      useSceneStore.getState().setFocusRequest(null);
+    });
+    return unsub;
+  }, []);
+
   // Frame the city + control config. ALL mouse input is custom (below) — including the wheel, so
   // its zoom curve matches Google Earth; native touch is left on for the mobile gestures.
   useEffect(() => {

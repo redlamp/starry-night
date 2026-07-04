@@ -472,6 +472,11 @@ type SceneState = {
   // Runtime tier only — not persisted/shared.
   inspectMode: boolean;
   setInspectMode: (on: boolean) => void;
+  // #87 focus: a one-shot request for the active orbit model to glide its pivot
+  // onto (x,y,z) at `dist` (Unity-F "frame + orbit the selected object"), then
+  // keep orbiting there. The model consumes + clears it. Runtime tier only.
+  focusRequest: { x: number; y: number; z: number; dist: number } | null;
+  setFocusRequest: (r: { x: number; y: number; z: number; dist: number } | null) => void;
   cameraTweenRequest: TweenRequest | null;
   // Projection model. We keep a single perspective camera under the hood; ortho
   // is implemented by overriding camera.projectionMatrix each frame using an
@@ -1044,6 +1049,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   inspectMode: false,
   setInspectMode: (on) =>
     set(on ? { inspectMode: true } : { inspectMode: false, selectedBuildingId: null }),
+  focusRequest: null,
+  setFocusRequest: (focusRequest) => set({ focusRequest }),
   resetCamera: () => {
     // Derive reset patch from the registry: every entry goes back to its
     // hardcoded defaultValue. Runtime readouts (cityPlanning.topologyKind /
