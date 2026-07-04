@@ -82,6 +82,9 @@ export function Traffic({ masterSeed }: { masterSeed: string }) {
       aHead: reorderToTiles(part, t.aHead, 1),
       aReveal: reorderToTiles(part, t.aReveal, 1),
       aSize: reorderToTiles(part, t.aSize, 1),
+      aWinStart: reorderToTiles(part, t.aWinStart, 1),
+      aWinEnd: reorderToTiles(part, t.aWinEnd, 1),
+      aRoadEnd: reorderToTiles(part, t.aRoadEnd, 1),
     };
 
     const geo = new THREE.BufferGeometry();
@@ -97,6 +100,9 @@ export function Traffic({ masterSeed }: { masterSeed: string }) {
     geo.setAttribute("aHead", new THREE.BufferAttribute(srcs.aHead.slice(), 1));
     geo.setAttribute("aReveal", new THREE.BufferAttribute(srcs.aReveal.slice(), 1));
     geo.setAttribute("aSize", new THREE.BufferAttribute(srcs.aSize.slice(), 1));
+    geo.setAttribute("aWinStart", new THREE.BufferAttribute(srcs.aWinStart.slice(), 1));
+    geo.setAttribute("aWinEnd", new THREE.BufferAttribute(srcs.aWinEnd.slice(), 1));
+    geo.setAttribute("aRoadEnd", new THREE.BufferAttribute(srcs.aRoadEnd.slice(), 1));
     const chans: CompactChannel[] = [
       { src: srcs.aA, dst: geo.getAttribute("position") as THREE.BufferAttribute, itemSize: 3 },
       { src: srcs.aA, dst: geo.getAttribute("aA") as THREE.BufferAttribute, itemSize: 3 },
@@ -108,6 +114,9 @@ export function Traffic({ masterSeed }: { masterSeed: string }) {
       { src: srcs.aHead, dst: geo.getAttribute("aHead") as THREE.BufferAttribute, itemSize: 1 },
       { src: srcs.aReveal, dst: geo.getAttribute("aReveal") as THREE.BufferAttribute, itemSize: 1 },
       { src: srcs.aSize, dst: geo.getAttribute("aSize") as THREE.BufferAttribute, itemSize: 1 },
+      { src: srcs.aWinStart, dst: geo.getAttribute("aWinStart") as THREE.BufferAttribute, itemSize: 1 },
+      { src: srcs.aWinEnd, dst: geo.getAttribute("aWinEnd") as THREE.BufferAttribute, itemSize: 1 },
+      { src: srcs.aRoadEnd, dst: geo.getAttribute("aRoadEnd") as THREE.BufferAttribute, itemSize: 1 },
     ];
 
     const mat = new THREE.ShaderMaterial({
