@@ -32,6 +32,14 @@ const STAR_MODE_TO_IDX: Record<string, number> = {
   "zenith-first": 3,
 };
 
+// Star wake runs this many times faster than the ambient 240 s duration
+// (DEFAULT_STAR_INTRO) until the first cityReady edge, so the sky is
+// visibly waking during an 8-10 s first-visit boot instead of reading dead
+// at ~4% progress. 10x ~= an effective 24 s wake, landing ~25-40% by the
+// time an 8-10 s boot wait ends (#77 option 1). Ambient feel after the
+// edge — and city cascade timing — are untouched.
+const BOOT_STAR_INTRO_MULTIPLIER = 10;
+
 // On mount, stars wake immediately (autoPlay, default true — the / boot) so the
 // sky isn't dead during the ~8-10 s worker gen. The CITY cascade (windows +
 // streetlights) waits for cityReady and restarts on every false→true edge —
@@ -55,6 +63,10 @@ export function IntroTicker({
   const firstReady = useRef(true);
   const lastPlaying = useRef(false);
   const lastProgress = useRef(0);
+  // True from mount until the first cityReady edge — the boot wait the star
+  // rate boost exists to cover. Never re-armed, so regen edges replay stars
+  // at the ambient rate like today.
+  const bootBoostActive = useRef(true);
 
   useEffect(() => {
     if (armed.current || !autoPlay) return;
@@ -73,8 +85,10 @@ export function IntroTicker({
     if (!cityReady || !autoPlay) return;
     const s = useSceneStore.getState();
     s.playIntro();
-    if (firstReady.current) firstReady.current = false;
-    else s.playStarIntro();
+    if (firstReady.current) {
+      firstReady.current = false;
+      bootBoostActive.current = false; // boot wait is over; back to ambient rate
+    } else s.playStarIntro();
   }, [cityReady, autoPlay]);
 
   useFrame((_, dt) => {
@@ -121,7 +135,12 @@ export function IntroTicker({
 
     // Star intro — progress-driven wake (no cycle), no startTime stamp needed.
     if (s.starIntro.playing) {
-      const next = Math.min(1, s.starIntro.progress + dt / Math.max(0.1, s.starIntro.durationSec));
+      const boostedDt =
+        autoPlay && bootBoostActive.current ? dt * BOOT_STAR_INTRO_MULTIPLIER : dt;
+      const next = Math.min(
+        1,
+        s.starIntro.progress + boostedDt / Math.max(0.1, s.starIntro.durationSec),
+      );
       s.setStarIntroProgress(next);
       sharedStarIntroProgress.value = next;
       if (next >= 1) s.setStarIntroPlaying(false);
