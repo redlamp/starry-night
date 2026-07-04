@@ -73,7 +73,23 @@ function pickBulb(pool: Bulb[], r: number): [number, number, number] {
 }
 
 const CAR_Y = 1.4; // sit just above the road surface (road y ≈ 0.05)
-const MAX_CARS = 5000; // hard cap — logged by the caller if exceeded
+// Hard instance cap (array ceiling + emission backstop). Raised from 5000 to
+// 9000 for #57 v2: 1-3 concurrent journeys per minor road + short respawn gaps
+// push minor-tier instances well above the old scatter. Worst-case measured
+// demand at the app multipliers (highway 4 / arterial 2 / minor 1) across
+// tiers 6-8 and 6 seeds was ~7227 (tier 6); 9000 is ~+24% headroom. Points are
+// cheap — one additive draw call, tile-culled (#55) — so 9000 vs 5000 does not
+// change frame cost in character. (The demand THROTTLE stays at 5000, below.)
+const MAX_CARS = 9000;
+// #57 v2 — DEMAND throttle reference, separate from the hard MAX_CARS cap.
+// budgetScale thins every tier proportionally when the pre-cap expected sum
+// exceeds this. Held at the ORIGINAL 5000 (the old MAX_CARS value) so that
+// highway/arterial counts AND the minor-road grant rate stay bit-identical to
+// what shipped: the app runs highway 4x / arterial 2x, where the old cap was
+// already throttling budgetScale to ~0.5, so raising the hard cap must NOT
+// silently ~2x the highways. The added minor liveliness comes from the short
+// respawn gaps + 1-3 concurrent cars, NOT from un-throttling the demand.
+const DEMAND_BUDGET = 5000;
 const MIN_SEG = 6; // drop a macro-segment shorter than this (m)
 // Tensor road polylines are finely sampled (RK4 streamline steps ~2-4 m), so
 // raw vertex pairs are far too short to slide a car along. Chunk each polyline
@@ -264,12 +280,22 @@ export function buildTrafficDensity(
   return { segments, maxRaw: p99 };
 }
 
-// #57 — seeded respawn gap for a minor-tier journey, as a multiple of the
-// road's one-way traverse time (traverseTime = roadLen / speed): 0.5x..2x, so
-// a car re-appears anywhere from "a while ago" to "quite a while" after its
-// last pass, and roads don't respawn in lockstep with each other.
-const GAP_MIN = 0.5;
-const GAP_RANGE = 1.5;
+// #57 — seeded respawn gap for a minor-tier journey, in ABSOLUTE SECONDS
+// (user 2026-07-04). The first cut made the gap a multiple of the road's
+// one-way traverse time, which left a long quiet road (~50 s to drive) dark
+// for up to ~100 s — it read as EMPTY, not "occasional car". A flat 0.5–4.0 s
+// gap means a car re-appears almost immediately after finishing the road, so
+// even a lone-car road reads as alive. Converted to a cycle fraction per
+// journey via its own speed (see the journey loop).
+const GAP_MIN_SEC = 0.5;
+const GAP_RANGE_SEC = 3.5; // → 0.5..4.0 s dark between passes
+
+// #57 — concurrent cars per ACTIVE minor road (user 2026-07-04). One car per
+// road read too sparse; allow 1–3, each on its OWN seeded phase + gap so they
+// bunch and spread irregularly (syncopated) rather than marching evenly. Cap
+// by road length so a short stub never hosts three cars nose-to-tail.
+const CONCURRENT_SHORT_M = 150; // below this: at most 1 car
+const CONCURRENT_LONG_M = 350; // at/above this: up to 3 (between: up to 2)
 
 export function buildTraffic(
   masterSeed: string,
@@ -301,7 +327,9 @@ export function buildTraffic(
     expected.push(e);
     expSum += e;
   }
-  const budgetScale = expSum > MAX_CARS ? MAX_CARS / expSum : 1;
+  // Throttle against DEMAND_BUDGET (not the raised hard cap) so legacy tiers and
+  // the grant rate stay at the shipped density (see DEMAND_BUDGET).
+  const budgetScale = expSum > DEMAND_BUDGET ? DEMAND_BUDGET / expSum : 1;
 
   // Growable output — legacy (highway/arterial) cars are pushed as generated;
   // minor-tier journey instances are appended afterward. Using plain arrays
@@ -407,9 +435,6 @@ export function buildTraffic(
       // #57: minor-tier segments are re-generated below as full-road journeys.
       // The draws above still had to happen here (same spot in the rng
       // stream) — this result for minor is discarded, not emitted.
-      // #57: minor-tier segments are re-generated below as full-road journeys.
-      // The draws above still had to happen here (same spot in the rng
-      // stream) — this result for minor is discarded, not emitted.
       if (s.tier === "minor") continue;
       emit(sx, sz, ex, ez, phase, speed, head, tail, headFlag, reveal, size, 0, 1, 1);
     }
@@ -441,36 +466,44 @@ export function buildTraffic(
     if (roadLen <= 0) continue;
     let roadExpected = 0;
     for (const i of idxs) roadExpected += expected[i] * budgetScale;
-    // A granted journey costs ONE INSTANCE PER MACRO-SEGMENT of its road, not
-    // one — far more expensive than the old independent-per-segment draw it
-    // replaces. Divide the grant probability by the segment count so the
-    // EXPECTED instance cost of this road (journeys × idxs.length) comes out
-    // equal to roadExpected, matching what the old scheme would have cost in
-    // expectation — otherwise a long road's journeys alone could out-cost its
-    // entire old scattered-car budget by an order of magnitude. This also
-    // reads better: a long quiet road gets an occasional single car sweeping
-    // its length, not several phantom cars scattered along it at once.
-    const journeyProb = roadExpected / idxs.length;
-    let journeys = Math.floor(journeyProb);
-    if (rng() < journeyProb - journeys) journeys += 1;
-    if (journeys <= 0) continue;
+    // GRANT: does this road carry traffic at all? Demand-based (length × tier
+    // rate × population-busyness), divided by the segment count so the decision
+    // is per-road, and Bernoulli-rounded exactly like the legacy per-segment
+    // draw. Busier areas grant more roads; remote roads mostly stay dark. Once
+    // granted, the concurrent count below (not this magnitude) sets how many
+    // cars run — so a quiet granted road still gets a lively 1–3.
+    const grantProb = roadExpected / idxs.length;
+    let grant = Math.floor(grantProb);
+    if (rng() < grantProb - grant) grant += 1;
+    if (grant <= 0) continue;
+
+    // CONCURRENT CARS (#57 v2): 1–3, capped by road length, each independent.
+    // Independent seeded phase + gap per car → syncopated, never evenly spaced.
+    const cap = roadLen < CONCURRENT_SHORT_M ? 1 : roadLen < CONCURRENT_LONG_M ? 2 : 3;
+    const concurrent = 1 + Math.floor(rng() * cap);
 
     const cfg = segs[idxs[0]].cfg;
-    for (let j = 0; j < journeys; j++) {
-      // MAX_CARS backstop: a granted journey costs one instance per
-      // macro-segment of its road, not one — stop granting new journeys
-      // once that would bust the shared cap rather than truncate a journey
-      // mid-road (which would visibly clip the car short of the road end).
+    for (let j = 0; j < concurrent; j++) {
+      // MAX_CARS backstop: each car costs one instance per macro-segment of its
+      // road — stop adding cars once that would bust the cap rather than
+      // truncate one mid-road (which would visibly clip it short of the end).
       if (emitted + idxs.length > MAX_CARS) break;
 
       const dir = rng() < 0.5 ? 1 : -1;
       const laneIdx = Math.floor(rng() * cfg.lanes);
       const off = (cfg.laneHalf + laneIdx * cfg.laneWidth) * dir;
       const speedMps = cfg.speed * (0.75 + rng() * 0.5);
-      const gapFactor = GAP_MIN + rng() * GAP_RANGE; // 0.5x..2x traverse time
-      const cycleLen = roadLen * (1 + gapFactor); // metres, traverse + gap
-      const roadEndFrac = 1 / (1 + gapFactor); // traverse-only fraction of the cycle
-      const journeySpeed = speedMps / cycleLen; // cycle-fractions per second
+      // Respawn gap in absolute seconds → cycle fraction. cycleSec = time to
+      // drive the road once + the dark gap; roadEndFrac is the traverse's share
+      // of that cycle; cycleLen is the virtual full-cycle distance the window
+      // maths index into (= speed × cycleSec, so winEnd of the last segment
+      // lands exactly on roadEndFrac).
+      const traverseSec = roadLen / speedMps;
+      const gapSec = GAP_MIN_SEC + rng() * GAP_RANGE_SEC;
+      const cycleSec = traverseSec + gapSec;
+      const roadEndFrac = traverseSec / cycleSec;
+      const cycleLen = speedMps * cycleSec;
+      const journeySpeed = 1 / cycleSec; // cycle-fractions per second
       const phase = rng();
       const head = pickBulb(HEAD_POOL, rng());
       const tail = pickBulb(TAIL_POOL, rng());
