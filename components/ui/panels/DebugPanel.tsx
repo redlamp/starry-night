@@ -1,12 +1,18 @@
 "use client";
 
 import { Fragment, useState, useEffect } from "react";
-import { useSceneStore, RENDER_GROUPS, type RenderGroup, type RenderMode } from "@/lib/state/sceneStore";
+import {
+  useSceneStore,
+  RENDER_GROUPS,
+  type RenderGroup,
+  type RenderMode,
+} from "@/lib/state/sceneStore";
 import { CITY_SHAPES, type CityShapeSetting } from "@/lib/seed/cityShape";
 import { CITY_TIER_ORDER } from "@/lib/seed/topology";
 import { TIER_LABELS, tierKm } from "@/components/ui/cityTiers";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
+import { Button } from "@/components/ui/button";
 import { ValueSlider } from "@/components/ui/value-slider";
 import { HelpHint } from "@/components/ui/tooltip";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -171,11 +177,16 @@ export function TrafficGroup() {
   );
 }
 
-// Flights — ambient departure corridor (#67), enable switch on header (no
-// other v1 tunables — the corridor and slot count are seed-baked, not live knobs).
+// Flights — ambient departure corridor (#67), enable switch on header. Slot
+// count/corridor are seed-baked, not live knobs; the two spawn buttons +
+// route overlay below are debug aids (#67 follow-up), not look-and-feel
+// settings.
 export function FlightsGroup() {
   const enabled = useSceneStore((s) => s.flights.enabled);
   const setFlights = useSceneStore((s) => s.setFlights);
+  const triggerFlightSpawn = useSceneStore((s) => s.triggerFlightSpawn);
+  const showFlightRoutes = useSceneStore((s) => s.debug.showFlightRoutes);
+  const setShowFlightRoutes = useSceneStore((s) => s.setShowFlightRoutes);
   return (
     <SubGroup
       label="Flights"
@@ -190,6 +201,36 @@ export function FlightsGroup() {
       <p className="text-foreground/55 text-[11px]">
         One seeded departure corridor; airliner + light-GA classes read by light pattern + speed.
       </p>
+      {/* One-shot debug spawns — fire a plane now instead of waiting out the
+          ambient ~40-90s loop. */}
+      <div className="flex gap-2">
+        <Button
+          size="xs"
+          variant="outline"
+          className="flex-1"
+          onClick={() => triggerFlightSpawn("airliner")}
+          title="Spawn Airliner"
+        >
+          Spawn Airliner
+        </Button>
+        <Button
+          size="xs"
+          variant="outline"
+          className="flex-1"
+          onClick={() => triggerFlightSpawn("lightGA")}
+          title="Spawn Cessna"
+        >
+          Spawn Cessna
+        </Button>
+      </div>
+      <label className="flex cursor-pointer items-center justify-between gap-2 text-xs">
+        <span className="text-foreground/70">Air Routes</span>
+        <Switch
+          checked={showFlightRoutes}
+          onCheckedChange={setShowFlightRoutes}
+          title="Air Routes"
+        />
+      </label>
     </SubGroup>
   );
 }
@@ -335,10 +376,10 @@ export function DebugSection() {
         action={
           <HelpHint>
             Render the window pipeline&apos;s layers instead of the composite: the raw one-texel-
-            per-window cell atlas each fragment samples, or the field view, which follows the
-            render mode — classic draws its mask in grayscale (its mid-range dither was the #82
-            stipple), hybrid draws the analytic pane field in the Window Lab&apos;s blue Atlas+SDF
-            style. Toggling classic/hybrid while in field view flips gray/blue instantly.
+            per-window cell atlas each fragment samples, or the field view, which follows the render
+            mode — classic draws its mask in grayscale (its mid-range dither was the #82 stipple),
+            hybrid draws the analytic pane field in the Window Lab&apos;s blue Atlas+SDF style.
+            Toggling classic/hybrid while in field view flips gray/blue instantly.
           </HelpHint>
         }
       >

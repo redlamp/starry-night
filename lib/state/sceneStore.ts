@@ -11,6 +11,7 @@ import {
   type DensityProfile,
 } from "@/lib/seed/density";
 import type { SketchTensorSource } from "@/lib/sketch/orientationField";
+import type { FlightClass } from "@/lib/seed/flights";
 
 // ---------------------------------------------------------------------------
 // Re-export everything from the sub-files so existing importers of
@@ -626,6 +627,7 @@ type SceneState = {
   setTileFreeze: (v: boolean) => void;
   setShowPinPlane: (v: boolean) => void;
   setWindowDebugView: (v: "final" | "atlas" | "field") => void;
+  setShowFlightRoutes: (v: boolean) => void;
   // Organic city footprint (#14) — gen input; changing it regenerates the city.
   cityShape: CityShapeSetting;
   setCityShape: (cityShape: CityShapeSetting) => void;
@@ -664,6 +666,14 @@ type SceneState = {
   // Ambient departure corridor (#67) — off-map airport anchor, lights-only planes.
   flights: typeof DEFAULT_FLIGHTS;
   setFlights: (patch: Partial<typeof DEFAULT_FLIGHTS>) => void;
+  // Debug: one-shot flight spawn triggers (#67 follow-up). Monotonically
+  // increasing per class — Flights.tsx watches each counter and rewrites the
+  // matching reserved debug instance's phase on every increment (the
+  // standard consume pattern for a fire-once counter). Never persisted / not
+  // in SETTINGS_REGISTRY, same treatment as highlightDistrictId: a debug
+  // convenience, not a look-and-feel setting.
+  flightsSpawn: Record<FlightClass, number>;
+  triggerFlightSpawn: (cls: FlightClass) => void;
   streetlights: typeof DEFAULT_STREETLIGHTS;
   setStreetlights: (patch: Partial<typeof DEFAULT_STREETLIGHTS>) => void;
   lod: typeof DEFAULT_LOD;
@@ -879,6 +889,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setTileFreeze: (v) => set((s) => ({ debug: { ...s.debug, tileFreeze: v } })),
   setShowPinPlane: (v) => set((s) => ({ debug: { ...s.debug, showPinPlane: v } })),
   setWindowDebugView: (v) => set((s) => ({ debug: { ...s.debug, windowView: v } })),
+  setShowFlightRoutes: (v) => set((s) => ({ debug: { ...s.debug, showFlightRoutes: v } })),
   cityShape: DEFAULT_CITY_SHAPE,
   setCityShape: (cityShape) => set({ cityShape }),
   cityShapeScale: DEFAULT_CITY_SHAPE_SCALE,
@@ -913,6 +924,9 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setTraffic: (patch) => set((s) => ({ traffic: { ...s.traffic, ...patch } })),
   flights: DEFAULT_FLIGHTS,
   setFlights: (patch) => set((s) => ({ flights: { ...s.flights, ...patch } })),
+  flightsSpawn: { airliner: 0, lightGA: 0 },
+  triggerFlightSpawn: (cls) =>
+    set((s) => ({ flightsSpawn: { ...s.flightsSpawn, [cls]: s.flightsSpawn[cls] + 1 } })),
   streetlights: DEFAULT_STREETLIGHTS,
   setStreetlights: (patch) => set((s) => ({ streetlights: { ...s.streetlights, ...patch } })),
   lod: DEFAULT_LOD,

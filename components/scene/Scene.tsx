@@ -35,6 +35,7 @@ import { TensorFieldOverlay } from "./TensorFieldOverlay";
 import { TileCullOverlay } from "./TileCullOverlay";
 import { Traffic } from "./Traffic";
 import { Flights } from "./Flights";
+import { FlightRoutes } from "./FlightRoutes";
 import { ShootingStars } from "./ShootingStars";
 import { useGeneratedCity } from "@/lib/hooks/useGeneratedCity";
 
@@ -158,6 +159,7 @@ export function Scene() {
             <Beacons masterSeed={masterSeed} />
             <Traffic masterSeed={masterSeed} />
             <Flights masterSeed={masterSeed} />
+            <FlightRoutes masterSeed={masterSeed} />
             {/* Planning overlays — each respects its own visibility flag (default
               off). Highway/arterial/street tier tinting now lives in <Roads/>. */}
             <DistrictShells masterSeed={masterSeed} />

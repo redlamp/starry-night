@@ -342,6 +342,9 @@ export const DEFAULT_DEBUG = {
   // buildings' raw cell atlas or the pane-mask field instead of the final
   // composite — the same layer debugging the lab's texture dropdowns give.
   windowView: "final" as "final" | "atlas" | "field",
+  // Air-route corridor overlay (#67 follow-up): 3D polyline of each seeded
+  // flight corridor. Off by default — a debug aid, not scene art.
+  showFlightRoutes: false,
 };
 
 // Default wireframe stroke colour — a bright blue used where a group has no

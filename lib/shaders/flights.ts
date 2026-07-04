@@ -10,11 +10,18 @@
 // Wingtip/nav/strobe offsets are built from the segment's own heading in the
 // vertex shader, so the ~35 m (airliner) / ~11 m (light GA) light spread reads
 // as separate port/starboard points rather than one blob.
+//
+// #67 follow-up: a few extra instances at the end of the buffer are reserved
+// debug spawns (aOneShot=1) — Flights.tsx rewrites their aPhase so
+// fract(uTime*aSpeed+aPhase) reads 0 at the moment a Debug-panel button fires,
+// and this shader clamps (rather than fracts) their progress so they can't
+// loop back around afterward. aFadeFrac moved from a uniform to a per-vertex
+// attribute so each corridor (v2 adds a second, for arrivals) can carry its
+// own fade width.
 
 export const flightsVertexShader = /* glsl */ `
 uniform float uTime;
 uniform float uPixelRatio;
-uniform float uFadeFrac;     // corridor-end fade width, as a fraction of segment length
 uniform float uIntroProgress; // shared window-intro progress (Beacons pattern)
 
 attribute vec3 aA;
@@ -28,6 +35,8 @@ attribute float aIntensity;
 attribute float aFlashPeriod;
 attribute float aPulses;     // 0 steady, 1 single-flash, 2 double-flash
 attribute float aSize;
+attribute float aFadeFrac;   // corridor-end fade width, as a fraction of segment length (per-corridor, #67 follow-up)
+attribute float aOneShot;    // 0 ambient loop, 1 debug one-shot spawn (#67 follow-up)
 
 varying vec3 vColor;
 varying float vAlpha;
@@ -37,7 +46,14 @@ varying float vPulses;
 varying float vKind;
 
 void main() {
-  float t = fract(uTime * aSpeed + aPhase);
+  // Ambient slots loop forever via fract(). A one-shot debug spawn instead
+  // CLAMPS its unwrapped progress: raw keeps climbing past 1 once the plane
+  // "lands" (uTime only ever increases), but t pins at 1 there and the fade
+  // envelope below is already fully closed at t=1 — so it can never relight
+  // without a fresh trigger rewriting aPhase (see Flights.tsx). clamp vs
+  // fract IS the one-shot gate; no separate "kill" flag is needed.
+  float raw = uTime * aSpeed + aPhase;
+  float t = aOneShot > 0.5 ? clamp(raw, 0.0, 1.0) : fract(raw);
   vec3 seg = aB - aA;
   vec2 dir = normalize(seg.xz);
   vec2 perp = vec2(-dir.y, dir.x); // horizontal perpendicular to the flight path
@@ -50,7 +66,7 @@ void main() {
   // gated by the shared intro progress — flights wake LATE (after the city and
   // traffic are already lit), mirroring Beacons' wake gate (Beacons.tsx:52) but
   // shifted later in the sequence.
-  vAlpha = smoothstep(0.0, uFadeFrac, t) * (1.0 - smoothstep(1.0 - uFadeFrac, 1.0, t));
+  vAlpha = smoothstep(0.0, aFadeFrac, t) * (1.0 - smoothstep(1.0 - aFadeFrac, 1.0, t));
   vAlpha *= smoothstep(0.55, 0.85, uIntroProgress);
 
   vColor = aKind < 0.5
