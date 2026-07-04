@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { useSceneStore, DEFAULT_FLIGHTS } from "@/lib/state/sceneStore";
 import { buildFlights, corridorLength, CLASS_SPEED, type FlightClass } from "@/lib/seed/flights";
@@ -84,6 +85,17 @@ const DEBUG_CLASSES: FlightClass[] = ["airliner", "lightGA"];
 // lib/shaders/flights.ts) and stays invisible until a trigger rewrites it.
 const DEBUG_PARKED_PHASE = 1e6;
 
+// JS mirror of the shader's hash11 (lib/shaders/flights.ts) + fract, so the
+// live "planes in the air" tally computes each plane's transit/gap cycle
+// exactly as the GPU does.
+const frac = (x: number) => x - Math.floor(x);
+function hash11(p: number): number {
+  p = frac(p * 0.1031);
+  p *= p + 33.33;
+  p *= p + p;
+  return frac(p);
+}
+
 export function Flights({ masterSeed }: { masterSeed: string }) {
   const enabled = useSceneStore((s) => s.flights.enabled);
   // #67 follow-up live look settings — `?? DEFAULT` covers configs saved
@@ -95,8 +107,9 @@ export function Flights({ masterSeed }: { masterSeed: string }) {
   const citySize = useSceneStore((s) => s.citySize);
   const spawnAirliner = useSceneStore((s) => s.flightsSpawn.airliner);
   const spawnLightGA = useSceneStore((s) => s.flightsSpawn.lightGA);
+  const setFlightsAirborne = useSceneStore((s) => s.setFlightsAirborne);
 
-  const { geometry, material, debugBase } = useMemo(() => {
+  const { geometry, material, debugBase, slotMeta } = useMemo(() => {
     void citySize; // tier drives the module-level gen extent (#58) — a switch must rebuild
     const data = buildFlights(masterSeed);
     const n = (data.slots.length + DEBUG_CLASSES.length) * VERTS_PER_PLANE;
@@ -228,7 +241,14 @@ export function Flights({ masterSeed }: { masterSeed: string }) {
       fog: false,
     });
     mat.name = "flights"; // so a shader error names its material
-    return { geometry: geo, material: mat, debugBase };
+    // Per-plane cycle inputs for the live airborne tally in the useFrame below
+    // (ambient slots only — debug spawns don't count toward "in the air").
+    const slotMeta = data.slots.map((sl) => ({
+      transitSec: sl.transitSec,
+      phase: sl.phase,
+      cls: sl.cls,
+    }));
+    return { geometry: geo, material: mat, debugBase, slotMeta };
     // gapMin/gapMax/deviation seed the uniforms above but must NOT trigger a
     // rebuild on every slider tick — the effect below re-syncs their live
     // values onto this same long-lived material instead.
@@ -283,6 +303,38 @@ export function Flights({ masterSeed }: { masterSeed: string }) {
     aPhase.needsUpdate = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spawnLightGA]);
+
+  // Live "planes in the air" readout (#67): count ambient planes currently in
+  // their transit phase (not idling in the between-flights gap), throttled to a
+  // few times a second. Replicates the shader's per-plane gap/cycle so the
+  // count matches the sky; writes to the store only on change, so the panel
+  // re-renders when a plane appears/lands, not every frame.
+  const tallyAcc = useRef(0);
+  const lastAirborne = useRef({ airliner: -1, lightGA: -1 });
+  useFrame((_, delta) => {
+    tallyAcc.current += delta;
+    if (tallyAcc.current < 0.35) return;
+    tallyAcc.current = 0;
+    let airliner = 0;
+    let lightGA = 0;
+    if (enabled) {
+      const now = sharedTime.value;
+      for (const m of slotMeta) {
+        const gap = gapMin + hash11(m.phase * 41 + 7) * (gapMax - gapMin);
+        const cycle = m.transitSec + gap;
+        // Airborne while the cycle position is within the transit fraction; the
+        // remainder of the cycle is the on-ground gap.
+        if (frac(now / cycle + m.phase) < m.transitSec / cycle) {
+          if (m.cls === "airliner") airliner += 1;
+          else lightGA += 1;
+        }
+      }
+    }
+    if (airliner !== lastAirborne.current.airliner || lightGA !== lastAirborne.current.lightGA) {
+      lastAirborne.current = { airliner, lightGA };
+      setFlightsAirborne({ airliner, lightGA, heli: 0 });
+    }
+  });
 
   if (!enabled) return null;
   return <points geometry={geometry} material={material} frustumCulled={false} />;

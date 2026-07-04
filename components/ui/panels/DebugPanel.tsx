@@ -20,6 +20,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StreetlightControls } from "@/components/ui/RoadsPanel";
 import { readTileCull, TILE_LAYERS } from "@/lib/scene/tileCullDebug";
 import { SubGroup, ModeSelect } from "./shared";
+import { Plane, Helicopter } from "lucide-react";
 
 const CITY_SHAPE_MODES = ["auto", ...CITY_SHAPES] as const;
 const RENDER_GROUP_LABELS: Record<RenderGroup, string> = {
@@ -193,15 +194,29 @@ export function FlightsGroup() {
   const triggerFlightSpawn = useSceneStore((s) => s.triggerFlightSpawn);
   const showFlightRoutes = useSceneStore((s) => s.debug.showFlightRoutes);
   const setShowFlightRoutes = useSceneStore((s) => s.setShowFlightRoutes);
+  const airborne = useSceneStore((s) => s.flightsAirborne);
   return (
     <SubGroup
       label="Flights"
       action={
-        <Switch
-          checked={enabled}
-          onCheckedChange={(v) => setFlights({ enabled: v })}
-          title="Ambient plane layer on / off"
-        />
+        <div className="flex items-center gap-2">
+          {/* Planes in the air: B = big (airliner), S = small (light GA), plus
+              the helicopter count (0 until helicopters land). */}
+          <span
+            className="text-foreground/60 flex items-center gap-1 text-[10px] tabular-nums"
+            title="Planes in the air (B: airliner, S: light GA) + helicopters"
+          >
+            <Plane aria-hidden className="size-3" />
+            B:{airborne.airliner} S:{airborne.lightGA}
+            <Helicopter aria-hidden className="size-3" />
+            {airborne.heli}
+          </span>
+          <Switch
+            checked={enabled}
+            onCheckedChange={(v) => setFlights({ enabled: v })}
+            title="Ambient plane layer on / off"
+          />
+        </div>
       }
     >
       <p className="text-foreground/55 text-[11px]">

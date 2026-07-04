@@ -696,6 +696,12 @@ type SceneState = {
   // convenience, not a look-and-feel setting.
   flightsSpawn: Record<FlightClass, number>;
   triggerFlightSpawn: (cls: FlightClass) => void;
+  // Live "planes in the air" readout (#67) — count of ambient planes currently
+  // in their transit phase (not idling in the between-flights gap), tallied by
+  // the Flights component. heli is a placeholder (0 until helicopters land).
+  // Transient: a display readout, never persisted.
+  flightsAirborne: { airliner: number; lightGA: number; heli: number };
+  setFlightsAirborne: (v: { airliner: number; lightGA: number; heli: number }) => void;
   streetlights: typeof DEFAULT_STREETLIGHTS;
   setStreetlights: (patch: Partial<typeof DEFAULT_STREETLIGHTS>) => void;
   lod: typeof DEFAULT_LOD;
@@ -958,6 +964,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   flightsSpawn: { airliner: 0, lightGA: 0 },
   triggerFlightSpawn: (cls) =>
     set((s) => ({ flightsSpawn: { ...s.flightsSpawn, [cls]: s.flightsSpawn[cls] + 1 } })),
+  flightsAirborne: { airliner: 0, lightGA: 0, heli: 0 },
+  setFlightsAirborne: (flightsAirborne) => set({ flightsAirborne }),
   streetlights: DEFAULT_STREETLIGHTS,
   setStreetlights: (patch) => set((s) => ({ streetlights: { ...s.streetlights, ...patch } })),
   lod: DEFAULT_LOD,
