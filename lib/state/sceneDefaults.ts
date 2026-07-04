@@ -392,10 +392,16 @@ export const DEFAULT_TRAFFIC = {
   lightSize: 1,
 };
 
-// Ambient departure corridor (#67 v1) — off-map airport anchor, 2-3 plane
-// slots. On by default; modeled on DEFAULT_TRAFFIC's enabled flag. v1 has no
-// other tunables (density/count are seed-baked, not live knobs).
-export const DEFAULT_FLIGHTS = { enabled: true };
+// Ambient departure/fly-by corridors (#67 v1/v1.5) — off-map anchors, a
+// handful of plane slots. On by default; modeled on DEFAULT_TRAFFIC's enabled
+// flag. Slot count/corridor placement are seed-baked, but the ANIMATION has
+// two live look settings (#67 follow-up, no regen — see lib/shaders/flights.ts):
+//   gapMin/gapMax — idle seconds between passes on the same route, seeded per
+//     plane uniformly within this range (uGapMin/uGapMax); both 0 reproduces
+//     the v1 always-flying continuous loop.
+//   deviation — 0..1 per-pass lateral/altitude wander off the baked corridor
+//     line (uFlightDeviation); 0 flies the exact same line every pass.
+export const DEFAULT_FLIGHTS = { enabled: true, gapMin: 8, gapMax: 30, deviation: 0.3 };
 
 // Streetlights along the road network. On by default; toggled from the Roads panel.
 // `size` scales the point sprite (×base 6 px); `brightness` scales emissive gain.

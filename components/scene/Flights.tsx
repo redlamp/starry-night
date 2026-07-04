@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo } from "react";
 import * as THREE from "three";
-import { useSceneStore } from "@/lib/state/sceneStore";
+import { useSceneStore, DEFAULT_FLIGHTS } from "@/lib/state/sceneStore";
 import { buildFlights, corridorLength, CLASS_SPEED, type FlightClass } from "@/lib/seed/flights";
 import { sharedTime } from "@/lib/shaders/sharedTime";
 import { sharedIntroProgress } from "@/lib/shaders/sharedIntro";
@@ -79,13 +79,19 @@ const VERTS_PER_PLANE = ROLE_KIND.length;
 // ambient traffic uses; v2's second (arrival) corridor can give debug spawns
 // their own corridor choice later without touching this reserve mechanic.
 const DEBUG_CLASSES: FlightClass[] = ["airliner", "lightGA"];
-// Any phase that keeps `uTime*aSpeed + aPhase` comfortably above 1 from boot,
-// so the reserved instance reads as "already landed" (see aOneShot in
+// Any phase that keeps `uTime/aTransit + aPhase` comfortably above 1 from
+// boot, so the reserved instance reads as "already landed" (see aOneShot in
 // lib/shaders/flights.ts) and stays invisible until a trigger rewrites it.
 const DEBUG_PARKED_PHASE = 1e6;
 
 export function Flights({ masterSeed }: { masterSeed: string }) {
   const enabled = useSceneStore((s) => s.flights.enabled);
+  // #67 follow-up live look settings — `?? DEFAULT` covers configs saved
+  // before these existed (revertToSaved/boot-hydration replace the whole
+  // `flights` object, so an old save can leave these keys missing).
+  const gapMin = useSceneStore((s) => s.flights.gapMin ?? DEFAULT_FLIGHTS.gapMin);
+  const gapMax = useSceneStore((s) => s.flights.gapMax ?? DEFAULT_FLIGHTS.gapMax);
+  const deviation = useSceneStore((s) => s.flights.deviation ?? DEFAULT_FLIGHTS.deviation);
   const citySize = useSceneStore((s) => s.citySize);
   const spawnAirliner = useSceneStore((s) => s.flightsSpawn.airliner);
   const spawnLightGA = useSceneStore((s) => s.flightsSpawn.lightGA);
@@ -99,7 +105,7 @@ export function Flights({ masterSeed }: { masterSeed: string }) {
     const aA = new Float32Array(n * 3);
     const aB = new Float32Array(n * 3);
     const aPhase = new Float32Array(n);
-    const aSpeed = new Float32Array(n);
+    const aTransit = new Float32Array(n);
     const aSide = new Float32Array(n);
     const aKind = new Float32Array(n);
     const aSpreadHalf = new Float32Array(n);
@@ -116,7 +122,7 @@ export function Flights({ masterSeed }: { masterSeed: string }) {
       pB: [number, number, number],
       fadeFrac: number,
       phase: number,
-      speedFrac: number,
+      transitSec: number,
       cls: FlightClass,
       oneShot: number,
     ) => {
@@ -132,7 +138,7 @@ export function Flights({ masterSeed }: { masterSeed: string }) {
         aB[c * 3 + 1] = pB[1];
         aB[c * 3 + 2] = pB[2];
         aPhase[c] = phase;
-        aSpeed[c] = speedFrac;
+        aTransit[c] = transitSec;
         const kind = ROLE_KIND[j];
         aSide[c] = ROLE_SIDE[j];
         aKind[c] = kind;
@@ -155,7 +161,7 @@ export function Flights({ masterSeed }: { masterSeed: string }) {
         corridor.aB,
         corridor.fadeFrac,
         slot.phase,
-        slot.speedFrac,
+        slot.transitSec,
         slot.cls,
         0,
       );
@@ -175,7 +181,7 @@ export function Flights({ masterSeed }: { masterSeed: string }) {
         debugCorridor.aB,
         debugCorridor.fadeFrac,
         DEBUG_PARKED_PHASE,
-        CLASS_SPEED[cls] / debugSegLen,
+        debugSegLen / CLASS_SPEED[cls],
         cls,
         1,
       );
@@ -188,7 +194,7 @@ export function Flights({ masterSeed }: { masterSeed: string }) {
     geo.setAttribute("aA", new THREE.BufferAttribute(aA, 3));
     geo.setAttribute("aB", new THREE.BufferAttribute(aB, 3));
     geo.setAttribute("aPhase", new THREE.BufferAttribute(aPhase, 1));
-    geo.setAttribute("aSpeed", new THREE.BufferAttribute(aSpeed, 1));
+    geo.setAttribute("aTransit", new THREE.BufferAttribute(aTransit, 1));
     geo.setAttribute("aSide", new THREE.BufferAttribute(aSide, 1));
     geo.setAttribute("aKind", new THREE.BufferAttribute(aKind, 1));
     geo.setAttribute("aSpreadHalf", new THREE.BufferAttribute(aSpreadHalf, 1));
@@ -208,6 +214,13 @@ export function Flights({ masterSeed }: { masterSeed: string }) {
         uPixelRatio: {
           value: typeof window !== "undefined" ? Math.min(window.devicePixelRatio, 2) : 1,
         },
+        // Live look settings (#67 follow-up) — kept in sync post-creation by
+        // the effect below; deliberately excluded from this memo's deps (see
+        // the eslint-disable at its dependency array) so a slider tick never
+        // rebuilds the geometry/material.
+        uGapMin: { value: gapMin },
+        uGapMax: { value: gapMax },
+        uFlightDeviation: { value: deviation },
       },
       transparent: true,
       depthWrite: false,
@@ -216,6 +229,10 @@ export function Flights({ masterSeed }: { masterSeed: string }) {
     });
     mat.name = "flights"; // so a shader error names its material
     return { geometry: geo, material: mat, debugBase };
+    // gapMin/gapMax/deviation seed the uniforms above but must NOT trigger a
+    // rebuild on every slider tick — the effect below re-syncs their live
+    // values onto this same long-lived material instead.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [masterSeed, citySize]);
 
   useEffect(() => {
@@ -225,12 +242,21 @@ export function Flights({ masterSeed }: { masterSeed: string }) {
     };
   }, [geometry, material]);
 
+  // Live uniform sync (#67 follow-up): gap + deviation are look settings, not
+  // gen inputs — push them onto the long-lived material instead of rebuilding
+  // geometry, mirroring Moon.tsx's termStyle/edgeSharpness effect.
+  useEffect(() => {
+    material.uniforms.uGapMin.value = gapMin;
+    material.uniforms.uGapMax.value = gapMax;
+    material.uniforms.uFlightDeviation.value = deviation;
+  }, [material, gapMin, gapMax, deviation]);
+
   // Debug spawn triggers (#67 follow-up): each counter increment rewrites the
-  // reserved instance's aPhase so fract(uTime*aSpeed+aPhase) reads 0 at the
-  // CURRENT shared clock (read from the sharedTime module, not the window
-  // global) — the plane appears at the airport end right now instead of
-  // waiting out the ambient ~40-90s loop. The shader clamps this instance's
-  // progress instead of wrapping it (aOneShot), so it can't loop.
+  // reserved instance's aPhase so uTime/aTransit+aPhase reads 0 at the CURRENT
+  // shared clock (read from the sharedTime module, not the window global) —
+  // the plane appears at the airport end right now instead of waiting out the
+  // ambient loop. The shader clamps this instance's progress instead of
+  // wrapping it (aOneShot), so it can't loop.
   //
   // Guarded on the initial 0 so mounting/reseeding never auto-fires. Not
   // depending on `geometry`/`debugBase`: a click must fire exactly once, not
@@ -239,9 +265,9 @@ export function Flights({ masterSeed }: { masterSeed: string }) {
   useEffect(() => {
     if (spawnAirliner === 0) return;
     const aPhase = geometry.getAttribute("aPhase") as THREE.BufferAttribute;
-    const aSpeed = geometry.getAttribute("aSpeed") as THREE.BufferAttribute;
+    const aTransit = geometry.getAttribute("aTransit") as THREE.BufferAttribute;
     const base = debugBase.airliner;
-    const phase = -sharedTime.value * aSpeed.getX(base);
+    const phase = -sharedTime.value / aTransit.getX(base);
     for (let j = 0; j < VERTS_PER_PLANE; j++) aPhase.setX(base + j, phase);
     aPhase.needsUpdate = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -250,9 +276,9 @@ export function Flights({ masterSeed }: { masterSeed: string }) {
   useEffect(() => {
     if (spawnLightGA === 0) return;
     const aPhase = geometry.getAttribute("aPhase") as THREE.BufferAttribute;
-    const aSpeed = geometry.getAttribute("aSpeed") as THREE.BufferAttribute;
+    const aTransit = geometry.getAttribute("aTransit") as THREE.BufferAttribute;
     const base = debugBase.lightGA;
-    const phase = -sharedTime.value * aSpeed.getX(base);
+    const phase = -sharedTime.value / aTransit.getX(base);
     for (let j = 0; j < VERTS_PER_PLANE; j++) aPhase.setX(base + j, phase);
     aPhase.needsUpdate = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps

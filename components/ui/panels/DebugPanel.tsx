@@ -3,6 +3,7 @@
 import { Fragment, useState, useEffect } from "react";
 import {
   useSceneStore,
+  DEFAULT_FLIGHTS,
   RENDER_GROUPS,
   type RenderGroup,
   type RenderMode,
@@ -13,7 +14,7 @@ import { TIER_LABELS, tierKm } from "@/components/ui/cityTiers";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
-import { ValueSlider } from "@/components/ui/value-slider";
+import { RangeSlider, ValueSlider } from "@/components/ui/value-slider";
 import { HelpHint } from "@/components/ui/tooltip";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StreetlightControls } from "@/components/ui/RoadsPanel";
@@ -177,12 +178,17 @@ export function TrafficGroup() {
   );
 }
 
-// Flights — ambient departure corridor (#67), enable switch on header. Slot
-// count/corridor are seed-baked, not live knobs; the two spawn buttons +
-// route overlay below are debug aids (#67 follow-up), not look-and-feel
-// settings.
+// Flights — ambient departure/fly-by corridors (#67), enable switch on
+// header. Slot count/corridor placement are seed-baked, not live knobs, but
+// the ANIMATION has two live look settings (#67 follow-up): gap (time-
+// between-flights range) and deviation (per-pass route wander) — see
+// lib/shaders/flights.ts. The two spawn buttons + route overlay below remain
+// debug aids, not look-and-feel settings.
 export function FlightsGroup() {
   const enabled = useSceneStore((s) => s.flights.enabled);
+  const gapMin = useSceneStore((s) => s.flights.gapMin ?? DEFAULT_FLIGHTS.gapMin);
+  const gapMax = useSceneStore((s) => s.flights.gapMax ?? DEFAULT_FLIGHTS.gapMax);
+  const deviation = useSceneStore((s) => s.flights.deviation ?? DEFAULT_FLIGHTS.deviation);
   const setFlights = useSceneStore((s) => s.setFlights);
   const triggerFlightSpawn = useSceneStore((s) => s.triggerFlightSpawn);
   const showFlightRoutes = useSceneStore((s) => s.debug.showFlightRoutes);
@@ -201,6 +207,24 @@ export function FlightsGroup() {
       <p className="text-foreground/55 text-[11px]">
         One seeded departure corridor; airliner + light-GA classes read by light pattern + speed.
       </p>
+      <RangeSlider
+        label="Gap"
+        hint="Idle time between passes on the same route, in seconds; 0 keeps a plane on it constantly."
+        value={[gapMin, gapMax]}
+        min={0}
+        max={60}
+        step={1}
+        onChange={([lo, hi]) => setFlights({ gapMin: lo, gapMax: hi })}
+      />
+      <ValueSlider
+        label="Deviation"
+        hint="Per-pass lateral and altitude wander off the baked route; 0 flies the same line every time."
+        value={deviation}
+        min={0}
+        max={1}
+        step={0.05}
+        onChange={(v) => setFlights({ deviation: v })}
+      />
       {/* One-shot debug spawns — fire a plane now instead of waiting out the
           ambient ~40-90s loop. */}
       <div className="flex gap-2">
