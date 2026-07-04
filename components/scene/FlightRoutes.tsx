@@ -5,14 +5,17 @@ import * as THREE from "three";
 import { useSceneStore } from "@/lib/state/sceneStore";
 import { buildFlights } from "@/lib/seed/flights";
 
-// Air-route debug overlay (#67 follow-up). Each seeded corridor drawn as a
-// real 3D polyline — the climb is actual geometry (aA low over the airport,
-// aB climbed near the city), so switching this on shows the line visibly
-// RISING across the frame, not a flat map annotation. Amber, additive,
-// vertex-colour gradient that brightens toward the destination end (the
-// direction a departure actually travels) — a small marker point sits at the
-// airport-side anchor so the runway end reads before the eye follows the
-// line.
+// Air-route debug overlay (#67 follow-up; multi-route in the #67 follow-up
+// dated 2026-07-04). Every seeded corridor is drawn as a real 3D polyline —
+// the departure corridor's climb is actual geometry (aA low over the airport,
+// aB climbed near the city), so switching this on shows that line visibly
+// RISING across the frame, not a flat map annotation; fly-by corridors are
+// level (aA/aB share an altitude) since they carry no airport story. Amber,
+// additive, vertex-colour gradient that brightens toward the aB end (a
+// departure's direction of travel; arbitrary but consistent for fly-bys) — a
+// small marker point sits at the airport anchor ONLY for the departure
+// corridor, so the runway end reads before the eye follows the line; fly-bys
+// get no marker, since they don't have an airport to mark.
 //
 // Debug aid, not scene art: depthTest stays ON (the default) so buildings
 // occlude it like the real corridor would, unlike the depthTest:false
@@ -33,7 +36,6 @@ export function FlightRoutes({ masterSeed }: { masterSeed: string }) {
 
     const positions = new Float32Array(n * 2 * 3);
     const colors = new Float32Array(n * 2 * 3);
-    const markerPositions = new Float32Array(n * 3);
     for (let i = 0; i < n; i++) {
       const corridor = data.corridors[i];
       const a = i * 6;
@@ -43,17 +45,25 @@ export function FlightRoutes({ masterSeed }: { masterSeed: string }) {
       positions[a + 3] = corridor.aB[0];
       positions[a + 4] = corridor.aB[1];
       positions[a + 5] = corridor.aB[2];
-      // Dim at the airport-side start, full brightness at the near-city end —
-      // a departure's direction of travel.
+      // Dim at the aA end, full brightness at aB — a departure's actual
+      // direction of travel; arbitrary (but still a consistent gradient) for
+      // the level, undirected fly-by corridors.
       colors[a + 0] = AMBER[0] * DIM_FACTOR;
       colors[a + 1] = AMBER[1] * DIM_FACTOR;
       colors[a + 2] = AMBER[2] * DIM_FACTOR;
       colors[a + 3] = AMBER[0];
       colors[a + 4] = AMBER[1];
       colors[a + 5] = AMBER[2];
-      markerPositions[i * 3 + 0] = corridor.aA[0];
-      markerPositions[i * 3 + 1] = corridor.aA[1];
-      markerPositions[i * 3 + 2] = corridor.aA[2];
+    }
+
+    // Airport marker: ONLY the departure corridor has an airport to mark —
+    // fly-bys carry no anchor (see the Corridor.kind union in lib/seed/flights.ts).
+    const departures = data.corridors.filter((c) => c.kind === "departure");
+    const markerPositions = new Float32Array(departures.length * 3);
+    for (let i = 0; i < departures.length; i++) {
+      markerPositions[i * 3 + 0] = departures[i].aA[0];
+      markerPositions[i * 3 + 1] = departures[i].aA[1];
+      markerPositions[i * 3 + 2] = departures[i].aA[2];
     }
 
     const geo = new THREE.BufferGeometry();
