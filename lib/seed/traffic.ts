@@ -10,18 +10,36 @@ import type { CityShapeSetting } from "./cityShape";
 // opposite directions: warm white headlights one way, red taillights the other —
 // the classic top-down night-traffic read. All randomness is seeded + baked here
 // (no per-frame CPU, no RNG in the render path); motion is pure uTime in-shader.
+//
+// #57 — highway/arterial cars keep exactly that: one instance, one segment,
+// fract()-loop. Minor-tier (rural/suburban street) cars are sparse enough that
+// the independent-per-macro-segment loop reads as an obvious short stretch of
+// road re-driven forever. Those get a "journey" instead: one instance per
+// macro-segment of the ORIGINAL polyline, all sharing one clock (aPhase +
+// aSpeed) and a per-instance visibility WINDOW (aWinStart/aWinEnd, a fraction
+// of that shared cycle) so exactly one segment is "occupied" at a time as the
+// window sweeps start→end, followed by a seeded dark respawn gap
+// (aWinEnd..1 of the cycle). aRoadEnd carries the road's traverse fraction of
+// the full cycle so the shader can fade in/out at the JOURNEY's start/end
+// rather than at every macro-segment join. Legacy (highway/arterial) instances
+// set aWinStart=0, aWinEnd=1, aRoadEnd=1 — the window math then degenerates
+// exactly to the original single-segment fract() loop. See
+// wiki/notes/decision-* (traffic rural journeys, #57) for the shape.
 
 export type TrafficData = {
   count: number;
   aA: Float32Array; // n·3 — travel-start point (lane-offset, raised to CAR_Y)
   aB: Float32Array; // n·3 — travel-end point
-  aPhase: Float32Array; // n  — per-car phase 0..1
-  aSpeed: Float32Array; // n  — segment fractions per second
+  aPhase: Float32Array; // n  — shared cycle start phase 0..1 (per journey, or per legacy car)
+  aSpeed: Float32Array; // n  — cycle-fractions per second (whole journey, or legacy segment)
   aColor: Float32Array; // n·3 — per-car HEADLIGHT colour (bulb-pool pick)
   aTail: Float32Array; // n·3 — per-car TAILLIGHT colour
   aHead: Float32Array; // n  — 1 if car flows "headlight-first" (top-down ribbon read)
   aReveal: Float32Array; // n  — per-car intro reveal time 0..1 (density ramp)
   aSize: Float32Array; // n  — base point size (px, before attenuation)
+  aWinStart: Float32Array; // n  — this instance's visibility window start (cycle fraction 0..1)
+  aWinEnd: Float32Array; // n  — this instance's visibility window end (cycle fraction 0..1)
+  aRoadEnd: Float32Array; // n  — journey's traverse-fraction of the full cycle (1 = legacy, no gap)
   maxRadius: number; // furthest car from city centre — normalises the center-out wake
 };
 
@@ -55,7 +73,23 @@ function pickBulb(pool: Bulb[], r: number): [number, number, number] {
 }
 
 const CAR_Y = 1.4; // sit just above the road surface (road y ≈ 0.05)
-const MAX_CARS = 5000; // hard cap — logged by the caller if exceeded
+// Hard instance cap (array ceiling + emission backstop). Raised from 5000 to
+// 9000 for #57 v2: 1-3 concurrent journeys per minor road + short respawn gaps
+// push minor-tier instances well above the old scatter. Worst-case measured
+// demand at the app multipliers (highway 4 / arterial 2 / minor 1) across
+// tiers 6-8 and 6 seeds was ~7227 (tier 6); 9000 is ~+24% headroom. Points are
+// cheap — one additive draw call, tile-culled (#55) — so 9000 vs 5000 does not
+// change frame cost in character. (The demand THROTTLE stays at 5000, below.)
+const MAX_CARS = 9000;
+// #57 v2 — DEMAND throttle reference, separate from the hard MAX_CARS cap.
+// budgetScale thins every tier proportionally when the pre-cap expected sum
+// exceeds this. Held at the ORIGINAL 5000 (the old MAX_CARS value) so that
+// highway/arterial counts AND the minor-road grant rate stay bit-identical to
+// what shipped: the app runs highway 4x / arterial 2x, where the old cap was
+// already throttling budgetScale to ~0.5, so raising the hard cap must NOT
+// silently ~2x the highways. The added minor liveliness comes from the short
+// respawn gaps + 1-3 concurrent cars, NOT from un-throttling the demand.
+const DEMAND_BUDGET = 5000;
 const MIN_SEG = 6; // drop a macro-segment shorter than this (m)
 // Tensor road polylines are finely sampled (RK4 streamline steps ~2-4 m), so
 // raw vertex pairs are far too short to slide a car along. Chunk each polyline
@@ -118,6 +152,10 @@ type RawSeg = {
   len: number;
   cfg: TierCfg;
   mult: number;
+  tier: Tier;
+  roadId: number; // groups macro-segments chunked from the SAME source polyline (#57)
+  cumLen: number; // chord length of this road's macro-segments BEFORE this one (m)
+  roadLen: number; // this road's total chord length, sum of all its macro-segments (m)
 };
 
 // Shared macro-segment builder — the SAME chunking + population-busyness logic
@@ -135,12 +173,16 @@ function buildTrafficSegments(
   const pop = popCoupling > 0 ? buildPopulationField(masterSeed, shape, shapeScale) : null;
 
   const segs: RawSeg[] = [];
+  let nextRoadId = 0;
   const collect = (verts: Vert[], tier: Tier) => {
     const cfg = tierCfg(tier);
     const baseMult = tierMul[tier];
     if (verts.length < 2) return;
+    const roadId = nextRoadId++;
+    const roadStart = segs.length;
     let startIdx = 0;
     let accum = 0;
+    let cum = 0; // running chord length of macro-segments already pushed for this road
     for (let i = 1; i < verts.length; i++) {
       accum += Math.hypot(verts[i].x - verts[i - 1].x, verts[i].z - verts[i - 1].z);
       const last = i === verts.length - 1;
@@ -154,12 +196,17 @@ function buildTrafficSegments(
             const p = pop.sample((a.x + b.x) / 2, (a.z + b.z) / 2);
             mult *= 1 + (busyness(p) - 1) * popCoupling;
           }
-          segs.push({ ax: a.x, az: a.z, bx: b.x, bz: b.z, len, cfg, mult });
+          segs.push({ ax: a.x, az: a.z, bx: b.x, bz: b.z, len, cfg, mult, tier, roadId, cumLen: cum, roadLen: 0 });
+          cum += len;
         }
         startIdx = i;
         accum = 0;
       }
     }
+    // Now that the road's total chord length is known, patch it onto every
+    // macro-segment just pushed for this road (roadLen is the same for all of
+    // them — only cumLen varies).
+    for (let k = roadStart; k < segs.length; k++) segs[k].roadLen = cum;
   };
   for (const h of city.topology.highways) collect(h.vertices, "highway");
   for (const a of city.arterials) collect(a.vertices, "arterial");
@@ -233,6 +280,23 @@ export function buildTrafficDensity(
   return { segments, maxRaw: p99 };
 }
 
+// #57 — seeded respawn gap for a minor-tier journey, in ABSOLUTE SECONDS
+// (user 2026-07-04). The first cut made the gap a multiple of the road's
+// one-way traverse time, which left a long quiet road (~50 s to drive) dark
+// for up to ~100 s — it read as EMPTY, not "occasional car". A flat 0.5–4.0 s
+// gap means a car re-appears almost immediately after finishing the road, so
+// even a lone-car road reads as alive. Converted to a cycle fraction per
+// journey via its own speed (see the journey loop).
+const GAP_MIN_SEC = 0.5;
+const GAP_RANGE_SEC = 3.5; // → 0.5..4.0 s dark between passes
+
+// #57 — concurrent cars per ACTIVE minor road (user 2026-07-04). One car per
+// road read too sparse; allow 1–3, each on its OWN seeded phase + gap so they
+// bunch and spread irregularly (syncopated) rather than marching evenly. Cap
+// by road length so a short stub never hosts three cars nose-to-tail.
+const CONCURRENT_SHORT_M = 150; // below this: at most 1 car
+const CONCURRENT_LONG_M = 350; // at/above this: up to 3 (between: up to 2)
+
 export function buildTraffic(
   masterSeed: string,
   density = 1,
@@ -263,7 +327,72 @@ export function buildTraffic(
     expected.push(e);
     expSum += e;
   }
-  const budgetScale = expSum > MAX_CARS ? MAX_CARS / expSum : 1;
+  // Throttle against DEMAND_BUDGET (not the raised hard cap) so legacy tiers and
+  // the grant rate stay at the shipped density (see DEMAND_BUDGET).
+  const budgetScale = expSum > DEMAND_BUDGET ? DEMAND_BUDGET / expSum : 1;
+
+  // Growable output — legacy (highway/arterial) cars are pushed as generated;
+  // minor-tier journey instances are appended afterward. Using plain arrays
+  // (converted to typed arrays at the end) sidesteps having to know the final
+  // minor-tier instance count up front.
+  const aA: number[] = [];
+  const aB: number[] = [];
+  const aPhase: number[] = [];
+  const aSpeed: number[] = [];
+  const aColor: number[] = [];
+  const aTail: number[] = [];
+  const aHead: number[] = [];
+  const aReveal: number[] = [];
+  const aSize: number[] = [];
+  const aWinStart: number[] = [];
+  const aWinEnd: number[] = [];
+  const aRoadEnd: number[] = [];
+  let emitted = 0;
+  let maxRadius = 1; // city centre is (0, -120); see Streetlights wake convention
+
+  function emit(
+    sx: number,
+    sz: number,
+    ex: number,
+    ez: number,
+    phase: number,
+    speed: number,
+    head: [number, number, number],
+    tail: [number, number, number],
+    headFlag: number,
+    reveal: number,
+    size: number,
+    winStart: number,
+    winEnd: number,
+    roadEnd: number,
+  ) {
+    aA.push(sx, CAR_Y, sz);
+    aB.push(ex, CAR_Y, ez);
+    aPhase.push(phase);
+    aSpeed.push(speed);
+    aColor.push(head[0], head[1], head[2]);
+    aTail.push(tail[0], tail[1], tail[2]);
+    aHead.push(headFlag);
+    aReveal.push(reveal);
+    aSize.push(size);
+    aWinStart.push(winStart);
+    aWinEnd.push(winEnd);
+    aRoadEnd.push(roadEnd);
+    emitted += 1;
+    const r1 = Math.hypot(sx, sz + 120);
+    const r2 = Math.hypot(ex, ez + 120);
+    if (r1 > maxRadius) maxRadius = r1;
+    if (r2 > maxRadius) maxRadius = r2;
+  }
+
+  // --- Legacy per-segment cars (highway + arterial; minor discarded below) ---
+  // Structure and rng() consumption here are UNCHANGED from before #57: every
+  // segment (any tier) still gets its Bernoulli-rounded car count and every
+  // car still draws its 8 rng() values in the same order. Minor-tier draws are
+  // simply not emitted — this guarantees the highway/arterial output (counts,
+  // positions, colours, speeds) is bit-for-bit unperturbed by the #57 rework,
+  // since minor-tier segments sort last in `segs` and nothing about their
+  // processing can shift an EARLIER segment's rng draws.
   const perSeg: number[] = [];
   let total = 0;
   for (let i = 0; i < segs.length; i++) {
@@ -275,18 +404,6 @@ export function buildTraffic(
     total += n;
   }
 
-  const aA = new Float32Array(total * 3);
-  const aB = new Float32Array(total * 3);
-  const aPhase = new Float32Array(total);
-  const aSpeed = new Float32Array(total);
-  const aColor = new Float32Array(total * 3);
-  const aTail = new Float32Array(total * 3);
-  const aHead = new Float32Array(total);
-  const aReveal = new Float32Array(total);
-  const aSize = new Float32Array(total);
-
-  let c = 0;
-  let maxRadius = 1; // city centre is (0, -120); see Streetlights wake convention
   for (let si = 0; si < segs.length; si++) {
     const s = segs[si];
     const n = perSeg[si];
@@ -305,35 +422,132 @@ export function buildTraffic(
       const sz = (dir > 0 ? s.az : s.bz) + pz * off;
       const ex = (dir > 0 ? s.bx : s.ax) + px * off;
       const ez = (dir > 0 ? s.bz : s.az) + pz * off;
-      aA[c * 3 + 0] = sx;
-      aA[c * 3 + 1] = CAR_Y;
-      aA[c * 3 + 2] = sz;
-      aB[c * 3 + 0] = ex;
-      aB[c * 3 + 1] = CAR_Y;
-      aB[c * 3 + 2] = ez;
-      aPhase[c] = rng();
+      const phase = rng();
       // metres/sec → segment-fractions/sec; clamp so very short segments don't zip.
-      aSpeed[c] = Math.min(2.0, (s.cfg.speed * (0.75 + rng() * 0.5)) / s.len);
+      const speed = Math.min(2.0, (s.cfg.speed * (0.75 + rng() * 0.5)) / s.len);
       // Both lights baked per car; the shader picks head vs tail by whether this
       // car drives toward or away from the camera (#45).
       const head = pickBulb(HEAD_POOL, rng());
       const tail = pickBulb(TAIL_POOL, rng());
-      aColor[c * 3 + 0] = head[0];
-      aColor[c * 3 + 1] = head[1];
-      aColor[c * 3 + 2] = head[2];
-      aTail[c * 3 + 0] = tail[0];
-      aTail[c * 3 + 1] = tail[1];
-      aTail[c * 3 + 2] = tail[2];
-      aHead[c] = dir > 0 ? 1 : 0;
-      aReveal[c] = rng(); // intro reveal time — drives the density ramp
-      aSize[c] = CAR_LIGHT_SIZE * (0.85 + rng() * 0.3); // tier-independent (#78)
-      const r1 = Math.hypot(sx, sz + 120);
-      const r2 = Math.hypot(ex, ez + 120);
-      if (r1 > maxRadius) maxRadius = r1;
-      if (r2 > maxRadius) maxRadius = r2;
-      c += 1;
+      const headFlag = dir > 0 ? 1 : 0;
+      const reveal = rng(); // intro reveal time — drives the density ramp
+      const size = CAR_LIGHT_SIZE * (0.85 + rng() * 0.3); // tier-independent (#78)
+      // #57: minor-tier segments are re-generated below as full-road journeys.
+      // The draws above still had to happen here (same spot in the rng
+      // stream) — this result for minor is discarded, not emitted.
+      if (s.tier === "minor") continue;
+      emit(sx, sz, ex, ez, phase, speed, head, tail, headFlag, reveal, size, 0, 1, 1);
     }
   }
 
-  return { count: total, aA, aB, aPhase, aSpeed, aColor, aTail, aHead, aReveal, aSize, maxRadius };
+  // --- #57: minor-tier journeys -------------------------------------------
+  // Rural/suburban streets are sparse enough (~0.008 cars/m, further thinned
+  // by the population-busyness coupling) that the old independent-car-per-
+  // 55m-chunk scheme reads as a short looping stretch: whichever macro-
+  // segment wins the draw shows a car endlessly re-driving just that chunk.
+  // Fix: regroup a street's macro-segments back into its ORIGINAL polyline
+  // ("road") and give it, in expectation, the same total car-time as before —
+  // but as one or more "journeys" that traverse the FULL road end-to-end on a
+  // shared clock (shared aPhase + aSpeed across every macro-segment of that
+  // journey), then sit dark for a seeded respawn gap. One GPU point instance
+  // per macro-segment per journey (no new textures); each instance's
+  // aWinStart/aWinEnd gate WHEN in the shared cycle it's the "occupied"
+  // segment (lib/shaders/traffic.ts).
+  const roadGroups = new Map<number, number[]>(); // roadId -> seg indices, road order
+  for (let i = 0; i < segs.length; i++) {
+    if (segs[i].tier !== "minor") continue;
+    const g = roadGroups.get(segs[i].roadId);
+    if (g) g.push(i);
+    else roadGroups.set(segs[i].roadId, [i]);
+  }
+
+  for (const idxs of roadGroups.values()) {
+    const roadLen = segs[idxs[0]].roadLen;
+    if (roadLen <= 0) continue;
+    let roadExpected = 0;
+    for (const i of idxs) roadExpected += expected[i] * budgetScale;
+    // GRANT: does this road carry traffic at all? Demand-based (length × tier
+    // rate × population-busyness), divided by the segment count so the decision
+    // is per-road, and Bernoulli-rounded exactly like the legacy per-segment
+    // draw. Busier areas grant more roads; remote roads mostly stay dark. Once
+    // granted, the concurrent count below (not this magnitude) sets how many
+    // cars run — so a quiet granted road still gets a lively 1–3.
+    const grantProb = roadExpected / idxs.length;
+    let grant = Math.floor(grantProb);
+    if (rng() < grantProb - grant) grant += 1;
+    if (grant <= 0) continue;
+
+    // CONCURRENT CARS (#57 v2): 1–3, capped by road length, each independent.
+    // Independent seeded phase + gap per car → syncopated, never evenly spaced.
+    const cap = roadLen < CONCURRENT_SHORT_M ? 1 : roadLen < CONCURRENT_LONG_M ? 2 : 3;
+    const concurrent = 1 + Math.floor(rng() * cap);
+
+    const cfg = segs[idxs[0]].cfg;
+    for (let j = 0; j < concurrent; j++) {
+      // MAX_CARS backstop: each car costs one instance per macro-segment of its
+      // road — stop adding cars once that would bust the cap rather than
+      // truncate one mid-road (which would visibly clip it short of the end).
+      if (emitted + idxs.length > MAX_CARS) break;
+
+      const dir = rng() < 0.5 ? 1 : -1;
+      const laneIdx = Math.floor(rng() * cfg.lanes);
+      const off = (cfg.laneHalf + laneIdx * cfg.laneWidth) * dir;
+      const speedMps = cfg.speed * (0.75 + rng() * 0.5);
+      // Respawn gap in absolute seconds → cycle fraction. cycleSec = time to
+      // drive the road once + the dark gap; roadEndFrac is the traverse's share
+      // of that cycle; cycleLen is the virtual full-cycle distance the window
+      // maths index into (= speed × cycleSec, so winEnd of the last segment
+      // lands exactly on roadEndFrac).
+      const traverseSec = roadLen / speedMps;
+      const gapSec = GAP_MIN_SEC + rng() * GAP_RANGE_SEC;
+      const cycleSec = traverseSec + gapSec;
+      const roadEndFrac = traverseSec / cycleSec;
+      const cycleLen = speedMps * cycleSec;
+      const journeySpeed = 1 / cycleSec; // cycle-fractions per second
+      const phase = rng();
+      const head = pickBulb(HEAD_POOL, rng());
+      const tail = pickBulb(TAIL_POOL, rng());
+      const headFlag = dir > 0 ? 1 : 0;
+      const reveal = rng();
+      const size = CAR_LIGHT_SIZE * (0.85 + rng() * 0.3);
+
+      for (const i of idxs) {
+        const s = segs[i];
+        const dx = (s.bx - s.ax) / s.len;
+        const dz = (s.bz - s.az) / s.len;
+        const px = -dz;
+        const pz = dx;
+        const sx = (dir > 0 ? s.ax : s.bx) + px * off;
+        const sz = (dir > 0 ? s.az : s.bz) + pz * off;
+        const ex = (dir > 0 ? s.bx : s.ax) + px * off;
+        const ez = (dir > 0 ? s.bz : s.az) + pz * off;
+        // Distance already travelled BEFORE this segment, in this journey's
+        // direction — forward reads cumLen off the road start; reversed
+        // reads it off the road end (mirrored), so consecutive-in-time
+        // segments always hand off at a shared window boundary regardless
+        // of which way the journey drives the polyline.
+        const before = dir > 0 ? s.cumLen : roadLen - s.cumLen - s.len;
+        const winStart = before / cycleLen;
+        const winEnd = (before + s.len) / cycleLen;
+        emit(sx, sz, ex, ez, phase, journeySpeed, head, tail, headFlag, reveal, size, winStart, winEnd, roadEndFrac);
+      }
+    }
+  }
+
+  return {
+    count: emitted,
+    aA: Float32Array.from(aA),
+    aB: Float32Array.from(aB),
+    aPhase: Float32Array.from(aPhase),
+    aSpeed: Float32Array.from(aSpeed),
+    aColor: Float32Array.from(aColor),
+    aTail: Float32Array.from(aTail),
+    aHead: Float32Array.from(aHead),
+    aReveal: Float32Array.from(aReveal),
+    aSize: Float32Array.from(aSize),
+    aWinStart: Float32Array.from(aWinStart),
+    aWinEnd: Float32Array.from(aWinEnd),
+    aRoadEnd: Float32Array.from(aRoadEnd),
+    maxRadius,
+  };
 }
