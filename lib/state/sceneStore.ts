@@ -64,6 +64,8 @@ export {
   RENDER_GROUPS,
   DEFAULT_DEBUG,
   DEBUG_WIRE_COLOR,
+  HIGHLIGHT_OUTLINE_COLOR,
+  HIGHLIGHT_OUTLINE_WIDTH_M,
   DEFAULT_TRAFFIC,
   DEFAULT_STREETLIGHTS,
   DEFAULT_LOD,
@@ -424,6 +426,23 @@ type SceneState = {
   // not only while dragging the near/far sliders. Session-scoped runtime flag.
   fogBoundsAlways: boolean;
   setFogBoundsAlways: (v: boolean) => void;
+  // Transient UI hover (#69): the archetype whose Windows-panel icon is under
+  // the pointer. InstancedCity eases each archetype mesh's uHighlight toward
+  // lift (match) / dim (rest). Runtime tier only — never in SETTINGS_REGISTRY,
+  // SavedConfig, or share codes.
+  highlightArchetype: Archetype | null;
+  setHighlightArchetype: (a: Archetype | null) => void;
+  // #87 hover-pick (opt-in via debug.hoverHighlight.pick): the single building
+  // instance under the pointer in the 3D view, independent of the archetype-
+  // icon hover above. pickInstance is a CURRENT-FRAME draw-buffer slot index —
+  // #55 tile culling recompacts on camera move, so a stale index can point at
+  // a different building until the next pointer move (acceptable for a hover
+  // cue, not a stable building id). -1 = no pick. Runtime tier only — never in
+  // SETTINGS_REGISTRY/SavedConfig/share codes; cleared on pointer-out and
+  // whenever the switch turns off (see setHoverHighlight).
+  pickArchetype: Archetype | null;
+  pickInstance: number;
+  setPickHover: (pickArchetype: Archetype | null, pickInstance: number) => void;
   cameraTweenRequest: TweenRequest | null;
   // Projection model. We keep a single perspective camera under the hood; ortho
   // is implemented by overriding camera.projectionMatrix each frame using an
@@ -613,6 +632,9 @@ type SceneState = {
   debug: typeof DEFAULT_DEBUG;
   setBuildingTint: (
     patch: Partial<{ mode: BuildingTintMode; intensity: number; enabled: boolean }>,
+  ) => void;
+  setHoverHighlight: (
+    patch: Partial<{ outline: number; lift: number; dim: number; pick: boolean }>,
   ) => void;
   setRenderMode: (group: RenderGroup, mode: RenderMode) => void;
   setAllRenderModes: (mode: RenderMode) => void;
@@ -857,6 +879,15 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   debug: DEFAULT_DEBUG,
   setBuildingTint: (patch) =>
     set((s) => ({ debug: { ...s.debug, buildingTint: { ...s.debug.buildingTint, ...patch } } })),
+  setHoverHighlight: (patch) =>
+    set((s) => ({
+      debug: { ...s.debug, hoverHighlight: { ...s.debug.hoverHighlight, ...patch } },
+      // #87: turning the pick switch off must never leave a building lit —
+      // clear the transient pick state right here so every call site (this
+      // panel switch today, Reset via DEFAULT_DEBUG, any future shortcut)
+      // gets it for free instead of each needing to remember to clear it.
+      ...(patch.pick === false ? { pickArchetype: null, pickInstance: -1 } : {}),
+    })),
   setRenderMode: (group, mode) =>
     set((s) => ({ debug: { ...s.debug, renderModes: { ...s.debug.renderModes, [group]: mode } } })),
   setAllRenderModes: (mode) =>
@@ -934,6 +965,11 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setFogAdjusting: (fogAdjusting) => set({ fogAdjusting }),
   fogBoundsAlways: false,
   setFogBoundsAlways: (fogBoundsAlways) => set({ fogBoundsAlways }),
+  highlightArchetype: null,
+  setHighlightArchetype: (highlightArchetype) => set({ highlightArchetype }),
+  pickArchetype: null,
+  pickInstance: -1,
+  setPickHover: (pickArchetype, pickInstance) => set({ pickArchetype, pickInstance }),
   resetCamera: () => {
     // Derive reset patch from the registry: every entry goes back to its
     // hardcoded defaultValue. Runtime readouts (cityPlanning.topologyKind /

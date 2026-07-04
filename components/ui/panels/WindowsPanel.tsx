@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { useSceneStore } from "@/lib/state/sceneStore";
 import { ARCHETYPE_ORDER, type Archetype } from "@/lib/seed/cityGen";
 import { cn } from "@/lib/utils";
@@ -229,8 +229,12 @@ function WindowsSimpleControls() {
 export function WindowProfilesSection() {
   const profiles = useSceneStore((s) => s.windowProfiles);
   const setWindowProfile = useSceneStore((s) => s.setWindowProfile);
+  const setHighlightArchetype = useSceneStore((s) => s.setHighlightArchetype);
   const [filter, setFilter] = useState<Archetype | "all">("all");
   const shown = filter === "all" ? ARCHETYPE_ORDER : [filter];
+  // #69: a fast panel close (or simple/advanced flip) can unmount between
+  // pointerenter and pointerleave — never leave a building lifted.
+  useEffect(() => () => useSceneStore.getState().setHighlightArchetype(null), []);
   return (
     <>
       <HelpHint>
@@ -245,6 +249,8 @@ export function WindowProfilesSection() {
               <Tooltip key={id}>
                 <TooltipTrigger
                   onClick={() => setFilter(id)}
+                  onPointerEnter={() => setHighlightArchetype(id === "all" ? null : id)}
+                  onPointerLeave={() => setHighlightArchetype(null)}
                   className={cn(
                     "flex h-7 flex-1 items-center justify-center rounded-md transition-colors",
                     filter === id

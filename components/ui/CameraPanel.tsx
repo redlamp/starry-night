@@ -201,7 +201,7 @@ const SETTINGS_SECTIONS: { value: string; label: string; keywords: string }[] = 
     value: "window-profiles",
     label: "Buildings",
     keywords:
-      "windows lit ratio width range min max size flicker brightness emissive profiles glow building facade wall color colour saturation lightness hue masonry glass debug tint population district landuse archetype depth height wash",
+      "windows lit ratio width range min max size flicker brightness emissive profiles glow building facade wall color colour saturation lightness hue masonry glass debug tint highlight hover outline population district landuse archetype depth height wash",
   },
   {
     value: "population",
