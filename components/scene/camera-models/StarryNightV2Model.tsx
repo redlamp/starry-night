@@ -42,6 +42,9 @@ const MIN_EYE_Y = 1; // floor the camera ~1m above the ground while orbiting / t
 const MAX_VERT = 0.98; // clamp free-look short of straight up/down (no flip)
 const MAX_ORBIT_EL = 89.9 * DEG; // orbit look-down cap: 0.1° short of straight-down; never crosses (no flip)
 const MAX_STEP = 0.15; // per-move cap on the free-look servo (rad), guards against big jumps
+const PAN_EYE_REACH_MULT = 2.0; // how far past the ground disc the EYE may travel when panning, as a
+// multiple of the ground-disc radius — keeps the aim on the ground but lets the camera back out to
+// view the "snow globe" from outside
 const WHEEL_ZOOM_SPEED = 1.0; // GE/OrbitControls wheel curve: ~5% dolly per notch at speed 1
 const ORTHO_SIZE_MIN = 5 * CITY_SCALE; // faked-ortho zoom band (frustum half-height); matches Map
 const ORTHO_SIZE_MAX = 2000 * CITY_SCALE;
@@ -209,25 +212,42 @@ function zoomAtCursor(
   zoomAboutPoint(c, _cur, k, smooth);
 }
 
-// Keep the focal point within the city's ground disc (centre CITY_CENTER, radius = the current tier
-// half-extent + apron) so a pan can't wander the view off the map into the void. Returns the clamped
-// [x, z]; the pan shifts the eye by the same clamped amount, preserving the pose.
-const _cc = { x: 0, z: 0 };
-function clampToCity(x: number, z: number): { x: number; z: number } {
-  const R = CITY_TIERS[useSceneStore.getState().citySize] + GROUND_APRON_M;
+// Keep a point within a disc of radius R centred on CITY_CENTER (world XZ). clampToCity below is the
+// ground-disc-radius convenience most callers use; the pan handler also clamps the EYE independently
+// to a larger disc (PAN_EYE_REACH_MULT × the ground radius) so backing the camera up can't dead-stop
+// at the same rim the focal is held to.
+function clampToDisc(
+  x: number,
+  z: number,
+  R: number,
+  out: { x: number; z: number },
+): { x: number; z: number } {
   const dx = x - CITY_CENTER.x;
   const dz = z - CITY_CENTER.z;
   const d2 = dx * dx + dz * dz;
   if (d2 <= R * R) {
-    _cc.x = x;
-    _cc.z = z;
+    out.x = x;
+    out.z = z;
   } else {
     const k = R / Math.sqrt(d2);
-    _cc.x = CITY_CENTER.x + dx * k;
-    _cc.z = CITY_CENTER.z + dz * k;
+    out.x = CITY_CENTER.x + dx * k;
+    out.z = CITY_CENTER.z + dz * k;
   }
-  return _cc;
+  return out;
 }
+
+// Keep the focal point within the city's ground disc (centre CITY_CENTER, radius = the current tier
+// half-extent + apron) so a pan/orbit pivot/zoom pick can't wander the view off the map into the void.
+// Returns the clamped [x, z] in a shared scratch object.
+const _cc = { x: 0, z: 0 };
+function clampToCity(x: number, z: number): { x: number; z: number } {
+  const R = CITY_TIERS[useSceneStore.getState().citySize] + GROUND_APRON_M;
+  return clampToDisc(x, z, R, _cc);
+}
+// Main oblique-pan scratch: the eye and focal clamp to DIFFERENT disc radii (PAN_EYE_REACH_MULT), so
+// each needs its own output object — clampToCity's shared _cc can't serve both in the same pan step.
+const _panFocal = { x: 0, z: 0 };
+const _panEye = { x: 0, z: 0 };
 
 // Skyline Mode = the aim within 2° of flat (looking at the city edge-on), in EITHER projection. The
 // RMB-vertical reframe and the per-frame focal offset key off this; the synthesized ground pick in
@@ -687,10 +707,16 @@ export function StarryNightV2Model() {
             SKYLINE_SCREEN_Y_MAX,
           );
         }
-        // INCREMENTAL ground-anchored pan: shift the rig by the ground delta between the PREVIOUS and
-        // CURRENT cursor, clamping the focal point to the city disc (eye shifts by the same clamped
-        // amount so the pose holds). Incremental (vs a fixed grab anchor) so the disc clamp engages
-        // gracefully at the boundary — no accumulated dead-zone where the cursor moves but the rig sticks.
+        // INCREMENTAL ground-anchored pan: shift eye + focal by the ground delta between the PREVIOUS
+        // and CURRENT cursor. The FOCAL clamps to the ground disc (the practical grab limit — the aim
+        // stays on the ground); the EYE is decoupled and clamps INDEPENDENTLY to a larger disc
+        // (PAN_EYE_REACH_MULT × the ground radius), so backing the camera up past the ground's edge
+        // pulls it back to view the "snow globe" from outside instead of dead-stopping (both used to
+        // shift by the SAME clamped delta, so the whole rig hit an invisible wall the instant the focal
+        // reached the rim). When neither clamp engages this is identical to before: eye and focal both
+        // shift by the full raw delta, so the grabbed point stays glued under the cursor. Incremental
+        // (vs a fixed grab anchor) so the disc clamps engage gracefully at the boundary — no accumulated
+        // dead-zone where the cursor moves but the rig sticks.
         if (
           !groundHit(cam, dom, e.clientX - dx, e.clientY - dy, _grab) ||
           !groundHit(cam, dom, e.clientX, e.clientY, _cur)
@@ -699,10 +725,15 @@ export function StarryNightV2Model() {
         _delta.subVectors(_grab, _cur); // prev→curr ground delta (horizontal)
         c.getPosition(_eye);
         c.getTarget(_tgt);
-        const cl = clampToCity(_tgt.x + _delta.x, _tgt.z + _delta.z);
-        const adx = cl.x - _tgt.x; // actual (clamped) horizontal shift
-        const adz = cl.z - _tgt.z;
-        void c.setLookAt(_eye.x + adx, _eye.y, _eye.z + adz, cl.x, _tgt.y, cl.z, false);
+        const groundR = CITY_TIERS[useSceneStore.getState().citySize] + GROUND_APRON_M;
+        const cl = clampToDisc(_tgt.x + _delta.x, _tgt.z + _delta.z, groundR, _panFocal);
+        const ce = clampToDisc(
+          _eye.x + _delta.x,
+          _eye.z + _delta.z,
+          groundR * PAN_EYE_REACH_MULT,
+          _panEye,
+        );
+        void c.setLookAt(ce.x, _eye.y, ce.z, cl.x, _tgt.y, cl.z, false);
       } else if (drag === "orbit") {
         // Reveal the pivot pin the moment the drag becomes "real" (same threshold as the cursor) — a
         // click or double-click never moves far enough, so the pin never flashes on a zoom-in.
