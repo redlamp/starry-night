@@ -7,7 +7,7 @@ tags:
 
 # Decision: Inspect Building Focus / Selection (#87)
 
-**Date:** shipped 2026-07-06 (`cf2c0ef`, tag v2026.07.06). Related: [[decision-camera-transition-tween]], [[decision-perspective-skyline-reframe]], [[decision-facade-display-space-color]], [[decision-network-aligned-districts]].
+**Date:** shipped 2026-07-05 (`cf2c0ef`, tag v2026.07.05). Related: [[decision-camera-transition-tween]], [[decision-perspective-skyline-reframe]], [[decision-facade-display-space-color]], [[decision-network-aligned-districts]].
 
 Builds the click-to-inspect panel (see [[2026-07-05]]) into a full focus/selection system. Iterated live with Taylor.
 
