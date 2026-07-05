@@ -320,12 +320,18 @@ export function StarryNightV2Model() {
     );
     s.setCameraHandoff(null);
     if (s.projection === "orthographic") {
-      const dist = Math.hypot(
-        h.position[0] - h.lookAt[0],
-        h.position[1] - h.lookAt[1],
-        h.position[2] - h.lookAt[2],
-      );
-      const half = dist * Math.tan((s.cameraIntent.fov * DEG) / 2);
+      // A handoff may carry the exact orthoSize to restore (leaving top-down back to a prior ortho
+      // zoom, #83) — use it verbatim so the zoom doesn't POP on takeover. Otherwise (still->orbit
+      // release-in-place) derive it from the pose distance so the faked-ortho zoom matches the frame.
+      let half = h.orthoSize;
+      if (half == null) {
+        const dist = Math.hypot(
+          h.position[0] - h.lookAt[0],
+          h.position[1] - h.lookAt[1],
+          h.position[2] - h.lookAt[2],
+        );
+        half = dist * Math.tan((s.cameraIntent.fov * DEG) / 2);
+      }
       s.setOrthoSize(THREE.MathUtils.clamp(half, ORTHO_SIZE_MIN, ORTHO_SIZE_MAX));
     }
   }, [mode]);
@@ -436,18 +442,23 @@ export function StarryNightV2Model() {
       '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg>';
     const MOVE_SVG =
       '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"/><path d="m15 19-3 3-3-3"/><path d="m19 9 3 3-3 3"/><path d="M2 12h20"/><path d="m5 9-3 3 3 3"/><path d="m9 5 3-3 3 3"/></svg>';
+    // Up/down arrows (lucide move-vertical): shown for the move gesture in Skyline Mode, where a
+    // vertical RMB / Shift+LMB drag reframes the city up/down (a pure vertical move), not a free
+    // ground pan — so the 4-way move glyph would misread the affordance.
+    const MOVE_V_SVG =
+      '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"/><path d="m8 6 4-4 4 4"/><path d="m8 18 4 4 4-4"/></svg>';
     const glyph = document.createElement("div");
     glyph.setAttribute("aria-hidden", "true");
     glyph.style.cssText =
       "position:fixed;left:0;top:0;z-index:9999;pointer-events:none;display:none;color:#7dd3fc;will-change:transform;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.85))";
     document.body.appendChild(glyph);
-    let glyphKind: "look" | "pan" | null = null; // current SVG — reset innerHTML only when it changes
+    let glyphKind: "look" | "pan" | "pan-v" | null = null; // current SVG — reset innerHTML only when it changes
     const moveGlyph = (x: number, y: number) => {
       glyph.style.transform = `translate3d(${x + 16}px, ${y + 14}px, 0)`; // just down-right of the cursor
     };
-    const showGlyph = (kind: "look" | "pan", x: number, y: number) => {
+    const showGlyph = (kind: "look" | "pan" | "pan-v", x: number, y: number) => {
       if (glyphKind !== kind) {
-        glyph.innerHTML = kind === "look" ? EYE_SVG : MOVE_SVG;
+        glyph.innerHTML = kind === "look" ? EYE_SVG : kind === "pan-v" ? MOVE_V_SVG : MOVE_SVG;
         glyphKind = kind;
       }
       glyph.style.display = "block";
@@ -462,7 +473,7 @@ export function StarryNightV2Model() {
     const applyModifierGlyph = () => {
       if (drag) return;
       if (overCanvas && ctrlHeld) showGlyph("look", hoverX, hoverY);
-      else if (overCanvas && shiftHeld) showGlyph("pan", hoverX, hoverY);
+      else if (overCanvas && shiftHeld) showGlyph(isSkylineMode(cam) ? "pan-v" : "pan", hoverX, hoverY);
       else hideGlyph();
     };
 
@@ -593,7 +604,7 @@ export function StarryNightV2Model() {
         drag = "pan";
         setPin(null);
         if (!groundHit(cam, dom, e.clientX, e.clientY, _grab)) drag = null;
-        else showGlyph("pan", e.clientX, e.clientY);
+        else showGlyph(isSkylineMode(cam) ? "pan-v" : "pan", e.clientX, e.clientY);
       } else {
         // Orbit + tilt (bare LMB) around the clicked ground point. The pin marking the pivot is
         // DEFERRED: captured here, revealed in onMove only once the drag actually moves — so a single
