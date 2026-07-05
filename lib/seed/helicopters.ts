@@ -22,6 +22,19 @@ import type { CityShapeSetting } from "./cityShape";
 // even in a city with no qualifying rooftops (the pool is never smaller
 // than 2).
 //
+// #89 route-variety + placement follow-up: the debug overlay (HelicopterRoutes)
+// showed routes sparse and fringe-heavy — HELI_COUNT was low (1-3), the
+// rooftop pool small (cap 6, height >= 45), and every helicopter's stop pool
+// included the 2 off-map pads unconditionally, so several routes reading as
+// "loop out to the 2 distant dots" was common and downtown often had none.
+// Now: more helicopters (4-6), a bigger/looser rooftop pool (cap 12, height >=
+// 35, same tallest-per-cell dedup so pads stay spread out), off-map pads
+// gated behind a rare (25%) seeded roll and capped to AT MOST ONE
+// helicopter's pool when they do appear, and a couple of helicopters always
+// sampling from the pads nearest CITY_CENTER so the default camera's view
+// has patrol traffic over downtown. See buildWaypointPools / nearestToCenter
+// / buildHelicopters below.
+//
 // Journey-window technique (mirrors Traffic's minor-tier journeys,
 // lib/seed/traffic.ts + lib/shaders/traffic.ts): the whole closed loop is
 // ONE shared clock per helicopter (phase + cycleSec); each leg carries a
@@ -38,10 +51,17 @@ import type { CityShapeSetting } from "./cityShape";
 // transit leg — the shader reads it as a plain attribute and never re-derives
 // it from aA/aB.
 
-const HELI_PAD_MIN_HEIGHT = 45;
+const HELI_PAD_MIN_HEIGHT = 35; // #89: 45 -> 35, more towers qualify
 const HELI_PAD_CLUSTER_SIZE = 450; // m — neighbourhood cell for the tallest-per-cell rule
-const HELI_PAD_POOL_CAP = 6; // tallest N qualifying rooftops kept in the pool
+const HELI_PAD_POOL_CAP = 12; // tallest N qualifying rooftops kept in the pool (#89: 6 -> 12)
 const HELI_PAD_EXCLUDE_DISTRICTS = new Set<Building["district"]>(["industrial", "oldtown"]);
+
+// #89: a couple of helicopters are always biased toward the pads nearest
+// CITY_CENTER (the default camera's look point) so downtown always has
+// patrol traffic in view — their pool is the closest N qualifying rooftops
+// rather than the full city-wide set. See nearestToCenter/buildHelicopters.
+const CENTRAL_HELI_COUNT = 2;
+const CENTRAL_POOL_SIZE = 5;
 
 const GROUND_APRON_M = 200; // mirrors Ground.tsx GROUND_APRON_M (lib/seed files don't import components/)
 const OFFMAP_PAD_COUNT = 2;
@@ -50,9 +70,15 @@ const OFFMAP_PAD_COUNT = 2;
 const OFFMAP_PAD_MARGIN_MIN_M = 100;
 const OFFMAP_PAD_MARGIN_MAX_M = 500;
 const OFFMAP_PAD_Y = 8; // low, just above ground — an off-map pad, not cruise altitude
+// #89: off-map fringe pads were dominating the route mix (every helicopter's
+// pool included them unconditionally). Now a rare accent — one seeded roll
+// per city decides whether ANY helicopter may touch them at all, and at most
+// ONE helicopter (also seeded) gets them merged into its pool — see
+// buildHelicopters.
+const OFFMAP_USE_PROB = 0.25;
 
-const HELI_COUNT_MIN = 1;
-const HELI_COUNT_MAX = 3; // inclusive
+const HELI_COUNT_MIN = 4; // #89: 1 -> 4
+const HELI_COUNT_MAX = 6; // inclusive (#89: 3 -> 6)
 const STOPS_MIN = 2;
 const STOPS_MAX = 4; // inclusive
 
@@ -93,7 +119,10 @@ export type HelicoptersData = {
   helicopters: Helicopter[];
 };
 
-function buildWaypointPool(rng: () => number, buildings: Building[]): Waypoint[] {
+function buildWaypointPools(
+  rng: () => number,
+  buildings: Building[],
+): { roofs: Waypoint[]; offmap: Waypoint[] } {
   const tallestPerCell = new Map<string, Building>();
   for (const b of buildings) {
     if (b.height < HELI_PAD_MIN_HEIGHT) continue;
@@ -120,9 +149,21 @@ function buildWaypointPool(rng: () => number, buildings: Building[]): Waypoint[]
       z: CITY_CENTER.z + Math.sin(az) * dist,
     });
   }
-  // Rooftops first so a small pool's "tallest 6" reads as the prominent
-  // downtown pads, off-map pads appended last.
-  return [...roofs, ...offmap];
+  // Two separate pools (#89) rather than one merged array — buildHelicopters
+  // biases most helicopters to roofs-only and gates offmap usage down to a
+  // rare, single-helicopter accent, which needs them kept apart.
+  return { roofs, offmap };
+}
+
+function distFromCenter(w: Waypoint): number {
+  return Math.hypot(w.x - CITY_CENTER.x, w.z - CITY_CENTER.z);
+}
+
+// Closest N of `pool` to CITY_CENTER (#89) — the sampling pool for the
+// couple of helicopters biased toward the downtown core. A plain slice when
+// N >= pool.length, so it degrades gracefully in a rooftop-sparse city.
+function nearestToCenter(pool: Waypoint[], n: number): Waypoint[] {
+  return [...pool].sort((a, b) => distFromCenter(a) - distFromCenter(b)).slice(0, n);
 }
 
 // Fisher-Yates partial shuffle — k distinct indices from [0, poolSize).
@@ -221,11 +262,32 @@ export function buildHelicopters(
 ): HelicoptersData {
   const rng = seedrandom(`${masterSeed}::helicopters`);
   const { buildings } = generateCity(masterSeed, shape, shapeScale);
-  const pool = buildWaypointPool(rng, buildings);
+  const { roofs, offmap } = buildWaypointPools(rng, buildings);
+  const centralPool = nearestToCenter(roofs, CENTRAL_POOL_SIZE);
+  const centralPoolUsable = centralPool.length >= 2;
 
   const count = HELI_COUNT_MIN + Math.floor(rng() * (HELI_COUNT_MAX - HELI_COUNT_MIN + 1));
+
+  // Off-map fringe pads: rare by design (#89). One seeded roll per city
+  // decides whether ANY helicopter may touch them at all; if it hits, a
+  // second seeded pick names the ONE helicopter that gets them merged into
+  // its pool. Every other helicopter's stops come only from in-city roofs.
+  const offmapHeliIndex =
+    offmap.length > 0 && rng() < OFFMAP_USE_PROB ? Math.floor(rng() * count) : -1;
+
   const helicopters: Helicopter[] = [];
-  for (let i = 0; i < count; i++) helicopters.push(buildHelicopter(rng, pool));
+  for (let i = 0; i < count; i++) {
+    // First couple of helicopters favour the pads nearest CITY_CENTER so the
+    // default camera always has patrol traffic over downtown (#89); the rest
+    // draw from the full rooftop pool for city-wide spread.
+    const basePool = i < CENTRAL_HELI_COUNT && centralPoolUsable ? centralPool : roofs;
+    let stopPool = i === offmapHeliIndex ? [...basePool, ...offmap] : basePool;
+    // Safety net (unchanged invariant, see file header): a loop needs >=2
+    // distinct stops, so a city with fewer than 2 qualifying rooftops falls
+    // back to the off-map pair regardless of the roll above.
+    if (stopPool.length < 2) stopPool = [...roofs, ...offmap];
+    helicopters.push(buildHelicopter(rng, stopPool));
+  }
 
   return { helicopters };
 }
