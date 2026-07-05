@@ -871,6 +871,10 @@ export function StarryNightV2Model() {
     const onDbl = (e: MouseEvent) => {
       const c = controls.current;
       if (!c) return;
+      // In inspect mode a double-click is the building FOCUS gesture (InstancedCity handles it), so
+      // the default zoom-to-cursor must NOT also fire — two camera tweens on one double-click fought
+      // and read as a harsh snap. Outside inspect mode, double-click zooms as before.
+      if (useSceneStore.getState().inspectMode) return;
       markCameraActivity("zoomIn"); // its own guide row (double-click), distinct from wheel Zoom
       zoomAtCursor(c, cam, dom, e.clientX, e.clientY, 0.6, true);
       setPin(null);
