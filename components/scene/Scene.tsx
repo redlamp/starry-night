@@ -43,7 +43,6 @@ import { useGeneratedCity } from "@/lib/hooks/useGeneratedCity";
 export function Scene() {
   const masterSeed = useSceneStore((s) => s.masterSeed);
   const cityShape = useSceneStore((s) => s.cityShape);
-  const cityShapeScale = useSceneStore((s) => s.cityShapeScale);
   const intent = useSceneStore((s) => s.cameraIntent);
   const stars = useSceneStore((s) => s.stars);
   const fog = useSceneStore((s) => s.fog);
@@ -79,7 +78,10 @@ export function Scene() {
   // layers stream in one idle tick later, once their shared seeded cache is warm
   // (so each renders synchronously). Determinism is unaffected — same seed in,
   // byte-identical city out, just scheduled after first paint.
-  const { ready: cityReady } = useGeneratedCity(masterSeed, cityShape, cityShapeScale);
+  // #70: no `cityShapeScale` arg — the gate no longer bounces on a crop notch
+  // (see useGeneratedCity's MAX_SCALE comment), so InstancedCity and its
+  // siblings below stay mounted (and the intro cascade doesn't replay) across one.
+  const { ready: cityReady } = useGeneratedCity(masterSeed, cityShape);
 
   return (
     <>

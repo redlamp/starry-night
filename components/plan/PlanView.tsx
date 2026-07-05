@@ -63,7 +63,13 @@ export function PlanView({ seed, size, layers }: Props) {
   // work across frames instead of blocking the main thread in one ~64×200ms wall
   // on mount. `data` + the draw stay gated on `ready` so we never touch the cache
   // before it is warm.
-  const { ready } = useGeneratedCity(seed, cityShape, cityShapeScale);
+  // #70: no `cityShapeScale` arg — the gate now only guarantees the MAX-extent
+  // (scale 1) cache is warm (see useGeneratedCity's MAX_SCALE comment). The
+  // `generateCity`/`generateStreetlights` calls below still read the LIVE
+  // (possibly cropped) scale directly, so a non-default crop can still cost a
+  // synchronous regen here — unchanged from before for any crop != 1, and out
+  // of Stage 1's scope (InstancedCity + the ready gate only).
+  const { ready } = useGeneratedCity(seed, cityShape);
 
   const citySize = useSceneStore((s) => s.citySize);
   const citySketch = useSceneStore((s) => s.citySketch);
