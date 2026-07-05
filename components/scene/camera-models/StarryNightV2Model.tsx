@@ -320,12 +320,18 @@ export function StarryNightV2Model() {
     );
     s.setCameraHandoff(null);
     if (s.projection === "orthographic") {
-      const dist = Math.hypot(
-        h.position[0] - h.lookAt[0],
-        h.position[1] - h.lookAt[1],
-        h.position[2] - h.lookAt[2],
-      );
-      const half = dist * Math.tan((s.cameraIntent.fov * DEG) / 2);
+      // A handoff may carry the exact orthoSize to restore (leaving top-down back to a prior ortho
+      // zoom, #83) — use it verbatim so the zoom doesn't POP on takeover. Otherwise (still->orbit
+      // release-in-place) derive it from the pose distance so the faked-ortho zoom matches the frame.
+      let half = h.orthoSize;
+      if (half == null) {
+        const dist = Math.hypot(
+          h.position[0] - h.lookAt[0],
+          h.position[1] - h.lookAt[1],
+          h.position[2] - h.lookAt[2],
+        );
+        half = dist * Math.tan((s.cameraIntent.fov * DEG) / 2);
+      }
       s.setOrthoSize(THREE.MathUtils.clamp(half, ORTHO_SIZE_MIN, ORTHO_SIZE_MAX));
     }
   }, [mode]);

@@ -245,6 +245,7 @@ export function TopDownModel() {
           st.setCameraHandoff({
             position: [_startPos.x, _startPos.y, _startPos.z],
             lookAt: [_startFocal.x, _startFocal.y, _startFocal.z],
+            orthoSize: orthoStart.current, // restore the prior ortho zoom verbatim, no size pop (#83)
           });
         }
         st.setOrbit(entry.orbit);
