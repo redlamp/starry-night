@@ -92,6 +92,8 @@ export type SavedConfig = {
     stagger: number;
     curtain: number;
     curtainW: number;
+    storefront: number;
+    storefrontHeight: number;
   };
   facade?: {
     satMin: number;

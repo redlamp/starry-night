@@ -120,6 +120,8 @@ export function WindowsSection() {
   const stagger = useSceneStore((s) => s.windowAA.stagger);
   const curtain = useSceneStore((s) => s.windowAA.curtain);
   const curtainW = useSceneStore((s) => s.windowAA.curtainW);
+  const storefront = useSceneStore((s) => s.windowAA.storefront);
+  const storefrontHeight = useSceneStore((s) => s.windowAA.storefrontHeight);
   const setWindowAA = useSceneStore((s) => s.setWindowAA);
   return (
     <>
@@ -197,6 +199,24 @@ export function WindowsSection() {
         max={1}
         step={0.01}
         onChange={(v) => setWindowAA({ curtainW: v })}
+      />
+      <ValueSlider
+        label="storefront"
+        hint="Share of eligible downtown buildings (4+ floors, any archetype but warehouse/spire) that get a taller, brighter ground-floor storefront band. Shader-only — no regen."
+        value={storefront}
+        min={0}
+        max={1}
+        step={0.05}
+        onChange={(v) => setWindowAA({ storefront: v })}
+      />
+      <ValueSlider
+        label="sf height"
+        hint="Storefront floor height as a multiple of a normal floor. 1.0 = no change; higher stretches the ground floor taller (floors above compress to make room, continuous at the seam)."
+        value={storefrontHeight}
+        min={1}
+        max={2.5}
+        step={0.05}
+        onChange={(v) => setWindowAA({ storefrontHeight: v })}
       />
     </>
   );

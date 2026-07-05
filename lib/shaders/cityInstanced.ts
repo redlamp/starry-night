@@ -52,8 +52,13 @@ varying float vFacadeGlow;
 //                   ulps away exactly; those hashes feed binary on/off
 //                   thresholds, where any residual noise shows as
 //                   full-contrast per-pixel flips on knife-edge cells
+//   vStorefrontRoll: ground-floor storefront eligibility roll (#86) — same
+//                    per-vertex hash treatment, reusing aBuildingHash rather
+//                    than a new attribute (this material sits at the 16-slot
+//                    GL_MAX_VERTEX_ATTRIBS cap; see aMeanLit above)
 varying vec4 vSizeRolls;
 varying vec2 vSeedRolls;
+varying float vStorefrontRoll;
 varying float vDistrictIdx;
 varying float vCorrelationMode;
 varying vec3 vBuildingCenter;  // world-space centre of this instance
@@ -105,6 +110,7 @@ void main() {
     hash11(aBuildingHash * 8.3 + 147.0)
   );
   vSeedRolls = vec2(hash11(aBuildingHash * 6.7 + 31.0), floor(hash11(aBuildingHash) * 4096.0));
+  vStorefrontRoll = hash11(aBuildingHash * 13.7 + 251.0);
   vDistrictIdx = aMisc.x;
   vCorrelationMode = aMisc.y;
   vLayerIdx = aMisc.z;
@@ -158,6 +164,13 @@ uniform float uCycleJitter; // 0..1 amplitude on per-window cycle randomness
 uniform float uStagger;     // share of correlated floors that switch on in banks
 uniform float uCurtainShare; // share of correlated office towers with full-glass facades
 uniform float uCurtainWidth; // pane fill on curtain towers; 1.0 = seamless one-window floors
+// #86 ground-floor storefronts (shader-only floor-0 override, no gen change —
+// see wiki/notes/plan-overnight-agents-2026-07-05.md). uStorefrontColor is
+// authored in DISPLAY space (kelvinToColor, no sRGB conversion), same
+// convention as every other colour fed to this raw-output shader.
+uniform float uStorefrontShare;      // share of ELIGIBLE downtown buildings with a storefront band
+uniform float uStorefrontHeightMult; // storefront floor height, as a multiple of a normal floor
+uniform vec3 uStorefrontColor;       // storefront window colour (display space, bright + distinct)
 uniform float uLightsOn;    // 1 = normal; 0 = every window dark (facade debug switch)
 uniform float uRenderMode;  // far-field strategy: 0 = classic distantGlow, 1 = hybrid mean-lit (#82)
 uniform float uOrthoBlend;      // 0 = perspective, 1 = orthographic; LOD bypass scales by (1-this)
@@ -227,6 +240,7 @@ varying float vFacadeGlow;
 // varying-interpolation ulps into per-pixel window-size noise at far poses.
 varying vec4 vSizeRolls; // x=width roll, y=height roll, z=curtain gate, w=full-curtain
 varying vec2 vSeedRolls; // x=curtain spandrel-height roll, y=cell timing seed [0,64)
+varying float vStorefrontRoll; // #86 ground-floor storefront eligibility roll
 varying float vDistrictIdx;
 varying float vCorrelationMode;
 varying vec3 vBuildingCenter;
@@ -344,6 +358,19 @@ vec4 windowCellState(vec2 cellF, float bandFade) {
       vSizeRolls.z < uCurtainShare) {
     isCurtain = 1.0;
   }
+  // #86 ground-floor storefront: eligibility duplicated from main() (same
+  // precedent as isCurtain above — each per-cell function derives its own
+  // copy rather than threading extra parameters through the call chain).
+  // floor(cellF.y) reads the UNSHIFTED row index (before the per-face faceId
+  // offset folded into cellId below), so the band sits at the same physical
+  // row on all 4 faces instead of shifting per face like the per-window
+  // variety pattern.
+  bool storefrontEligible =
+    abs(vGrid.z - 1.0) > 0.5 && abs(vGrid.z - 6.0) > 0.5 && // not warehouse, not spire
+    vDistrictIdx < 0.5 &&                                    // downtown only (v1 gap: no mixed-use)
+    vGrid.y > 3.5 &&                                          // >= 4 floors
+    vStorefrontRoll < uStorefrontShare;
+  bool showStorefront = storefrontEligible && floor(cellF.y) < 0.5;
 
   // Correlated band cells share their timing: a whole-floor band uses one
   // clock for the row on EVERY face (jx = 0); fractional bands AND curtain
@@ -374,6 +401,11 @@ vec4 windowCellState(vec2 cellF, float bandFade) {
     // Atlas-unlit cells: default warm tungsten for the wake-up sweep — dimmer
     // than the average lit window so full-lit moments still read as a city.
     lit = vec3(1.0, 0.82, 0.55) * uEmissiveBoost * 0.55;
+  }
+  // #86: storefront rows override the atlas-derived colour outright — a
+  // shopfront doesn't care what lighting mood lightingGen.ts painted there.
+  if (showStorefront) {
+    lit = uStorefrontColor * uEmissiveBoost;
   }
 
   // After-Dark wake-and-cycle. Step 1: order cells by intro mode, pick a
@@ -417,7 +449,9 @@ vec4 windowCellState(vec2 cellF, float bandFade) {
   float windowOn;
   if (uTime < wakeTime) {
     windowOn = 0.0;
-  } else if (isTv) {
+  } else if (isTv || showStorefront) {
+    // #86: storefronts hold steady once awake — no duty-cycle flicker,
+    // mirroring the TV branch's always-on-after-wake behaviour.
     windowOn = 1.0;
   } else {
     // (1 - jitter) .. (1 + jitter) — at jitter=0 every window cycles in
@@ -435,8 +469,11 @@ vec4 windowCellState(vec2 cellF, float bandFade) {
 
   // Fractional-floor band: only a per-(face, floor) SEGMENT of the row lights —
   // length and position hashed independently per face. Curtain floors are
-  // exempt (a curtain ribbon spans its whole face).
-  if (fracFloor > 0.5 && isBand && isCurtain < 0.5) {
+  // exempt (a curtain ribbon spans its whole face). #86 REQUIRED GUARD:
+  // storefront rows are exempt too — without !showStorefront this cut would
+  // re-zero storefront columns outside the hashed lit run, undoing the
+  // always-on override above.
+  if (fracFloor > 0.5 && isBand && isCurtain < 0.5 && !showStorefront) {
     float col = floor(cellF.x);
     float u1 = hash11(faceId * 3.7 + cellId.y * 13.1 + cellSeed + 101.0);
     float u2 = hash11(faceId * 9.3 + cellId.y * 5.7 + cellSeed + 137.0);
@@ -518,7 +555,34 @@ void main() {
     return;
   }
 
-  vec2 cell = vUv * vGrid.xy;
+  // #86 ground-floor storefronts: eligibility gate, duplicated in
+  // windowCellState (same precedent as isBand/isCurtain there) — each
+  // function derives its own copy from the varyings/uniforms rather than
+  // threading an extra parameter through the whole per-cell call chain.
+  bool storefrontEligible =
+    abs(vGrid.z - 1.0) > 0.5 && abs(vGrid.z - 6.0) > 0.5 && // not warehouse, not spire
+    vDistrictIdx < 0.5 &&                                    // downtown only (v1 gap: no mixed-use)
+    vGrid.y > 3.5 &&                                          // >= 4 floors
+    vStorefrontRoll < uStorefrontShare;
+
+  // Ground-floor UV remap: an explicit if/else so an ineligible building
+  // takes the ORIGINAL line byte-identically. Eligible buildings stretch
+  // floor 0 to uStorefrontHeightMult x a normal floor's height; floors
+  // 1..rows-1 compress into the remaining space, continuous at the seam.
+  // vUv.y runs 0 (ground) -> 1 (roof) on BoxGeometry's side faces, so floor 0
+  // sits at the LOW end of the facade — the physical ground floor.
+  vec2 cell;
+  if (storefrontEligible) {
+    float rows = vGrid.y;
+    float groundFrac = uStorefrontHeightMult / max(rows - 1.0 + uStorefrontHeightMult, 1e-4);
+    float vy = vUv.y;
+    float cellY = vy < groundFrac
+      ? vy / max(groundFrac, 1e-4)
+      : 1.0 + (vy - groundFrac) / max(1.0 - groundFrac, 1e-4) * (rows - 1.0);
+    cell = vec2(vUv.x * vGrid.x, cellY);
+  } else {
+    cell = vUv * vGrid.xy;
+  }
   vec2 cellLocal = fract(cell);
   // Cells-per-pixel PER AXIS from the CONTINUOUS grid coord (see the LOD block
   // below for why not atlasUv). relSpan (min) drives the isotropic distance
@@ -644,6 +708,16 @@ void main() {
     // letting the glass wrap the corner as one continuous window.
     float pierCol = floor(cell.x);
     if (pierCol < 0.5 || pierCol > grid.x - 1.5) fracW = min(fracW, 0.78);
+  }
+  // #86 storefront override: the ground row gets wider panes than any other
+  // row on the building — applied AFTER the curtain override above so a
+  // storefront wins even if it lands on an isBand cell of a curtain-eligible
+  // tower. floor(cell.y) reads the (possibly remapped) row index computed
+  // above, so this correctly targets the stretched ground band.
+  bool showStorefront = storefrontEligible && floor(cell.y) < 0.5;
+  if (showStorefront) {
+    fracW = max(fracW, 0.85);
+    fracH = max(fracH, 0.8);
   }
   float halfW = fracW * 0.5;
   float halfH = fracH * 0.5;

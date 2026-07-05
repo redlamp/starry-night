@@ -192,6 +192,13 @@ export const DEFAULT_STARS = {
 //   curtainW— pane fill on those towers. 0.99 default keeps hairline mullions;
 //             exactly 1.0 turns lit floors into one continuous window (the
 //             full curtain look — opt-in because it reads as a neon tube).
+//   storefront — share of ELIGIBLE downtown buildings (>=4 floors, any
+//             archetype but warehouse/spire) that render a taller, brighter
+//             ground-floor storefront band (#86). Shader-only floor-0
+//             override — no gen change, gate1/cityGolden unaffected.
+//   storefrontHeight — storefront floor height as a multiple of a normal
+//             floor's height. 1.0 = no change; the remap is continuous at
+//             the seam so this never touches floors 1..rows-1's proportions.
 export const DEFAULT_WINDOW_AA = {
   edge: 1.1,
   // Window distance-wash LOD; header toggle in the LOD group. OFF by default
@@ -212,6 +219,8 @@ export const DEFAULT_WINDOW_AA = {
   stagger: 0.5,
   curtain: 0.3,
   curtainW: 0.99,
+  storefront: 0.7,
+  storefrontHeight: 1.7,
 };
 
 // Facade base-colour ranges (lightingGen.facadeColorFor): each building rolls

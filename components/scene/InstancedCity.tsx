@@ -36,6 +36,7 @@ import {
 import { packWindowAtlas, type PackInput } from "@/lib/scene/atlasPacker";
 import { meanLitStats } from "@/lib/scene/windowStats";
 import { buildingPopulation } from "@/lib/seed/population";
+import { kelvinToColor } from "@/lib/color/kelvin";
 import { cityVertexShader, cityFragmentShader } from "@/lib/shaders/cityInstanced";
 import { cityOutlineVertexShader, cityOutlineFragmentShader } from "@/lib/shaders/cityOutline";
 import { sharedTime } from "@/lib/shaders/sharedTime";
@@ -105,6 +106,13 @@ const OUTLINE_COLOR = displayColor(HIGHLIGHT_OUTLINE_COLOR);
 // visually distinct from OUTLINE_COLOR (the #69 hover cream) so a selection
 // never reads as "just another hover".
 const SELECT_COLOR = displayColor(SELECT_OUTLINE_COLOR);
+// #86 ground-floor storefront window colour — a bright, distinct warm-white
+// display-space colour (kelvinToColor, NOT new THREE.Color(hex)/SRGB convert;
+// see the CLAUDE.md note on cityInstanced's raw gl_FragColor write). Module-
+// level singleton: UniformsUtils.merge clones Color VALUES per material (see
+// uOutlineColor/uSelectColor above), so sharing one source instance across
+// all 7 archetype meshes is safe.
+const STOREFRONT_COLOR = kelvinToColor(5500);
 
 // #87 single-instance pick: "no pick" sentinel fed as uPickPosition, far
 // outside any city tier's extent (max half-extent ~4000 m — see CITY_TIERS)
@@ -483,6 +491,8 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
     const stagger = wa.stagger;
     const curtainShare = wa.curtain;
     const curtainWidth = wa.curtainW;
+    const storefrontShare = wa.storefront;
+    const storefrontHeightMult = wa.storefrontHeight;
     const lightsOn = s.windowLights ? 1 : 0;
     const windowMode = s.windowMode === "advanced" ? 1 : 0;
     const renderMode = s.windowRenderMode === "hybrid" ? 1 : 0;
@@ -522,6 +532,8 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
         mat.uniforms.uStagger.value = stagger;
         mat.uniforms.uCurtainShare.value = curtainShare;
         mat.uniforms.uCurtainWidth.value = curtainWidth;
+        mat.uniforms.uStorefrontShare.value = storefrontShare;
+        mat.uniforms.uStorefrontHeightMult.value = storefrontHeightMult;
       }
       if (lightsChanged) mat.uniforms.uLightsOn.value = lightsOn;
       if (modeChanged) mat.uniforms.uWindowMode.value = windowMode;
@@ -811,6 +823,9 @@ function buildMeshes(
           uStagger: { value: DEFAULT_WINDOW_AA.stagger },
           uCurtainShare: { value: DEFAULT_WINDOW_AA.curtain },
           uCurtainWidth: { value: DEFAULT_WINDOW_AA.curtainW },
+          uStorefrontShare: { value: DEFAULT_WINDOW_AA.storefront },
+          uStorefrontHeightMult: { value: DEFAULT_WINDOW_AA.storefrontHeight },
+          uStorefrontColor: { value: STOREFRONT_COLOR },
           uLightsOn: { value: 1 },
           uTime: { value: 0 },
           uIntroMode: { value: 0 },

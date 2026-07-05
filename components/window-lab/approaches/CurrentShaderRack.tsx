@@ -19,6 +19,7 @@ import {
   DEFAULT_WINDOW_PROFILES,
   DEFAULT_WINDOW_SIMPLE,
 } from "@/lib/state/sceneDefaults";
+import { kelvinToColor } from "@/lib/color/kelvin";
 import type { RackProps } from "./index";
 
 // Baseline: the production pipeline, miniaturised. Same generateWindowTexture →
@@ -160,6 +161,12 @@ function buildRackMesh(specimens: RackProps["specimens"], seed: string): THREE.I
         uStagger: { value: DEFAULT_WINDOW_AA.stagger },
         uCurtainShare: { value: DEFAULT_WINDOW_AA.curtain },
         uCurtainWidth: { value: DEFAULT_WINDOW_AA.curtainW },
+        // #86 ground-floor storefronts — pinned to scene defaults (no lab
+        // slider yet), same treatment as stagger/curtain above; required or
+        // this shared shader errors on the missing uniforms.
+        uStorefrontShare: { value: DEFAULT_WINDOW_AA.storefront },
+        uStorefrontHeightMult: { value: DEFAULT_WINDOW_AA.storefrontHeight },
+        uStorefrontColor: { value: kelvinToColor(5500) },
         uLightsOn: { value: 1 },
         uTime: { value: 0 },
         // Intro long since finished: every window is deep into its steady
