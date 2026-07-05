@@ -434,8 +434,8 @@ type SceneState = {
   // without it camera-controls keeps the eye but re-derives its target,
   // yanking the aim. Set by CameraControls' still-mode release, consumed and
   // cleared by the active model on the still→orbit transition. Never persisted.
-  cameraHandoff: { position: Vec3; lookAt: Vec3 } | null;
-  setCameraHandoff: (h: { position: Vec3; lookAt: Vec3 } | null) => void;
+  cameraHandoff: { position: Vec3; lookAt: Vec3; orthoSize?: number } | null;
+  setCameraHandoff: (h: { position: Vec3; lookAt: Vec3; orthoSize?: number } | null) => void;
   // Transient UI signal: true while the user drags the atmosphere near/far
   // sliders — FogBoundsMarkers draws the in-world bracket rings while set.
   fogAdjusting: boolean;
