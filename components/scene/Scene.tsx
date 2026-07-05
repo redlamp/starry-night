@@ -22,12 +22,15 @@ import { AdaptiveQuality } from "./AdaptiveQuality";
 import { CityReveal } from "./CityReveal";
 import { TimeTicker } from "./TimeTicker";
 import { ProjectionBlender } from "./ProjectionBlender";
+import { OrthoPickingFix } from "./OrthoPickingFix";
 import { FocalIndicator } from "./FocalIndicator";
 import { IntroTicker } from "./IntroTicker";
 import { FogTicker } from "./FogTicker";
 import { FogBoundsMarkers } from "./FogBoundsMarkers";
 import { PinPlaneMarker } from "./PinPlaneMarker";
 import { BuildingPin } from "./BuildingPin";
+import { SelectedDistrictOutline } from "./SelectedDistrictOutline";
+import { SelectedBuildingOutline } from "./SelectedBuildingOutline";
 import { GroundHaze } from "./GroundHaze";
 import { Roads } from "./Roads";
 import { DistrictShells } from "./DistrictShells";
@@ -116,6 +119,8 @@ export function Scene() {
         {!legacyControls && <CameraModelHost />}
         {oldController && <CameraControls />}
         <ProjectionBlender />
+        {/* Build parallel picking rays in (faked) ortho so hover/selection land right. */}
+        <OrthoPickingFix />
         <PerfMonitor />
         {/* Dynamic DPR regression — default-inert; enable with ?adaptive (see
             AdaptiveQuality + samples/perf-report.html). Verify on real devices. */}
@@ -194,6 +199,10 @@ export function Scene() {
         {/* #87: marker pin above the selected building (renders null until a
           selection exists; gated on cityReady so its lookup hits the warm cache). */}
         {cityReady && <BuildingPin />}
+        {/* #87: outline the district the selected building sits in (inspect only). */}
+        {cityReady && <SelectedDistrictOutline masterSeed={masterSeed} />}
+        {/* #87: x-ray outline of the selected building, visible through occluders. */}
+        {cityReady && <SelectedBuildingOutline masterSeed={masterSeed} />}
         {/* old controller's store-based indicator; the drei bridge renders its own
           live one (tracks the camera-controls target with no throttle lag) */}
         {oldController && <FocalIndicator />}

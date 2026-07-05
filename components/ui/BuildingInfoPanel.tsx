@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, type ReactNode } from "react";
-import { Crosshair, MapPin, X } from "lucide-react";
+import { MapPin, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import { focusBuilding } from "@/lib/scene/focusBuilding";
+import { focusBuilding, unfocusBuilding } from "@/lib/scene/focusBuilding";
 import { useSceneStore } from "@/lib/state/sceneStore";
 import { generateCity } from "@/lib/seed/cityGen";
 import { buildingPopulation } from "@/lib/seed/population";
@@ -44,6 +44,7 @@ function Stat({ label, value, muted }: { label: string; value: ReactNode; muted?
 export function BuildingInfoPanel() {
   const selectedBuildingId = useSceneStore((s) => s.selectedBuildingId);
   const setSelectedBuildingId = useSceneStore((s) => s.setSelectedBuildingId);
+  const focusedBuildingId = useSceneStore((s) => s.focusedBuildingId);
   const masterSeed = useSceneStore((s) => s.masterSeed);
   const cityShape = useSceneStore((s) => s.cityShape);
   const cityShapeScale = useSceneStore((s) => s.cityShapeScale);
@@ -93,6 +94,7 @@ export function BuildingInfoPanel() {
   if (!building) return null;
 
   const Icon = ARCHETYPE_ICONS[building.archetype];
+  const isFocused = focusedBuildingId === building.id;
   const district = idToDistrict.get(building.districtId);
   const floorArea = building.width * building.depth * building.floors;
   const population = Math.round(buildingPopulation(building));
@@ -101,33 +103,39 @@ export function BuildingInfoPanel() {
   return (
     <div className="pointer-events-auto fixed bottom-16 left-3 z-30 flex w-72 max-w-[calc(100vw-1.5rem)] flex-col gap-2.5 rounded-xl border border-border bg-popover/95 p-3 text-popover-foreground shadow-lg backdrop-blur-md">
       <div className="flex items-start justify-between gap-2">
-        <div className="flex flex-col gap-1.5">
-          <Badge variant="secondary" className="gap-1.5 text-[0.8rem]">
-            <Icon />
-            {ARCHETYPE_LABELS[building.archetype]}
-          </Badge>
-          {district && (
-            <div className="flex items-center gap-1 text-sm text-muted-foreground">
-              <MapPin className="size-3.5 shrink-0" />
-              {district.displayName}
-            </div>
-          )}
-        </div>
+        <Badge variant="secondary" className="gap-1.5 text-[0.8rem]">
+          <Icon />
+          {ARCHETYPE_LABELS[building.archetype]}
+        </Badge>
         <div className="flex items-center gap-1">
           <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => focusBuilding(building)}
-            title="Focus this building (also: double-click it)"
+            variant={isFocused ? "default" : "secondary"}
+            size="icon-sm"
+            onClick={() => (isFocused ? unfocusBuilding() : focusBuilding(building))}
+            title={isFocused ? "Unfocus" : "Focus"}
+            aria-label={isFocused ? "Unfocus this building" : "Focus this building"}
+            aria-pressed={isFocused}
           >
-            <Crosshair />
-            Focus
+            <MapPin />
           </Button>
           <Button variant="ghost" size="icon-sm" onClick={close} aria-label="Close building info">
             <X />
           </Button>
         </div>
       </div>
+
+      {district && (
+        // Full-width row so a long district name can span it; coloured by the
+        // district's own colour, which is keyed to its character/type (the same
+        // legend the plan-view district shells + the scene outline use).
+        <div
+          className="flex items-center gap-1.5 text-sm font-medium"
+          style={{ color: district.color }}
+        >
+          <MapPin className="size-4 shrink-0" />
+          <span>{district.displayName}</span>
+        </div>
+      )}
 
       <Separator />
 

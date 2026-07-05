@@ -477,10 +477,23 @@ type SceneState = {
   inspectMode: boolean;
   setInspectMode: (on: boolean) => void;
   // #87 focus: a one-shot request for the active orbit model to glide its pivot
-  // onto (x,y,z) at `dist` (Unity-F "frame + orbit the selected object"), then
-  // keep orbiting there. The model consumes + clears it. Runtime tier only.
-  focusRequest: { x: number; y: number; z: number; dist: number } | null;
-  setFocusRequest: (r: { x: number; y: number; z: number; dist: number } | null) => void;
+  // onto (x,y,z) and frame a sphere of `radius` (Unity-F "frame + orbit the
+  // selected object"), then keep orbiting there. The model consumes + clears it,
+  // fitting `radius` to its live fov/aspect so the whole object stays on screen.
+  // Runtime tier only.
+  focusRequest: { x: number; y: number; z: number; radius: number } | null;
+  setFocusRequest: (r: { x: number; y: number; z: number; radius: number } | null) => void;
+  // Inspect focus-lock: while inspecting a FOCUSED building, LMB-orbit pivots on
+  // its 3D centre (this point) instead of the ground pick. Set by focusBuilding,
+  // cleared when the selection or inspect mode clears. Runtime tier only.
+  focusPivot: [number, number, number] | null;
+  setFocusPivot: (p: [number, number, number] | null) => void;
+  // Which building is currently FOCUSED (framed + orbited via double-click or the
+  // info panel's Focus button) — drives the roof pin and the Focus button's active
+  // state. Distinct from selectedBuildingId: a single click selects (info panel)
+  // WITHOUT focusing. Set by focusBuilding, cleared when selection/inspect clears.
+  focusedBuildingId: number | null;
+  setFocusedBuildingId: (id: number | null) => void;
   cameraTweenRequest: TweenRequest | null;
   // Projection model. We keep a single perspective camera under the hood; ortho
   // is implemented by overriding camera.projectionMatrix each frame using an
@@ -1067,12 +1080,28 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   pickInstance: -1,
   setPickHover: (pickArchetype, pickInstance) => set({ pickArchetype, pickInstance }),
   selectedBuildingId: null,
-  setSelectedBuildingId: (selectedBuildingId) => set({ selectedBuildingId }),
+  // Selecting nothing — or a DIFFERENT building than the focused one — drops the
+  // focus marker (roof pin + orbit-lock pivot); a fresh focus re-arms them via
+  // focusBuilding. Re-selecting the already-focused building keeps its marker.
+  setSelectedBuildingId: (selectedBuildingId) =>
+    set((s) =>
+      selectedBuildingId != null && selectedBuildingId === s.focusedBuildingId
+        ? { selectedBuildingId }
+        : { selectedBuildingId, focusPivot: null, focusedBuildingId: null },
+    ),
   inspectMode: false,
   setInspectMode: (on) =>
-    set(on ? { inspectMode: true } : { inspectMode: false, selectedBuildingId: null }),
+    set(
+      on
+        ? { inspectMode: true }
+        : { inspectMode: false, selectedBuildingId: null, focusPivot: null, focusedBuildingId: null },
+    ),
   focusRequest: null,
   setFocusRequest: (focusRequest) => set({ focusRequest }),
+  focusPivot: null,
+  setFocusPivot: (focusPivot) => set({ focusPivot }),
+  focusedBuildingId: null,
+  setFocusedBuildingId: (focusedBuildingId) => set({ focusedBuildingId }),
   resetCamera: () => {
     // Derive reset patch from the registry: every entry goes back to its
     // hardcoded defaultValue. Runtime readouts (cityPlanning.topologyKind /
