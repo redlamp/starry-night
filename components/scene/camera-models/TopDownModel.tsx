@@ -25,19 +25,22 @@ import { HOME_TWEEN_SEC } from "@/lib/scene/cameraView";
 // `t` again mid-transition plays the SAME tween the other way (gsap reverse()/play()),
 // rather than restarting from a fresh snapshot.
 //
-// Entry motion: a SWING-ARM ARC around the vertical axis through CITY_CENTER (#83
-// refinement, user 2026-07-05). The camera rises (Y eases OUT) while its horizontal
-// distance from the centre eases IN, azimuth HELD, and the aim glides to the city centre —
-// so it arcs UP-and-IN and keeps the city framed the whole sweep. The earlier straight-
-// line position lerp + quaternion slerp cut diagonally across and swung the city off-
-// screen mid-tween. Azimuth is held (atan2 of the start's horizontal offset from
-// CITY_CENTER), trivially the shortest arc — there's no azimuthal travel to shorten, and
-// the overhead endpoint has zero horizontal offset. Reversing the SAME tween sweeps the
-// arc back out to the entry pose. A restore target's STORED azimuth (map's remembered
-// bearing, say) generally differs, so the live `orbit.azimuthDeg` readout (the panel, and
-// #84's ProjectionBlender feed) is driven separately during the outro, unwound the
-// shortest way — the R-reset formula (cameraView.ts's tweenOrbitToHome) — from the held
-// entry azimuth toward the restore target's.
+// Entry motion: ONE synchronized swing-arm sweep around the vertical axis through
+// CITY_CENTER (#83, user 2026-07-05). On a single eased clock the POSITION arcs on a
+// spherical path — the arm's elevation swings from the current angle up to straight-down
+// while its length (distance from the centre) eases to the overhead height, azimuth HELD —
+// so it sweeps up-and-over as one large arc and the city stays framed (the earlier
+// straight-line position lerp cut diagonally across and swung the city off-screen). The
+// ORIENTATION is a quaternion SLERP start->overhead, NOT a per-frame lookAt: lookAt is
+// singular near straight-down and snapped the yaw a frame or two before the poles. Azimuth
+// is held (atan2 of the start's horizontal offset from CITY_CENTER), trivially the shortest
+// arc — no azimuthal travel to shorten, and the overhead endpoint has zero horizontal
+// offset. Reversing the SAME tween sweeps the arc back to the entry pose. A restore
+// target's STORED azimuth (map's remembered bearing, say) generally differs, so the live
+// `orbit.azimuthDeg` readout (the panel, and #84's ProjectionBlender feed) is driven
+// separately during the outro, unwound the shortest way — the R-reset formula
+// (cameraView.ts's tweenOrbitToHome) — from the held entry azimuth toward the restore
+// target's.
 //
 // #84 — orbit.radius (and azimuthDeg / elevationDeg) are synced live, not just written
 // once, so a `p` press while resting in (or transitioning through) top-down has a fresh,
@@ -54,6 +57,7 @@ const TOP_DOWN_MARGIN = 1.15;
 const NORTH_UP = new THREE.Vector3(0, 0, -1);
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
 const RAD2DEG = 180 / Math.PI;
+const HALF_PI = Math.PI / 2;
 const TWO_DP = (n: number) => Math.round(n * 100) / 100;
 
 // Ortho half-height that fits the city (+ margin); the limiting screen axis sets it.
@@ -74,11 +78,12 @@ const _startPos = new THREE.Vector3();
 const _startUp = new THREE.Vector3();
 const _startQuat = new THREE.Quaternion();
 const _targetPos = new THREE.Vector3();
+const _targetQuat = new THREE.Quaternion();
+const _lookMat = new THREE.Matrix4();
+const _curQuat = new THREE.Quaternion();
 const _curUp = new THREE.Vector3();
 const _cityGround = new THREE.Vector3(CITY_CENTER.x, 0, CITY_CENTER.z);
 const _lookTarget = new THREE.Vector3(CITY_CENTER.x, 0, CITY_CENTER.z);
-const _startFocal = new THREE.Vector3(); // ground point the camera looked at when entry began
-const _fwd = new THREE.Vector3();
 
 export function TopDownModel() {
   const camera = useThree((s) => s.camera);
@@ -148,18 +153,10 @@ export function TopDownModel() {
     _startUp.copy(cam.up);
     _startQuat.copy(cam.quaternion);
 
-    // Where the camera currently looks, on the ground — the arc's aim glides
-    // from here to the city centre. Ground hit of the forward ray; falls back
-    // to the city centre if it's aimed at the sky.
-    _fwd.set(0, 0, -1).applyQuaternion(_startQuat);
-    if (_fwd.y < -1e-3) {
-      _startFocal.copy(_startPos).addScaledVector(_fwd, -_startPos.y / _fwd.y);
-    } else {
-      _startFocal.copy(_cityGround);
-    }
-
     const height = fitHeight(targetOrtho, cam.fov);
     _targetPos.set(CITY_CENTER.x, height, CITY_CENTER.z);
+    _lookMat.lookAt(_targetPos, _lookTarget, NORTH_UP);
+    _targetQuat.setFromRotationMatrix(_lookMat);
 
     // Hold azimuth fixed (see module doc): capture the CURRENT compass bearing once, up
     // front — matches orbitWriteback's atan2 convention (do NOT trust s.orbit.azimuthDeg,
@@ -173,30 +170,28 @@ export function TopDownModel() {
 
     function applyPose(t: number) {
       const cm = camera as THREE.PerspectiveCamera;
-      // Swing-arm arc around the city-centre vertical axis (#83 refinement,
-      // user 2026-07-05): Y eases OUT (rise early) while the horizontal distance
-      // eases IN (pull over the centre late), azimuth held, and the aim glides
-      // to the centre — so the camera arcs UP-and-IN and keeps the city framed
-      // the whole sweep (the old straight-line position lerp + quaternion slerp
-      // cut across and swung the city off-screen). Reversing this same tween
-      // sweeps the arc back out to the entry pose.
+      // ONE synchronized swing-arm sweep (#83, user 2026-07-05). POSITION arcs on
+      // a spherical path around the city-centre vertical axis: the arm's ELEVATION
+      // swings from the current angle up to straight-down while its LENGTH (distance
+      // from the centre) eases to the overhead height, azimuth HELD — so it sweeps
+      // up-and-over as one large arc and the city stays framed (no straight-line cut
+      // across). ORIENTATION is a quaternion SLERP start->overhead, NOT a per-frame
+      // lookAt: lookAt is singular near straight-down and snapped the yaw a frame or
+      // two before the poles. Both channels run on the same eased clock; reversing
+      // the tween sweeps the arc back to the entry pose.
       const cx = CITY_CENTER.x;
       const cz = CITY_CENTER.z;
-      const rH0 = Math.hypot(_startPos.x - cx, _startPos.z - cz);
+      const dist0 = Math.max(1e-3, _startPos.distanceTo(_cityGround));
+      const elev0 = Math.asin(THREE.MathUtils.clamp(_startPos.y / dist0, -1, 1));
       const azRad = Math.atan2(_startPos.x - cx, _startPos.z - cz);
-      const yEase = 1 - (1 - t) * (1 - t); // ease-out: rise fast, then settle
-      const xzEase = t * t; // ease-in: hold wide, then pull in over centre
-      const rH = rH0 * (1 - xzEase);
-      cm.position.set(
-        cx + Math.sin(azRad) * rH,
-        _startPos.y + (_targetPos.y - _startPos.y) * yEase,
-        cz + Math.cos(azRad) * rH,
-      );
-      const aimT = t * t * (3 - 2 * t); // smoothstep — glide the aim to centre
-      _lookTarget.lerpVectors(_startFocal, _cityGround, aimT);
+      const elev = elev0 + (HALF_PI - elev0) * t; // swing the arm up to straight down
+      const armLen = dist0 + (_targetPos.y - dist0) * t; // arm length -> overhead height
+      const rH = armLen * Math.cos(elev);
+      cm.position.set(cx + Math.sin(azRad) * rH, armLen * Math.sin(elev), cz + Math.cos(azRad) * rH);
       _curUp.lerpVectors(_startUp, NORTH_UP, t).normalize();
       cm.up.copy(_curUp);
-      cm.lookAt(_lookTarget);
+      _curQuat.copy(_startQuat).slerp(_targetQuat, t);
+      cm.quaternion.copy(_curQuat);
       cm.updateMatrixWorld();
 
       // orthoSize eases in on the way IN; held FIXED (not eased back) on the way OUT — see
