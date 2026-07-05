@@ -54,3 +54,16 @@ export function makeShapeMask(
   const falloff = half * 0.05;
   return (x, z) => clamp01((R - Math.hypot(x - cx, z - cz)) / falloff);
 }
+
+// The city's DISPLAYED half-extent for a resolved shape/scale (#56): `square` is
+// never cropped (the full tier extent — same no-op as makeShapeMask's mask);
+// `circle` shrinks to `half * scale`, matching the disc makeShapeMask draws. Camera
+// resting poses read this (directly, or via cameraView.ts's cropFollowScale ratio)
+// so framing tracks the crop instead of a fixed look-scale constant.
+export function displayedRadius(
+  shape: CityShape,
+  scale = 1,
+  half: number = maxHalfExtent(),
+): number {
+  return shape === "circle" ? half * scale : half;
+}

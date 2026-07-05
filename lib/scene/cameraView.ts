@@ -11,7 +11,8 @@ import {
   type RenderGroup,
   type RenderMode,
 } from "@/lib/state/sceneStore";
-import { maxHalfExtent } from "@/lib/seed/topology";
+import { maxHalfExtent, CITY_TIERS, DEFAULT_CITY_TIER } from "@/lib/seed/topology";
+import { resolveCityShape, displayedRadius } from "@/lib/seed/cityShape";
 import { getCameraModelMeta } from "@/lib/scene/cameraModelCatalog";
 import type { CameraModelId, Vec3 } from "@/lib/state/sceneStore";
 
@@ -19,6 +20,29 @@ import type { CameraModelId, Vec3 } from "@/lib/state/sceneStore";
 // user-initiated switch — mirrors the selector's pickCamera. See catalog.startsPaused.
 function applyTransportDefault(id: CameraModelId) {
   useSceneStore.getState().setOrbitPaused(getCameraModelMeta(id).startsPaused ?? false);
+}
+
+// #56 — camera resting poses should track the DISPLAYED radius (size tier × crop),
+// not the fixed look-scale the DEFAULT_* camera constants were hand-tuned at: today
+// every default is `constant × CITY_SCALE`, frozen at the old single-size era, so a
+// Truck Stop and a Metropolis boot to the same distance. REFERENCE_HALF_EXTENT is
+// the tier DEFAULT_CITY_SIZE was authored at, so cropFollowScale() is exactly 1.0
+// until the tier or crop actually moves (byte-identical at current defaults).
+const REFERENCE_HALF_EXTENT: number = CITY_TIERS[DEFAULT_CITY_TIER];
+
+// FRAMING-TIME ONLY: call this when establishing a resting pose (mount, Reset /
+// Default / Home, top-down entry) — NEVER in a per-frame hook or reactive selector.
+// AdaptiveQuality.stepCrop() steps cityShapeScale live for performance; a live
+// binding here would dolly the resting camera on every fps-driven crop nudge (the
+// same lesson as #84's restPerspK freeze). DEFAULT_ORBIT / DEFAULT_ORTHO_SIZE /
+// DEFAULT_PERSP_RADIUS stay plain constants (functionizing them breaks Settings
+// Reset/Revert) — multiply by this at each consumption site instead.
+export function cropFollowScale(): number {
+  const s = useSceneStore.getState();
+  return (
+    displayedRadius(resolveCityShape(s.cityShape, s.masterSeed), s.cityShapeScale) /
+    REFERENCE_HALF_EXTENT
+  );
 }
 
 // Shared camera-mode logic — the single source of truth for the Fly / Orbit /
@@ -271,7 +295,8 @@ export function tweenOrbitToDefault() {
   if (s.cameraMode !== "orbit") s.setCameraMode("orbit");
   s.setOrbitPaused(true); // default orbit is the still / paused framing — auto-orbit is off by default
   s.setOrbit({ lookAtY: DEFAULT_ORBIT.lookAtY, periodSec: DEFAULT_ORBIT.periodSec });
-  tweenOrbitTowards(DEFAULT_ORBIT.elevationDeg, DEFAULT_ORBIT.radius, DEFAULT_ORTHO_SIZE);
+  const k = cropFollowScale(); // #56 — read once, establishing this resting pose
+  tweenOrbitTowards(DEFAULT_ORBIT.elevationDeg, DEFAULT_ORBIT.radius * k, DEFAULT_ORTHO_SIZE * k);
 }
 
 // The single in-flight projection tween (perspective ⇄ ortho blend). Killed before a new one
@@ -299,8 +324,9 @@ export function tweenOrbitToHome() {
   // the home tween then owns radius and lands it on the DEFAULT projection's default distance.
   projTween?.kill();
   if (s.projection !== DEFAULT_PROJECTION) s.setProjection(DEFAULT_PROJECTION);
+  const k = cropFollowScale(); // #56 — read once, establishing this resting pose
   const targetRadius =
-    DEFAULT_PROJECTION === "orthographic" ? DEFAULT_ORBIT.radius : DEFAULT_PERSP_RADIUS;
+    (DEFAULT_PROJECTION === "orthographic" ? DEFAULT_ORBIT.radius : DEFAULT_PERSP_RADIUS) * k;
   const targetBlend = DEFAULT_PROJECTION === "orthographic" ? 1 : 0;
   const o = s.orbit;
   // Shortest-way azimuth delta so the reset never spins the long way round.
@@ -322,7 +348,7 @@ export function tweenOrbitToHome() {
     az: o.azimuthDeg + dAz,
     el: DEFAULT_ORBIT.elevationDeg,
     r: targetRadius,
-    os: DEFAULT_ORTHO_SIZE,
+    os: DEFAULT_ORTHO_SIZE * k,
     ly: DEFAULT_ORBIT.lookAtY,
     fov: DEFAULT_INTENT.fov,
     tip: 0,
@@ -361,8 +387,8 @@ const PROJECTION_TWEEN_DURATION = 1.0;
 // the live radius whenever a mode is left, so toggling away and back restores the distance
 // that mode was last at.
 const rememberedRadius: Record<"perspective" | "orthographic", number> = {
-  perspective: DEFAULT_PERSP_RADIUS,
-  orthographic: DEFAULT_ORBIT.radius,
+  perspective: DEFAULT_PERSP_RADIUS * cropFollowScale(),
+  orthographic: DEFAULT_ORBIT.radius * cropFollowScale(),
 };
 
 // Projection swap (perspective ⇄ orthographic) — shared by the Camera panel's projection

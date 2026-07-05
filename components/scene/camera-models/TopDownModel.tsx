@@ -6,6 +6,7 @@ import gsap from "gsap";
 import * as THREE from "three";
 import { useSceneStore } from "@/lib/state/sceneStore";
 import { CITY_CENTER, CITY_SCALE, CITY_TIERS } from "@/lib/seed/topology";
+import { displayedRadius, resolveCityShape } from "@/lib/seed/cityShape";
 import { GROUND_APRON_M } from "../Ground";
 import { HOME_TWEEN_SEC } from "@/lib/scene/cameraView";
 
@@ -84,6 +85,9 @@ export function TopDownModel() {
   const camera = useThree((s) => s.camera);
   const size = useThree((s) => s.size);
   const citySize = useSceneStore((s) => s.citySize);
+  const cityShape = useSceneStore((s) => s.cityShape);
+  const cityShapeScale = useSceneStore((s) => s.cityShapeScale);
+  const masterSeed = useSceneStore((s) => s.masterSeed);
   const exiting = useSceneStore((s) => s.topDownExiting);
   const prevOrtho = useRef<number | null>(null);
   const lastWrite = useRef(0);
@@ -107,14 +111,22 @@ export function TopDownModel() {
     };
   }, [camera]);
 
-  // Steady-state orthoSize re-fit on citySize/aspect change — skipped mid-transition
-  // (entering / exiting) so it can't fight the tween's own orthoSize handling below.
+  // Steady-state orthoSize re-fit on citySize/shape/crop/aspect change — skipped
+  // mid-transition (entering / exiting) so it can't fight the tween's own orthoSize
+  // handling below. Unlike the other camera models' resting poses, top-down's whole
+  // job is to keep framing the CURRENT displayed city (#56 extends that live fit to
+  // the crop, on the same footing as the pre-existing citySize/aspect tracking).
   useEffect(() => {
     if (phase.current !== "steady") return;
     const aspect = size.width / Math.max(1, size.height);
-    const tier = CITY_TIERS[citySize] + GROUND_APRON_M;
+    const tier =
+      displayedRadius(
+        resolveCityShape(cityShape, masterSeed),
+        cityShapeScale,
+        CITY_TIERS[citySize],
+      ) + GROUND_APRON_M;
     useSceneStore.getState().setOrthoSize(fitOrthoSize(tier, aspect));
-  }, [citySize, size.width, size.height]);
+  }, [citySize, cityShape, cityShapeScale, masterSeed, size.width, size.height]);
 
   // ENTRY — build the sweep the moment this model mounts, FROM wherever the camera
   // actually is (the previous model's live pose). Mount-only: toggleTopDown never
@@ -123,7 +135,12 @@ export function TopDownModel() {
   useEffect(() => {
     const cam = camera as THREE.PerspectiveCamera;
     const aspect = size.width / Math.max(1, size.height);
-    const tier = CITY_TIERS[citySize] + GROUND_APRON_M;
+    const tier =
+      displayedRadius(
+        resolveCityShape(cityShape, masterSeed),
+        cityShapeScale,
+        CITY_TIERS[citySize],
+      ) + GROUND_APRON_M;
     const targetOrtho = fitOrthoSize(tier, aspect);
     orthoTarget.current = targetOrtho;
     orthoStart.current = useSceneStore.getState().orthoSize;
@@ -250,7 +267,12 @@ export function TopDownModel() {
     if (phase.current !== "steady") return;
     const cam = camera as THREE.PerspectiveCamera;
     const aspect = size.width / Math.max(1, size.height);
-    const tier = CITY_TIERS[citySize] + GROUND_APRON_M;
+    const tier =
+      displayedRadius(
+        resolveCityShape(cityShape, masterSeed),
+        cityShapeScale,
+        CITY_TIERS[citySize],
+      ) + GROUND_APRON_M;
     const orthoSize = fitOrthoSize(tier, aspect);
     const height = fitHeight(orthoSize, cam.fov);
     cam.position.set(CITY_CENTER.x, height, CITY_CENTER.z);

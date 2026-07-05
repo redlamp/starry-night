@@ -4,7 +4,8 @@ import { useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import * as THREE from "three";
 import { useSceneStore, QUALITY_TIERS } from "@/lib/state/sceneStore";
-import { CITY_SCALE } from "@/lib/seed/topology";
+import { CITY_SCALE, CITY_CENTER } from "@/lib/seed/topology";
+import { cropFollowScale } from "@/lib/scene/cameraView";
 import { InstancedCity } from "./InstancedCity";
 import { Moon } from "./Moon";
 import { StarField } from "./StarField";
@@ -81,11 +82,25 @@ export function Scene() {
   // byte-identical city out, just scheduled after first paint.
   const { ready: cityReady } = useGeneratedCity(masterSeed, cityShape, cityShapeScale);
 
+  // Boot-time-only camera position (#56 crop-follow): StarryNightV2Model's mount
+  // effect immediately re-poses the live camera to this same scaled hero shot, so
+  // this only matters for the very first painted frame — computed once so a reload
+  // never flashes the un-scaled framing before that effect corrects it. Horizontal-
+  // only, relative to CITY_CENTER (never Y — #47 vertical invariance).
+  const [bootPosition] = useState<[number, number, number]>(() => {
+    const k = cropFollowScale();
+    return [
+      CITY_CENTER.x + (intent.position[0] - CITY_CENTER.x) * k,
+      intent.position[1],
+      CITY_CENTER.z + (intent.position[2] - CITY_CENTER.z) * k,
+    ];
+  });
+
   return (
     <>
       <Canvas
         key={antialias ? "aa-on" : "aa-off"} // remount on MSAA change (context-creation flag)
-        camera={{ position: intent.position, fov: intent.fov, near: 0.5, far: 12000 * CITY_SCALE }}
+        camera={{ position: bootPosition, fov: intent.fov, near: 0.5, far: 12000 * CITY_SCALE }}
         gl={{
           antialias,
           toneMapping: THREE.ACESFilmicToneMapping,

@@ -10,7 +10,7 @@ import { useSceneStore, DEFAULT_INTENT, DEFAULT_PROJECTION } from "@/lib/state/s
 import { orbitFramingFactor } from "@/lib/scene/aspectFraming";
 import { markCameraActivity } from "@/lib/scene/cameraActivity";
 import { cameraCommand } from "@/lib/scene/cameraCommand";
-import { tweenProjectionTo } from "@/lib/scene/cameraView";
+import { tweenProjectionTo, cropFollowScale } from "@/lib/scene/cameraView";
 import { isTypingTarget } from "@/lib/utils";
 import { CITY_SCALE, CITY_CENTER, CITY_TIERS } from "@/lib/seed/topology";
 import { GROUND_APRON_M } from "../Ground";
@@ -343,8 +343,16 @@ export function StarryNightV2Model() {
       // already pending — the effect above adopts that pose instead, and this step must not
       // stomp it. Absent a handoff, it doesn't restore a saved pose either (the old computed
       // framing didn't).
-      const [px, py, pz] = DEFAULT_INTENT.position;
-      const [tx, ty, tz] = DEFAULT_INTENT.lookAt;
+      // #56 crop-follow: scale the hero shot's horizontal offset from CITY_CENTER by the
+      // displayed radius vs. the tier DEFAULT_INTENT was authored at — read ONCE here (mount
+      // is a framing-time event), never reactively. Y is untouched (#47 vertical invariance).
+      const k = cropFollowScale();
+      const px = CITY_CENTER.x + (DEFAULT_INTENT.position[0] - CITY_CENTER.x) * k;
+      const py = DEFAULT_INTENT.position[1];
+      const pz = CITY_CENTER.z + (DEFAULT_INTENT.position[2] - CITY_CENTER.z) * k;
+      const tx = CITY_CENTER.x + (DEFAULT_INTENT.lookAt[0] - CITY_CENTER.x) * k;
+      const ty = DEFAULT_INTENT.lookAt[1];
+      const tz = CITY_CENTER.z + (DEFAULT_INTENT.lookAt[2] - CITY_CENTER.z) * k;
       void c.setLookAt(px, py, pz, tx, ty, tz, false);
       // Ortho continuity: if we boot in ortho, match orthoSize to this pose's framing so the faked-
       // ortho render shows the same content the perspective pose would (no zoom mismatch on entry).
@@ -458,8 +466,15 @@ export function StarryNightV2Model() {
       drag = null;
       setPin(null);
       hideGlyph();
-      const [px, py, pz] = DEFAULT_INTENT.position;
-      const [tx, ty, tz] = DEFAULT_INTENT.lookAt;
+      // #56 crop-follow: same horizontal-only, CITY_CENTER-relative scale as the mount
+      // effect above — Reset is a resting-pose framing event too, read once here.
+      const k = cropFollowScale();
+      const px = CITY_CENTER.x + (DEFAULT_INTENT.position[0] - CITY_CENTER.x) * k;
+      const py = DEFAULT_INTENT.position[1];
+      const pz = CITY_CENTER.z + (DEFAULT_INTENT.position[2] - CITY_CENTER.z) * k;
+      const tx = CITY_CENTER.x + (DEFAULT_INTENT.lookAt[0] - CITY_CENTER.x) * k;
+      const ty = DEFAULT_INTENT.lookAt[1];
+      const tz = CITY_CENTER.z + (DEFAULT_INTENT.lookAt[2] - CITY_CENTER.z) * k;
       // setLookAt would tween the azimuth numerically from the CURRENT theta
       // (unbounded — drag accumulates whole turns) to atan2's (-pi, pi] home
       // value, which often reads as the camera revolving the long way round.
