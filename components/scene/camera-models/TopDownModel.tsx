@@ -43,11 +43,10 @@ import { HOME_TWEEN_SEC } from "@/lib/scene/cameraView";
 // #84 — orbit.radius (and azimuthDeg / elevationDeg) are synced live, not just written
 // once, so a `p` press while resting in (or transitioning through) top-down has a fresh,
 // K-matched radius for ProjectionBlender's framing bridge instead of a stale one. orthoSize
-// itself EASES during the entry sweep but is HELD FIXED (not eased back) during the outro —
-// only snapping to the restored value at the very end — because #84's fix keeps the
-// apparent size constant precisely when radius stays K-matched to a non-moving orthoSize;
-// easing orthoSize down through the outro while ALSO sweeping the camera back out would
-// reintroduce the same breathing the fix removes.
+// eases symmetrically (in on entry, back out on exit): in pure ortho the apparent size IS
+// orthoSize, so holding it through the outro and snapping at the end popped the size on return
+// (user 2026-07-05). radius is kept K-matched to the current orthoSize each frame so the eased
+// zoom stays consistent; in perspective orthoSize is unused (size is the dolly) so it is moot.
 
 const TOP_DOWN_MARGIN = 1.15;
 // North-up: compass 0 = +Z (azimuth = atan2(x, z)), so making -Z read as "up" on screen
@@ -206,13 +205,13 @@ export function TopDownModel() {
       cm.up.copy(_up);
       cm.updateMatrixWorld();
 
-      // orthoSize eases in on the way IN; held FIXED (not eased back) on the way OUT — see
-      // module doc. radius stays K-matched to whatever orthoSize is right now either way,
-      // so a `p` press mid-transition still gets #84's size-invariant blend.
-      const ortho =
-        phase.current === "exiting"
-          ? orthoTarget.current
-          : orthoStart.current + (orthoTarget.current - orthoStart.current) * t;
+      // orthoSize eases BOTH ways (in on entry, back out on exit). In pure ortho the apparent
+      // size IS orthoSize, so holding it through the outro and snapping at the very end read as a
+      // size POP on return (user 2026-07-05); easing it symmetrically eases the zoom instead. In
+      // perspective orthoSize is unused (size comes from the dolly), so this is moot there. radius
+      // stays K-matched to the current orthoSize each frame; at t=0 ortho lands on orthoStart
+      // (== the entry orthoSize finishExit restores), so the handoff is seamless.
+      const ortho = orthoStart.current + (orthoTarget.current - orthoStart.current) * t;
       const st = useSceneStore.getState();
       st.setOrthoSize(ortho);
       const fovRad = (st.cameraIntent.fov * Math.PI) / 180;
