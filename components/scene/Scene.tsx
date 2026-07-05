@@ -4,7 +4,8 @@ import { useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import * as THREE from "three";
 import { useSceneStore, QUALITY_TIERS } from "@/lib/state/sceneStore";
-import { CITY_SCALE } from "@/lib/seed/topology";
+import { CITY_SCALE, CITY_CENTER } from "@/lib/seed/topology";
+import { cropFollowScale } from "@/lib/scene/cameraView";
 import { InstancedCity } from "./InstancedCity";
 import { Moon } from "./Moon";
 import { StarField } from "./StarField";
@@ -26,6 +27,7 @@ import { IntroTicker } from "./IntroTicker";
 import { FogTicker } from "./FogTicker";
 import { FogBoundsMarkers } from "./FogBoundsMarkers";
 import { PinPlaneMarker } from "./PinPlaneMarker";
+import { BuildingPin } from "./BuildingPin";
 import { GroundHaze } from "./GroundHaze";
 import { Roads } from "./Roads";
 import { DistrictShells } from "./DistrictShells";
@@ -36,13 +38,14 @@ import { TileCullOverlay } from "./TileCullOverlay";
 import { Traffic } from "./Traffic";
 import { Flights } from "./Flights";
 import { FlightRoutes } from "./FlightRoutes";
+import { HelicopterRoutes } from "./HelicopterRoutes";
+import { Helicopters } from "./Helicopters";
 import { ShootingStars } from "./ShootingStars";
 import { useGeneratedCity } from "@/lib/hooks/useGeneratedCity";
 
 export function Scene() {
   const masterSeed = useSceneStore((s) => s.masterSeed);
   const cityShape = useSceneStore((s) => s.cityShape);
-  const cityShapeScale = useSceneStore((s) => s.cityShapeScale);
   const intent = useSceneStore((s) => s.cameraIntent);
   const stars = useSceneStore((s) => s.stars);
   const fog = useSceneStore((s) => s.fog);
@@ -78,13 +81,30 @@ export function Scene() {
   // layers stream in one idle tick later, once their shared seeded cache is warm
   // (so each renders synchronously). Determinism is unaffected — same seed in,
   // byte-identical city out, just scheduled after first paint.
-  const { ready: cityReady } = useGeneratedCity(masterSeed, cityShape, cityShapeScale);
+  // #70: no `cityShapeScale` arg — the gate no longer bounces on a crop notch
+  // (see useGeneratedCity's MAX_SCALE comment), so InstancedCity and its
+  // siblings below stay mounted (and the intro cascade doesn't replay) across one.
+  const { ready: cityReady } = useGeneratedCity(masterSeed, cityShape);
+
+  // Boot-time-only camera position (#56 crop-follow): StarryNightV2Model's mount
+  // effect immediately re-poses the live camera to this same scaled hero shot, so
+  // this only matters for the very first painted frame — computed once so a reload
+  // never flashes the un-scaled framing before that effect corrects it. Horizontal-
+  // only, relative to CITY_CENTER (never Y — #47 vertical invariance).
+  const [bootPosition] = useState<[number, number, number]>(() => {
+    const k = cropFollowScale();
+    return [
+      CITY_CENTER.x + (intent.position[0] - CITY_CENTER.x) * k,
+      intent.position[1],
+      CITY_CENTER.z + (intent.position[2] - CITY_CENTER.z) * k,
+    ];
+  });
 
   return (
     <>
       <Canvas
         key={antialias ? "aa-on" : "aa-off"} // remount on MSAA change (context-creation flag)
-        camera={{ position: intent.position, fov: intent.fov, near: 0.5, far: 12000 * CITY_SCALE }}
+        camera={{ position: bootPosition, fov: intent.fov, near: 0.5, far: 12000 * CITY_SCALE }}
         gl={{
           antialias,
           toneMapping: THREE.ACESFilmicToneMapping,
@@ -160,6 +180,8 @@ export function Scene() {
             <Traffic masterSeed={masterSeed} />
             <Flights masterSeed={masterSeed} />
             <FlightRoutes masterSeed={masterSeed} />
+            <Helicopters masterSeed={masterSeed} />
+            <HelicopterRoutes masterSeed={masterSeed} />
             {/* Planning overlays — each respects its own visibility flag (default
               off). Highway/arterial/street tier tinting now lives in <Roads/>. */}
             <DistrictShells masterSeed={masterSeed} />
@@ -169,6 +191,9 @@ export function Scene() {
             <TileCullOverlay masterSeed={masterSeed} />
           </CityReveal>
         )}
+        {/* #87: marker pin above the selected building (renders null until a
+          selection exists; gated on cityReady so its lookup hits the warm cache). */}
+        {cityReady && <BuildingPin />}
         {/* old controller's store-based indicator; the drei bridge renders its own
           live one (tracks the camera-controls target with no throttle lag) */}
         {oldController && <FocalIndicator />}

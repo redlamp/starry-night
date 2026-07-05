@@ -192,6 +192,13 @@ export const DEFAULT_STARS = {
 //   curtainW— pane fill on those towers. 0.99 default keeps hairline mullions;
 //             exactly 1.0 turns lit floors into one continuous window (the
 //             full curtain look — opt-in because it reads as a neon tube).
+//   storefront — share of ELIGIBLE downtown buildings (>=4 floors, any
+//             archetype but warehouse/spire) that render a taller, brighter
+//             ground-floor storefront band (#86). Shader-only floor-0
+//             override — no gen change, gate1/cityGolden unaffected.
+//   storefrontHeight — storefront floor height as a multiple of a normal
+//             floor's height. 1.0 = no change; the remap is continuous at
+//             the seam so this never touches floors 1..rows-1's proportions.
 export const DEFAULT_WINDOW_AA = {
   edge: 1.1,
   // Window distance-wash LOD; header toggle in the LOD group. OFF by default
@@ -212,6 +219,8 @@ export const DEFAULT_WINDOW_AA = {
   stagger: 0.5,
   curtain: 0.3,
   curtainW: 0.99,
+  storefront: 0.7,
+  storefrontHeight: 1.7,
 };
 
 // Facade base-colour ranges (lightingGen.facadeColorFor): each building rolls
@@ -285,7 +294,7 @@ export const DEFAULT_HAZE = {
 };
 
 // Intro wake-up sequence defaults. Durations are the "Default" speed preset
-// (windows 240s / stars 360s); the panel's Fast preset drops both to 30s.
+// (windows 240s / stars 120s); the panel's Fast preset drops both to 30s.
 // Persisted via the settings registry so Reset/Save/Copy/Revert cover them.
 export const DEFAULT_INTRO = {
   progress: 0,
@@ -302,7 +311,11 @@ export const DEFAULT_INTRO = {
 export const DEFAULT_STAR_INTRO = {
   progress: 0,
   playing: false,
-  durationSec: 240,
+  // 240 -> 120 (user 2026-07-04): stars were coming in slow relative to the
+  // building-light wake (windows 240s, streetlights 60s). Half the duration
+  // lets the sky establish while the city keeps lighting up. The #77 boot
+  // boost still front-loads the wake before cityReady on top of this.
+  durationSec: 120,
   mode: "random" as "random" | "bright-first" | "horizon-first" | "zenith-first",
 };
 
@@ -353,6 +366,9 @@ export const DEFAULT_DEBUG = {
   // Air-route corridor overlay (#67 follow-up): 3D polyline of each seeded
   // flight corridor. Off by default — a debug aid, not scene art.
   showFlightRoutes: false,
+  // #89 helicopter patrol-route overlay (waypoint pads + transit legs) — a debug
+  // aid for spotting the (small, high/edge-positioned) helicopters. Off by default.
+  showHeliRoutes: false,
 };
 
 // Default wireframe stroke colour — a bright blue used where a group has no
@@ -368,6 +384,13 @@ export const DEBUG_WIRE_COLOR = "#4d9fff";
 // stays the same visual thickness on a low-rise and a spire.
 export const HIGHLIGHT_OUTLINE_COLOR = "#ffe9c4";
 export const HIGHLIGHT_OUTLINE_WIDTH_M = 2;
+
+// #87 click-to-select outline — a distinct COOL BLUE, clearly different from
+// the #69 hover cream above, so a click-selection reads differently from a
+// pointer hover even when both could hit the same building at once (the
+// select colour wins ties — see cityOutline's vColorMix). Shares the #69
+// outline's width knob (hh.outline) by design — no separate width setting.
+export const SELECT_OUTLINE_COLOR = "#4fc3ff";
 
 // Ambient traffic (research D): car head/tail-lights flowing along the roads.
 // On by default. `density` is the global car-count multiplier; highway/arterial/
@@ -388,10 +411,22 @@ export const DEFAULT_TRAFFIC = {
   lightSize: 1,
 };
 
-// Ambient departure corridor (#67 v1) — off-map airport anchor, 2-3 plane
-// slots. On by default; modeled on DEFAULT_TRAFFIC's enabled flag. v1 has no
-// other tunables (density/count are seed-baked, not live knobs).
-export const DEFAULT_FLIGHTS = { enabled: true };
+// Ambient departure/fly-by corridors (#67 v1/v1.5) — off-map anchors, a
+// handful of plane slots. On by default; modeled on DEFAULT_TRAFFIC's enabled
+// flag. Slot count/corridor placement are seed-baked, but the ANIMATION has
+// two live look settings (#67 follow-up, no regen — see lib/shaders/flights.ts):
+//   gapMin/gapMax — idle seconds between passes on the same route, seeded per
+//     plane uniformly within this range (uGapMin/uGapMax); both 0 reproduces
+//     the v1 always-flying continuous loop.
+//   deviation — 0..1 per-pass lateral/altitude wander off the baked corridor
+//     line (uFlightDeviation); 0 flies the exact same line every pass.
+export const DEFAULT_FLIGHTS = { enabled: true, gapMin: 8, gapMax: 30, deviation: 0.3 };
+
+// Helicopters (#89) — third air-transit class, rooftop-to-rooftop patrol
+// loops. On by default, modeled on DEFAULT_FLIGHTS' enabled flag. No live
+// look settings yet (loop shape/speed are seed-baked) — see
+// lib/seed/helicopters.ts.
+export const DEFAULT_HELICOPTERS = { enabled: true };
 
 // Streetlights along the road network. On by default; toggled from the Roads panel.
 // `size` scales the point sprite (×base 6 px); `brightness` scales emissive gain.

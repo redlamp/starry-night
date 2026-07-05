@@ -3,6 +3,7 @@
 import { Fragment, useState, useEffect } from "react";
 import {
   useSceneStore,
+  DEFAULT_FLIGHTS,
   RENDER_GROUPS,
   type RenderGroup,
   type RenderMode,
@@ -13,12 +14,13 @@ import { TIER_LABELS, tierKm } from "@/components/ui/cityTiers";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
-import { ValueSlider } from "@/components/ui/value-slider";
+import { RangeSlider, ValueSlider } from "@/components/ui/value-slider";
 import { HelpHint } from "@/components/ui/tooltip";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StreetlightControls } from "@/components/ui/RoadsPanel";
 import { readTileCull, TILE_LAYERS } from "@/lib/scene/tileCullDebug";
 import { SubGroup, ModeSelect } from "./shared";
+import { Plane, Helicopter } from "lucide-react";
 
 const CITY_SHAPE_MODES = ["auto", ...CITY_SHAPES] as const;
 const RENDER_GROUP_LABELS: Record<RenderGroup, string> = {
@@ -177,30 +179,72 @@ export function TrafficGroup() {
   );
 }
 
-// Flights — ambient departure corridor (#67), enable switch on header. Slot
-// count/corridor are seed-baked, not live knobs; the two spawn buttons +
-// route overlay below are debug aids (#67 follow-up), not look-and-feel
-// settings.
+// Flights — ambient departure/fly-by corridors (#67), enable switch on
+// header. Slot count/corridor placement are seed-baked, not live knobs, but
+// the ANIMATION has two live look settings (#67 follow-up): gap (time-
+// between-flights range) and deviation (per-pass route wander) — see
+// lib/shaders/flights.ts. The two spawn buttons + route overlay below remain
+// debug aids, not look-and-feel settings.
 export function FlightsGroup() {
   const enabled = useSceneStore((s) => s.flights.enabled);
+  const gapMin = useSceneStore((s) => s.flights.gapMin ?? DEFAULT_FLIGHTS.gapMin);
+  const gapMax = useSceneStore((s) => s.flights.gapMax ?? DEFAULT_FLIGHTS.gapMax);
+  const deviation = useSceneStore((s) => s.flights.deviation ?? DEFAULT_FLIGHTS.deviation);
   const setFlights = useSceneStore((s) => s.setFlights);
   const triggerFlightSpawn = useSceneStore((s) => s.triggerFlightSpawn);
   const showFlightRoutes = useSceneStore((s) => s.debug.showFlightRoutes);
   const setShowFlightRoutes = useSceneStore((s) => s.setShowFlightRoutes);
+  const showHeliRoutes = useSceneStore((s) => s.debug.showHeliRoutes);
+  const setShowHeliRoutes = useSceneStore((s) => s.setShowHeliRoutes);
+  const airborne = useSceneStore((s) => s.flightsAirborne);
+  const helicoptersEnabled = useSceneStore((s) => s.helicopters.enabled);
+  const setHelicopters = useSceneStore((s) => s.setHelicopters);
+  const triggerHeliSpawn = useSceneStore((s) => s.triggerHeliSpawn);
   return (
     <SubGroup
       label="Flights"
       action={
-        <Switch
-          checked={enabled}
-          onCheckedChange={(v) => setFlights({ enabled: v })}
-          title="Ambient plane layer on / off"
-        />
+        <div className="flex items-center gap-2">
+          {/* Planes in the air: B = big (airliner), S = small (light GA), plus
+              the helicopter count (0 until helicopters land). */}
+          <span
+            className="text-foreground/60 flex items-center gap-1 text-[10px] tabular-nums"
+            title="Planes in the air (B: airliner, S: light GA) + helicopters"
+          >
+            <Plane aria-hidden className="size-3" />
+            B:{airborne.airliner} S:{airborne.lightGA}
+            <Helicopter aria-hidden className="size-3" />
+            {airborne.heli}
+          </span>
+          <Switch
+            checked={enabled}
+            onCheckedChange={(v) => setFlights({ enabled: v })}
+            title="Ambient plane layer on / off"
+          />
+        </div>
       }
     >
       <p className="text-foreground/55 text-[11px]">
         One seeded departure corridor; airliner + light-GA classes read by light pattern + speed.
       </p>
+      <RangeSlider
+        label="Gap"
+        hint="Idle time between passes on the same route, in seconds; 0 keeps a plane on it constantly."
+        value={[gapMin, gapMax]}
+        min={0}
+        max={60}
+        step={1}
+        onChange={([lo, hi]) => setFlights({ gapMin: lo, gapMax: hi })}
+      />
+      <ValueSlider
+        label="Deviation"
+        hint="Per-pass lateral and altitude wander off the baked route; 0 flies the same line every time."
+        value={deviation}
+        min={0}
+        max={1}
+        step={0.05}
+        onChange={(v) => setFlights({ deviation: v })}
+      />
       {/* One-shot debug spawns — fire a plane now instead of waiting out the
           ambient ~40-90s loop. */}
       <div className="flex gap-2">
@@ -223,12 +267,37 @@ export function FlightsGroup() {
           Spawn Cessna
         </Button>
       </div>
+      <Button
+        size="xs"
+        variant="outline"
+        className="w-full"
+        onClick={() => triggerHeliSpawn()}
+        title="Spawn Helicopter"
+      >
+        Spawn Helicopter
+      </Button>
       <label className="flex cursor-pointer items-center justify-between gap-2 text-xs">
         <span className="text-foreground/70">Air Routes</span>
         <Switch
           checked={showFlightRoutes}
           onCheckedChange={setShowFlightRoutes}
           title="Air Routes"
+        />
+      </label>
+      <label className="flex cursor-pointer items-center justify-between gap-2 text-xs">
+        <span className="text-foreground/70">Heli Routes</span>
+        <Switch
+          checked={showHeliRoutes}
+          onCheckedChange={setShowHeliRoutes}
+          title="Heli Routes"
+        />
+      </label>
+      <label className="flex cursor-pointer items-center justify-between gap-2 text-xs">
+        <span className="text-foreground/70">Helicopters</span>
+        <Switch
+          checked={helicoptersEnabled}
+          onCheckedChange={(v) => setHelicopters({ enabled: v })}
+          title="Helicopters"
         />
       </label>
     </SubGroup>

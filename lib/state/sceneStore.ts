@@ -32,6 +32,7 @@ export type {
   Snv2Config,
   TurntableConfig,
   TweenRequest,
+  TopDownEntry,
   WindowRange,
   WindowProfile,
   BuildingTintMode,
@@ -67,8 +68,10 @@ export {
   DEBUG_WIRE_COLOR,
   HIGHLIGHT_OUTLINE_COLOR,
   HIGHLIGHT_OUTLINE_WIDTH_M,
+  SELECT_OUTLINE_COLOR,
   DEFAULT_TRAFFIC,
   DEFAULT_FLIGHTS,
+  DEFAULT_HELICOPTERS,
   DEFAULT_STREETLIGHTS,
   DEFAULT_LOD,
   DEFAULT_CITY_SHAPE,
@@ -100,6 +103,7 @@ import type {
   Snv2Config,
   TurntableConfig,
   TweenRequest,
+  TopDownEntry,
   WindowRange,
   WindowProfile,
   BuildingTintMode,
@@ -129,6 +133,7 @@ import {
   DEFAULT_DEBUG,
   DEFAULT_TRAFFIC,
   DEFAULT_FLIGHTS,
+  DEFAULT_HELICOPTERS,
   DEFAULT_STREETLIGHTS,
   DEFAULT_LOD,
   DEFAULT_CITY_SHAPE,
@@ -220,11 +225,14 @@ type AnySettingEntry =
   | SettingEntry<"turntable">
   | SettingEntry<"orbitRestore">
   | SettingEntry<"topDownTip">
+  | SettingEntry<"topDownEntry">
+  | SettingEntry<"topDownExiting">
   | SettingEntry<"intro">
   | SettingEntry<"starIntro">
   | SettingEntry<"debug">
   | SettingEntry<"traffic">
   | SettingEntry<"flights">
+  | SettingEntry<"helicopters">
   | SettingEntry<"streetlights">
   | SettingEntry<"lod">
   | SettingEntry<"cityShape">
@@ -294,6 +302,10 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "turntable", defaultValue: DEFAULT_TURNTABLE, persist: true },
   { key: "orbitRestore", defaultValue: null as SceneState["orbitRestore"], persist: false },
   { key: "topDownTip", defaultValue: 0, persist: false },
+  // Transient — the `t` hotkey's Top-down sweep state (#83), same bucket as orbitRestore/
+  // topDownTip: resetCamera clears it, but it never belongs in a Saved/Copied config.
+  { key: "topDownEntry", defaultValue: null as SceneState["topDownEntry"], persist: false },
+  { key: "topDownExiting", defaultValue: false as const, persist: false },
   { key: "intro", defaultValue: DEFAULT_INTRO, persist: true },
   { key: "starIntro", defaultValue: DEFAULT_STAR_INTRO, persist: true },
   // persist:false — debug view modes are transient inspection state (wireframe /
@@ -302,6 +314,7 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "debug", defaultValue: DEFAULT_DEBUG, persist: false },
   { key: "traffic", defaultValue: DEFAULT_TRAFFIC, persist: true },
   { key: "flights", defaultValue: DEFAULT_FLIGHTS, persist: true },
+  { key: "helicopters", defaultValue: DEFAULT_HELICOPTERS, persist: true },
   { key: "streetlights", defaultValue: DEFAULT_STREETLIGHTS, persist: true },
   { key: "lod", defaultValue: DEFAULT_LOD, persist: true },
   { key: "cityShape", defaultValue: DEFAULT_CITY_SHAPE, persist: true },
@@ -448,6 +461,26 @@ type SceneState = {
   pickArchetype: Archetype | null;
   pickInstance: number;
   setPickHover: (pickArchetype: Archetype | null, pickInstance: number) => void;
+  // #87 click-to-select: the STABLE building id (Building.id — not a
+  // frame-volatile draw-slot index like pickInstance above) of the single
+  // building the user clicked in the 3D view. Building position is immutable
+  // post-generation, so this survives #55 tile eviction/re-admission for
+  // free — see InstancedCity's stableIndex ride-along channel + selectScratch.
+  // Runtime tier only — never in SETTINGS_REGISTRY/SavedConfig/share codes.
+  // Cleared on regen, an empty-space click, and Escape.
+  selectedBuildingId: number | null;
+  setSelectedBuildingId: (id: number | null) => void;
+  // Inspect mode (user-facing, toggled by the Info button). When on, buildings
+  // highlight on hover and a click selects one (info panel + outline + pin);
+  // when off, pointer picking is inert. Turning it off clears any selection.
+  // Runtime tier only — not persisted/shared.
+  inspectMode: boolean;
+  setInspectMode: (on: boolean) => void;
+  // #87 focus: a one-shot request for the active orbit model to glide its pivot
+  // onto (x,y,z) at `dist` (Unity-F "frame + orbit the selected object"), then
+  // keep orbiting there. The model consumes + clears it. Runtime tier only.
+  focusRequest: { x: number; y: number; z: number; dist: number } | null;
+  setFocusRequest: (r: { x: number; y: number; z: number; dist: number } | null) => void;
   cameraTweenRequest: TweenRequest | null;
   // Projection model. We keep a single perspective camera under the hood; ortho
   // is implemented by overriding camera.projectionMatrix each frame using an
@@ -610,6 +643,16 @@ type SceneState = {
   // elevation-keyed tip so manual high-elevation orbit still avoids gimbal.
   topDownTip: number;
   setTopDownTip: (v: number) => void;
+  // Snapshot of the model + pose the `t` hotkey's Top-down sweep is tweening FROM (#83) —
+  // consumed by TopDownModel's exit tween to return there. null when top-down isn't active.
+  // Deliberately separate from orbitRestore (which feeds the older, still-present
+  // tweenOrbitTopDown/CameraTab path) — the two top-down concepts don't share state.
+  topDownEntry: TopDownEntry | null;
+  setTopDownEntry: (v: SceneState["topDownEntry"]) => void;
+  // True while TopDownModel's outro (exit tween) is playing. Set by the `t` hotkey via
+  // toggleTopDown when already in top-down; toggling it again mid-outro reverses the tween.
+  topDownExiting: boolean;
+  setTopDownExiting: (v: boolean) => void;
   // Streets-first city-planning layer visibility + readouts (Stage 1).
   // Gated in the UI behind the ?stage1=1 flag until the rewrite is default.
   cityPlanning: {
@@ -650,6 +693,7 @@ type SceneState = {
   setShowPinPlane: (v: boolean) => void;
   setWindowDebugView: (v: "final" | "atlas" | "field") => void;
   setShowFlightRoutes: (v: boolean) => void;
+  setShowHeliRoutes: (v: boolean) => void;
   // Organic city footprint (#14) — gen input; changing it regenerates the city.
   cityShape: CityShapeSetting;
   setCityShape: (cityShape: CityShapeSetting) => void;
@@ -696,6 +740,24 @@ type SceneState = {
   // convenience, not a look-and-feel setting.
   flightsSpawn: Record<FlightClass, number>;
   triggerFlightSpawn: (cls: FlightClass) => void;
+  // Live "planes/helicopters in the air" readout (#67, #89) — count of
+  // ambient aircraft currently airborne, tallied by Flights.tsx (airliner/
+  // lightGA) and Helicopters.tsx (heli) independently. setFlightsAirborne is
+  // a PARTIAL merge (not a full replace) so each component only ever writes
+  // its own key(s) and can't stomp the other's count. Transient: a display
+  // readout, never persisted.
+  flightsAirborne: { airliner: number; lightGA: number; heli: number };
+  setFlightsAirborne: (v: Partial<{ airliner: number; lightGA: number; heli: number }>) => void;
+  // Helicopters (#89) — third air-transit class, rooftop-to-rooftop patrol
+  // loops.
+  helicopters: typeof DEFAULT_HELICOPTERS;
+  setHelicopters: (patch: Partial<typeof DEFAULT_HELICOPTERS>) => void;
+  // Debug: one-shot helicopter spawn trigger (#89), same fire-once counter
+  // pattern as flightsSpawn — Helicopters.tsx watches it and rewrites the
+  // next reserved debug pool instance's phase on every increment. Never
+  // persisted / not in SETTINGS_REGISTRY.
+  heliSpawn: number;
+  triggerHeliSpawn: () => void;
   streetlights: typeof DEFAULT_STREETLIGHTS;
   setStreetlights: (patch: Partial<typeof DEFAULT_STREETLIGHTS>) => void;
   lod: typeof DEFAULT_LOD;
@@ -851,6 +913,10 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setOrbitRestore: (orbitRestore) => set({ orbitRestore }),
   topDownTip: 0,
   setTopDownTip: (topDownTip) => set({ topDownTip }),
+  topDownEntry: null,
+  setTopDownEntry: (topDownEntry) => set({ topDownEntry }),
+  topDownExiting: false,
+  setTopDownExiting: (topDownExiting) => set({ topDownExiting }),
   cityPlanning: {
     // Planning overlays are review aids, not part of the ambient screensaver —
     // the streets-first network still shapes the city, it just isn't drawn over
@@ -921,6 +987,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setShowPinPlane: (v) => set((s) => ({ debug: { ...s.debug, showPinPlane: v } })),
   setWindowDebugView: (v) => set((s) => ({ debug: { ...s.debug, windowView: v } })),
   setShowFlightRoutes: (v) => set((s) => ({ debug: { ...s.debug, showFlightRoutes: v } })),
+  setShowHeliRoutes: (v) => set((s) => ({ debug: { ...s.debug, showHeliRoutes: v } })),
   cityShape: DEFAULT_CITY_SHAPE,
   setCityShape: (cityShape) => set({ cityShape }),
   cityShapeScale: DEFAULT_CITY_SHAPE_SCALE,
@@ -958,6 +1025,12 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   flightsSpawn: { airliner: 0, lightGA: 0 },
   triggerFlightSpawn: (cls) =>
     set((s) => ({ flightsSpawn: { ...s.flightsSpawn, [cls]: s.flightsSpawn[cls] + 1 } })),
+  flightsAirborne: { airliner: 0, lightGA: 0, heli: 0 },
+  setFlightsAirborne: (v) => set((s) => ({ flightsAirborne: { ...s.flightsAirborne, ...v } })),
+  helicopters: DEFAULT_HELICOPTERS,
+  setHelicopters: (patch) => set((s) => ({ helicopters: { ...s.helicopters, ...patch } })),
+  heliSpawn: 0,
+  triggerHeliSpawn: () => set((s) => ({ heliSpawn: s.heliSpawn + 1 })),
   streetlights: DEFAULT_STREETLIGHTS,
   setStreetlights: (patch) => set((s) => ({ streetlights: { ...s.streetlights, ...patch } })),
   lod: DEFAULT_LOD,
@@ -993,6 +1066,13 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   pickArchetype: null,
   pickInstance: -1,
   setPickHover: (pickArchetype, pickInstance) => set({ pickArchetype, pickInstance }),
+  selectedBuildingId: null,
+  setSelectedBuildingId: (selectedBuildingId) => set({ selectedBuildingId }),
+  inspectMode: false,
+  setInspectMode: (on) =>
+    set(on ? { inspectMode: true } : { inspectMode: false, selectedBuildingId: null }),
+  focusRequest: null,
+  setFocusRequest: (focusRequest) => set({ focusRequest }),
   resetCamera: () => {
     // Derive reset patch from the registry: every entry goes back to its
     // hardcoded defaultValue. Runtime readouts (cityPlanning.topologyKind /

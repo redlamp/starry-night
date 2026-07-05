@@ -38,8 +38,24 @@ import type { CityTier } from "@/lib/seed/topology";
 // hook can decide between sync-now and defer.
 const warmedKeys = new Set<string>();
 
-function cityKey(seed: string, shape: CityShapeSetting, scale: number, tier: CityTier): string {
-  return `${seed}::${shape}::${scale}::${tier}`;
+// #70: the ready gate always warms the city's MAX extent — crop
+// (`cityShapeScale`) is a render-only reveal/hide (InstancedCity partitions at
+// scale 1 and folds the live crop into its per-frame tile cull), never a
+// different city, so it is no longer part of what this hook warms or keys on.
+// Before this, a crop notch changed the key below, flipping `ready`
+// false→true — which unmounted/remounted every scene consumer under
+// `{cityReady && (...)}` and replayed the full intro cascade on every notch.
+// Consumers that still read the LIVE (cropped) scale directly when calling
+// generateCity themselves — Roads/Streetlights/Traffic/Beacons/PlanView/etc.,
+// see wiki/notes/plan-overnight-agents-2026-07-05.md #70's ~10-consumer count
+// — sit outside this gate's warmed key and may pay their own synchronous
+// generateCity() cost on a crop change; unifying that is the "split
+// cityShapeScale into user-crop vs perf-radius" work the plan doc flags as a
+// longer-horizon follow-up (Stage 1 only covers InstancedCity + this gate).
+const MAX_SCALE = 1;
+
+function cityKey(seed: string, shape: CityShapeSetting, tier: CityTier): string {
+  return `${seed}::${shape}::${tier}`;
 }
 
 // Run `cb` off the mount-critical path: prefer requestIdleCallback (yields until
@@ -78,16 +94,19 @@ function scheduleOffCritical(cb: () => void): () => void {
  * Warms the seeded city-generation cache off the mount-critical main thread and
  * reports when scene consumers may generate synchronously.
  *
+ * Takes `shape` but not `scale` (#70) — the gate always warms the city's MAX
+ * extent; the crop slider no longer flips `ready` false→true (which used to
+ * unmount/remount every scene consumer and replay the intro cascade on every
+ * crop notch — see MAX_SCALE above).
+ *
  * @returns `ready` — false until the cold `generateCity` has run for this
- *   (seed, shape, scale); true once the cache is warm (or immediately if it
- *   already was). While false, consumers should render nothing; once true their
- *   own seeded generators hit the warm cache at ~0ms.
+ *   (seed, shape, tier, sketch, deviation, density); true once the cache is
+ *   warm (or immediately if it already was). While false, consumers should
+ *   render nothing; once true their own seeded generators hit the warm cache
+ *   at ~0ms (for anything keyed at the max extent — see MAX_SCALE above for
+ *   consumers that still read a live, possibly-cropped scale directly).
  */
-export function useGeneratedCity(
-  seed: string,
-  shape: CityShapeSetting,
-  scale: number,
-): { ready: boolean } {
+export function useGeneratedCity(seed: string, shape: CityShapeSetting): { ready: boolean } {
   // Tier (#58) joins the key so a size switch re-warms: the store subscription
   // has already pointed the generators at the new extent by the time we run.
   const citySize = useSceneStore((s) => s.citySize);
@@ -98,7 +117,7 @@ export function useGeneratedCity(
   const deviation = useSceneStore((s) => s.fieldDeviation);
   // Population profile (#49) — a different profile is a different city.
   const densityProfile = useSceneStore((s) => s.densityProfile);
-  const key = `${cityKey(seed, shape, scale, citySize)}::${sketchKey()}::${deviation}::${densityProfile.centres}:${densityProfile.spread}:${densityProfile.shoulder}:${densityProfile.satellite}`;
+  const key = `${cityKey(seed, shape, citySize)}::${sketchKey()}::${deviation}::${densityProfile.centres}:${densityProfile.spread}:${densityProfile.shoulder}:${densityProfile.satellite}`;
   void citySketch; // the key reads the module registry; this subscription triggers the re-render
 
   // Track which key the current `ready` value belongs to, so a key change is
@@ -109,7 +128,8 @@ export function useGeneratedCity(
   const [state, setState] = useState(() => ({ key, ready: warmedKeys.has(key) }));
   let ready = state.ready;
   if (state.key !== key) {
-    // Seed / shape / scale changed this render: re-derive readiness immediately.
+    // Seed / shape / tier / sketch / deviation / density changed this render
+    // (NOT scale, #70 — see MAX_SCALE above): re-derive readiness immediately.
     // A previously-warmed key reads ready at once; a new key starts not-ready and
     // the effect below schedules the warm-up.
     ready = warmedKeys.has(key);
@@ -128,7 +148,7 @@ export function useGeneratedCity(
     const primeFromBundle = (bundle: CityBundle) => {
       // The store subscriptions have already mirrored tier / sketch / deviation /
       // density into the gen modules, so the prime keys match this bundle.
-      primeCityCaches(seed, shape, scale, bundle);
+      primeCityCaches(seed, shape, MAX_SCALE, bundle);
       finish();
     };
     // Sync fallback — the pre-#59 path: one cold generateCity on an idle
@@ -136,7 +156,7 @@ export function useGeneratedCity(
     const startSyncFallback = () =>
       scheduleOffCritical(() => {
         if (cancelled) return;
-        generateCity(seed, shape, scale); // warms cityGen's cache + the shared field
+        generateCity(seed, shape, MAX_SCALE); // warms cityGen's cache + the shared field
         genCycleEnd("sync");
         finish();
       });
@@ -150,7 +170,7 @@ export function useGeneratedCity(
     // switch can never prime a stale bundle.
     mark("gen:start");
     genCycleStart(); // per-cycle timer (fires every seed/shape/tier change)
-    const fp = fingerprintCurrent(seed, shape, scale);
+    const fp = fingerprintCurrent(seed, shape, MAX_SCALE);
     void (async () => {
       const cached = await getBundle(fp); // (2)
       if (cancelled) return;
@@ -162,7 +182,7 @@ export function useGeneratedCity(
       }
 
       if (cancelled) return; // (3)
-      const viaWorker = generateCityInWorker(seed, shape, scale, citySize);
+      const viaWorker = generateCityInWorker(seed, shape, MAX_SCALE, citySize);
       if (viaWorker) {
         try {
           const bundle = await viaWorker;
@@ -183,7 +203,7 @@ export function useGeneratedCity(
       cancelled = true;
       cancelFallback?.();
     };
-  }, [key, seed, shape, scale, citySize]);
+  }, [key, seed, shape, citySize]);
 
   return { ready };
 }
