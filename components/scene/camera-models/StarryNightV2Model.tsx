@@ -727,13 +727,25 @@ export function StarryNightV2Model() {
         c.getTarget(_tgt);
         const groundR = CITY_TIERS[useSceneStore.getState().citySize] + GROUND_APRON_M;
         const cl = clampToDisc(_tgt.x + _delta.x, _tgt.z + _delta.z, groundR, _panFocal);
-        const ce = clampToDisc(
-          _eye.x + _delta.x,
-          _eye.z + _delta.z,
-          groundR * PAN_EYE_REACH_MULT,
-          _panEye,
-        );
-        void c.setLookAt(ce.x, _eye.y, ce.z, cl.x, _tgt.y, cl.z, false);
+        if (useSceneStore.getState().projection === "orthographic") {
+          // Ortho: keep the pan RIGID — shift the eye by the SAME clamped delta as the focal. The
+          // eye is only a parallel-projection park value here, so decoupling it (backing it out to
+          // the larger disc) would swing the eye->focal DIRECTION and tilt the view instead of doing
+          // anything useful. Just stop at the ground edge.
+          const adx = cl.x - _tgt.x;
+          const adz = cl.z - _tgt.z;
+          void c.setLookAt(_eye.x + adx, _eye.y, _eye.z + adz, cl.x, _tgt.y, cl.z, false);
+        } else {
+          // Perspective: decouple — the eye may back out past the ground disc (to
+          // PAN_EYE_REACH_MULT × the radius) to view the "snow globe" from outside, focal pinned.
+          const ce = clampToDisc(
+            _eye.x + _delta.x,
+            _eye.z + _delta.z,
+            groundR * PAN_EYE_REACH_MULT,
+            _panEye,
+          );
+          void c.setLookAt(ce.x, _eye.y, ce.z, cl.x, _tgt.y, cl.z, false);
+        }
       } else if (drag === "orbit") {
         // Reveal the pivot pin the moment the drag becomes "real" (same threshold as the cursor) — a
         // click or double-click never moves far enough, so the pin never flashes on a zoom-in.

@@ -198,16 +198,26 @@ function panRig(c: CameraControlsImpl, dx: number, dz: number): void {
   c.getPosition(_camPos);
   const r = CITY_TIERS[useSceneStore.getState().citySize] + GROUND_APRON_M;
   clampToDisc(_tgt.x + dx, _tgt.z + dz, r, _clamped);
-  clampToDisc(_camPos.x + dx, _camPos.z + dz, r * PAN_EYE_REACH_MULT, _clampedEye);
-  void c.setLookAt(
-    _clampedEye.x,
-    _camPos.y,
-    _clampedEye.z,
-    _clamped.x,
-    _tgt.y,
-    _clamped.z,
-    false,
-  );
+  if (useSceneStore.getState().projection === "orthographic") {
+    // Ortho: rigid pan — shift the eye by the focal's clamped delta. The eye is a parallel-
+    // projection park value here, so decoupling it would swing the eye->focal direction and tilt
+    // the view rather than back out usefully; just stop at the ground edge.
+    const ax = _clamped.x - _tgt.x;
+    const az = _clamped.z - _tgt.z;
+    void c.setLookAt(_camPos.x + ax, _camPos.y, _camPos.z + az, _clamped.x, _tgt.y, _clamped.z, false);
+  } else {
+    // Perspective: decouple the eye to the larger disc so it can back out past the ground.
+    clampToDisc(_camPos.x + dx, _camPos.z + dz, r * PAN_EYE_REACH_MULT, _clampedEye);
+    void c.setLookAt(
+      _clampedEye.x,
+      _camPos.y,
+      _clampedEye.z,
+      _clamped.x,
+      _tgt.y,
+      _clamped.z,
+      false,
+    );
+  }
 }
 
 // Near-horizon pan limit (ported from camera-lab CustomOrbitControls.doPan, 2026-06-21). A
