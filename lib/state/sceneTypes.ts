@@ -91,6 +91,20 @@ export interface TurntableConfig {
 
 export type TweenRequest = { to: CameraIntent; durationMs: number };
 
+// Snapshot of the model + pose that was active before the `t` hotkey swept into
+// Top-down (#83) — consumed on exit to tween back to the same model and pose
+// (map/snv2/fly exactly; drift/turntable/googleearth/dreimap/dreicamera just seed
+// their azimuth from `orbit` and resume their own motion). See TopDownModel.tsx.
+export type TopDownEntry = {
+  modelId: CameraModelId;
+  orbit: Pick<OrbitConfig, "azimuthDeg" | "elevationDeg" | "radius" | "centerX" | "centerZ" | "lookAtY">;
+  position: Vec3;
+  lookAt: Vec3;
+  fov: number;
+  orthoSize: number;
+  paused: boolean;
+};
+
 // Per-archetype window glass-to-cell fraction. Width AND height are
 // per-building RANGES: each building rolls ONE seeded value per dimension
 // (independent rolls) inside [min, max], and every window on that building

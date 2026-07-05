@@ -11,14 +11,38 @@ import {
   type RenderGroup,
   type RenderMode,
 } from "@/lib/state/sceneStore";
-import { maxHalfExtent } from "@/lib/seed/topology";
+import { maxHalfExtent, CITY_TIERS, DEFAULT_CITY_TIER } from "@/lib/seed/topology";
+import { resolveCityShape, displayedRadius } from "@/lib/seed/cityShape";
 import { getCameraModelMeta } from "@/lib/scene/cameraModelCatalog";
-import type { CameraModelId } from "@/lib/state/sceneStore";
+import type { CameraModelId, Vec3 } from "@/lib/state/sceneStore";
 
 // Apply a model's transport default (Map paused, Drift/Turntable playing) on a
 // user-initiated switch — mirrors the selector's pickCamera. See catalog.startsPaused.
 function applyTransportDefault(id: CameraModelId) {
   useSceneStore.getState().setOrbitPaused(getCameraModelMeta(id).startsPaused ?? false);
+}
+
+// #56 — camera resting poses should track the DISPLAYED radius (size tier × crop),
+// not the fixed look-scale the DEFAULT_* camera constants were hand-tuned at: today
+// every default is `constant × CITY_SCALE`, frozen at the old single-size era, so a
+// Truck Stop and a Metropolis boot to the same distance. REFERENCE_HALF_EXTENT is
+// the tier DEFAULT_CITY_SIZE was authored at, so cropFollowScale() is exactly 1.0
+// until the tier or crop actually moves (byte-identical at current defaults).
+const REFERENCE_HALF_EXTENT: number = CITY_TIERS[DEFAULT_CITY_TIER];
+
+// FRAMING-TIME ONLY: call this when establishing a resting pose (mount, Reset /
+// Default / Home, top-down entry) — NEVER in a per-frame hook or reactive selector.
+// AdaptiveQuality.stepCrop() steps cityShapeScale live for performance; a live
+// binding here would dolly the resting camera on every fps-driven crop nudge (the
+// same lesson as #84's restPerspK freeze). DEFAULT_ORBIT / DEFAULT_ORTHO_SIZE /
+// DEFAULT_PERSP_RADIUS stay plain constants (functionizing them breaks Settings
+// Reset/Revert) — multiply by this at each consumption site instead.
+export function cropFollowScale(): number {
+  const s = useSceneStore.getState();
+  return (
+    displayedRadius(resolveCityShape(s.cityShape, s.masterSeed), s.cityShapeScale) /
+    REFERENCE_HALF_EXTENT
+  );
 }
 
 // Shared camera-mode logic — the single source of truth for the Fly / Orbit /
@@ -201,13 +225,52 @@ export function setCameraTab(tab: CameraTab) {
   else enterTopDownMode();
 }
 
-// `t` hotkey: toggle the Top-down camera MODEL on/off (back to Map when leaving).
+// `t` hotkey: tween into the Top-down camera MODEL along the shortest arc, and tween back
+// out to whichever model + pose was active before (#83). The actual sweep animation lives
+// in TopDownModel (CameraModelHost unmounts/remounts on cameraModel change, so it can't
+// live here) — this only snapshots the outgoing model/pose, does the mode/model switch
+// that mounts TopDownModel, and — once already mounted — toggles the outro.
 export function toggleTopDown() {
   const s = useSceneStore.getState();
+  if (s.cameraModel === "topdown") {
+    // Already in top-down: toggle the outro. Pressing `t` again mid-outro reverses it
+    // (TopDownModel plays the same tween the other way instead of restarting one).
+    s.setTopDownExiting(!s.topDownExiting);
+    return;
+  }
+  // Snapshot the model + pose we're leaving. position/lookAt are reconstructed from
+  // cameraLive — this is a plain module with no live camera ref — using the same
+  // convention as snapIntentToLive (10 units ahead of the camera along its facing).
+  const live = s.cameraLive;
+  const pos = live.position;
+  const yaw = live.rotation[1];
+  const pitch = live.rotation[0];
+  const dist = 10;
+  const lookAt: Vec3 = [
+    pos[0] - Math.sin(yaw) * Math.cos(pitch) * dist,
+    pos[1] + Math.sin(pitch) * dist,
+    pos[2] - Math.cos(yaw) * Math.cos(pitch) * dist,
+  ];
+  s.setTopDownEntry({
+    modelId: s.cameraModel,
+    orbit: {
+      azimuthDeg: s.orbit.azimuthDeg,
+      elevationDeg: s.orbit.elevationDeg,
+      radius: s.orbit.radius,
+      centerX: s.orbit.centerX,
+      centerZ: s.orbit.centerZ,
+      lookAtY: s.orbit.lookAtY,
+    },
+    position: pos,
+    lookAt,
+    fov: live.fov,
+    orthoSize: s.orthoSize,
+    paused: s.orbitPaused,
+  });
+  s.setTopDownExiting(false); // defensive: guarantees a fresh mount never reads a stale outro flag
   s.setCameraMode("orbit");
-  const next = s.cameraModel === "topdown" ? "map" : "topdown";
-  s.setCameraModel(next);
-  applyTransportDefault(next);
+  s.setCameraModel("topdown");
+  applyTransportDefault("topdown");
 }
 
 // `f` hotkey: toggle the Fly camera MODEL on/off (back to Map when leaving).
@@ -232,7 +295,8 @@ export function tweenOrbitToDefault() {
   if (s.cameraMode !== "orbit") s.setCameraMode("orbit");
   s.setOrbitPaused(true); // default orbit is the still / paused framing — auto-orbit is off by default
   s.setOrbit({ lookAtY: DEFAULT_ORBIT.lookAtY, periodSec: DEFAULT_ORBIT.periodSec });
-  tweenOrbitTowards(DEFAULT_ORBIT.elevationDeg, DEFAULT_ORBIT.radius, DEFAULT_ORTHO_SIZE);
+  const k = cropFollowScale(); // #56 — read once, establishing this resting pose
+  tweenOrbitTowards(DEFAULT_ORBIT.elevationDeg, DEFAULT_ORBIT.radius * k, DEFAULT_ORTHO_SIZE * k);
 }
 
 // The single in-flight projection tween (perspective ⇄ ortho blend). Killed before a new one
@@ -246,7 +310,8 @@ let homeTween: gsap.core.Tween | null = null;
 // shortest-way + elevation), position (orbit centre + focal height), framing (radius / orthoSize /
 // fov) AND projection (morph back to the default) all together. Lands paused (auto-orbit is off by
 // default). (user 2026-06-16)
-const HOME_TWEEN_SEC = 1.6;
+// Exported so TopDownModel's entry/exit sweep (#83) reuses the same tween feel.
+export const HOME_TWEEN_SEC = 1.6;
 
 export function tweenOrbitToHome() {
   const s = useSceneStore.getState();
@@ -259,8 +324,9 @@ export function tweenOrbitToHome() {
   // the home tween then owns radius and lands it on the DEFAULT projection's default distance.
   projTween?.kill();
   if (s.projection !== DEFAULT_PROJECTION) s.setProjection(DEFAULT_PROJECTION);
+  const k = cropFollowScale(); // #56 — read once, establishing this resting pose
   const targetRadius =
-    DEFAULT_PROJECTION === "orthographic" ? DEFAULT_ORBIT.radius : DEFAULT_PERSP_RADIUS;
+    (DEFAULT_PROJECTION === "orthographic" ? DEFAULT_ORBIT.radius : DEFAULT_PERSP_RADIUS) * k;
   const targetBlend = DEFAULT_PROJECTION === "orthographic" ? 1 : 0;
   const o = s.orbit;
   // Shortest-way azimuth delta so the reset never spins the long way round.
@@ -282,7 +348,7 @@ export function tweenOrbitToHome() {
     az: o.azimuthDeg + dAz,
     el: DEFAULT_ORBIT.elevationDeg,
     r: targetRadius,
-    os: DEFAULT_ORTHO_SIZE,
+    os: DEFAULT_ORTHO_SIZE * k,
     ly: DEFAULT_ORBIT.lookAtY,
     fov: DEFAULT_INTENT.fov,
     tip: 0,
@@ -321,8 +387,8 @@ const PROJECTION_TWEEN_DURATION = 1.0;
 // the live radius whenever a mode is left, so toggling away and back restores the distance
 // that mode was last at.
 const rememberedRadius: Record<"perspective" | "orthographic", number> = {
-  perspective: DEFAULT_PERSP_RADIUS,
-  orthographic: DEFAULT_ORBIT.radius,
+  perspective: DEFAULT_PERSP_RADIUS * cropFollowScale(),
+  orthographic: DEFAULT_ORBIT.radius * cropFollowScale(),
 };
 
 // Projection swap (perspective ⇄ orthographic) — shared by the Camera panel's projection
@@ -336,9 +402,25 @@ const rememberedRadius: Record<"perspective" | "orthographic", number> = {
 export function tweenProjectionTo(target: "perspective" | "orthographic") {
   const s = useSceneStore.getState();
   if (s.projection === target) return;
-  // Remember where the mode we're leaving sat, then slide to the target mode's distance.
-  rememberedRadius[s.projection] = s.orbit.radius;
-  const targetRadius = rememberedRadius[target];
+  // Remember where the mode we're leaving sat, then slide to the target mode's distance —
+  // EXCEPT in top-down (#84). There the camera is pinned overhead, fit to the city, and does
+  // NOT dolly on a projection toggle: orbit.radius is a K-matched *report* of the fixed overhead
+  // distance (D = orthoSize / tan(fov/2), ~16.8k at the default tier), not a dolly to slide.
+  // Sliding it toward the orbit-model remembered distance (~4.8k) drags ProjectionBlender's
+  // focal-plane distance `d` off the real, unmoving camera→city distance, so the framing bridge
+  // holds the (now empty) focal plane invariant while the actual city — sitting at the pinned
+  // distance — breathes by D/d. It only bites the FIRST toggle: after one, rememberedRadius has
+  // been overwritten with the top-down distance, so later toggles no longer slide. Hold the radius
+  // put here, and leave rememberedRadius (the orbit dolly memory) untouched so a later orbit toggle
+  // isn't dragged out to the top-down height.
+  const inTopDown = s.cameraModel === "topdown";
+  let targetRadius: number;
+  if (inTopDown) {
+    targetRadius = s.orbit.radius;
+  } else {
+    rememberedRadius[s.projection] = s.orbit.radius;
+    targetRadius = rememberedRadius[target];
+  }
   s.setProjection(target);
   // Start from the LIVE blend + radius (mid-tween if interrupted), not a stale snapshot.
   projTween?.kill();

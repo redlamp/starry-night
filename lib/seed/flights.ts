@@ -36,6 +36,22 @@ import { CITY_CENTER, maxHalfExtent } from "./topology";
 // and independently seeded per corridor so crossing traffic reads at
 // different heights as well as different angles.
 //
+// Fly-by altitude is CLASS-AWARE (#67 follow-up, user 2026-07-04, superseding
+// an earlier pure-centrality pass): the actual problem was never "traffic
+// near the centre" — it was a big plane low over downtown. A light GA
+// (Cessna-class) buzzing near/over the centre at a few hundred metres reads
+// fine; an AIRLINER doing the same looms right over the towers (~300-380m —
+// barely cleared at the old flat 400-900m band). So a whole fly-by CORRIDOR
+// is now one class (every slot that rides it matches), and altitude follows
+// that class:
+//   - airliner fly-bys fly HIGH everywhere (floor ~800m even at the disc
+//     edge) and get an extra centrality lift toward ~1300-1400m for routes
+//     whose closest approach nears the centre — never low over downtown.
+//   - light-GA fly-bys stay LOW (~300-700m) with no centrality lift — they
+//     may legitimately pass near/over the centre at that altitude.
+// Both bands carry their own seeded jitter/spread for variety. The departure
+// corridor is untouched (still airliner, still climbing off the airport).
+//
 // Corridor maths (GH #67 design comment):
 //   - airport = azimuth + distance rolled just past the ground disc edge
 //     (Ground.tsx:22 GROUND_APRON_M=200), 2-6 km out. Never rendered.
@@ -61,12 +77,22 @@ export type Corridor = {
   // different lengths and therefore different fade fractions.
   fadeFrac: number;
   kind: "departure" | "flyby"; // v2 may still add "arrival" on the reciprocal heading
+  // Fly-by only: every slot on this corridor rolls THIS class, so the
+  // corridor's baked altitude (class-aware, see the fly-by comment above)
+  // always matches the plane actually flying it. Undefined on the departure
+  // corridor, whose slots keep the original independent per-slot class coin.
+  cls?: FlightClass;
 };
 
 export type FlightSlot = {
   corridor: number; // index into FlightsData.corridors
-  phase: number; // 0..1 (fract(uTime*speedFrac+phase) — see lib/shaders/flights.ts)
-  speedFrac: number; // segment-fractions per second (mirrors traffic's aSpeed)
+  // 0..1, this slot's offset into its transit+gap cycle (see uGapMin/uGapMax
+  // and the per-plane gap hash keyed off this same phase, lib/shaders/flights.ts).
+  phase: number;
+  // Seconds to cross the segment (segLen/speed) at this slot's rolled speed.
+  // The shader adds a LIVE per-plane gap on top (uGapMin/uGapMax) — this is
+  // baked transit time only, not the full cycle.
+  transitSec: number;
   cls: FlightClass;
 };
 
@@ -92,7 +118,10 @@ const CORRIDOR_FADE_M = 500;
 const CORRIDOR_FAR_MARGIN_M = 2000;
 const GLIDE_DEG_MIN = 3;
 const GLIDE_DEG_MAX = 4;
-const AIRLINER_SHARE = 0.55; // seeded per-slot coin, every slot on every corridor
+// Airliner-vs-GA coin, shared by two different rolls: per fly-by CORRIDOR
+// (#67 follow-up — the whole route is one class) and per departure SLOT
+// (unchanged — small planes share the runway too).
+const AIRLINER_SHARE = 0.55;
 // The runway axis is aimed to pass over the OUTSKIRTS, not dead centre — a
 // seeded perpendicular offset off the airport->centre line, in the requested
 // 1.5-3.5 km periphery band. Capped to 0.75*discEdge at build time so the axis
@@ -103,18 +132,30 @@ const RUNWAY_AIM_OFFSET_MIN_M = 1500;
 const RUNWAY_AIM_OFFSET_MAX_M = 3500;
 
 // Fly-by corridors (#67 multi-route follow-up): no airport, level cruise,
-// crossing traffic at varied headings/altitudes. Count is seeded 2-4; the
-// altitude band sits above the departure corridor's low/climbing end and well
-// under the star shell (sceneDefaults.ts — 6400 m radius).
+// crossing traffic at varied headings/altitudes. Count is seeded 2-4; both
+// class altitude bands sit well under the star shell (sceneDefaults.ts —
+// 6400 m radius).
 const FLYBY_COUNT_MIN = 2;
 const FLYBY_COUNT_MAX = 4; // inclusive
-const FLYBY_ALT_MIN_M = 400;
-const FLYBY_ALT_MAX_M = 900;
+// Airliner fly-by altitude (#67 follow-up): a base floor that alone already
+// clears the towers at the disc edge, plus a centrality bonus (scaled by
+// `closeness`, 1 at dead-centre -> 0 at the edge) so routes nearer the centre
+// fly higher still, plus a seeded jitter for variety.
+const FLYBY_ALT_AIRLINER_EDGE_M = 800;
+const FLYBY_ALT_AIRLINER_CENTER_BONUS_M = 550; // -> ~1350m at dead-centre
+const FLYBY_ALT_AIRLINER_JITTER_M = 150;
+// Light-GA fly-by altitude: a flat low band, no centrality coupling — a small
+// plane reads fine near/over the centre at these heights.
+const FLYBY_ALT_GA_MIN_M = 300;
+const FLYBY_ALT_GA_MAX_M = 700;
 // Signed lateral offset (fraction of discEdge) for a fly-by's closest
 // approach to the centre — wider AND signed vs. the departure's
 // periphery-only band, so routes vary from near-overhead downtown to grazing
 // the edge. Capped under 1 so every fly-by still crosses a real chord of the
-// far circle (never a vanishing/tangent line).
+// far circle (never a vanishing/tangent line). Safety near the centre comes
+// from the class-aware altitude above, not from spatial spreading — a fly-by
+// is free to pass dead-centre; a light-GA one is fine there, and an airliner
+// one is already lifted high.
 const FLYBY_OFFSET_MAX_FRAC = 0.85;
 
 // Real-world cruise speeds for the two v1 classes (~140-160 kt airliner
@@ -215,6 +256,9 @@ export function buildFlights(masterSeed: string): FlightsData {
   // + signed lateral offset off the centre for its closest approach P0, then
   // axisCircleRoots solves both endpoints in one call (P0 is already the
   // perpendicular foot, so the roots come out as +-sqrt(rFar^2 - offset^2)).
+  // Class is now rolled PER CORRIDOR (not per slot) so altitude — which is
+  // class-aware, see the fly-by comment above — always matches the plane
+  // actually flying the route.
   const flybyCount = FLYBY_COUNT_MIN + Math.floor(rng() * (FLYBY_COUNT_MAX - FLYBY_COUNT_MIN + 1));
   const flybyCorridors: Corridor[] = [];
   for (let i = 0; i < flybyCount; i++) {
@@ -225,13 +269,23 @@ export function buildFlights(masterSeed: string): FlightsData {
     const p0x = CITY_CENTER.x - dZ * offset; // perpendicular to (dX,dZ), same rotation as perpX/perpZ above
     const p0z = CITY_CENTER.z + dX * offset;
     const [s0, s1] = axisCircleRoots(p0x, p0z, dX, dZ, rFar);
-    const altitude = FLYBY_ALT_MIN_M + rng() * (FLYBY_ALT_MAX_M - FLYBY_ALT_MIN_M);
+    const flybyCls: FlightClass = rng() < AIRLINER_SHARE ? "airliner" : "lightGA";
+    // closeness: 1 at dead-centre, 0 at the disc edge — only the airliner
+    // band uses it (the centrality LIFT); GA ignores it (flat low band).
+    const closeness = 1 - Math.min(1, Math.abs(offset) / discEdge);
+    const altitude =
+      flybyCls === "airliner"
+        ? FLYBY_ALT_AIRLINER_EDGE_M +
+          closeness * FLYBY_ALT_AIRLINER_CENTER_BONUS_M +
+          rng() * FLYBY_ALT_AIRLINER_JITTER_M
+        : FLYBY_ALT_GA_MIN_M + rng() * (FLYBY_ALT_GA_MAX_M - FLYBY_ALT_GA_MIN_M);
     const flybyLen = s1 - s0;
     flybyCorridors.push({
       aA: [p0x + dX * s0, altitude, p0z + dZ * s0],
       aB: [p0x + dX * s1, altitude, p0z + dZ * s1],
       fadeFrac: Math.min(0.3, CORRIDOR_FADE_M / flybyLen),
       kind: "flyby",
+      cls: flybyCls,
     });
   }
 
@@ -239,19 +293,21 @@ export function buildFlights(masterSeed: string): FlightsData {
 
   // Slots, spread across every corridor — a few each (#67 multi-route
   // follow-up), aiming ~5-8 planes total rather than piling them onto one
-  // route. Each corridor independently rolls 1-2 slots; class is a per-slot
-  // coin (55% airliner) — no longer pinned to specific slot indices now that
-  // variety comes from having several routes instead of one.
+  // route. Each corridor independently rolls 1-2 slots. Fly-by slots all take
+  // their corridor's pre-rolled class (see above, so altitude always matches
+  // the plane); the departure corridor has no fixed class, so its slots keep
+  // the original independent per-slot coin (55% airliner) — small planes
+  // legitimately share the same runway.
   const slots: FlightSlot[] = [];
   for (let c = 0; c < corridors.length; c++) {
     const len = corridorLength(corridors[c]);
     const slotsHere = 1 + (rng() < 0.5 ? 1 : 0);
     for (let i = 0; i < slotsHere; i++) {
-      const cls: FlightClass = rng() < AIRLINER_SHARE ? "airliner" : "lightGA";
+      const cls: FlightClass = corridors[c].cls ?? (rng() < AIRLINER_SHARE ? "airliner" : "lightGA");
       // Per-slot speed jitter (mirrors traffic's aSpeed jitter): keeps loop
       // periods off a clean ratio so planes don't pulse in lockstep.
       const speed = CLASS_SPEED[cls] * (0.9 + rng() * 0.2);
-      slots.push({ corridor: c, phase: rng(), speedFrac: speed / len, cls });
+      slots.push({ corridor: c, phase: rng(), transitSec: len / speed, cls });
     }
   }
 

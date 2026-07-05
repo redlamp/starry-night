@@ -159,13 +159,20 @@ const _camUp = new THREE.Vector3();
 const _camFwd = new THREE.Vector3();
 const _camWorld = new THREE.Vector3();
 
+// How far past the ground disc the EYE may travel when panning, as a multiple of the ground-disc
+// radius — keeps the aim on the ground but lets the camera back out to view the "snow globe" from
+// outside. Mirrors StarryNightV2Model's PAN_EYE_REACH_MULT.
+const PAN_EYE_REACH_MULT = 2.0;
+
 // Ground bounds = the ground disc (Ground.tsx): centre CITY_CENTER, radius = the
 // current tier's half-extent + apron. The focal/target is clamped to it so a pan
 // or zoom can't push the focus off the map — which, at shallow elevation, would
 // otherwise rocket the rig toward the horizon.
 const _clamped = { x: 0, z: 0 };
-function clampToGround(x: number, z: number, out: { x: number; z: number }): void {
-  const r = CITY_TIERS[useSceneStore.getState().citySize] + GROUND_APRON_M;
+// panRig's independently-clamped EYE (a larger disc than the focal's — see PAN_EYE_REACH_MULT above);
+// a separate scratch object because eye and focal clamp to DIFFERENT radii in the same pan step.
+const _clampedEye = { x: 0, z: 0 };
+function clampToDisc(x: number, z: number, r: number, out: { x: number; z: number }): void {
   const dx = x - CITY_CENTER.x;
   const dz = z - CITY_CENTER.z;
   const d2 = dx * dx + dz * dz;
@@ -179,24 +186,38 @@ function clampToGround(x: number, z: number, out: { x: number; z: number }): voi
   out.z = CITY_CENTER.z + dz * k;
 }
 
-// Translate the rig (camera + target) by a horizontal ground delta, clamping the
-// resulting focal to the ground disc and shifting the camera by the SAME clamped
-// amount so the pose is preserved. Every pan / zoom-truck path goes through here.
+// Translate the rig (camera + target) by a horizontal ground delta. The FOCAL clamps to the ground
+// disc (the practical grab limit — the aim stays on the ground); the EYE is decoupled and clamps
+// INDEPENDENTLY to a larger disc (PAN_EYE_REACH_MULT × the ground radius), so backing the camera up
+// past the ground's edge pulls it back to view the "snow globe" from outside instead of dead-stopping
+// (both used to shift by the SAME clamped delta, so the whole rig hit an invisible wall the instant
+// the focal reached the rim). When neither clamp engages this is identical to before: eye and focal
+// both shift by the full raw delta. Every pan / zoom-truck path goes through here.
 function panRig(c: CameraControlsImpl, dx: number, dz: number): void {
   c.getTarget(_tgt);
   c.getPosition(_camPos);
-  clampToGround(_tgt.x + dx, _tgt.z + dz, _clamped);
-  const ax = _clamped.x - _tgt.x;
-  const az = _clamped.z - _tgt.z;
-  void c.setLookAt(
-    _camPos.x + ax,
-    _camPos.y,
-    _camPos.z + az,
-    _clamped.x,
-    _tgt.y,
-    _clamped.z,
-    false,
-  );
+  const r = CITY_TIERS[useSceneStore.getState().citySize] + GROUND_APRON_M;
+  clampToDisc(_tgt.x + dx, _tgt.z + dz, r, _clamped);
+  if (useSceneStore.getState().projection === "orthographic") {
+    // Ortho: rigid pan — shift the eye by the focal's clamped delta. The eye is a parallel-
+    // projection park value here, so decoupling it would swing the eye->focal direction and tilt
+    // the view rather than back out usefully; just stop at the ground edge.
+    const ax = _clamped.x - _tgt.x;
+    const az = _clamped.z - _tgt.z;
+    void c.setLookAt(_camPos.x + ax, _camPos.y, _camPos.z + az, _clamped.x, _tgt.y, _clamped.z, false);
+  } else {
+    // Perspective: decouple the eye to the larger disc so it can back out past the ground.
+    clampToDisc(_camPos.x + dx, _camPos.z + dz, r * PAN_EYE_REACH_MULT, _clampedEye);
+    void c.setLookAt(
+      _clampedEye.x,
+      _camPos.y,
+      _clampedEye.z,
+      _clamped.x,
+      _tgt.y,
+      _clamped.z,
+      false,
+    );
+  }
 }
 
 // Near-horizon pan limit (ported from camera-lab CustomOrbitControls.doPan, 2026-06-21). A

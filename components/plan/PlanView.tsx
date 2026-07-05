@@ -17,7 +17,7 @@ import {
   type DensityBand,
 } from "@/lib/seed/density";
 import { sampleSuburbNodes } from "@/lib/seed/suburbField";
-import { makeShapeMask, resolveCityShape } from "@/lib/seed/cityShape";
+import { makeShapeMask, resolveCityShape, displayedRadius } from "@/lib/seed/cityShape";
 import { useSceneStore } from "@/lib/state/sceneStore";
 import { useGeneratedCity } from "@/lib/hooks/useGeneratedCity";
 
@@ -63,7 +63,13 @@ export function PlanView({ seed, size, layers }: Props) {
   // work across frames instead of blocking the main thread in one ~64×200ms wall
   // on mount. `data` + the draw stay gated on `ready` so we never touch the cache
   // before it is warm.
-  const { ready } = useGeneratedCity(seed, cityShape, cityShapeScale);
+  // #70: no `cityShapeScale` arg — the gate now only guarantees the MAX-extent
+  // (scale 1) cache is warm (see useGeneratedCity's MAX_SCALE comment). The
+  // `generateCity`/`generateStreetlights` calls below still read the LIVE
+  // (possibly cropped) scale directly, so a non-default crop can still cost a
+  // synchronous regen here — unchanged from before for any crop != 1, and out
+  // of Stage 1's scope (InstancedCity + the ready gate only).
+  const { ready } = useGeneratedCity(seed, cityShape);
 
   const citySize = useSceneStore((s) => s.citySize);
   const citySketch = useSceneStore((s) => s.citySketch);
@@ -93,7 +99,16 @@ export function PlanView({ seed, size, layers }: Props) {
       makeShapeMask(resolveCityShape(cityShape, seed), cityShapeScale),
     );
     return { topo, field, city, lights, density, nodes };
-  }, [ready, seed, cityShape, cityShapeScale, citySize, citySketch, fieldDeviation, densityProfile]);
+  }, [
+    ready,
+    seed,
+    cityShape,
+    cityShapeScale,
+    citySize,
+    citySketch,
+    fieldDeviation,
+    densityProfile,
+  ]);
 
   useEffect(() => {
     if (!data) return;
@@ -109,9 +124,14 @@ export function PlanView({ seed, size, layers }: Props) {
     const { topo, field, city, lights, density, nodes } = data;
     const cx = CITY_CENTER.x;
     const cz = CITY_CENTER.z;
-    // Frame the current tier's full gen extent (#58) — not the fixed default
-    // CITY_HALF_EXTENT, which would crop big tiers and shrink small ones.
-    const half = CITY_TIERS[citySize];
+    // Frame the current DISPLAYED extent (#56: tier × crop) — not the fixed default
+    // CITY_HALF_EXTENT (would crop big tiers and shrink small ones) and not the raw
+    // tier alone (would leave a crop's dead margin baked into the minimap).
+    const half = displayedRadius(
+      resolveCityShape(cityShape, seed),
+      cityShapeScale,
+      CITY_TIERS[citySize],
+    );
 
     // World → canvas pixel helper
     const toX = (x: number) => ((x - (cx - half)) / (2 * half)) * size;
@@ -303,7 +323,7 @@ export function PlanView({ seed, size, layers }: Props) {
     ctx.fillText(`${seed}`, 4, 13);
     ctx.fillText(`${topo.kind} · ${field.districts.length}d`, 4, 24);
     ctx.restore();
-  }, [seed, size, layers, data, citySize]);
+  }, [seed, size, layers, data, citySize, cityShape, cityShapeScale]);
 
   return <canvas ref={canvasRef} style={{ width: size, height: size, display: "block" }} />;
 }

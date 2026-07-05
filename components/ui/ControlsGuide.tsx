@@ -456,8 +456,8 @@ export function ControlsGuide() {
         aria-label="Camera controls"
         title="Camera controls"
         className={cn(
-          "border-foreground/10 bg-popover/70 text-foreground/85 hover:bg-foreground/10 fixed right-3 bottom-3 z-20 flex size-11 items-center justify-center rounded-full border text-lg font-semibold shadow-lg backdrop-blur-md transition-[opacity,background-color] duration-700",
-          open && "bg-foreground/10",
+          "border-foreground/10 bg-popover/70 text-foreground/85 hover:bg-foreground/10 fixed right-3 bottom-3 z-20 flex size-11 items-center justify-center rounded-full border text-lg font-semibold shadow-lg backdrop-blur-md transition-[opacity,background-color,color] duration-700",
+          open && "border-transparent bg-primary text-primary-foreground",
           idle && !open ? "pointer-events-none opacity-0" : "pointer-events-auto opacity-100",
         )}
       >
