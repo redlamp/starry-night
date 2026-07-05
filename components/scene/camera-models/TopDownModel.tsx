@@ -25,22 +25,20 @@ import { HOME_TWEEN_SEC } from "@/lib/scene/cameraView";
 // `t` again mid-transition plays the SAME tween the other way (gsap reverse()/play()),
 // rather than restarting from a fresh snapshot.
 //
-// Entry motion: ONE synchronized swing-arm sweep around the vertical axis through
-// CITY_CENTER (#83, user 2026-07-05). On a single eased clock the POSITION arcs on a
-// spherical path — the arm's elevation swings from the current angle up to straight-down
-// while its length (distance from the centre) eases to the overhead height, azimuth HELD —
-// so it sweeps up-and-over as one large arc and the city stays framed (the earlier
-// straight-line position lerp cut diagonally across and swung the city off-screen). The
-// ORIENTATION is a quaternion SLERP start->overhead, NOT a per-frame lookAt: lookAt is
-// singular near straight-down and snapped the yaw a frame or two before the poles. Azimuth
-// is held (atan2 of the start's horizontal offset from CITY_CENTER), trivially the shortest
-// arc — no azimuthal travel to shorten, and the overhead endpoint has zero horizontal
-// offset. Reversing the SAME tween sweeps the arc back to the entry pose. A restore
-// target's STORED azimuth (map's remembered bearing, say) generally differs, so the live
-// `orbit.azimuthDeg` readout (the panel, and #84's ProjectionBlender feed) is driven
-// separately during the outro, unwound the shortest way — the R-reset formula
-// (cameraView.ts's tweenOrbitToHome) — from the held entry azimuth toward the restore
-// target's.
+// Entry motion — a drone GIMBAL sweep (user 2026-07-05, revised after the end-of-tween snap).
+// Two channels on ONE eased clock. (1) ORIENTATION slerps the start quaternion -> the overhead
+// north-up-straight-down quaternion. A quaternion slerp is smooth and takes the SHORTEST arc, so
+// the north-up alignment eases in across the WHOLE tween instead of resolving abruptly at the pole
+// (the earlier up-lerp let the azimuth stay suppressed while the view was oblique, then snap ~180
+// degrees in the last few frames as the view went vertical). (2) the EYE is DERIVED, not lerped:
+// the FOCUS eases from the ground point the camera was aimed at to the city centre, the DISTANCE
+// eases start -> overhead height, and the eye is parked at focus - forward*distance so the slerped
+// orientation looks EXACTLY at the easing-to-centre focus every frame. That keeps the city
+// dead-centre the whole way. (A slerp with an INDEPENDENT straight-line eye is what swung the city
+// off-screen earlier; deriving the eye from the focus is what frames it.) t=0 reproduces the entry
+// pose exactly, t=1 the overhead pose; reversing the SAME tween runs it back out. The live
+// `orbit.azimuthDeg` readout (panel + #84's ProjectionBlender feed) is still driven separately
+// during the outro, unwound the shortest way (the R-reset formula in cameraView.ts's tweenOrbitToHome).
 //
 // #84 — orbit.radius (and azimuthDeg / elevationDeg) are synced live, not just written
 // once, so a `p` press while resting in (or transitioning through) top-down has a fresh,
@@ -57,7 +55,6 @@ const TOP_DOWN_MARGIN = 1.15;
 const NORTH_UP = new THREE.Vector3(0, 0, -1);
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
 const RAD2DEG = 180 / Math.PI;
-const HALF_PI = Math.PI / 2;
 const TWO_DP = (n: number) => Math.round(n * 100) / 100;
 
 // Ortho half-height that fits the city (+ margin); the limiting screen axis sets it.
@@ -75,15 +72,17 @@ type Phase = "entering" | "steady" | "exiting";
 
 // Scratch — only one TopDownModel is ever mounted at a time.
 const _startPos = new THREE.Vector3();
-const _startUp = new THREE.Vector3();
-const _startQuat = new THREE.Quaternion();
-const _targetPos = new THREE.Vector3();
-const _targetQuat = new THREE.Quaternion();
-const _lookMat = new THREE.Matrix4();
+const _startFocal = new THREE.Vector3(); // ground point the camera was aimed at, at entry
+const _startQuat = new THREE.Quaternion(); // entry orientation
+const _targetPos = new THREE.Vector3(); // overhead eye position (directly above the centre)
+const _targetQuat = new THREE.Quaternion(); // overhead: north-up, straight down at the centre
 const _curQuat = new THREE.Quaternion();
-const _curUp = new THREE.Vector3();
+const _focus = new THREE.Vector3(); // per-frame gimbal focus (start focal -> city centre)
+const _fwd = new THREE.Vector3(); // current forward, from the slerped orientation
+const _up = new THREE.Vector3(); // current up, from the slerped orientation (kept on camera.up)
+const _lookMat = new THREE.Matrix4();
 const _cityGround = new THREE.Vector3(CITY_CENTER.x, 0, CITY_CENTER.z);
-const _lookTarget = new THREE.Vector3(CITY_CENTER.x, 0, CITY_CENTER.z);
+const _lookTarget = new THREE.Vector3(CITY_CENTER.x, 0, CITY_CENTER.z); // end focus = city centre
 
 export function TopDownModel() {
   const camera = useThree((s) => s.camera);
@@ -150,13 +149,34 @@ export function TopDownModel() {
     orthoStart.current = useSceneStore.getState().orthoSize;
 
     _startPos.copy(cam.position);
-    _startUp.copy(cam.up);
     _startQuat.copy(cam.quaternion);
 
     const height = fitHeight(targetOrtho, cam.fov);
     _targetPos.set(CITY_CENTER.x, height, CITY_CENTER.z);
     _lookMat.lookAt(_targetPos, _lookTarget, NORTH_UP);
     _targetQuat.setFromRotationMatrix(_lookMat);
+
+    // Forward from the ENTRY orientation — not cam.getWorldDirection (matrixWorld can be a beat
+    // stale at mount); the quaternion is the live source and is exactly what applyPose uses at
+    // t = 0, so the focal lands on the t = 0 forward ray and eye(t=0) reproduces _startPos with
+    // no jump.
+    _fwd.set(0, 0, -1).applyQuaternion(_startQuat);
+    // Gimbal focus start: the ground point straight ahead if the view looks down, else a point on
+    // the forward ray at ~the city-centre distance (the default hero pose looks a hair UP, so
+    // there is no ground hit ahead — parking the focal off the ray there dropped the derived eye
+    // BELOW ground at t=0). Either way it sits ON the forward ray, so
+    // eye(t=0) = focus - fwd*startDist = _startPos EXACTLY (no below-ground dip, entry or return).
+    // The tween then eases this focus to the city centre while the derived eye keeps the slerped
+    // orientation looking straight at it.
+    let startDist: number;
+    if (_fwd.y < -1e-3) {
+      startDist = -_startPos.y / _fwd.y; // forward ray meets the ground plane y=0 ahead
+    } else {
+      startDist = _startPos.distanceTo(_cityGround); // level/up view: focus at ~city distance
+    }
+    startDist = Math.max(1, startDist);
+    _startFocal.copy(_startPos).addScaledVector(_fwd, startDist);
+    const overheadDist = height; // overhead eye is at y = height directly above the ground centre
 
     // Hold azimuth fixed (see module doc): capture the CURRENT compass bearing once, up
     // front — matches orbitWriteback's atan2 convention (do NOT trust s.orbit.azimuthDeg,
@@ -170,28 +190,20 @@ export function TopDownModel() {
 
     function applyPose(t: number) {
       const cm = camera as THREE.PerspectiveCamera;
-      // ONE synchronized swing-arm sweep (#83, user 2026-07-05). POSITION arcs on
-      // a spherical path around the city-centre vertical axis: the arm's ELEVATION
-      // swings from the current angle up to straight-down while its LENGTH (distance
-      // from the centre) eases to the overhead height, azimuth HELD — so it sweeps
-      // up-and-over as one large arc and the city stays framed (no straight-line cut
-      // across). ORIENTATION is a quaternion SLERP start->overhead, NOT a per-frame
-      // lookAt: lookAt is singular near straight-down and snapped the yaw a frame or
-      // two before the poles. Both channels run on the same eased clock; reversing
-      // the tween sweeps the arc back to the entry pose.
-      const cx = CITY_CENTER.x;
-      const cz = CITY_CENTER.z;
-      const dist0 = Math.max(1e-3, _startPos.distanceTo(_cityGround));
-      const elev0 = Math.asin(THREE.MathUtils.clamp(_startPos.y / dist0, -1, 1));
-      const azRad = Math.atan2(_startPos.x - cx, _startPos.z - cz);
-      const elev = elev0 + (HALF_PI - elev0) * t; // swing the arm up to straight down
-      const armLen = dist0 + (_targetPos.y - dist0) * t; // arm length -> overhead height
-      const rH = armLen * Math.cos(elev);
-      cm.position.set(cx + Math.sin(azRad) * rH, armLen * Math.sin(elev), cz + Math.cos(azRad) * rH);
-      _curUp.lerpVectors(_startUp, NORTH_UP, t).normalize();
-      cm.up.copy(_curUp);
+      // ORIENTATION: shortest-arc slerp start -> overhead north-up. Quaternion slerp is smooth and
+      // takes the short way, so the north-up alignment eases in over the WHOLE tween instead of
+      // snapping ~180 degrees at the pole (the earlier up-lerp resolved the azimuth abruptly there).
       _curQuat.copy(_startQuat).slerp(_targetQuat, t);
       cm.quaternion.copy(_curQuat);
+      // EYE (derived, not lerped): park it so the slerped orientation looks EXACTLY at the
+      // easing-to-centre focus — eye = focus - forward*distance. Keeps the city dead-centre the
+      // whole sweep (a slerp with an independent straight-line eye is what swung it off before).
+      _fwd.set(0, 0, -1).applyQuaternion(_curQuat); // world forward of the current orientation
+      _focus.lerpVectors(_startFocal, _lookTarget, t);
+      const eyeDist = startDist + (overheadDist - startDist) * t;
+      cm.position.copy(_focus).addScaledVector(_fwd, -eyeDist);
+      _up.set(0, 1, 0).applyQuaternion(_curQuat);
+      cm.up.copy(_up);
       cm.updateMatrixWorld();
 
       // orthoSize eases in on the way IN; held FIXED (not eased back) on the way OUT — see
@@ -222,17 +234,25 @@ export function TopDownModel() {
       const st = useSceneStore.getState();
       const entry = st.topDownEntry;
       if (entry) {
-        st.setCameraModel(entry.modelId);
+        // Restore the EXACT pose the tween started from — _startPos, looking along _startQuat's
+        // forward ray (via _startFocal) — NOT entry.position/lookAt, which toggleTopDown rebuilt
+        // from the throttled cameraLive (stale by up to a beat, and only 10 units ahead), so the
+        // return missed the pose and the aim snapped on takeover. Because _startFocal is ON that
+        // ray, setLookAt(_startPos, _startFocal) reproduces _startQuat's orientation exactly and
+        // the reverse-tween's final frame hands off with zero jump. Set the handoff FIRST and swap
+        // the model LAST, so the pose (and orbit/ortho/mode) are in place before CameraModelHost
+        // mounts the restored model (its hadHandoffOnMount reads cameraHandoff at render).
+        if (entry.modelId === "snv2") {
+          st.setCameraHandoff({
+            position: [_startPos.x, _startPos.y, _startPos.z],
+            lookAt: [_startFocal.x, _startFocal.y, _startFocal.z],
+          });
+        }
         st.setOrbit(entry.orbit);
         st.setOrthoSize(entry.orthoSize);
         st.setOrbitPaused(entry.paused);
         st.setCameraMode(entry.modelId === "fly" ? "fly" : "orbit");
-        // snv2 drives its own camera-controls instance from position/lookAt, not from the
-        // orbit config — deliver the exact pose over the handoff channel it already
-        // consumes on mount (see StarryNightV2Model's hadHandoffOnMount gate, #83).
-        if (entry.modelId === "snv2") {
-          st.setCameraHandoff({ position: entry.position, lookAt: entry.lookAt });
-        }
+        st.setCameraModel(entry.modelId);
       }
       st.setTopDownEntry(null);
       st.setTopDownExiting(false);
