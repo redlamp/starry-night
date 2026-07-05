@@ -34,6 +34,7 @@ export function ProjectionBlender() {
   const orthoSize = useSceneStore((s) => s.orthoSize);
   const fov = useSceneStore((s) => s.cameraIntent.fov);
   const radius = useSceneStore((s) => s.orbit.radius);
+  const cameraModel = useSceneStore((s) => s.cameraModel);
 
   // Debug exposure (capture mode only): the #84 size-invariance verify script reads the
   // ACTUAL projectionMatrix baked below each frame — a black-box measurement of apparent
@@ -64,7 +65,9 @@ export function ProjectionBlender() {
       // anchor perspK freezes to once a blend starts (see below). Recaptured every frame spent
       // here, so zooming while at rest keeps it current — it only goes stale (on purpose) the
       // moment blend leaves 0, which is what stops radius drift during a blend from reading as
-      // the apparent size "breathing" (#84).
+      // the apparent size "breathing" (#84). Top-down ALSO refreshes this from the pure-ortho
+      // rest below — its overhead distance is projection-independent, so resting there in ortho
+      // must keep the anchor fresh too, not leave it stale from the pre-top-down orbit pose.
       restPerspK = Math.max(1, radius) * Math.tan(fovRad / 2);
       return; // pure perspective
     }
@@ -74,6 +77,13 @@ export function ProjectionBlender() {
     const oeff = orthoSize * f;
 
     if (blend >= 0.9999) {
+      // Top-down rests at a projection-INDEPENDENT overhead distance (camera pinned, fit to the
+      // city), so refresh the frozen resting-K anchor from here too: the pure-perspective capture
+      // above never runs while top-down sits in ortho, which would otherwise leave restPerspK stale
+      // from the pre-top-down orbit pose and breathe on the first p-toggle back to perspective (#84).
+      // Gated to top-down — for the orbit models the ortho PARK distance differs from the perspective
+      // DOLLY, so anchoring K here would mis-frame the perspective end (a size pop on the toggle back).
+      if (cameraModel === "topdown") restPerspK = Math.max(1, radius) * Math.tan(fovRad / 2);
       // Pure orthographic — exact, and avoids the huge virtual-eye numbers.
       // #88: camera.near (0.5, tuned for the PERSPECTIVE lens) used to double as the
       // ortho near plane too, clipping anything within 0.5 world units of the real

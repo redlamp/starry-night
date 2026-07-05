@@ -402,9 +402,25 @@ const rememberedRadius: Record<"perspective" | "orthographic", number> = {
 export function tweenProjectionTo(target: "perspective" | "orthographic") {
   const s = useSceneStore.getState();
   if (s.projection === target) return;
-  // Remember where the mode we're leaving sat, then slide to the target mode's distance.
-  rememberedRadius[s.projection] = s.orbit.radius;
-  const targetRadius = rememberedRadius[target];
+  // Remember where the mode we're leaving sat, then slide to the target mode's distance —
+  // EXCEPT in top-down (#84). There the camera is pinned overhead, fit to the city, and does
+  // NOT dolly on a projection toggle: orbit.radius is a K-matched *report* of the fixed overhead
+  // distance (D = orthoSize / tan(fov/2), ~16.8k at the default tier), not a dolly to slide.
+  // Sliding it toward the orbit-model remembered distance (~4.8k) drags ProjectionBlender's
+  // focal-plane distance `d` off the real, unmoving camera→city distance, so the framing bridge
+  // holds the (now empty) focal plane invariant while the actual city — sitting at the pinned
+  // distance — breathes by D/d. It only bites the FIRST toggle: after one, rememberedRadius has
+  // been overwritten with the top-down distance, so later toggles no longer slide. Hold the radius
+  // put here, and leave rememberedRadius (the orbit dolly memory) untouched so a later orbit toggle
+  // isn't dragged out to the top-down height.
+  const inTopDown = s.cameraModel === "topdown";
+  let targetRadius: number;
+  if (inTopDown) {
+    targetRadius = s.orbit.radius;
+  } else {
+    rememberedRadius[s.projection] = s.orbit.radius;
+    targetRadius = rememberedRadius[target];
+  }
   s.setProjection(target);
   // Start from the LIVE blend + radius (mid-tween if interrupted), not a stale snapshot.
   projTween?.kill();
