@@ -35,6 +35,20 @@ import type { CityShapeSetting } from "./cityShape";
 // has patrol traffic over downtown. See buildWaypointPools / nearestToCenter
 // / buildHelicopters below.
 //
+// #89 v2 (user feedback on the tuned routes, 2026-07-05): a straight point-to-
+// point hop reads as a fixed-wing corridor, not a helicopter touring an area
+// and landing back at its base. Two shape changes, BOTH still plain "transit"
+// legs (no leg-schema change — see the Gotcha below, still fully intact) —
+// just more of them, arranged in a curve or a circle instead of one straight
+// shot: (1) each hop between stops is a seeded quadratic-bezier ARC (a
+// minority stay a direct reposition) sampled into ARC_SEGMENTS straight sub-
+// legs, exactly anchored at the two stops — reads as banking across the city;
+// (2) most arrivals get a small ORBIT circling the pad — "examining the
+// area" — before the existing hover hold. Because the loop is closed, the
+// final hop's orbit is around stops[0] itself — the helicopter circles its
+// OWN base before settling, i.e. "landing back at base". See buildArcPoints /
+// buildOrbitPoints / buildHelicopter below.
+//
 // Journey-window technique (mirrors Traffic's minor-tier journeys,
 // lib/seed/traffic.ts + lib/shaders/traffic.ts): the whole closed loop is
 // ONE shared clock per helicopter (phase + cycleSec); each leg carries a
@@ -87,12 +101,30 @@ const STOPS_MAX = 4; // inclusive
 const HELI_SPEED_MIN = 18;
 const HELI_SPEED_MAX = 25;
 
-// Hover holds: most stops pause, some are a fly-through (no hover leg at all —
-// "skip if 0", per the design brief) so a loop doesn't feel mechanically
-// uniform.
+// Hover holds: most stops pause, some are a fly-through (no orbit, no hover
+// leg at all — "skip if 0", per the design brief) so a loop doesn't feel
+// mechanically uniform. #89 v2: the SAME roll also gates the examine-orbit
+// below — a skipped stop is a clean flythrough, full stop.
 const HOVER_SKIP_PROB = 0.3;
 const HOVER_DURATION_MIN_SEC = 15;
 const HOVER_DURATION_MAX_SEC = 45;
+
+// #89 v2: curved hops instead of one straight shot per stop-to-stop leg — a
+// seeded quadratic-bezier bow, sampled at ARC_SEGMENTS straight sub-legs
+// (still plain "transit" legs, see the file header). A minority of hops
+// (ARC_STRAIGHT_PROB) stay a direct reposition — real patrol traffic isn't
+// ALWAYS sightseeing.
+const ARC_SEGMENTS = 4;
+const ARC_STRAIGHT_PROB = 0.15;
+const ARC_BOW_MIN_FRAC = 0.12; // lateral bow, as a fraction of the hop's length
+const ARC_BOW_MAX_FRAC = 0.32;
+
+// #89 v2: a small circle traced around a stop before the hover hold —
+// "examining the area" rather than beelining in and parking. Radius is
+// deliberately tight (a specific pad/tower, not the whole neighbourhood).
+const ORBIT_SEGMENTS = 6;
+const ORBIT_RADIUS_MIN_M = 35;
+const ORBIT_RADIUS_MAX_M = 90;
 
 type Waypoint = { x: number; y: number; z: number };
 
@@ -192,6 +224,65 @@ function headingXZ(a: Waypoint, b: Waypoint): [number, number, number] {
   return [dx / len, 0, dz / len];
 }
 
+// #89 v2 — ordered points from `a` to `b` (inclusive of both ends) tracing a
+// quadratic-bezier arc via a seeded lateral control point, sampled at
+// ARC_SEGMENTS straight sub-legs. The bezier endpoint property means pts[0]
+// === a and pts[last] === b exactly, so this composes cleanly with whatever
+// precedes/follows. Degenerates to the plain 2-point `[a, b]` hop — no curve
+// — for a zero-length hop (can't build a perpendicular) or the seeded
+// ARC_STRAIGHT_PROB roll.
+function buildArcPoints(rng: () => number, a: Waypoint, b: Waypoint): Waypoint[] {
+  const dx = b.x - a.x;
+  const dz = b.z - a.z;
+  const hopLen = Math.hypot(dx, dz);
+  if (hopLen < 1e-3 || rng() < ARC_STRAIGHT_PROB) return [a, b];
+
+  const nx = -dz / hopLen; // horizontal perpendicular, unit
+  const nz = dx / hopLen;
+  const side = rng() < 0.5 ? 1 : -1;
+  const bow = hopLen * (ARC_BOW_MIN_FRAC + rng() * (ARC_BOW_MAX_FRAC - ARC_BOW_MIN_FRAC)) * side;
+  const cx = (a.x + b.x) / 2 + nx * bow;
+  const cy = (a.y + b.y) / 2;
+  const cz = (a.z + b.z) / 2 + nz * bow;
+
+  const pts: Waypoint[] = [];
+  for (let s = 0; s <= ARC_SEGMENTS; s++) {
+    const t = s / ARC_SEGMENTS;
+    const it = 1 - t;
+    const w0 = it * it;
+    const w1 = 2 * it * t;
+    const w2 = t * t;
+    pts.push({
+      x: w0 * a.x + w1 * cx + w2 * b.x,
+      y: w0 * a.y + w1 * cy + w2 * b.y,
+      z: w0 * a.z + w1 * cz + w2 * b.z,
+    });
+  }
+  return pts;
+}
+
+// #89 v2 — ordered points tracing a small circle around `center`, starting
+// and ending exactly AT centre (enters/exits from directly overhead the pad)
+// so it composes cleanly with buildArcPoints before it and the hover leg
+// after it. Seeded radius, start angle, and spin direction so orbits don't
+// all look identical.
+function buildOrbitPoints(rng: () => number, center: Waypoint): Waypoint[] {
+  const radius = ORBIT_RADIUS_MIN_M + rng() * (ORBIT_RADIUS_MAX_M - ORBIT_RADIUS_MIN_M);
+  const startAngle = rng() * Math.PI * 2;
+  const spin = rng() < 0.5 ? 1 : -1;
+  const pts: Waypoint[] = [center];
+  for (let k = 1; k < ORBIT_SEGMENTS; k++) {
+    const theta = startAngle + spin * (k / ORBIT_SEGMENTS) * Math.PI * 2;
+    pts.push({
+      x: center.x + Math.cos(theta) * radius,
+      y: center.y,
+      z: center.z + Math.sin(theta) * radius,
+    });
+  }
+  pts.push(center);
+  return pts;
+}
+
 function buildHelicopter(rng: () => number, pool: Waypoint[]): Helicopter {
   const stopCount = Math.min(
     STOPS_MIN + Math.floor(rng() * (STOPS_MAX - STOPS_MIN + 1)),
@@ -211,20 +302,34 @@ function buildHelicopter(rng: () => number, pool: Waypoint[]): Helicopter {
   };
   // Always start with a transit leg (stop 0 -> stop 1, ..., wrapping stop
   // n-1 -> stop 0) so every hover leg already has a preceding transit to
-  // carry `dir` forward from — see the file header gotcha.
+  // carry `dir` forward from — see the file header gotcha. #89 v2: each hop
+  // is now an ARC (buildArcPoints) rather than one straight shot, and most
+  // arrivals get an ORBIT (buildOrbitPoints) before the hover — see the v2
+  // block comment near the top of the file. Both are just more transit legs,
+  // so `dir` carries forward exactly as before (from whichever transit sub-
+  // leg most recently ran).
   const raw: RawLeg[] = [];
   let carriedDir: [number, number, number] = [0, 0, 1];
-  for (let i = 0; i < stops.length; i++) {
-    const a = stops[i];
-    const b = stops[(i + 1) % stops.length];
+  const pushTransit = (a: Waypoint, b: Waypoint) => {
     const dir = headingXZ(a, b);
     carriedDir = dir;
     raw.push({ aA: a, aB: b, dir, kind: "transit", durationSec: dist3(a, b) / speed });
+  };
+  for (let i = 0; i < stops.length; i++) {
+    const a = stops[i];
+    const b = stops[(i + 1) % stops.length];
 
-    const hoverDur =
-      rng() < HOVER_SKIP_PROB
-        ? 0
-        : HOVER_DURATION_MIN_SEC + rng() * (HOVER_DURATION_MAX_SEC - HOVER_DURATION_MIN_SEC);
+    const arcPts = buildArcPoints(rng, a, b);
+    for (let s = 0; s < arcPts.length - 1; s++) pushTransit(arcPts[s], arcPts[s + 1]);
+
+    const skipHover = rng() < HOVER_SKIP_PROB;
+    if (!skipHover) {
+      const orbitPts = buildOrbitPoints(rng, b);
+      for (let s = 0; s < orbitPts.length - 1; s++) pushTransit(orbitPts[s], orbitPts[s + 1]);
+    }
+    const hoverDur = skipHover
+      ? 0
+      : HOVER_DURATION_MIN_SEC + rng() * (HOVER_DURATION_MAX_SEC - HOVER_DURATION_MIN_SEC);
     if (hoverDur > 0) {
       raw.push({ aA: b, aB: b, dir: carriedDir, kind: "hover", durationSec: hoverDur });
     }
