@@ -71,6 +71,7 @@ export {
   SELECT_OUTLINE_COLOR,
   DEFAULT_TRAFFIC,
   DEFAULT_FLIGHTS,
+  DEFAULT_HELICOPTERS,
   DEFAULT_STREETLIGHTS,
   DEFAULT_LOD,
   DEFAULT_CITY_SHAPE,
@@ -132,6 +133,7 @@ import {
   DEFAULT_DEBUG,
   DEFAULT_TRAFFIC,
   DEFAULT_FLIGHTS,
+  DEFAULT_HELICOPTERS,
   DEFAULT_STREETLIGHTS,
   DEFAULT_LOD,
   DEFAULT_CITY_SHAPE,
@@ -230,6 +232,7 @@ type AnySettingEntry =
   | SettingEntry<"debug">
   | SettingEntry<"traffic">
   | SettingEntry<"flights">
+  | SettingEntry<"helicopters">
   | SettingEntry<"streetlights">
   | SettingEntry<"lod">
   | SettingEntry<"cityShape">
@@ -311,6 +314,7 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "debug", defaultValue: DEFAULT_DEBUG, persist: false },
   { key: "traffic", defaultValue: DEFAULT_TRAFFIC, persist: true },
   { key: "flights", defaultValue: DEFAULT_FLIGHTS, persist: true },
+  { key: "helicopters", defaultValue: DEFAULT_HELICOPTERS, persist: true },
   { key: "streetlights", defaultValue: DEFAULT_STREETLIGHTS, persist: true },
   { key: "lod", defaultValue: DEFAULT_LOD, persist: true },
   { key: "cityShape", defaultValue: DEFAULT_CITY_SHAPE, persist: true },
@@ -735,12 +739,24 @@ type SceneState = {
   // convenience, not a look-and-feel setting.
   flightsSpawn: Record<FlightClass, number>;
   triggerFlightSpawn: (cls: FlightClass) => void;
-  // Live "planes in the air" readout (#67) — count of ambient planes currently
-  // in their transit phase (not idling in the between-flights gap), tallied by
-  // the Flights component. heli is a placeholder (0 until helicopters land).
-  // Transient: a display readout, never persisted.
+  // Live "planes/helicopters in the air" readout (#67, #89) — count of
+  // ambient aircraft currently airborne, tallied by Flights.tsx (airliner/
+  // lightGA) and Helicopters.tsx (heli) independently. setFlightsAirborne is
+  // a PARTIAL merge (not a full replace) so each component only ever writes
+  // its own key(s) and can't stomp the other's count. Transient: a display
+  // readout, never persisted.
   flightsAirborne: { airliner: number; lightGA: number; heli: number };
-  setFlightsAirborne: (v: { airliner: number; lightGA: number; heli: number }) => void;
+  setFlightsAirborne: (v: Partial<{ airliner: number; lightGA: number; heli: number }>) => void;
+  // Helicopters (#89) — third air-transit class, rooftop-to-rooftop patrol
+  // loops.
+  helicopters: typeof DEFAULT_HELICOPTERS;
+  setHelicopters: (patch: Partial<typeof DEFAULT_HELICOPTERS>) => void;
+  // Debug: one-shot helicopter spawn trigger (#89), same fire-once counter
+  // pattern as flightsSpawn — Helicopters.tsx watches it and rewrites the
+  // next reserved debug pool instance's phase on every increment. Never
+  // persisted / not in SETTINGS_REGISTRY.
+  heliSpawn: number;
+  triggerHeliSpawn: () => void;
   streetlights: typeof DEFAULT_STREETLIGHTS;
   setStreetlights: (patch: Partial<typeof DEFAULT_STREETLIGHTS>) => void;
   lod: typeof DEFAULT_LOD;
@@ -1008,7 +1024,11 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   triggerFlightSpawn: (cls) =>
     set((s) => ({ flightsSpawn: { ...s.flightsSpawn, [cls]: s.flightsSpawn[cls] + 1 } })),
   flightsAirborne: { airliner: 0, lightGA: 0, heli: 0 },
-  setFlightsAirborne: (flightsAirborne) => set({ flightsAirborne }),
+  setFlightsAirborne: (v) => set((s) => ({ flightsAirborne: { ...s.flightsAirborne, ...v } })),
+  helicopters: DEFAULT_HELICOPTERS,
+  setHelicopters: (patch) => set((s) => ({ helicopters: { ...s.helicopters, ...patch } })),
+  heliSpawn: 0,
+  triggerHeliSpawn: () => set((s) => ({ heliSpawn: s.heliSpawn + 1 })),
   streetlights: DEFAULT_STREETLIGHTS,
   setStreetlights: (patch) => set((s) => ({ streetlights: { ...s.streetlights, ...patch } })),
   lod: DEFAULT_LOD,
