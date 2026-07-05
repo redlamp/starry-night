@@ -7,6 +7,8 @@ import {
   partitionByTile,
   visibleTiles,
   compactVisible,
+  tileCropCount,
+  TILE_SIZE,
   type CompactChannel,
   type TilePartition,
 } from "@/lib/scene/tileCull";
@@ -19,8 +21,12 @@ import {
   type Archetype,
   type Building,
 } from "@/lib/seed/cityGen";
-import type { CityShapeSetting } from "@/lib/seed/cityShape";
-import { CITY_CENTER } from "@/lib/seed/topology";
+import {
+  type CityShapeSetting,
+  resolveCityShape,
+  cropRadiusThreshold,
+} from "@/lib/seed/cityShape";
+import { CITY_CENTER, maxHalfExtent } from "@/lib/seed/topology";
 import {
   correlationModeFor,
   facadeColorFor,
@@ -131,15 +137,28 @@ type TiledMesh = {
 
 export function InstancedCity({ masterSeed }: { masterSeed: string }) {
   const cityShape = useSceneStore((s) => s.cityShape);
-  const cityShapeScale = useSceneStore((s) => s.cityShapeScale);
   const citySize = useSceneStore((s) => s.citySize);
   const citySketch = useSceneStore((s) => s.citySketch);
+  // #70: cityShapeScale (the crop) is intentionally NOT a dependency here —
+  // buildMeshes always partitions the FULL (scale=1) MAX-extent building set;
+  // the live crop is folded into the per-frame tile cull below (a radius
+  // prefix within each tile, same recompaction path as frustum re-entry) so a
+  // crop notch never rebuilds a mesh, atlas, or window texture. See
+  // wiki/notes/plan-overnight-agents-2026-07-05.md #70.
   const { entries, maxRadius, idToBuilding } = useMemo(() => {
     void citySize; // tier drives the module-level gen extent (#58) — a switch must rebuild
     void citySketch; // a registered sketch is a different city (#40) — likewise
-    return buildMeshes(masterSeed, cityShape, cityShapeScale);
-  }, [masterSeed, cityShape, cityShapeScale, citySize, citySketch]);
+    return buildMeshes(masterSeed, cityShape);
+  }, [masterSeed, cityShape, citySize, citySketch]);
   const meshes = useMemo(() => entries.map((e) => e.mesh), [entries]);
+  // #70: resolved shape ("auto" is a seeded coin flip per masterSeed) —
+  // memoised so the per-frame crop-threshold read below doesn't re-run
+  // seedrandom() every frame for a value that only changes on an actual
+  // seed/shape-setting change.
+  const resolvedShape = useMemo(
+    () => resolveCityShape(cityShape, masterSeed),
+    [cityShape, masterSeed],
+  );
   const hidden = useSceneStore((s) => s.debug.renderModes.buildings === "hidden");
   // Inspect mode (the Info button) is the user-facing driver; the "Pick
   // Hovered" debug switch is a hover-only aid. Either one attaches the pointer
@@ -323,6 +342,15 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
     }
     if (!hasSelect) selectScratch.current.set(PICK_SENTINEL, PICK_SENTINEL, PICK_SENTINEL);
 
+    // #70: live crop threshold — a building must sit within this distance of
+    // the city centre to stay visible. Infinity when the resolved shape is
+    // "square" (never crops, see cropRadiusThreshold) or the slider sits at 1
+    // (no active crop) — both the "everything passes" fast path tileCropCount
+    // takes below. Recomputed every frame (cheap: maxHalfExtent() is a plain
+    // variable read) but only forces a recompaction when it actually differs
+    // from last frame's value, via the signature strings below — same
+    // "cheap test every frame, rare copy" shape as the frustum cull.
+    const cropThreshold = cropRadiusThreshold(resolvedShape, s.cityShapeScale, maxHalfExtent());
     // #55 per-tile culling: lower each archetype mesh's instance count to the
     // frustum-visible tiles. Instance copies fire only when a mesh's visible
     // tile set changes; a still camera costs only the AABB tests.
@@ -386,16 +414,30 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
       }
       tilesTot += partition.tiles.length;
       if (s.lod.tiles && partition.tiles.length > 1) {
-        const sig = visibleTiles(partition, state.camera, frustum.current, visible.current);
+        const frustumSig = visibleTiles(partition, state.camera, frustum.current, visible.current);
+        // #70: fold the crop into the SAME signature the frustum cull already
+        // uses — a crop-only change (frustum-visible tile SET unchanged) still
+        // triggers exactly one recompaction, same path as frustum re-entry.
+        const sig = `${frustumSig}|${cropThreshold}`;
         if (sig !== lastSigs.current[e]) {
           lastSigs.current[e] = sig;
-          mesh.count = compactVisible(partition, visible.current, channels);
+          // Per-tile radius prefix (#70): most visible tiles are either fully
+          // inside the crop (count === tile.count, a no-op clamp) or fully
+          // outside it (count === 0); only boundary tiles actually shrink.
+          const counts = visible.current.map((t) =>
+            tileCropCount(partition, partition.tiles[t], cropThreshold),
+          );
+          mesh.count = compactVisible(partition, visible.current, channels, counts);
         }
         tilesVis += visible.current.length;
       } else {
-        if (lastSigs.current[e] !== "ALL") {
-          lastSigs.current[e] = "ALL";
-          mesh.count = compactVisible(partition, null, channels);
+        // Tile-culling disabled (debug) or a single-tile city: still respect
+        // the live crop (#70) — it is a user-facing feature, not a debug aid.
+        const sig = `ALL|${cropThreshold}`;
+        if (lastSigs.current[e] !== sig) {
+          lastSigs.current[e] = sig;
+          const counts = partition.tiles.map((t) => tileCropCount(partition, t, cropThreshold));
+          mesh.count = compactVisible(partition, null, channels, counts);
         }
         tilesVis += partition.tiles.length;
       }
@@ -609,9 +651,13 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
 function buildMeshes(
   masterSeed: string,
   shape: CityShapeSetting,
-  shapeScale: number,
 ): { entries: TiledMesh[]; maxRadius: number; idToBuilding: Map<number, Building> } {
-  const { buildings } = generateCity(masterSeed, shape, shapeScale);
+  // #70: always the FULL (scale=1) MAX-extent set for this shape/tier — the
+  // live crop is a render-only cull (see the useFrame loop above), never a
+  // regen input. This is a superset for every scale <= 1: cropRadiusThreshold
+  // only shrinks as scale drops, so scale=1's buildings are exactly the union
+  // of everything any crop notch could ever reveal.
+  const { buildings } = generateCity(masterSeed, shape, 1);
   // #87: every building by id, for the click-select useFrame block to resolve
   // a world position + archetype from a bare selectedBuildingId. Built once
   // over the FULL list (before the per-archetype grouping below) since ids
@@ -704,6 +750,12 @@ function buildMeshes(
       (i) => rawList[i].x,
       (i) => rawList[i].z,
       (i) => rawList[i].height + 10,
+      TILE_SIZE,
+      80,
+      // #70: sort each tile's buildings ascending by distance from the city
+      // centre so the live crop can prefix-cull a tile (tileCropCount)
+      // instead of testing every building's membership every frame.
+      (i) => Math.hypot(rawList[i].x - CITY_CENTER.x, rawList[i].z - CITY_CENTER.z),
     );
     const list = Array.from(partition.order, (idx) => rawList[idx]);
     const N = list.length;

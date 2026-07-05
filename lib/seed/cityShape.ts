@@ -31,6 +31,14 @@ function clamp01(v: number): number {
   return v < 0 ? 0 : v > 1 ? 1 : v;
 }
 
+// #70: shared R/falloff derivation for the circle crop — makeShapeMask's smooth
+// mask and cropRadiusThreshold's boolean membership test are two views of the
+// SAME boundary, so both compute from this one pair rather than risking two
+// formulas drifting apart.
+function circleCropParams(scale: number, half: number): { R: number; falloff: number } {
+  return { R: half * scale, falloff: half * 0.05 };
+}
+
 // Build the boundary mask for a resolved shape — a pure CROP applied POST-generation
 // (#14: the city is generated at the tier's full extent; this only reveals/hides, it
 // never re-rolls). `scale` sets the circle radius as a fraction of `half`, which
@@ -50,8 +58,7 @@ export function makeShapeMask(
   // circle: a disc of radius `half * scale`, crisp edge.
   const cx = CITY_CENTER.x;
   const cz = CITY_CENTER.z;
-  const R = half * scale;
-  const falloff = half * 0.05;
+  const { R, falloff } = circleCropParams(scale, half);
   return (x, z) => clamp01((R - Math.hypot(x - cx, z - cz)) / falloff);
 }
 
@@ -66,4 +73,22 @@ export function displayedRadius(
   half: number = maxHalfExtent(),
 ): number {
   return shape === "circle" ? half * scale : half;
+}
+
+// #70: distance-from-centre threshold equivalent to
+// `makeShapeMask(shape, scale, half)(x, z) >= 0.5` — the exact "inside the
+// crop" boolean generateCity's own building filter uses — expressed as a
+// single radius comparison instead of a per-point mask evaluation. Lets
+// render-side cull code (lib/scene/tileCull's tileCropCount) prefix-filter a
+// RADIUS-SORTED tile with a binary search, so a crop notch never needs to
+// re-test every building's membership. `square` never crops (see
+// makeShapeMask) → Infinity, so every radius passes.
+export function cropRadiusThreshold(
+  shape: CityShape,
+  scale: number,
+  half: number = maxHalfExtent(),
+): number {
+  if (shape === "square") return Infinity;
+  const { R, falloff } = circleCropParams(scale, half);
+  return R - falloff / 2;
 }

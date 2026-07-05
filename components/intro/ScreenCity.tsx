@@ -232,9 +232,11 @@ export function ScreenCity({
 }) {
   const masterSeed = useSceneStore((s) => s.masterSeed);
   const cityShape = useSceneStore((s) => s.cityShape);
-  const cityShapeScale = useSceneStore((s) => s.cityShapeScale);
   const stars = useSceneStore((s) => s.stars);
-  const { ready: cityReady } = useGeneratedCity(masterSeed, cityShape, cityShapeScale);
+  // #70: no `cityShapeScale` arg — see useGeneratedCity's MAX_SCALE comment;
+  // the gate no longer bounces (and this screen's own city no longer rebuilds
+  // or replays) on a crop notch.
+  const { ready: cityReady } = useGeneratedCity(masterSeed, cityShape);
   // sticky foundation: survives hover cycles, owned here so the rig and the
   // (conditionally mounted) controls agree on the pivot
   const base = useRef(makeDefaultBase());
