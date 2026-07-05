@@ -46,6 +46,11 @@ const PAN_EYE_REACH_MULT = 2.0; // how far past the ground disc the EYE may trav
 // multiple of the ground-disc radius — keeps the aim on the ground but lets the camera back out to
 // view the "snow globe" from outside
 const WHEEL_ZOOM_SPEED = 1.0; // GE/OrbitControls wheel curve: ~5% dolly per notch at speed 1
+const FOCUS_FIT_MARGIN = 1.25; // padding around a focused building's bounding sphere (1.0 = edges touch the frame)
+const FOCUS_MIN_DIST = 60 * CITY_SCALE; // don't dolly closer than this on focus (keeps small houses at a sane size)
+const FOCUS_SMOOTH_TIME = 0.18; // camera-controls smoothTime DURING a focus (< default 0.25 = snappier pan/dolly out)
+const ORTHO_FOCUS_DURATION = 0.6; // seconds for the ortho size ramp; > the pan settle so the zoom trails it
+const ORTHO_FOCUS_EASE = (t: number) => t * t * (3 - 2 * t); // smoothstep — flat start so the zoom lags the pan
 const ORTHO_SIZE_MIN = 5 * CITY_SCALE; // faked-ortho zoom band (frustum half-height); matches Map
 const ORTHO_SIZE_MAX = 2000 * CITY_SCALE;
 // "Skyline Mode": aim within 2° of flat (EITHER projection) — looking at the city edge-on, like an
@@ -267,6 +272,10 @@ export function StarryNightV2Model() {
   const grabP = useRef(new THREE.Vector3()); // free-look grab handle (a fixed world point)
   const orbitAxis = useRef(new THREE.Vector3(1, 0, 0)); // carried tilt axis (stable through straight-down)
   const skylineScreenY = useRef(0.5); // Skyline Mode framing: city rest point up from bottom (0.5 = centred)
+  const orthoFocusTarget = useRef<number | null>(null); // in-flight ortho focus zoom: orthoSize goal (ramped in useFrame)
+  const orthoFocusStart = useRef(0); // orthoSize at the moment the focus began
+  const orthoFocusT = useRef(0); // ortho focus zoom progress 0..1 (smoothstep-eased)
+  const baseSmoothTime = useRef<number | null>(null); // camera-controls' default smoothTime, restored after a focus
   // Captured once, at render — BEFORE the handoff-adoption effect below can consume + clear
   // cameraHandoff — so the framing effect further down can tell a restore pose (leaving
   // top-down back to this model, #83) was pending at mount. A live getState() read INSIDE
@@ -336,23 +345,55 @@ export function StarryNightV2Model() {
     }
   }, [mode]);
 
-  // #87 focus: glide the pivot onto a focus request's target (a building's
-  // ground centre) at its framing distance, keeping the current viewing
-  // direction. enableTransition=true eases camera-controls there and leaves the
-  // user orbiting AROUND the target afterward (the Unity-F feel). Consumed once.
+  // #87 focus: glide the pivot onto a focus request's target (a building's 3D
+  // centre) and frame the whole building, keeping the current viewing direction.
+  //
+  // We PAN the pivot (moveTo) and dolly to the fit distance, but never touch the
+  // azimuth/polar. setLookAt would tween the azimuth NUMERICALLY from the current
+  // theta — which drag accumulates into whole extra turns — to atan2's (-pi, pi]
+  // home value, so a focus after some orbiting revolves the camera the long way
+  // round the city. Keeping the angle (moveTo + dollyTo) is the shortest route:
+  // zero rotation. Distance fits the request's bounding SPHERE to the narrower of
+  // the live vertical/horizontal fov (so the whole building stays on screen at
+  // any orbit angle, in any aspect bucket). Consumed once; focusPivot then keeps
+  // LMB-orbit pivoting on this centre (see the orbit branch below).
   useEffect(() => {
-    const eye = new THREE.Vector3();
-    const dir = new THREE.Vector3();
     const unsub = useSceneStore.subscribe((s, p) => {
       const f = s.focusRequest;
       if (f === p.focusRequest || !f) return;
       const c = controls.current;
       if (!c || s.cameraMode !== "orbit") return;
-      c.getPosition(eye);
-      dir.set(eye.x - f.x, eye.y - f.y, eye.z - f.z);
-      const len = dir.length() || 1;
-      dir.multiplyScalar(f.dist / len);
-      void c.setLookAt(f.x + dir.x, f.y + dir.y, f.z + dir.z, f.x, f.y, f.z, true);
+      const pc = c.camera as THREE.PerspectiveCamera;
+      const vFov = (pc.fov * DEG) / 2; // vertical half-fov
+      const hFov = Math.atan(Math.tan(vFov) * (pc.aspect || 1)); // horizontal half-fov
+      const halfFov = Math.max(1e-3, Math.min(vFov, hFov)); // the limiting one
+      const dist = Math.max((f.radius / Math.sin(halfFov)) * FOCUS_FIT_MARGIN, FOCUS_MIN_DIST);
+      // POSITION/rotation get a stronger ease-out: run this transition at a shorter
+      // smoothTime so the pivot zeroes in decisively, then restore the default.
+      // (camera-controls' smoothTime is global to transitions, so save/restore it.)
+      if (baseSmoothTime.current === null) baseSmoothTime.current = c.smoothTime;
+      const base = baseSmoothTime.current;
+      c.smoothTime = FOCUS_SMOOTH_TIME;
+      void Promise.all([c.moveTo(f.x, f.y, f.z, true), c.dollyTo(dist, true)]).finally(() => {
+        c.smoothTime = base;
+      });
+      // In ORTHO, apparent size is orthoSize (not distance), so dollyTo doesn't
+      // zoom — ramp orthoSize so the building's bounding sphere fills ~half the
+      // viewport HEIGHT (oeff = orthoSize·framingFactor, full height = 2·oeff, so a
+      // sphere of diameter 2·radius fills half when oeff = 2·radius). The ramp is a
+      // slow-start smoothstep over ORTHO_FOCUS_DURATION (see useFrame), longer than
+      // the snappy pan, so we settle on position BEFORE the zoom really ramps.
+      if (s.projection === "orthographic") {
+        orthoFocusStart.current = s.orthoSize;
+        orthoFocusT.current = 0;
+        orthoFocusTarget.current = THREE.MathUtils.clamp(
+          (2 * f.radius) / orbitFramingFactor(pc.aspect || 1),
+          ORTHO_SIZE_MIN,
+          ORTHO_SIZE_MAX,
+        );
+      } else {
+        orthoFocusTarget.current = null;
+      }
       useSceneStore.getState().setFocusRequest(null);
     });
     return unsub;
@@ -611,7 +652,17 @@ export function StarryNightV2Model() {
         // click or a double-click (zoom-in) never flashes it. The view rotates around it, no re-centre.
         drag = "orbit";
         hideGlyph(); // orbit uses the pin marker, not a cursor glyph
-        if (groundHit(cam, dom, e.clientX, e.clientY, _cur)) {
+        const st = useSceneStore.getState();
+        const fp = st.inspectMode ? st.focusPivot : null;
+        if (fp) {
+          // Inspect focus-lock: while a building is FOCUSED, orbit around its 3D centre
+          // rather than the ground point under the cursor — so LMB-drag keeps circling
+          // the building the double-click framed, at any height. The building already
+          // wears its selection MapPin (BuildingPin, above the roof), so DON'T raise the
+          // transient orbit-pivot pin here — that roof pin is the marker.
+          _grab.set(fp[0], fp[1], fp[2]);
+          orbitPinPending = null;
+        } else if (groundHit(cam, dom, e.clientX, e.clientY, _cur)) {
           // Pivot must lie within the ground disc — a click near the horizon hits the (infinite)
           // ground plane far off the map, so clamp it to the disc edge; we never orbit around a
           // point outside the city's ground.
@@ -871,6 +922,10 @@ export function StarryNightV2Model() {
     const onDbl = (e: MouseEvent) => {
       const c = controls.current;
       if (!c) return;
+      // In inspect mode a double-click is the building FOCUS gesture (InstancedCity handles it), so
+      // the default zoom-to-cursor must NOT also fire — two camera tweens on one double-click fought
+      // and read as a harsh snap. Outside inspect mode, double-click zooms as before.
+      if (useSceneStore.getState().inspectMode) return;
       markCameraActivity("zoomIn"); // its own guide row (double-click), distinct from wheel Zoom
       zoomAtCursor(c, cam, dom, e.clientX, e.clientY, 0.6, true);
       setPin(null);
@@ -882,6 +937,7 @@ export function StarryNightV2Model() {
     const onWheel = (e: WheelEvent) => {
       const c = controls.current;
       if (!c) return;
+      orthoFocusTarget.current = null; // a manual zoom cancels an in-flight focus zoom
       e.preventDefault();
       markCameraActivity("zoom");
       const k = Math.pow(
@@ -961,7 +1017,7 @@ export function StarryNightV2Model() {
   }, []);
 
   // ~10/s pose write-back so fog / moon-follow / panel readout track the live view.
-  useFrame((state) => {
+  useFrame((state, delta) => {
     const c = controls.current;
     if (!c || mode !== "orbit") return;
 
@@ -981,6 +1037,17 @@ export function StarryNightV2Model() {
     const curOffY = c.getFocalOffset(_focalOff).y;
     const nextOffY = curOffY + (targetOffY - curOffY) * 0.35;
     if (Math.abs(nextOffY - curOffY) > 0.5) c.setFocalOffset(0, nextOffY, 0, false);
+
+    // Ortho focus zoom (#87): advance a slow-start smoothstep ramp on THIS frame
+    // clock (the same one camera-controls' pan/dolly runs on). The flat start means
+    // the size barely moves while the snappy pan zeroes in, then eases into the
+    // target — position leads, zoom trails.
+    if (orthoFocusTarget.current !== null) {
+      orthoFocusT.current = Math.min(1, orthoFocusT.current + delta / ORTHO_FOCUS_DURATION);
+      const e = ORTHO_FOCUS_EASE(orthoFocusT.current);
+      st.setOrthoSize(orthoFocusStart.current + (orthoFocusTarget.current - orthoFocusStart.current) * e);
+      if (orthoFocusT.current >= 1) orthoFocusTarget.current = null;
+    }
 
     const tt = state.clock.elapsedTime;
     if (tt - lastWrite.current >= 0.1) {

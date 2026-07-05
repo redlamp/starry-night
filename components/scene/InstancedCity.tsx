@@ -153,7 +153,7 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
   // prefix within each tile, same recompaction path as frustum re-entry) so a
   // crop notch never rebuilds a mesh, atlas, or window texture. See
   // wiki/notes/plan-overnight-agents-2026-07-05.md #70.
-  const { entries, maxRadius, idToBuilding } = useMemo(() => {
+  const { entries, maxRadius, idToBuilding, districtColorById } = useMemo(() => {
     void citySize; // tier drives the module-level gen extent (#58) — a switch must rebuild
     void citySketch; // a registered sketch is a different city (#40) — likewise
     return buildMeshes(masterSeed, cityShape);
@@ -349,6 +349,12 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
       }
     }
     if (!hasSelect) selectScratch.current.set(PICK_SENTINEL, PICK_SENTINEL, PICK_SENTINEL);
+    // #87: tint the SELECT outline to the building's district colour (matches the
+    // roof pin + wireframe + info panel). Display-space, for the raw-output shader.
+    const selColor =
+      hasSelect && selectedBuilding
+        ? (districtColorById.get(selectedBuilding.districtId) ?? SELECT_COLOR)
+        : SELECT_COLOR;
 
     // #70: live crop threshold — a building must sit within this distance of
     // the city centre to stay visible. Infinity when the resolved shape is
@@ -419,6 +425,7 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
         // hover-pick and a selection can coexist on the same mesh here.
         ou.uOutlineWidth.value = hh.outline;
         ou.uOutlineWhole.value = 0;
+        if (isSelectMesh) ou.uSelectColor.value.copy(selColor); // district-tinted selection
       }
       tilesTot += partition.tiles.length;
       if (s.lod.tiles && partition.tiles.length > 1) {
@@ -663,7 +670,12 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
 function buildMeshes(
   masterSeed: string,
   shape: CityShapeSetting,
-): { entries: TiledMesh[]; maxRadius: number; idToBuilding: Map<number, Building> } {
+): {
+  entries: TiledMesh[];
+  maxRadius: number;
+  idToBuilding: Map<number, Building>;
+  districtColorById: Map<string, THREE.Color>;
+} {
   // #70: always the FULL (scale=1) MAX-extent set for this shape/tier — the
   // live crop is a render-only cull (see the useFrame loop above), never a
   // regen input. This is a superset for every scale <= 1: cropRadiusThreshold
@@ -675,7 +687,8 @@ function buildMeshes(
   // over the FULL list (before the per-archetype grouping below) since ids
   // are unique city-wide, not per-archetype.
   const idToBuilding = new Map(buildings.map((b) => [b.id, b]));
-  if (buildings.length === 0) return { entries: [], maxRadius: 1, idToBuilding };
+  if (buildings.length === 0)
+    return { entries: [], maxRadius: 1, idToBuilding, districtColorById: new Map() };
 
   // Build-time snapshot; the recolor effect re-applies live slider changes.
   const facadeRanges = useSceneStore.getState().facade;
@@ -697,7 +710,13 @@ function buildMeshes(
   // Parcel id → plan colour (the DistrictShells palette) for the district tint
   // debug mode. tensorDistrictField is cached, so this is a cheap shared read.
   const parcelColor = new Map<string, string>();
-  for (const d of tensorDistrictField(masterSeed).districts) parcelColor.set(d.id, d.color);
+  // #87: display-space THREE.Colors of the same palette, for the select outline's
+  // uSelectColor (the raw-output outline shader needs display space — see displayColor).
+  const districtColorById = new Map<string, THREE.Color>();
+  for (const d of tensorDistrictField(masterSeed).districts) {
+    parcelColor.set(d.id, d.color);
+    districtColorById.set(d.id, displayColor(d.color));
+  }
 
   // 1. Generate per-building window pixels. While the data is in hand, fold
   // each building's cells into the hybrid far-field statistics (#82) — see
@@ -999,6 +1018,14 @@ function buildMeshes(
 
     mesh.instanceMatrix.needsUpdate = true;
     mesh.frustumCulled = false; // we cull per TILE (#55), finer than a whole-mesh test.
+    // Pin the raycast bounding sphere NOW, over the full instance set (count === N
+    // here, before the frame loop shrinks it). InstancedMesh.raycast early-outs on
+    // a cached boundingSphere it computes lazily over the CURRENT `count`; with #55
+    // per-frame compaction that first-computed sphere would cover only whatever was
+    // visible at the first pointer-move and then go stale — silently dropping picks
+    // for buildings outside it. Buildings never move, so a full-set sphere always
+    // encloses any visible subset and keeps every drawn building hoverable.
+    mesh.computeBoundingSphere();
 
     // #55 source records: stable tile-major copies the frame loop compacts from.
     // The attribute arrays themselves are the (mutated) draw buffers.
@@ -1070,5 +1097,5 @@ function buildMeshes(
     });
   }
 
-  return { entries, maxRadius, idToBuilding };
+  return { entries, maxRadius, idToBuilding, districtColorById };
 }

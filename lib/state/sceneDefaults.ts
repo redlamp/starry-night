@@ -362,7 +362,7 @@ export const DEFAULT_DEBUG = {
   // #87 pick: "Pick Hovered" switch — when on, hovering ANY building in the 3D
   // view highlights just that one instance (see sceneStore's pickArchetype /
   // pickInstance), independent of the archetype-icon hover.
-  hoverHighlight: { outline: 2, lift: 1.8, dim: 0.7, pick: false },
+  hoverHighlight: { outline: 1, lift: 1.8, dim: 0.7, pick: false },
   // Air-route corridor overlay (#67 follow-up): 3D polyline of each seeded
   // flight corridor. Off by default — a debug aid, not scene art.
   showFlightRoutes: false,
