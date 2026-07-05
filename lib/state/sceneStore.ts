@@ -693,6 +693,7 @@ type SceneState = {
   setShowPinPlane: (v: boolean) => void;
   setWindowDebugView: (v: "final" | "atlas" | "field") => void;
   setShowFlightRoutes: (v: boolean) => void;
+  setShowHeliRoutes: (v: boolean) => void;
   // Organic city footprint (#14) — gen input; changing it regenerates the city.
   cityShape: CityShapeSetting;
   setCityShape: (cityShape: CityShapeSetting) => void;
@@ -986,6 +987,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setShowPinPlane: (v) => set((s) => ({ debug: { ...s.debug, showPinPlane: v } })),
   setWindowDebugView: (v) => set((s) => ({ debug: { ...s.debug, windowView: v } })),
   setShowFlightRoutes: (v) => set((s) => ({ debug: { ...s.debug, showFlightRoutes: v } })),
+  setShowHeliRoutes: (v) => set((s) => ({ debug: { ...s.debug, showHeliRoutes: v } })),
   cityShape: DEFAULT_CITY_SHAPE,
   setCityShape: (cityShape) => set({ cityShape }),
   cityShapeScale: DEFAULT_CITY_SHAPE_SCALE,

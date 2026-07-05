@@ -194,6 +194,8 @@ export function FlightsGroup() {
   const triggerFlightSpawn = useSceneStore((s) => s.triggerFlightSpawn);
   const showFlightRoutes = useSceneStore((s) => s.debug.showFlightRoutes);
   const setShowFlightRoutes = useSceneStore((s) => s.setShowFlightRoutes);
+  const showHeliRoutes = useSceneStore((s) => s.debug.showHeliRoutes);
+  const setShowHeliRoutes = useSceneStore((s) => s.setShowHeliRoutes);
   const airborne = useSceneStore((s) => s.flightsAirborne);
   const helicoptersEnabled = useSceneStore((s) => s.helicopters.enabled);
   const setHelicopters = useSceneStore((s) => s.setHelicopters);
@@ -280,6 +282,14 @@ export function FlightsGroup() {
           checked={showFlightRoutes}
           onCheckedChange={setShowFlightRoutes}
           title="Air Routes"
+        />
+      </label>
+      <label className="flex cursor-pointer items-center justify-between gap-2 text-xs">
+        <span className="text-foreground/70">Heli Routes</span>
+        <Switch
+          checked={showHeliRoutes}
+          onCheckedChange={setShowHeliRoutes}
+          title="Heli Routes"
         />
       </label>
       <label className="flex cursor-pointer items-center justify-between gap-2 text-xs">

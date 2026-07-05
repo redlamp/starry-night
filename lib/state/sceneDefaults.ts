@@ -366,6 +366,9 @@ export const DEFAULT_DEBUG = {
   // Air-route corridor overlay (#67 follow-up): 3D polyline of each seeded
   // flight corridor. Off by default — a debug aid, not scene art.
   showFlightRoutes: false,
+  // #89 helicopter patrol-route overlay (waypoint pads + transit legs) — a debug
+  // aid for spotting the (small, high/edge-positioned) helicopters. Off by default.
+  showHeliRoutes: false,
 };
 
 // Default wireframe stroke colour — a bright blue used where a group has no
