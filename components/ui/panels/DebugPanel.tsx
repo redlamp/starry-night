@@ -195,6 +195,9 @@ export function FlightsGroup() {
   const showFlightRoutes = useSceneStore((s) => s.debug.showFlightRoutes);
   const setShowFlightRoutes = useSceneStore((s) => s.setShowFlightRoutes);
   const airborne = useSceneStore((s) => s.flightsAirborne);
+  const helicoptersEnabled = useSceneStore((s) => s.helicopters.enabled);
+  const setHelicopters = useSceneStore((s) => s.setHelicopters);
+  const triggerHeliSpawn = useSceneStore((s) => s.triggerHeliSpawn);
   return (
     <SubGroup
       label="Flights"
@@ -262,12 +265,29 @@ export function FlightsGroup() {
           Spawn Cessna
         </Button>
       </div>
+      <Button
+        size="xs"
+        variant="outline"
+        className="w-full"
+        onClick={() => triggerHeliSpawn()}
+        title="Spawn Helicopter"
+      >
+        Spawn Helicopter
+      </Button>
       <label className="flex cursor-pointer items-center justify-between gap-2 text-xs">
         <span className="text-foreground/70">Air Routes</span>
         <Switch
           checked={showFlightRoutes}
           onCheckedChange={setShowFlightRoutes}
           title="Air Routes"
+        />
+      </label>
+      <label className="flex cursor-pointer items-center justify-between gap-2 text-xs">
+        <span className="text-foreground/70">Helicopters</span>
+        <Switch
+          checked={helicoptersEnabled}
+          onCheckedChange={(v) => setHelicopters({ enabled: v })}
+          title="Helicopters"
         />
       </label>
     </SubGroup>

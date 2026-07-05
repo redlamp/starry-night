@@ -369,7 +369,9 @@ export function Flights({ masterSeed }: { masterSeed: string }) {
     }
     if (airliner !== lastAirborne.current.airliner || lightGA !== lastAirborne.current.lightGA) {
       lastAirborne.current = { airliner, lightGA };
-      setFlightsAirborne({ airliner, lightGA, heli: 0 });
+      // Partial merge (sceneStore.ts) — Helicopters.tsx owns `heli` and is
+      // never stomped by this write.
+      setFlightsAirborne({ airliner, lightGA });
     }
   });
 

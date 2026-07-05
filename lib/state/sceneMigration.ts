@@ -146,6 +146,7 @@ export type SavedConfig = {
     lightSize: number;
   };
   flights?: { enabled: boolean; gapMin: number; gapMax: number; deviation: number };
+  helicopters?: { enabled: boolean };
   streetlights?: { enabled: boolean; size: number; brightness: number };
   lod?: {
     enabled: boolean;

@@ -410,6 +410,12 @@ export const DEFAULT_TRAFFIC = {
 //     line (uFlightDeviation); 0 flies the exact same line every pass.
 export const DEFAULT_FLIGHTS = { enabled: true, gapMin: 8, gapMax: 30, deviation: 0.3 };
 
+// Helicopters (#89) — third air-transit class, rooftop-to-rooftop patrol
+// loops. On by default, modeled on DEFAULT_FLIGHTS' enabled flag. No live
+// look settings yet (loop shape/speed are seed-baked) — see
+// lib/seed/helicopters.ts.
+export const DEFAULT_HELICOPTERS = { enabled: true };
+
 // Streetlights along the road network. On by default; toggled from the Roads panel.
 // `size` scales the point sprite (×base 6 px); `brightness` scales emissive gain.
 // Defaults dialled below 1.0 — on high-DPR mobile the sprite pinned the clamp
