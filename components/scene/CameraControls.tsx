@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { useSceneStore, type CameraIntent, type Vec3 } from "@/lib/state/sceneStore";
-import { enterFlyMode, enterOrbitMode } from "@/lib/scene/cameraView";
+import { enterOrbitMode } from "@/lib/scene/cameraView";
 import { liveViewPose } from "@/lib/scene/viewLink";
 import { CITY_SCALE } from "@/lib/seed/topology";
 import { isTypingTarget } from "@/lib/utils";
@@ -246,12 +246,9 @@ export function CameraControls() {
       }
       if (e.repeat) return;
       const key = e.key.toLowerCase();
-      if (key === "f") {
-        if (currentMode === "fly") enterOrbitMode();
-        else enterFlyMode();
-        return;
-      }
-      // G switches to orbit when NOT in fly mode (in fly, S/G are movement keys).
+      // F used to toggle Fly here; Fly is now selector-only (Settings → Camera) and F is the
+      // global Wireframe key (ViewHotkeys). G still switches to orbit when NOT in fly mode
+      // (in fly, S/G are movement keys).
       // Routes through enterOrbitMode so it also exits a held top-down cleanly.
       if (currentMode !== "fly" && key === "g") {
         enterOrbitMode();

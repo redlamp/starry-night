@@ -166,6 +166,14 @@ export const CLASS_SPEED: Record<FlightClass, number> = {
   lightGA: 50,
 };
 
+// Ambient plane pool (user 2026-07-06): a FIXED number of ambient slots baked
+// every seed. The "Max Planes" setting (Transport → Flights) caps how many are
+// VISIBLE — Flights.tsx zeroes the point size of the slots past the cap, a live
+// buffer write with no regen — so the slider's range is seed-independent and
+// dragging it never rebuilds the geometry. Slots round-robin across the
+// corridors, so capping to the first N keeps the spread across routes.
+export const AMBIENT_PLANE_POOL = 12;
+
 export function corridorLength(c: Corridor): number {
   return Math.hypot(c.aB[0] - c.aA[0], c.aB[1] - c.aA[1], c.aB[2] - c.aA[2]);
 }
@@ -291,24 +299,20 @@ export function buildFlights(masterSeed: string): FlightsData {
 
   const corridors: Corridor[] = [departureCorridor, ...flybyCorridors];
 
-  // Slots, spread across every corridor — a few each (#67 multi-route
-  // follow-up), aiming ~5-8 planes total rather than piling them onto one
-  // route. Each corridor independently rolls 1-2 slots. Fly-by slots all take
-  // their corridor's pre-rolled class (see above, so altitude always matches
-  // the plane); the departure corridor has no fixed class, so its slots keep
-  // the original independent per-slot coin (55% airliner) — small planes
-  // legitimately share the same runway.
+  // Slots: a FIXED ambient pool (AMBIENT_PLANE_POOL) round-robined across every
+  // corridor for even spread (#67 multi-route follow-up; fixed-pool rework user
+  // 2026-07-06 for the live "Max Planes" cap — see the constant above). Fly-by
+  // slots take their corridor's pre-rolled class (so altitude always matches the
+  // plane); the departure corridor has no fixed class, so its slots keep the
+  // original per-slot coin (55% airliner) — small planes share the runway too.
+  // Per-slot speed jitter (mirrors traffic's aSpeed) keeps loop periods off a
+  // clean ratio so planes don't pulse in lockstep.
   const slots: FlightSlot[] = [];
-  for (let c = 0; c < corridors.length; c++) {
-    const len = corridorLength(corridors[c]);
-    const slotsHere = 1 + (rng() < 0.5 ? 1 : 0);
-    for (let i = 0; i < slotsHere; i++) {
-      const cls: FlightClass = corridors[c].cls ?? (rng() < AIRLINER_SHARE ? "airliner" : "lightGA");
-      // Per-slot speed jitter (mirrors traffic's aSpeed jitter): keeps loop
-      // periods off a clean ratio so planes don't pulse in lockstep.
-      const speed = CLASS_SPEED[cls] * (0.9 + rng() * 0.2);
-      slots.push({ corridor: c, phase: rng(), transitSec: len / speed, cls });
-    }
+  for (let i = 0; i < AMBIENT_PLANE_POOL; i++) {
+    const c = i % corridors.length;
+    const cls: FlightClass = corridors[c].cls ?? (rng() < AIRLINER_SHARE ? "airliner" : "lightGA");
+    const speed = CLASS_SPEED[cls] * (0.9 + rng() * 0.2);
+    slots.push({ corridor: c, phase: rng(), transitSec: corridorLength(corridors[c]) / speed, cls });
   }
 
   return {

@@ -273,20 +273,6 @@ export function toggleTopDown() {
   applyTransportDefault("topdown");
 }
 
-// `f` hotkey: toggle the Fly camera MODEL on/off (back to Map when leaving).
-export function toggleFly() {
-  const s = useSceneStore.getState();
-  if (s.cameraModel === "fly") {
-    s.setCameraMode("orbit");
-    s.setCameraModel("map");
-    applyTransportDefault("map");
-  } else {
-    s.setCameraMode("fly");
-    s.setCameraModel("fly");
-    applyTransportDefault("fly");
-  }
-}
-
 // "Default Orbit" button: reset the orbit framing to DEFAULT_ORBIT with a tween
 // (elevation / radius / orthoSize animate; azimuth is kept so it doesn't spin).
 export function tweenOrbitToDefault() {
@@ -448,9 +434,9 @@ export function toggleProjection() {
   tweenProjectionTo(s.projection === "orthographic" ? "perspective" : "orthographic");
 }
 
-// `d` hotkey (orbit only): flip every render group to wireframe, remembering the
-// exact prior modes; press again to restore them. Snapshot is module-level, so a
-// reload/HMR just starts fresh (next `d` re-snapshots).
+// `f` hotkey (global, via ViewHotkeys): flip every render group to wireframe, remembering
+// the exact prior modes; press again to restore them. Snapshot is module-level, so a
+// reload/HMR just starts fresh (next `f` re-snapshots).
 let wireframeSnapshot: Record<RenderGroup, RenderMode> | null = null;
 export function toggleAllWireframe() {
   const s = useSceneStore.getState();

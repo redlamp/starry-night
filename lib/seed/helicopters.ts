@@ -91,8 +91,12 @@ const OFFMAP_PAD_Y = 8; // low, just above ground — an off-map pad, not cruise
 // buildHelicopters.
 const OFFMAP_USE_PROB = 0.25;
 
-const HELI_COUNT_MIN = 4; // #89: 1 -> 4
-const HELI_COUNT_MAX = 6; // inclusive (#89: 3 -> 6)
+// Fixed ambient pool (user 2026-07-06): bake this many helicopters every seed;
+// the "Max Helicopters" setting caps how many are VISIBLE (Helicopters.tsx
+// zeroes the point size of the rest — a live buffer write, no regen), so the
+// slider's range is seed-independent. The first CENTRAL_HELI_COUNT are
+// downtown-biased, so a low cap keeps the ones in the default view.
+export const AMBIENT_HELI_POOL = 10;
 const STOPS_MIN = 2;
 const STOPS_MAX = 4; // inclusive
 
@@ -371,7 +375,7 @@ export function buildHelicopters(
   const centralPool = nearestToCenter(roofs, CENTRAL_POOL_SIZE);
   const centralPoolUsable = centralPool.length >= 2;
 
-  const count = HELI_COUNT_MIN + Math.floor(rng() * (HELI_COUNT_MAX - HELI_COUNT_MIN + 1));
+  const count = AMBIENT_HELI_POOL;
 
   // Off-map fringe pads: rare by design (#89). One seeded roll per city
   // decides whether ANY helicopter may touch them at all; if it hits, a

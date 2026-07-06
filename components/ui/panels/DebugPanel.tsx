@@ -4,10 +4,13 @@ import { Fragment, useState, useEffect } from "react";
 import {
   useSceneStore,
   DEFAULT_FLIGHTS,
+  DEFAULT_HELICOPTERS,
   RENDER_GROUPS,
   type RenderGroup,
   type RenderMode,
 } from "@/lib/state/sceneStore";
+import { AMBIENT_PLANE_POOL } from "@/lib/seed/flights";
+import { AMBIENT_HELI_POOL } from "@/lib/seed/helicopters";
 import { CITY_SHAPES, type CityShapeSetting } from "@/lib/seed/cityShape";
 import { CITY_TIER_ORDER } from "@/lib/seed/topology";
 import { TIER_LABELS, tierKm } from "@/components/ui/cityTiers";
@@ -179,14 +182,16 @@ export function TrafficGroup() {
   );
 }
 
-// Flights — ambient departure/fly-by corridors (#67), enable switch on
-// header. Slot count/corridor placement are seed-baked, not live knobs, but
-// the ANIMATION has two live look settings (#67 follow-up): gap (time-
-// between-flights range) and deviation (per-pass route wander) — see
-// lib/shaders/flights.ts. The two spawn buttons + route overlay below remain
-// debug aids, not look-and-feel settings.
+// Flights — the air-traffic group: ambient plane corridors (#67) + helicopters
+// (#89). The header switch is the plane-layer master enable. Corridor/route
+// placement is seed-baked; the live knobs are Planes / Helis (how many ambient
+// aircraft of each are shown — a size-zero cap, no regen; Helis at 0 turns
+// helicopters off, replacing the old switch — user 2026-07-06), plus gap and
+// deviation. The three spawn buttons + route overlays below are debug aids,
+// not look-and-feel settings.
 export function FlightsGroup() {
   const enabled = useSceneStore((s) => s.flights.enabled);
+  const maxPlanes = useSceneStore((s) => s.flights.maxPlanes ?? DEFAULT_FLIGHTS.maxPlanes);
   const gapMin = useSceneStore((s) => s.flights.gapMin ?? DEFAULT_FLIGHTS.gapMin);
   const gapMax = useSceneStore((s) => s.flights.gapMax ?? DEFAULT_FLIGHTS.gapMax);
   const deviation = useSceneStore((s) => s.flights.deviation ?? DEFAULT_FLIGHTS.deviation);
@@ -197,7 +202,7 @@ export function FlightsGroup() {
   const showHeliRoutes = useSceneStore((s) => s.debug.showHeliRoutes);
   const setShowHeliRoutes = useSceneStore((s) => s.setShowHeliRoutes);
   const airborne = useSceneStore((s) => s.flightsAirborne);
-  const helicoptersEnabled = useSceneStore((s) => s.helicopters.enabled);
+  const maxHelis = useSceneStore((s) => s.helicopters.count ?? DEFAULT_HELICOPTERS.count);
   const setHelicopters = useSceneStore((s) => s.setHelicopters);
   const triggerHeliSpawn = useSceneStore((s) => s.triggerHeliSpawn);
   return (
@@ -224,9 +229,26 @@ export function FlightsGroup() {
         </div>
       }
     >
-      <p className="text-foreground/55 text-[11px]">
-        One seeded departure corridor; airliner + light-GA classes read by light pattern + speed.
-      </p>
+      <ValueSlider
+        label="Planes"
+        hint="How many ambient planes fly at once — a live cap on the seeded pool (no regen). Debug spawns below are separate."
+        value={maxPlanes}
+        min={0}
+        max={AMBIENT_PLANE_POOL}
+        step={1}
+        format={{ maximumFractionDigits: 0 }}
+        onChange={(maxPlanes) => setFlights({ maxPlanes })}
+      />
+      <ValueSlider
+        label="Helis"
+        hint="How many ambient helicopters patrol at once — a live cap on the seeded pool. 0 turns helicopters off. Debug spawns below are separate."
+        value={maxHelis}
+        min={0}
+        max={AMBIENT_HELI_POOL}
+        step={1}
+        format={{ maximumFractionDigits: 0 }}
+        onChange={(count) => setHelicopters({ count })}
+      />
       <RangeSlider
         label="Gap"
         hint="Idle time between passes on the same route, in seconds; 0 keeps a plane on it constantly."
@@ -245,37 +267,42 @@ export function FlightsGroup() {
         step={0.05}
         onChange={(v) => setFlights({ deviation: v })}
       />
-      {/* One-shot debug spawns — fire a plane now instead of waiting out the
-          ambient ~40-90s loop. */}
-      <div className="flex gap-2">
+      {/* One-shot debug spawns — fire one now instead of waiting out the ambient
+          loop. All three on one row under a "Spawn" header, so the labels drop
+          the "Spawn" prefix (kept in the tooltip). Independent of the Planes/
+          Helis caps above. */}
+      <span className="text-foreground/55 text-[11px] font-medium tracking-wide uppercase">
+        Spawn
+      </span>
+      <div className="flex gap-1.5">
         <Button
           size="xs"
           variant="outline"
-          className="flex-1"
+          className="flex-1 px-1"
           onClick={() => triggerFlightSpawn("airliner")}
           title="Spawn Airliner"
         >
-          Spawn Airliner
+          Airliner
         </Button>
         <Button
           size="xs"
           variant="outline"
-          className="flex-1"
+          className="flex-1 px-1"
           onClick={() => triggerFlightSpawn("lightGA")}
           title="Spawn Cessna"
         >
-          Spawn Cessna
+          Cessna
+        </Button>
+        <Button
+          size="xs"
+          variant="outline"
+          className="flex-1 px-1"
+          onClick={() => triggerHeliSpawn()}
+          title="Spawn Helicopter"
+        >
+          Heli
         </Button>
       </div>
-      <Button
-        size="xs"
-        variant="outline"
-        className="w-full"
-        onClick={() => triggerHeliSpawn()}
-        title="Spawn Helicopter"
-      >
-        Spawn Helicopter
-      </Button>
       <label className="flex cursor-pointer items-center justify-between gap-2 text-xs">
         <span className="text-foreground/70">Air Routes</span>
         <Switch
@@ -290,14 +317,6 @@ export function FlightsGroup() {
           checked={showHeliRoutes}
           onCheckedChange={setShowHeliRoutes}
           title="Heli Routes"
-        />
-      </label>
-      <label className="flex cursor-pointer items-center justify-between gap-2 text-xs">
-        <span className="text-foreground/70">Helicopters</span>
-        <Switch
-          checked={helicoptersEnabled}
-          onCheckedChange={(v) => setHelicopters({ enabled: v })}
-          title="Helicopters"
         />
       </label>
     </SubGroup>

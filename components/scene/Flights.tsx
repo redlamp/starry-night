@@ -116,8 +116,11 @@ export function Flights({ masterSeed }: { masterSeed: string }) {
   const spawnAirliner = useSceneStore((s) => s.flightsSpawn.airliner);
   const spawnLightGA = useSceneStore((s) => s.flightsSpawn.lightGA);
   const setFlightsAirborne = useSceneStore((s) => s.setFlightsAirborne);
+  // "Max Planes" live cap — how many ambient slots are shown (see the cap
+  // effect below). NOT a memo dep: dragging it must never rebuild the geometry.
+  const maxPlanes = useSceneStore((s) => s.flights.maxPlanes ?? DEFAULT_FLIGHTS.maxPlanes);
 
-  const { geometry, material, debugBase, slotMeta } = useMemo(() => {
+  const { geometry, material, debugBase, slotMeta, ambientSizes } = useMemo(() => {
     void citySize; // tier drives the module-level gen extent (#58) — a switch must rebuild
     const data = buildFlights(masterSeed);
     const n =
@@ -261,7 +264,11 @@ export function Flights({ masterSeed }: { masterSeed: string }) {
       phase: sl.phase,
       cls: sl.cls,
     }));
-    return { geometry: geo, material: mat, debugBase, slotMeta };
+    // Untouched build-time point size for every AMBIENT vertex, so the Max
+    // Planes cap effect can hide/restore whole slots by writing aSize live
+    // (0 = hidden, ambientSizes[v] = restore) without rebuilding this geometry.
+    const ambientSizes = aSize.slice(0, data.slots.length * VERTS_PER_PLANE);
+    return { geometry: geo, material: mat, debugBase, slotMeta, ambientSizes };
     // gapMin/gapMax/deviation seed the uniforms above but must NOT trigger a
     // rebuild on every slider tick — the effect below re-syncs their live
     // values onto this same long-lived material instead.
@@ -283,6 +290,23 @@ export function Flights({ masterSeed }: { masterSeed: string }) {
     material.uniforms.uGapMax.value = gapMax;
     material.uniforms.uFlightDeviation.value = deviation;
   }, [material, gapMin, gapMax, deviation]);
+
+  // "Max Planes" cap (user 2026-07-06): show only the first `maxPlanes` ambient
+  // slots — the rest get point size 0. A live buffer write on the long-lived
+  // geometry (no rebuild, so no shader recompile mid-drag); ambientSizes restores
+  // exact sizes when the cap is raised. Debug-spawn planes sit past the ambient
+  // region and are never touched here.
+  useEffect(() => {
+    const aSize = geometry.getAttribute("aSize") as THREE.BufferAttribute;
+    for (let s = 0; s < slotMeta.length; s++) {
+      const visible = s < maxPlanes;
+      for (let j = 0; j < VERTS_PER_PLANE; j++) {
+        const v = s * VERTS_PER_PLANE + j;
+        aSize.setX(v, visible ? ambientSizes[v] : 0);
+      }
+    }
+    aSize.needsUpdate = true;
+  }, [geometry, slotMeta, ambientSizes, maxPlanes]);
 
   // Debug spawn triggers (#67 follow-up): each counter increment rewrites the
   // reserved instance's aPhase so uTime/aTransit+aPhase reads 0 at the CURRENT
@@ -337,7 +361,10 @@ export function Flights({ masterSeed }: { masterSeed: string }) {
     let lightGA = 0;
     if (enabled) {
       const now = sharedTime.value;
-      for (const m of slotMeta) {
+      // Only the visible slots (Max Planes cap): capped slots have point size 0,
+      // so they're not in the sky and must not be tallied.
+      for (let i = 0; i < slotMeta.length && i < maxPlanes; i++) {
+        const m = slotMeta[i];
         const gap = gapMin + hash11(m.phase * 41 + 7) * (gapMax - gapMin);
         const cycle = m.transitSec + gap;
         // Airborne while the cycle position is within the transit fraction; the

@@ -77,6 +77,9 @@ export interface Snv2Config {
   maxDist: number; // farthest the camera may get (world metres)
   orbitSpeed: number; // tilt / rotate drag sensitivity (× base). 1 = default
   zoomSpeed: number; // wheel zoom rate (× base). 1 = default
+  moveSpeed: number; // WASD/QE fly-through rate (× base). Speed scales with altitude
+  // (perspective) or view size (ortho), so the on-screen glide feels constant at any zoom
+  // — this is the multiplier on top of that. 1 = default
   // Perspective: lowest the view may tilt. 0 = level (no looking up); negative lets the camera drop
   // into a low vantage looking up; positive keeps it angled down. Down-tilt still caps near vertical.
   tiltFloorDeg: number;

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import { useSceneStore } from "@/lib/state/sceneStore";
+import { useSceneStore, DEFAULT_HELICOPTERS } from "@/lib/state/sceneStore";
 import { buildHelicopters } from "@/lib/seed/helicopters";
 import { sharedTime } from "@/lib/shaders/sharedTime";
 import { sharedIntroProgress } from "@/lib/shaders/sharedIntro";
@@ -58,14 +58,25 @@ const DEBUG_POOL_SIZE = 12;
 const DEBUG_PARKED_PHASE = 1e6;
 
 export function Helicopters({ masterSeed }: { masterSeed: string }) {
-  const enabled = useSceneStore((s) => s.helicopters.enabled);
+  // "Max Helicopters" live cap — how many ambient helicopters are shown (0 =
+  // off; see the cap effect + render gate below). NOT a memo dep: dragging it
+  // must never rebuild the geometry.
+  const count = useSceneStore((s) => s.helicopters.count ?? DEFAULT_HELICOPTERS.count);
   const cityShape = useSceneStore((s) => s.cityShape);
   const cityShapeScale = useSceneStore((s) => s.cityShapeScale);
   const citySize = useSceneStore((s) => s.citySize);
   const heliSpawn = useSceneStore((s) => s.heliSpawn);
   const setFlightsAirborne = useSceneStore((s) => s.setFlightsAirborne);
 
-  const { geometry, material, debugBase, debugLegCount, ambientCount } = useMemo(() => {
+  const {
+    geometry,
+    material,
+    debugBase,
+    debugLegCount,
+    ambientCount,
+    ambientHeliBounds,
+    ambientSizeZ,
+  } = useMemo(() => {
     void citySize; // tier drives the module-level gen extent (#58) — a switch must rebuild
     const data = buildHelicopters(masterSeed, cityShape, cityShapeScale);
     const rep = data.helicopters[0];
@@ -136,11 +147,22 @@ export function Helicopters({ masterSeed }: { masterSeed: string }) {
       }
     };
 
+    // Ambient helicopters — each a contiguous run of leg-vertices. Record the
+    // [start, end) vertex range per helicopter so the Max Helicopters cap effect
+    // can hide/restore a whole helicopter by zeroing its point size (aLight.z).
+    const ambientHeliBounds: { start: number; end: number }[] = [];
     for (const heli of data.helicopters) {
+      const start = c;
       for (const leg of heli.legs) {
         writeLeg(leg, heli.phase, heli.cycleSec, leg.winStart, leg.winEnd, 0);
       }
+      ambientHeliBounds.push({ start, end: c });
     }
+    const ambientVertCount = c; // vertices used by ambient helis (the debug pool follows)
+    // Untouched build-time point size for every ambient vertex, so the cap
+    // effect can restore exact sizes when the cap is raised.
+    const ambientSizeZ = new Float32Array(ambientVertCount);
+    for (let v = 0; v < ambientVertCount; v++) ambientSizeZ[v] = aLight[v * 3 + 2];
 
     // Debug spawn reserve — a POOL of instances, all parked invisible
     // (DEBUG_PARKED_PHASE) until a Debug-panel trigger rewrites one's phase
@@ -190,6 +212,8 @@ export function Helicopters({ masterSeed }: { masterSeed: string }) {
       debugBase,
       debugLegCount: repLegCount,
       ambientCount: data.helicopters.length,
+      ambientHeliBounds,
+      ambientSizeZ,
     };
   }, [masterSeed, cityShape, cityShapeScale, citySize]);
 
@@ -199,6 +223,21 @@ export function Helicopters({ masterSeed }: { masterSeed: string }) {
       material.dispose();
     };
   }, [geometry, material]);
+
+  // "Max Helicopters" cap (user 2026-07-06): show the first `count` helicopters
+  // and hide the rest by zeroing their point size (aLight.z) — a live buffer
+  // write on the long-lived geometry (no rebuild / recompile). ambientSizeZ is
+  // the untouched build-time size, restored when the cap is raised. The debug
+  // pool sits past the ambient region and is never touched here.
+  useEffect(() => {
+    const aLight = geometry.getAttribute("aLight") as THREE.BufferAttribute;
+    for (let i = 0; i < ambientHeliBounds.length; i++) {
+      const visible = i < count;
+      const { start, end } = ambientHeliBounds[i];
+      for (let v = start; v < end; v++) aLight.setZ(v, visible ? ambientSizeZ[v] : 0);
+    }
+    aLight.needsUpdate = true;
+  }, [geometry, ambientHeliBounds, ambientSizeZ, count]);
 
   // Debug spawn trigger (mirrors Flights.tsx): each click rewrites the next
   // pool instance's aClock.x (phase) so uTime/cycleSec+phase reads 0 at the
@@ -233,8 +272,8 @@ export function Helicopters({ masterSeed }: { masterSeed: string }) {
     if (tallyAcc.current < 0.35) return;
     tallyAcc.current = 0;
     let heli = 0;
-    if (enabled) {
-      heli += ambientCount;
+    if (count > 0) {
+      heli += Math.min(count, ambientCount); // capped helis are hidden (Max Helicopters)
       const now = sharedTime.value;
       const aClockAttr = geometry.getAttribute("aClock") as THREE.BufferAttribute;
       for (let i = 0; i < DEBUG_POOL_SIZE; i++) {
@@ -251,6 +290,6 @@ export function Helicopters({ masterSeed }: { masterSeed: string }) {
     }
   });
 
-  if (!enabled) return null;
+  if (count === 0) return null; // Max Helicopters at 0 = off (replaced the enabled switch)
   return <points geometry={geometry} material={material} frustumCulled={false} />;
 }
