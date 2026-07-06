@@ -51,6 +51,18 @@ const FOCUS_MIN_DIST = 60 * CITY_SCALE; // don't dolly closer than this on focus
 const FOCUS_SMOOTH_TIME = 0.18; // camera-controls smoothTime DURING a focus (< default 0.25 = snappier pan/dolly out)
 const ORTHO_FOCUS_DURATION = 0.6; // seconds for the ortho size ramp; > the pan settle so the zoom trails it
 const ORTHO_FOCUS_EASE = (t: number) => t * t * (3 - 2 * t); // smoothstep — flat start so the zoom lags the pan
+// WASD/QE fly-through (SNCv2). Speed scales with on-screen scale so the glide is
+// zoom-constant (Google-Earth style): altitude in perspective, orthoSize × framing in
+// ortho. Tuned so a held key crosses ~1 viewport/sec; snv2.moveSpeed multiplies it.
+const MOVE_CODES = new Set(["KeyW", "KeyA", "KeyS", "KeyD", "KeyQ", "KeyE"]);
+const MOVE_ALT_K = 0.6; // perspective: world units/sec per unit of altitude
+const MOVE_ORTHO_K = 1.3; // ortho: world units/sec per unit of (orthoSize × framing)
+const MOVE_MIN_ALT = 20; // floor the altitude used for speed so near-ground isn't frozen
+const _mvEye = new THREE.Vector3();
+const _mvTgt = new THREE.Vector3();
+const _mvFwd = new THREE.Vector3();
+const _mvRight = new THREE.Vector3();
+const _mvDelta = new THREE.Vector3();
 const ORTHO_SIZE_MIN = 5 * CITY_SCALE; // faked-ortho zoom band (frustum half-height); matches Map
 const ORTHO_SIZE_MAX = 2000 * CITY_SCALE;
 // "Skyline Mode": aim within 2° of flat (EITHER projection) — looking at the city edge-on, like an
@@ -276,6 +288,7 @@ export function StarryNightV2Model() {
   const orthoFocusStart = useRef(0); // orthoSize at the moment the focus began
   const orthoFocusT = useRef(0); // ortho focus zoom progress 0..1 (smoothstep-eased)
   const baseSmoothTime = useRef<number | null>(null); // camera-controls' default smoothTime, restored after a focus
+  const moveKeys = useRef<Record<string, boolean>>({}); // WASD/QE held state (by e.code), consumed in useFrame
   // Captured once, at render — BEFORE the handoff-adoption effect below can consume + clear
   // cameraHandoff — so the framing effect further down can tell a restore pose (leaving
   // top-down back to this model, #83) was pending at mount. A live getState() read INSIDE
@@ -578,6 +591,12 @@ export function StarryNightV2Model() {
       pulse();
     };
     const onKeyDown = (e: KeyboardEvent) => {
+      // WASD/QE fly-through — track by e.code (Shift flips e.key case, which would
+      // strand held movement); consumed in the useFrame loop below.
+      if (MOVE_CODES.has(e.code) && !isTypingTarget(e)) {
+        moveKeys.current[e.code] = true;
+        return;
+      }
       if (e.key === "Control" || e.key === "Meta") {
         ctrlHeld = true;
         applyCursor();
@@ -601,6 +620,7 @@ export function StarryNightV2Model() {
       }
     };
     const onKeyUp = (e: KeyboardEvent) => {
+      if (MOVE_CODES.has(e.code)) moveKeys.current[e.code] = false;
       if (e.key === "Control" || e.key === "Meta") {
         ctrlHeld = false;
         applyCursor();
@@ -957,8 +977,10 @@ export function StarryNightV2Model() {
     };
 
     dom.style.cursor = "pointer"; // default affordance before any interaction
+    const clearMoveKeys = () => (moveKeys.current = {}); // drop held keys if focus leaves the window
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", clearMoveKeys);
     dom.addEventListener("pointerdown", onDown);
     dom.addEventListener("pointermove", onMove);
     dom.addEventListener("pointerup", onUp);
@@ -969,6 +991,8 @@ export function StarryNightV2Model() {
     return () => {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", clearMoveKeys);
+      moveKeys.current = {};
       dom.removeEventListener("pointerdown", onDown);
       dom.removeEventListener("pointermove", onMove);
       dom.removeEventListener("pointerup", onUp);
@@ -1047,6 +1071,44 @@ export function StarryNightV2Model() {
       const e = ORTHO_FOCUS_EASE(orthoFocusT.current);
       st.setOrthoSize(orthoFocusStart.current + (orthoFocusTarget.current - orthoFocusStart.current) * e);
       if (orthoFocusT.current >= 1) orthoFocusTarget.current = null;
+    }
+
+    // WASD/QE fly-through (SNCv2): translate the whole rig across the ground plane
+    // (WASD along the camera's HORIZONTAL heading, so it glides at any tilt) and
+    // vertically (Q down / E up). Speed scales with altitude in perspective and with
+    // orthoSize in ortho, so the on-screen glide stays zoom-constant (Google-Earth).
+    const mk = moveKeys.current;
+    const mvF = (mk.KeyW ? 1 : 0) - (mk.KeyS ? 1 : 0);
+    const mvR = (mk.KeyD ? 1 : 0) - (mk.KeyA ? 1 : 0);
+    const mvU = (mk.KeyE ? 1 : 0) - (mk.KeyQ ? 1 : 0);
+    if (mvF || mvR || mvU) {
+      orthoFocusTarget.current = null; // manual movement cancels an in-flight focus zoom
+      c.getPosition(_mvEye);
+      c.getTarget(_mvTgt);
+      _mvFwd.subVectors(_mvTgt, _mvEye);
+      _mvFwd.y = 0;
+      if (_mvFwd.lengthSq() < 1e-6) _mvFwd.set(0, 0, -1); // near top-down: pick a default heading
+      _mvFwd.normalize();
+      _mvRight.crossVectors(_mvFwd, _UP).normalize();
+      const speed =
+        st.projection === "orthographic"
+          ? st.orthoSize * orbitFramingFactor(pcam.aspect) * MOVE_ORTHO_K
+          : Math.max(_mvEye.y, MOVE_MIN_ALT) * MOVE_ALT_K;
+      const step = speed * st.snv2.moveSpeed * delta;
+      _mvDelta.copy(_mvFwd).multiplyScalar(mvF * step).addScaledVector(_mvRight, mvR * step);
+      // Keep the focal over the city disc (rigid rig move); Q/E stops at the ground floor.
+      const cl = clampToCity(_mvTgt.x + _mvDelta.x, _mvTgt.z + _mvDelta.z);
+      const dx = cl.x - _mvTgt.x;
+      const dz = cl.z - _mvTgt.z;
+      const dy = mvU * step;
+      let eyeY = _mvEye.y + dy;
+      let tgtY = _mvTgt.y + dy;
+      if (eyeY < MIN_EYE_Y) {
+        tgtY += MIN_EYE_Y - eyeY;
+        eyeY = MIN_EYE_Y;
+      }
+      void c.setLookAt(_mvEye.x + dx, eyeY, _mvEye.z + dz, _mvTgt.x + dx, tgtY, _mvTgt.z + dz, false);
+      markCameraActivity("pan");
     }
 
     const tt = state.clock.elapsedTime;

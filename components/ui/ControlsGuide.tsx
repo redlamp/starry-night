@@ -12,7 +12,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { useIdle } from "@/lib/useIdle";
 import { Switch } from "@/components/ui/switch";
-import { toggleProjection } from "@/lib/scene/cameraView";
+import { toggleProjection, toggleAllWireframe } from "@/lib/scene/cameraView";
 import { Eye, MapPin, Move } from "lucide-react";
 import { getCameraModelMeta } from "@/components/scene/camera-models/catalog";
 import type { CameraModelId } from "@/lib/state/sceneStore";
@@ -136,8 +136,12 @@ const MODEL_GUIDE: Record<CameraModelId, GuideSpec> = {
       { icon: "finger-1", motion: "all", label: "Move", action: "pan" },
       { icon: "pinch", label: "Zoom + Rotate", sub: "two fingers", action: "zoom" },
     ],
-    keys: [{ cap: "R", label: "Reset Camera", action: "reset" }],
-    hotkeys: ["projection", "settings"],
+    keys: [
+      { cap: "W A S D", label: "Move", action: "pan" },
+      { cap: "Q / E", label: "Down / Up" },
+      { cap: "R", label: "Reset Camera", action: "reset" },
+    ],
+    hotkeys: ["projection", "wireframe", "inspect", "settings"],
   },
   googleearth: {
     mouse: [
@@ -185,11 +189,13 @@ const MODEL_GUIDE: Record<CameraModelId, GuideSpec> = {
 // Toggle rows under the gestures: the keyboard shortcut (desktop only) + label + a live Switch wired
 // to the SAME store state the key flips, so the card doubles as a control surface. On touch the keycap
 // is hidden (no keyboard) but the label + switch stay. Keys mirror the app's real shortcuts.
-type HotkeyId = "autoOrbit" | "projection" | "showPin" | "zoom" | "settings";
-const HOTKEYS: { k: string; label: string; icon?: string; id: HotkeyId }[] = [
+type HotkeyId = "autoOrbit" | "projection" | "showPin" | "zoom" | "settings" | "wireframe" | "inspect";
+const HOTKEYS: { k?: string; label: string; icon?: string; id: HotkeyId }[] = [
   { k: "Space", label: "Auto-Orbit", id: "autoOrbit" },
-  { k: "P", label: "Ortho / Perspective", id: "projection" },
-  { k: "I", label: "Show Pin", icon: "pin", id: "showPin" },
+  { k: "P", label: "Perspective / Ortho", id: "projection" },
+  { k: "F", label: "Wireframe", id: "wireframe" },
+  { k: "I", label: "Inspect Buildings", id: "inspect" },
+  { label: "Show Pin", icon: "pin", id: "showPin" }, // no keycap — `i` is now Inspect (global)
   { k: "Z", label: "Zoom", id: "zoom" },
   { k: "H", label: "Settings", id: "settings" },
 ];
@@ -270,27 +276,28 @@ function Rows({ items, active }: { items: Item[]; active: CameraAction | null })
   );
 }
 
-// Keyboard rows (Fly's WASD / E·Q / Shift, snv2's R). No glyph assets for keys, so render keycaps
-// in the same amber style as the hotkey switches below. Rows with an action highlight like the
-// gesture rows do — e.g. "Reset Camera" stays lit for the whole R flight.
+// Keyboard rows (Fly's WASD / E·Q / Shift, snv2's WASD / Q·E / R). No glyph assets for keys, so
+// render keycaps in the same amber style + size as the hotkey switches below (matching keycap
+// column). Rows with an action highlight like the gesture rows do — "Move" lights while gliding,
+// "Reset Camera" for the whole R flight.
 function KeyRows({ rows, active }: { rows: KeyRow[]; active: CameraAction | null }) {
   return (
-    <div className="flex flex-col gap-1.5 py-1">
+    <div className="flex flex-col gap-1 py-1">
       {rows.map((r, i) => {
         const on = active != null && r.action === active;
         return (
           <div
             key={i}
             className={cn(
-              "flex h-10 items-center gap-3 rounded px-1.5 transition-colors",
+              "flex items-center gap-2 rounded px-1.5 py-1 transition-colors",
               on ? "bg-amber-500/15" : "hover:bg-foreground/5",
             )}
           >
-            <kbd className="inline-flex min-w-[4.5rem] justify-center rounded bg-amber-400 px-2 py-1 font-mono text-sm font-semibold text-black">
+            <kbd className="inline-flex min-w-[3rem] justify-center rounded bg-amber-400 px-1.5 py-0.5 font-mono text-xs font-semibold text-black">
               {r.cap}
             </kbd>
             <span
-              className={cn("text-base", on ? "font-medium text-amber-300" : "text-foreground/90")}
+              className={cn("text-sm", on ? "font-medium text-amber-300" : "text-foreground/90")}
             >
               {r.label}
             </span>
@@ -314,10 +321,17 @@ function HotkeyToggles({ showKeys, ids }: { showKeys: boolean; ids: HotkeyId[] }
   const setZoomToPin = useSceneStore((s) => s.setOrbitZoomToPin);
   const panelHidden = useSceneStore((s) => s.panelHidden);
   const setPanelHidden = useSceneStore((s) => s.setPanelHidden);
+  const inspectMode = useSceneStore((s) => s.inspectMode);
+  const setInspectMode = useSceneStore((s) => s.setInspectMode);
+  const allWireframe = useSceneStore((s) =>
+    Object.values(s.debug.renderModes).every((m) => m === "wireframe"),
+  );
 
   const state: Record<HotkeyId, { on: boolean; toggle: (v: boolean) => void }> = {
     autoOrbit: { on: !orbitPaused, toggle: (v) => setOrbitPaused(!v) },
     projection: { on: isOrtho, toggle: () => toggleProjection() },
+    wireframe: { on: allWireframe, toggle: () => toggleAllWireframe() },
+    inspect: { on: inspectMode, toggle: (v) => setInspectMode(v) },
     showPin: { on: showPin, toggle: (v) => setShowPin(v) },
     zoom: { on: zoomToPin, toggle: (v) => setZoomToPin(v) },
     settings: { on: !panelHidden, toggle: (v) => setPanelHidden(!v) },
@@ -326,16 +340,20 @@ function HotkeyToggles({ showKeys, ids }: { showKeys: boolean; ids: HotkeyId[] }
   const rows = HOTKEYS.filter((hk) => ids.includes(hk.id));
   if (rows.length === 0) return null;
   return (
-    <div className="border-foreground/10 mt-2.5 flex flex-col gap-2 border-t pt-2.5">
+    <div className="border-foreground/10 mt-2.5 flex flex-col gap-1 border-t pt-2.5">
       {rows.map((hk) => {
         const s = state[hk.id];
         return (
-          <div key={hk.id} className="flex items-center gap-2">
-            {showKeys && (
-              <kbd className="inline-flex min-w-[3rem] justify-center rounded bg-amber-400 px-1.5 py-0.5 font-mono text-xs font-semibold text-black">
-                {hk.k}
-              </kbd>
-            )}
+          <div key={hk.id} className="flex items-center gap-2 px-1.5 py-1">
+            {showKeys &&
+              (hk.k ? (
+                <kbd className="inline-flex min-w-[3rem] justify-center rounded bg-amber-400 px-1.5 py-0.5 font-mono text-xs font-semibold text-black">
+                  {hk.k}
+                </kbd>
+              ) : (
+                // no shortcut (Show Pin lost its `i` key to Inspect) — hold the column width
+                <span className="min-w-[3rem]" aria-hidden />
+              ))}
             <span className="text-foreground/70 text-sm">{hk.label}</span>
             {hk.icon === "pin" && <MapPin className="h-5 w-auto text-sky-300" strokeWidth={2.5} />}
             <Switch checked={s.on} onCheckedChange={s.toggle} size="sm" className="ml-auto" />

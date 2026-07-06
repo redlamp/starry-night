@@ -247,6 +247,15 @@ export function OrbitSection() {
             onChange={(zoomSpeed) => setSnv2({ zoomSpeed })}
           />
           <ValueSlider
+            label="Move speed"
+            hint="WASD glides across the city, Q/E down/up. Speed scales with height above the ground (perspective) or view size (ortho), so it feels constant at any zoom — this multiplies that."
+            value={snv2.moveSpeed}
+            min={0.25}
+            max={3}
+            step={0.05}
+            onChange={(moveSpeed) => setSnv2({ moveSpeed })}
+          />
+          <ValueSlider
             label="Tilt°"
             hint="The camera's current tilt (look-down angle). 0 = parallel to the ground; 90 = straight down. Drag to re-pitch in place — azimuth, distance, and target hold. Clamped by Min tilt."
             value={orbit.elevationDeg}

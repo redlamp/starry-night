@@ -1449,9 +1449,9 @@ export function DreiSceneControls() {
     return unsub;
   }, []);
 
-  // Hotkeys (orbit only): Space = pause sweep, "i" = focal indicator, "z" = zoom mode
-  // (cursor ↔ pin), "u" = allow underview (the intentional under-the-ground gate). F / P are
-  // taken (fly / perspective).
+  // Hotkeys (orbit only): Space = pause sweep, "z" = zoom mode (cursor ↔ pin),
+  // "u" = allow underview (the intentional under-the-ground gate). "i" (Inspect) and "f"
+  // (Wireframe) are global now (ViewHotkeys); "p" toggles projection.
   useEffect(() => {
     if (mode !== "orbit") return;
     const onKey = (e: KeyboardEvent) => {
@@ -1462,9 +1462,6 @@ export function DreiSceneControls() {
       if (e.code === "Space") {
         e.preventDefault();
         s.setOrbitPaused(!s.orbitPaused);
-      } else if (e.code === "KeyI") {
-        e.preventDefault();
-        s.setShowFocalIndicator(!s.showFocalIndicator);
       } else if (e.code === "KeyZ") {
         e.preventDefault();
         s.setOrbitZoomToPin(!s.orbitZoomToPin); // toggle zoom-to-cursor ↔ zoom-to-pin

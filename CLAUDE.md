@@ -29,7 +29,7 @@ If a request conflicts with the PRD or a `decision-*.md` note, surface the confl
 
 ## Git workflow
 
-**Branches**: `main` ← `dev` ← `feature/*`. Feature off `dev`; delete after merge. Stay on the current feature branch — a new `feature/*` only when the domain shifts (camera → fog → wiki) or the user closes the concept.
+**Branches**: `main` ← `dev` ← `feat/*`. Feature off `dev`; delete after merge. Stay on the current feature branch — a new `feat/*` only when the domain shifts (camera → fog → wiki) or the user closes the concept.
 **Merge styles** (2026-06-05): feature → dev with `--no-ff`; dev → main with `--ff-only` (main = bookmark on dev's line; tag main per promotion). If `--ff-only` refuses, main has commits dev lacks — back-merge main into dev first, never force.
 **Direct-to-main**: CI/hotfix only, and back-merge into dev the same session.
 **Deploy source**: `main`.

@@ -147,8 +147,10 @@ export type SavedConfig = {
     popCoupling: number;
     lightSize: number;
   };
-  flights?: { enabled: boolean; gapMin: number; gapMax: number; deviation: number };
-  helicopters?: { enabled: boolean };
+  flights?: { enabled: boolean; gapMin: number; gapMax: number; deviation: number; maxPlanes?: number };
+  // `count` since 2026-07-06 (replaced `enabled`); both optional so pre- and
+  // post-change saves load — the reader falls back to DEFAULT_HELICOPTERS.count.
+  helicopters?: { count?: number; enabled?: boolean };
   streetlights?: { enabled: boolean; size: number; brightness: number };
   lod?: {
     enabled: boolean;

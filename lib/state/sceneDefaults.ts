@@ -103,6 +103,7 @@ export const DEFAULT_SNV2: Snv2Config = {
   maxDist: 20000,
   orbitSpeed: 1,
   zoomSpeed: 1,
+  moveSpeed: 1,
   tiltFloorDeg: 0,
 };
 
@@ -411,22 +412,25 @@ export const DEFAULT_TRAFFIC = {
   lightSize: 1,
 };
 
-// Ambient departure/fly-by corridors (#67 v1/v1.5) — off-map anchors, a
-// handful of plane slots. On by default; modeled on DEFAULT_TRAFFIC's enabled
-// flag. Slot count/corridor placement are seed-baked, but the ANIMATION has
-// two live look settings (#67 follow-up, no regen — see lib/shaders/flights.ts):
+// Ambient departure/fly-by corridors (#67 v1/v1.5) — off-map anchors, a FIXED
+// pool of plane slots (lib/seed/flights.ts AMBIENT_PLANE_POOL). On by default;
+// modeled on DEFAULT_TRAFFIC's enabled flag. Corridor placement is seed-baked;
+// three live look settings (no regen — see lib/shaders/flights.ts + Flights.tsx):
 //   gapMin/gapMax — idle seconds between passes on the same route, seeded per
 //     plane uniformly within this range (uGapMin/uGapMax); both 0 reproduces
 //     the v1 always-flying continuous loop.
 //   deviation — 0..1 per-pass lateral/altitude wander off the baked corridor
 //     line (uFlightDeviation); 0 flies the exact same line every pass.
-export const DEFAULT_FLIGHTS = { enabled: true, gapMin: 8, gapMax: 30, deviation: 0.3 };
+//   maxPlanes — how many of the baked ambient slots are VISIBLE (Flights.tsx
+//     zeroes the rest's point size); a live cap, 0..AMBIENT_PLANE_POOL.
+export const DEFAULT_FLIGHTS = { enabled: true, gapMin: 8, gapMax: 30, deviation: 0.3, maxPlanes: 4 };
 
-// Helicopters (#89) — third air-transit class, rooftop-to-rooftop patrol
-// loops. On by default, modeled on DEFAULT_FLIGHTS' enabled flag. No live
-// look settings yet (loop shape/speed are seed-baked) — see
-// lib/seed/helicopters.ts.
-export const DEFAULT_HELICOPTERS = { enabled: true };
+// Helicopters (#89) — third air-transit class, rooftop-to-rooftop patrol loops.
+// `count` is how many of the seed-baked pool (lib/seed/helicopters.ts
+// AMBIENT_HELI_POOL) are VISIBLE — a live cap (Helicopters.tsx zeroes the rest's
+// point size, no regen); 0 = off (this replaced the old enabled switch, user
+// 2026-07-06). Loop shape/speed remain seed-baked.
+export const DEFAULT_HELICOPTERS = { count: 1 };
 
 // Streetlights along the road network. On by default; toggled from the Roads panel.
 // `size` scales the point sprite (×base 6 px); `brightness` scales emissive gain.
