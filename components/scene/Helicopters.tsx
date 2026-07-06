@@ -75,7 +75,7 @@ export function Helicopters({ masterSeed }: { masterSeed: string }) {
     debugLegCount,
     ambientCount,
     ambientHeliBounds,
-    ambientSizeZ,
+    ambientIntensityX,
   } = useMemo(() => {
     void citySize; // tier drives the module-level gen extent (#58) — a switch must rebuild
     const data = buildHelicopters(masterSeed, cityShape, cityShapeScale);
@@ -159,10 +159,13 @@ export function Helicopters({ masterSeed }: { masterSeed: string }) {
       ambientHeliBounds.push({ start, end: c });
     }
     const ambientVertCount = c; // vertices used by ambient helis (the debug pool follows)
-    // Untouched build-time point size for every ambient vertex, so the cap
-    // effect can restore exact sizes when the cap is raised.
-    const ambientSizeZ = new Float32Array(ambientVertCount);
-    for (let v = 0; v < ambientVertCount; v++) ambientSizeZ[v] = aLight[v * 3 + 2];
+    // Untouched build-time INTENSITY (aLight.x) for every ambient vertex, so the
+    // cap effect can hide/restore whole helicopters live. We cap on intensity,
+    // NOT size: the shader floors point size to MIN_PX, so a zeroed aLight.z
+    // still draws a 4px light — but a zero-intensity point is zero-rgb, which
+    // adds nothing under additive blending (invisible).
+    const ambientIntensityX = new Float32Array(ambientVertCount);
+    for (let v = 0; v < ambientVertCount; v++) ambientIntensityX[v] = aLight[v * 3 + 0];
 
     // Debug spawn reserve — a POOL of instances, all parked invisible
     // (DEBUG_PARKED_PHASE) until a Debug-panel trigger rewrites one's phase
@@ -213,7 +216,7 @@ export function Helicopters({ masterSeed }: { masterSeed: string }) {
       debugLegCount: repLegCount,
       ambientCount: data.helicopters.length,
       ambientHeliBounds,
-      ambientSizeZ,
+      ambientIntensityX,
     };
   }, [masterSeed, cityShape, cityShapeScale, citySize]);
 
@@ -225,19 +228,21 @@ export function Helicopters({ masterSeed }: { masterSeed: string }) {
   }, [geometry, material]);
 
   // "Max Helicopters" cap (user 2026-07-06): show the first `count` helicopters
-  // and hide the rest by zeroing their point size (aLight.z) — a live buffer
-  // write on the long-lived geometry (no rebuild / recompile). ambientSizeZ is
-  // the untouched build-time size, restored when the cap is raised. The debug
-  // pool sits past the ambient region and is never touched here.
+  // and hide the rest by zeroing their INTENSITY (aLight.x) — a live buffer
+  // write on the long-lived geometry (no rebuild / recompile). We cap on
+  // intensity, not size: the shader floors point size to MIN_PX, so a zeroed
+  // aLight.z still draws a 4px light; a zero-intensity point is zero-rgb and adds
+  // nothing under additive blending. ambientIntensityX restores exact values
+  // when the cap is raised. The debug pool sits past the ambient region.
   useEffect(() => {
     const aLight = geometry.getAttribute("aLight") as THREE.BufferAttribute;
     for (let i = 0; i < ambientHeliBounds.length; i++) {
       const visible = i < count;
       const { start, end } = ambientHeliBounds[i];
-      for (let v = start; v < end; v++) aLight.setZ(v, visible ? ambientSizeZ[v] : 0);
+      for (let v = start; v < end; v++) aLight.setX(v, visible ? ambientIntensityX[v] : 0);
     }
     aLight.needsUpdate = true;
-  }, [geometry, ambientHeliBounds, ambientSizeZ, count]);
+  }, [geometry, ambientHeliBounds, ambientIntensityX, count]);
 
   // Debug spawn trigger (mirrors Flights.tsx): each click rewrites the next
   // pool instance's aClock.x (phase) so uTime/cycleSec+phase reads 0 at the

@@ -120,7 +120,7 @@ export function Flights({ masterSeed }: { masterSeed: string }) {
   // effect below). NOT a memo dep: dragging it must never rebuild the geometry.
   const maxPlanes = useSceneStore((s) => s.flights.maxPlanes ?? DEFAULT_FLIGHTS.maxPlanes);
 
-  const { geometry, material, debugBase, slotMeta, ambientSizes } = useMemo(() => {
+  const { geometry, material, debugBase, slotMeta, ambientIntensity } = useMemo(() => {
     void citySize; // tier drives the module-level gen extent (#58) — a switch must rebuild
     const data = buildFlights(masterSeed);
     const n =
@@ -264,11 +264,13 @@ export function Flights({ masterSeed }: { masterSeed: string }) {
       phase: sl.phase,
       cls: sl.cls,
     }));
-    // Untouched build-time point size for every AMBIENT vertex, so the Max
-    // Planes cap effect can hide/restore whole slots by writing aSize live
-    // (0 = hidden, ambientSizes[v] = restore) without rebuilding this geometry.
-    const ambientSizes = aSize.slice(0, data.slots.length * VERTS_PER_PLANE);
-    return { geometry: geo, material: mat, debugBase, slotMeta, ambientSizes };
+    // Untouched build-time INTENSITY for every AMBIENT vertex, so the Max Planes
+    // cap effect can hide/restore whole slots by writing aIntensity live. We cap
+    // on intensity, NOT size: the vertex shader floors point size to MIN_PX, so a
+    // zeroed aSize still draws a 4px light — but a zero-intensity point is
+    // zero-rgb, which adds nothing under additive blending (invisible).
+    const ambientIntensity = aIntensity.slice(0, data.slots.length * VERTS_PER_PLANE);
+    return { geometry: geo, material: mat, debugBase, slotMeta, ambientIntensity };
     // gapMin/gapMax/deviation seed the uniforms above but must NOT trigger a
     // rebuild on every slider tick — the effect below re-syncs their live
     // values onto this same long-lived material instead.
@@ -292,21 +294,23 @@ export function Flights({ masterSeed }: { masterSeed: string }) {
   }, [material, gapMin, gapMax, deviation]);
 
   // "Max Planes" cap (user 2026-07-06): show only the first `maxPlanes` ambient
-  // slots — the rest get point size 0. A live buffer write on the long-lived
-  // geometry (no rebuild, so no shader recompile mid-drag); ambientSizes restores
-  // exact sizes when the cap is raised. Debug-spawn planes sit past the ambient
-  // region and are never touched here.
+  // slots — the rest get INTENSITY 0 (a zero-rgb point adds nothing under
+  // additive blending, so it's invisible; zeroing SIZE wouldn't hide it — the
+  // shader floors point size to MIN_PX). A live buffer write on the long-lived
+  // geometry (no rebuild, so no shader recompile mid-drag); ambientIntensity
+  // restores exact values when the cap is raised. Debug-spawn planes sit past
+  // the ambient region and are never touched here.
   useEffect(() => {
-    const aSize = geometry.getAttribute("aSize") as THREE.BufferAttribute;
+    const aIntensity = geometry.getAttribute("aIntensity") as THREE.BufferAttribute;
     for (let s = 0; s < slotMeta.length; s++) {
       const visible = s < maxPlanes;
       for (let j = 0; j < VERTS_PER_PLANE; j++) {
         const v = s * VERTS_PER_PLANE + j;
-        aSize.setX(v, visible ? ambientSizes[v] : 0);
+        aIntensity.setX(v, visible ? ambientIntensity[v] : 0);
       }
     }
-    aSize.needsUpdate = true;
-  }, [geometry, slotMeta, ambientSizes, maxPlanes]);
+    aIntensity.needsUpdate = true;
+  }, [geometry, slotMeta, ambientIntensity, maxPlanes]);
 
   // Debug spawn triggers (#67 follow-up): each counter increment rewrites the
   // reserved instance's aPhase so uTime/aTransit+aPhase reads 0 at the CURRENT
