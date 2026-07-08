@@ -1,0 +1,549 @@
+"use client";
+
+import { useEffect, useRef, type ReactElement, type ReactNode } from "react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Columns3,
+  Cone,
+  Layers,
+  Square,
+  X,
+  Map as MapIcon,
+  Route,
+  Building2,
+  Store,
+  User,
+} from "lucide-react";
+import { ScrollArea as ScrollAreaPrimitive } from "@base-ui/react/scroll-area";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+  TooltipProvider,
+} from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
+import { useSceneStore, type EntityRef } from "@/lib/state/sceneStore";
+import { useEntityIndexes, type EntityIndexes } from "./entityData";
+import { DistrictColumn } from "./DistrictColumn";
+import { StreetColumn } from "./StreetColumn";
+import { BuildingColumn } from "./BuildingColumn";
+import { CompanyColumn } from "./CompanyColumn";
+import { PersonaColumn } from "./PersonaColumn";
+
+// Entity columns: the Miller-columns drill (macOS Finder columns) unifying
+// district / street / building / company / persona details, docked top-left
+// so column headers align. Three display states (cycle button in the header):
+//   side — flat columns side by side, every column fully interactive;
+//          clicking inside an EARLIER column branches the path from there
+//          (capture-phase jump + the click's own push = Miller semantics).
+//   deck — the CSS-3D stack: earlier columns recede as tilted slivers,
+//          click a sliver to jump back; only the top column is readable.
+//   collapsed — just the top card.
+// Back/Forward walk the path without truncating it (forward history survives
+// until a new push branches). Replaces BuildingInfoPanel + PersonaPanel.
+
+const VIEW_META = {
+  side: { icon: Columns3, label: "Side by Side", next: "deck" },
+  deck: { icon: Layers, label: "3D Deck", next: "collapsed" },
+  collapsed: { icon: Square, label: "Collapsed", next: "side" },
+} as const;
+
+const KIND_ICON: Record<EntityRef["kind"], typeof MapIcon> = {
+  district: MapIcon,
+  street: Route,
+  building: Building2,
+  company: Store,
+  persona: User,
+};
+
+const KIND_LABEL: Record<EntityRef["kind"], string> = {
+  district: "District",
+  street: "Street",
+  building: "Building",
+  company: "Company",
+  persona: "Resident",
+};
+
+function refTitle(ref: EntityRef, indexes: EntityIndexes): string {
+  switch (ref.kind) {
+    case "district":
+      return indexes.names.districtNames.get(ref.id) ?? ref.id;
+    case "street":
+      return indexes.roadById.get(ref.id)?.name ?? "Unnamed Road";
+    case "building": {
+      const named = indexes.names.buildingNames.get(ref.id);
+      if (named) return named;
+      const address = indexes.names.addresses.get(ref.id);
+      return address ? `${address.number} ${address.street}` : `Building #${ref.id}`;
+    }
+    case "company":
+      return indexes.directory.businesses.get(ref.id)?.name ?? "Closed Business";
+    case "persona":
+      return indexes.directory.personas.get(ref.id)?.fullName ?? "Unknown Resident";
+  }
+}
+
+// The "cone" action (user 2026-07-08): frame every location tied to the top
+// card — a commuter's home + work + their connections' homes, a company's
+// building + its people's homes, a street's full run, a district's bounds.
+// Reuses the #87 focus mechanism: bounding sphere -> 45-degree look-down glide.
+function showLocations(ref: EntityRef, indexes: EntityIndexes): void {
+  const pts: Array<[number, number, number]> = [];
+  const addBuilding = (buildingId: number | undefined) => {
+    if (buildingId === undefined) return;
+    const b = indexes.buildingById.get(buildingId);
+    if (b) pts.push([b.x, b.height / 2, b.z]);
+  };
+  const addPersonaPlaces = (pid: string, withConnections: boolean) => {
+    const p = indexes.directory.personas.get(pid);
+    if (!p) return;
+    addBuilding(p.homeBuildingId);
+    addBuilding(p.commuteTargetBuildingId);
+    if (!withConnections) return;
+    const connect = (id: string | undefined) => {
+      if (!id) return;
+      const q = indexes.directory.personas.get(id);
+      if (q) addBuilding(q.homeBuildingId);
+    };
+    connect(p.partnerId);
+    for (const link of p.family) connect(link.personaId);
+    connect(p.story.relation?.targetId);
+  };
+  switch (ref.kind) {
+    case "persona":
+      addPersonaPlaces(ref.id, true);
+      break;
+    case "company": {
+      const biz = indexes.directory.businesses.get(ref.id);
+      if (!biz) break;
+      addBuilding(biz.buildingId);
+      for (const pid of biz.employeeIds) addPersonaPlaces(pid, false);
+      for (const pid of biz.studentIds ?? []) {
+        const p = indexes.directory.personas.get(pid);
+        if (p) addBuilding(p.homeBuildingId);
+      }
+      break;
+    }
+    case "building": {
+      addBuilding(ref.id);
+      // Where this building's people go: residents' work/school, and the
+      // homes of everyone employed here.
+      for (const hh of indexes.householdsInBuilding(ref.id))
+        for (const pid of hh.memberIds) {
+          const p = indexes.directory.personas.get(pid);
+          if (p) addBuilding(p.commuteTargetBuildingId);
+        }
+      for (const biz of indexes.companiesInBuilding(ref.id))
+        for (const pid of biz.employeeIds) {
+          const p = indexes.directory.personas.get(pid);
+          if (p) addBuilding(p.homeBuildingId);
+        }
+      break;
+    }
+    case "street": {
+      const road = indexes.roadById.get(ref.id);
+      if (road) for (const v of road.vertices) pts.push([v.x, 6, v.z]);
+      break;
+    }
+    case "district": {
+      const d = indexes.districtById.get(ref.id);
+      if (d) {
+        pts.push([d.minX, 6, d.minZ], [d.maxX, 6, d.minZ], [d.minX, 6, d.maxZ], [d.maxX, 6, d.maxZ]);
+      }
+      break;
+    }
+  }
+  if (pts.length === 0) return;
+  // Centroid + PERCENTILE radius: one cross-town outlier must not zoom the
+  // whole view out (user 2026-07-08) — frame the 85th-percentile cluster and
+  // let the far arc leave the frame; it still reads via its arc.
+  let cx = 0, cy = 0, cz = 0;
+  for (const [x, y, z] of pts) { cx += x; cy += y; cz += z; }
+  cx /= pts.length; cy /= pts.length; cz /= pts.length;
+  const dists = pts.map(([x, y, z]) => Math.hypot(x - cx, y - cy, z - cz)).sort((a, b) => a - b);
+  const p85 = dists[Math.min(dists.length - 1, Math.ceil(dists.length * 0.85) - 1)] ?? 0;
+  const radius = Math.min(1800, Math.max(150, p85 * 1.15 + 40));
+  const st = useSceneStore.getState();
+  st.setFocusPivot([cx, cy, cz]);
+  st.setFocusRequest({ x: cx, y: cy, z: cz, radius, fit: "fill" });
+}
+
+function ColumnBody({ entityRef }: { entityRef: EntityRef }) {
+  switch (entityRef.kind) {
+    case "district":
+      return <DistrictColumn id={entityRef.id} />;
+    case "street":
+      return <StreetColumn id={entityRef.id} />;
+    case "building":
+      return <BuildingColumn id={entityRef.id} />;
+    case "company":
+      return <CompanyColumn id={entityRef.id} />;
+    case "persona":
+      return <PersonaColumn id={entityRef.id} />;
+  }
+}
+
+export function EntityColumns() {
+  const columnPath = useSceneStore((s) => s.columnPath);
+  const columnCursor = useSceneStore((s) => s.columnCursor);
+  const columnsView = useSceneStore((s) => s.columnsView);
+  const setColumnsView = useSceneStore((s) => s.setColumnsView);
+  const columnBack = useSceneStore((s) => s.columnBack);
+  const columnForward = useSceneStore((s) => s.columnForward);
+  const jumpToColumn = useSceneStore((s) => s.jumpToColumn);
+  const closeColumns = useSceneStore((s) => s.closeColumns);
+  const resetColumns = useSceneStore((s) => s.resetColumns);
+  const selectedBuildingId = useSceneStore((s) => s.selectedBuildingId);
+  const masterSeed = useSceneStore((s) => s.masterSeed);
+  const panelHidden = useSceneStore((s) => s.panelHidden);
+  const settingsPanelWidth = useSceneStore((s) => s.settingsPanelWidth);
+  const coneFollow = useSceneStore((s) => s.coneFollow);
+  const setConeFollow = useSceneStore((s) => s.setConeFollow);
+  const indexes = useEntityIndexes();
+
+  const visible = columnPath.slice(0, columnCursor + 1);
+  const open = visible.length > 0;
+
+  // Bridge: a scene building click (InstancedCity → setSelectedBuildingId)
+  // opens a fresh [district, building] path; deselection (Esc, empty-space
+  // click, regen, inspect-off) closes any path that involved a building.
+  // syncColumnSelection keeps store-side state consistent, so this only
+  // fires on real divergence — no feedback loop.
+  useEffect(() => {
+    let lastBuilding: number | null = null;
+    for (const ref of visible) if (ref.kind === "building") lastBuilding = ref.id;
+    if (selectedBuildingId === null) {
+      if (lastBuilding !== null) closeColumns();
+      return;
+    }
+    if (lastBuilding === selectedBuildingId) return;
+    const b = indexes.buildingById.get(selectedBuildingId);
+    resetColumns(
+      b
+        ? [
+            { kind: "district", id: b.districtId },
+            { kind: "building", id: selectedBuildingId },
+          ]
+        : [{ kind: "building", id: selectedBuildingId }],
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedBuildingId]);
+
+  // A reroll invalidates every id in the path — close rather than resolve
+  // refs against the wrong city.
+  useEffect(() => {
+    closeColumns();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [masterSeed]);
+
+  // Escape closes the whole stack (same idiom the old panels used).
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeColumns();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, closeColumns]);
+
+  // The row can outgrow its slot — keep the newest column in view, and let
+  // the mouse wheel pan the row horizontally while hovering it (native
+  // listener: React's onWheel can't preventDefault reliably).
+  const rootRef = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = viewportRef.current;
+    if (el) el.scrollLeft = el.scrollWidth;
+  }, [columnCursor, columnPath, columnsView]);
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const onWheel = (e: WheelEvent) => {
+      const vp = viewportRef.current;
+      if (!vp || vp.scrollWidth <= vp.clientWidth) return;
+      if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return; // real horizontal wheel: let it be
+      vp.scrollLeft += e.deltaY;
+      e.preventDefault();
+    };
+    root.addEventListener("wheel", onWheel, { passive: false });
+    return () => root.removeEventListener("wheel", onWheel);
+  }, [open]);
+
+  // Cone-follow: re-frame to the top card's location set whenever the drill
+  // moves (or the mode is switched on).
+  const topRef = visible.length > 0 ? visible[visible.length - 1] : undefined;
+  const topKey = topRef ? `${topRef.kind}:${topRef.id}` : null;
+  useEffect(() => {
+    if (!coneFollow || !topRef) return;
+    showLocations(topRef, indexes);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coneFollow, topKey, indexes]);
+
+  if (!open) return null;
+
+  const top = visible.length - 1;
+  const canBack = columnCursor >= 0;
+  const canForward = columnCursor < columnPath.length - 1;
+  const view = VIEW_META[columnsView];
+  // Stop short of the settings drawer (live width) or, when it's hidden, the
+  // gear button — plus the left dock margin.
+  const rightReserve = panelHidden ? 64 : settingsPanelWidth + 12;
+
+  return (
+    <div
+      ref={rootRef}
+      className="pointer-events-auto fixed left-3 top-3 z-30"
+      style={{ maxWidth: `calc(100vw - ${12 + rightReserve}px)` }}
+    >
+      <ScrollAreaPrimitive.Root className="flex flex-col">
+        {/* Horizontal scrollbar ABOVE the columns (user 2026-07-08) — the
+            primitive composed directly: the shared ScrollBar's variant
+            classes (absolute, bottom-0) would win the cascade against plain
+            overrides and drop the bar back below the cards. */}
+        <ScrollAreaPrimitive.Scrollbar
+          orientation="horizontal"
+          className="order-first mb-1 flex h-2 w-full touch-none flex-col select-none"
+        >
+          <ScrollAreaPrimitive.Thumb className="bg-border relative flex-1 rounded-full" />
+        </ScrollAreaPrimitive.Scrollbar>
+        <ScrollAreaPrimitive.Viewport ref={viewportRef} className="w-full">
+          <div
+            className={cn(
+              "flex items-start pb-1",
+              columnsView === "side" && "gap-2",
+              columnsView === "deck" && "py-3",
+            )}
+          >
+            {visible.map((ref, i) => {
+        const isTop = i === top;
+        if (columnsView === "collapsed" && !isTop) return null;
+        const deck = columnsView === "deck";
+        const depth = top - i;
+        const Icon = KIND_ICON[ref.kind];
+        return (
+          <div
+            key={`${ref.kind}:${ref.id}:${i}`}
+            // deck: the whole sliver is a jump-back button. side: columns stay
+            // fully interactive; a capture-phase jump re-roots the path at
+            // this column, then the click's own push branches from here.
+            onClick={deck && !isTop ? () => jumpToColumn(i) : undefined}
+            onClickCapture={
+              !deck && !isTop && columnsView === "side" ? () => jumpToColumn(i) : undefined
+            }
+            role={deck && !isTop ? "button" : undefined}
+            className={cn(
+              "flex w-72 shrink-0 flex-col rounded-xl border border-border bg-popover/95 text-popover-foreground shadow-lg backdrop-blur-md",
+              // Transition transform/filter ONLY — margins snap. Animating
+              // margin-right is a per-frame reflow (the choppiness the user
+              // saw); transforms composite on the GPU.
+              "transition-[transform,filter] duration-300 will-change-transform motion-reduce:transition-none",
+              deck && !isTop && "cursor-pointer",
+            )}
+            style={
+              !deck || isTop
+                ? { zIndex: 30 + i }
+                : {
+                    zIndex: 30 + i,
+                    marginRight: "-15rem", // leave a ~3rem sliver of the older card
+                    // PER-CARD perspective, pivoted on the card's own right
+                    // edge: a shared container perspective projects cards left
+                    // of the vanishing axis upward and out of the dock (user
+                    // 2026-07-08). Tilt + stack only — Y stays top-aligned.
+                    // Positive tilt (left side toward the viewer) — the
+                    // fanned-cards look the user picked. Kept moderate: the
+                    // near-side growth at these params stays inside the tab
+                    // cap + row padding, so nothing clips.
+                    transform: `perspective(1200px) rotateY(${Math.min(26, 11 + depth * 4)}deg)`,
+                    transformOrigin: "100% 35%",
+                    filter: "brightness(0.68)",
+                  }
+            }
+          >
+            {/* Header row 1: kind icon + type chip left, nav cluster right.
+                Row 2: the full name/address title, free to WRAP — long
+                company/building names no longer crop (user 2026-07-08). */}
+            <div className="flex flex-col gap-0.5 border-b border-border/60 px-3 py-2">
+              <div className="flex items-center justify-between gap-1">
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <Icon className="size-4 shrink-0 text-muted-foreground" />
+                  <span className="truncate text-[11px] uppercase tracking-wide text-muted-foreground">
+                    {KIND_LABEL[ref.kind]}
+                    {columnsView === "collapsed" && top > 0 && ` · ${top} behind`}
+                  </span>
+                </div>
+                {isTop && (
+                <div className="flex shrink-0 items-center">
+                  <IconTip label="Follow Locations">
+                    <Button
+                      variant={coneFollow ? "default" : "ghost"}
+                      size="icon-sm"
+                      onClick={() => setConeFollow(!coneFollow)}
+                      aria-label="Follow this card's locations with the camera"
+                      aria-pressed={coneFollow}
+                    >
+                      <Cone />
+                    </Button>
+                  </IconTip>
+                  <IconTip label="Back">
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={columnBack}
+                      disabled={!canBack}
+                      aria-label="Back one column"
+                    >
+                      <ChevronLeft />
+                    </Button>
+                  </IconTip>
+                  <IconTip label="Forward">
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={columnForward}
+                      disabled={!canForward}
+                      aria-label="Forward one column"
+                    >
+                      <ChevronRight />
+                    </Button>
+                  </IconTip>
+                  <IconTip label={`View: ${view.label}`}>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => setColumnsView(view.next)}
+                      aria-label={`Column view: ${view.label}. Switch view.`}
+                    >
+                      <view.icon />
+                    </Button>
+                  </IconTip>
+                  <IconTip label="Close">
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={closeColumns}
+                      aria-label="Close columns"
+                    >
+                      <X />
+                    </Button>
+                  </IconTip>
+                </div>
+                )}
+              </div>
+              <div className="text-sm font-medium leading-snug [overflow-wrap:anywhere]">
+                {refTitle(ref, indexes)}
+              </div>
+            </div>
+            {/* One persistent wrapper whose MAX-HEIGHT tweens between the
+                deck-tab cap and the full-card cap — a component swap here
+                would remount and kill the transition (user 2026-07-08:
+                "super quick tween when expanding/collapsing"). Deck slivers
+                read as uniform tabs via the cap + fade-out mask; the inner
+                ScrollArea pins its scrollbar to the card's inner-right edge. */}
+            <div
+              className="overflow-hidden transition-[max-height] duration-200 ease-out motion-reduce:transition-none"
+              style={{
+                maxHeight: deck && !isTop ? "14rem" : "min(72vh, calc(100vh - 7rem))",
+                maskImage:
+                  deck && !isTop
+                    ? "linear-gradient(to bottom, black 60%, transparent)"
+                    : undefined,
+                WebkitMaskImage:
+                  deck && !isTop
+                    ? "linear-gradient(to bottom, black 60%, transparent)"
+                    : undefined,
+              }}
+            >
+              <ScrollArea className="max-h-[min(72vh,calc(100vh-7rem))]">
+                <div className="flex flex-col gap-2.5 p-3 pr-4">
+                  <ColumnBody entityRef={ref} />
+                </div>
+              </ScrollArea>
+            </div>
+          </div>
+        );
+            })}
+          </div>
+        </ScrollAreaPrimitive.Viewport>
+      </ScrollAreaPrimitive.Root>
+    </div>
+  );
+}
+
+// shadcn tooltip for short action labels (user 2026-07-08: shadcn tooltips or
+// hover cards everywhere — no native title attrs). Rich content stays in
+// hover-card.tsx; this is the action-name-only wrapper for icon buttons.
+export function IconTip({ label, children }: { label: string; children: ReactElement }) {
+  return (
+    <TooltipProvider delay={300}>
+      <Tooltip>
+        <TooltipTrigger render={children} />
+        <TooltipContent>{label}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
+// "+N more" that actually expands (user 2026-07-08). Column sections keep a
+// local expanded flag and pass it through here.
+export function ShowMore({
+  total,
+  cap,
+  expanded,
+  onToggle,
+  noun,
+}: {
+  total: number;
+  cap: number;
+  expanded: boolean;
+  onToggle: () => void;
+  noun?: string;
+}) {
+  if (total <= cap) return null;
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className="px-1 text-left text-sm text-muted-foreground hover:underline"
+    >
+      {expanded ? "Show fewer" : `+${total - cap} more${noun ? ` ${noun}` : ""}`}
+    </button>
+  );
+}
+
+// Small shared row primitive for the column bodies. `stack` breaks the row
+// into two lines — label above, value below at full width — for values too
+// long to share a line with their label (user 2026-07-08: long profession /
+// commute rows wrapped into the label).
+export function ColumnStat({
+  label,
+  value,
+  muted,
+  stack,
+}: {
+  label: string;
+  value: ReactNode;
+  muted?: boolean;
+  stack?: boolean;
+}) {
+  if (stack) {
+    return (
+      <div className="flex flex-col text-sm">
+        <span className="text-muted-foreground">{label}</span>
+        <span className={cn("text-right", muted ? "text-muted-foreground" : "font-medium")}>
+          {value}
+        </span>
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-start justify-between gap-4 text-sm">
+      <span className="shrink-0 text-muted-foreground">{label}</span>
+      <span className={cn("min-w-0 text-right", muted ? "text-muted-foreground" : "font-medium")}>
+        {value}
+      </span>
+    </div>
+  );
+}

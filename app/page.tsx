@@ -1,7 +1,7 @@
 import { Scene } from "@/components/scene/Scene";
 import { CameraPanel } from "@/components/ui/CameraPanel";
 import { SeedControls } from "@/components/ui/SeedControls";
-import { BuildingInfoPanel } from "@/components/ui/BuildingInfoPanel";
+import { EntityColumns } from "@/components/ui/columns/EntityColumns";
 import { FpsHud } from "@/components/ui/FpsHud";
 import { PerfOverlay } from "@/components/ui/PerfOverlay";
 import { CaptureBoot } from "@/components/scene/CaptureBoot";
@@ -19,8 +19,10 @@ export default function Page() {
       <div className="pointer-events-none absolute inset-0">
         <CameraPanel />
         <SeedControls />
-        {/* #87: single-click building info panel, docked above SeedControls. */}
-        <BuildingInfoPanel />
+        {/* Entity columns: the Miller-columns drill (district / street /
+            building / company / persona) — replaces the old BuildingInfoPanel
+            + PersonaPanel pair. Docked bottom-left, above SeedControls. */}
+        <EntityColumns />
         <FpsHud />
         <PerfOverlay />
         <CameraSideView />

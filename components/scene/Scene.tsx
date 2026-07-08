@@ -31,6 +31,9 @@ import { PinPlaneMarker } from "./PinPlaneMarker";
 import { BuildingPin } from "./BuildingPin";
 import { SelectedDistrictOutline } from "./SelectedDistrictOutline";
 import { SelectedBuildingOutline } from "./SelectedBuildingOutline";
+import { CommuteArc } from "./CommuteArc";
+import { RoadHover } from "./RoadHover";
+import { StreetHighlight } from "./StreetHighlight";
 import { GroundHaze } from "./GroundHaze";
 import { Roads } from "./Roads";
 import { DistrictShells } from "./DistrictShells";
@@ -203,6 +206,12 @@ export function Scene() {
         {cityReady && <SelectedDistrictOutline masterSeed={masterSeed} />}
         {/* #87: x-ray outline of the selected building, visible through occluders. */}
         {cityReady && <SelectedBuildingOutline masterSeed={masterSeed} />}
+        {/* Personas: home→work arc for the selected persona, mode-coloured. */}
+        {cityReady && <CommuteArc masterSeed={masterSeed} />}
+        {/* Inspect: street-name hover chip + hovered-road highlight. */}
+        {cityReady && <RoadHover masterSeed={masterSeed} />}
+        {/* Entity columns: persistent highlight for a selected street. */}
+        {cityReady && <StreetHighlight masterSeed={masterSeed} />}
         {/* old controller's store-based indicator; the drei bridge renders its own
           live one (tracks the camera-controls target with no throttle lag) */}
         {oldController && <FocalIndicator />}

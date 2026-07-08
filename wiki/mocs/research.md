@@ -31,6 +31,12 @@ Map of Content for external references that shape direction.
 - [[taxicab-geometry]] — Manhattan (L1) / Chebyshev (L∞) vs Euclidean; rectilinear, map-like seams for the grid rework
 - [[block-proportions]] — real-world block aspect ratios (1:2–1:3 downtown, 1:1.5–1:2 residential); recommended W:D bands per GRAMMAR character; how to apply in grid-first block formation (issue #33)
 
+## Character / narrative references
+
+- [[procgen-character-design-games]] — how shipped games make procgen characters players care about: Heat Signature (sparse personal missions), Nemesis (recognition + continuity + authored voice), RimWorld (two-beat backstories, incapabilities), Watch Dogs Legion (the rich-data/generic-voice failure), DF/Wildermyth/CK3; 15 distilled principles for the persona system
+- [[apophenia-engine]] — the story layer's design thesis: generate evidence with deliberate gaps, not stories; Sylvester/Kuleshov grounding + the five enforcement mechanisms + the Owen Taylor example
+- [[procgen-character-theory-literature]] — the academic/theory beat: Talk of the Town & Bad News (belief facets, knowledge implantation, story sifting), Prom Week/CiF, Oz Project, Grinblat's domain word + generate-then-rationalize, Compton's oatmeal/fanfic test, Emily Short's storylets, SSA cohort-dated names + the stereotype traps; top-10 ranked actions
+
 ## Interaction / camera references
 
 - [[camera-interaction-models]] — survey of camera/navigation models (Google Maps, Mapbox, Cesium; RTS + city-builders; Blender/Maya/Fusion/Unity/Unreal; drei `<CameraControls>` / camera-controls / OrbitControls vs MapControls) to evaluate "drag the pin to set Focal Y" + find missing angles for the drei camera bridge. Includes the open-decisions list awaiting review.
