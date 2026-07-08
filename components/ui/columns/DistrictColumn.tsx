@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Building2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useSceneStore } from "@/lib/state/sceneStore";
@@ -9,18 +10,23 @@ import { ColumnStat, ShowMore } from "./EntityColumns";
 
 const STREET_CAP = 8;
 
-export function DistrictColumn({ id }: { id: string }) {
+export function DistrictColumn({ id, part }: { id: string; part: "pinned" | "rest" }) {
   const push = useSceneStore((s) => s.pushColumn);
   const indexes = useEntityIndexes();
   const [allStreets, setAllStreets] = useState(false);
   const [allLandmarks, setAllLandmarks] = useState(false);
   const agg = indexes.districtAgg(id);
-  if (!agg) return <div className="text-sm text-muted-foreground">District not found.</div>;
+  if (!agg) {
+    return part === "pinned" ? null : (
+      <div className="text-sm text-muted-foreground">District not found.</div>
+    );
+  }
 
-  return (
-    <>
-      <div className="flex flex-wrap items-center gap-1.5">
-        <Badge variant="secondary" style={{ color: agg.district.color }}>
+  if (part === "pinned") {
+    return (
+      <>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Badge variant="secondary" style={{ color: agg.district.color }}>
           {agg.district.displayName}
         </Badge>
         <Badge variant="outline" className="capitalize">
@@ -33,13 +39,21 @@ export function DistrictColumn({ id }: { id: string }) {
         <ColumnStat label="Companies" value={agg.companyCount.toLocaleString()} />
         <ColumnStat label="Homes" value={agg.homeBuildingCount.toLocaleString()} />
         <ColumnStat label="Area" value={`${(agg.district.area / 1e6).toFixed(2)} km²`} muted />
-      </div>
+        </div>
+      </>
+    );
+  }
 
+  return (
+    <>
       {agg.streets.length > 0 && (
         <>
-          <Separator />
           <div className="flex flex-col gap-0.5">
-            <div className="text-sm font-medium">Streets</div>
+            <div className="flex items-baseline justify-between gap-2">
+              <div className="text-sm font-medium">Streets</div>
+              {/* The count column is buildings-per-street. */}
+              <Building2 className="size-3.5 shrink-0 text-muted-foreground" aria-label="Buildings on street" />
+            </div>
             {(allStreets ? agg.streets : agg.streets.slice(0, STREET_CAP)).map((s) => (
               <button
                 key={s.roadId}

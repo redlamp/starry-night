@@ -171,18 +171,18 @@ function showLocations(ref: EntityRef, indexes: EntityIndexes): void {
   st.setFocusRequest({ x: cx, y: cy, z: cz, radius, fit: "fill" });
 }
 
-function ColumnBody({ entityRef }: { entityRef: EntityRef }) {
+function ColumnBody({ entityRef, part }: { entityRef: EntityRef; part: "pinned" | "rest" }) {
   switch (entityRef.kind) {
     case "district":
-      return <DistrictColumn id={entityRef.id} />;
+      return <DistrictColumn id={entityRef.id} part={part} />;
     case "street":
-      return <StreetColumn id={entityRef.id} />;
+      return <StreetColumn id={entityRef.id} part={part} />;
     case "building":
-      return <BuildingColumn id={entityRef.id} />;
+      return <BuildingColumn id={entityRef.id} part={part} />;
     case "company":
-      return <CompanyColumn id={entityRef.id} />;
+      return <CompanyColumn id={entityRef.id} part={part} />;
     case "persona":
-      return <PersonaColumn id={entityRef.id} />;
+      return <PersonaColumn id={entityRef.id} part={part} />;
   }
 }
 
@@ -200,6 +200,7 @@ export function EntityColumns() {
   const masterSeed = useSceneStore((s) => s.masterSeed);
   const panelHidden = useSceneStore((s) => s.panelHidden);
   const settingsPanelWidth = useSceneStore((s) => s.settingsPanelWidth);
+  const directoryOpen = useSceneStore((s) => s.directoryOpen);
   const coneFollow = useSceneStore((s) => s.coneFollow);
   const setConeFollow = useSceneStore((s) => s.setConeFollow);
   const indexes = useEntityIndexes();
@@ -220,15 +221,9 @@ export function EntityColumns() {
       return;
     }
     if (lastBuilding === selectedBuildingId) return;
-    const b = indexes.buildingById.get(selectedBuildingId);
-    resetColumns(
-      b
-        ? [
-            { kind: "district", id: b.districtId },
-            { kind: "building", id: selectedBuildingId },
-          ]
-        : [{ kind: "building", id: selectedBuildingId }],
-    );
+    // Just the building — its card links to the district (user 2026-07-08:
+    // don't pre-stack a district card nobody asked for).
+    resetColumns([{ kind: "building", id: selectedBuildingId }]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedBuildingId]);
 
@@ -265,6 +260,25 @@ export function EntityColumns() {
       const vp = viewportRef.current;
       if (!vp || vp.scrollWidth <= vp.clientWidth) return;
       if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return; // real horizontal wheel: let it be
+      // A card's own scrollable content wins: if any ancestor viewport under
+      // the cursor can still scroll vertically in this direction, let the
+      // wheel do that (user 2026-07-08: expanded lists were unscrollable).
+      for (
+        let el = e.target instanceof Element ? e.target : null;
+        el && el !== root;
+        el = el.parentElement
+      ) {
+        if (
+          el.getAttribute("data-slot") === "scroll-area-viewport" &&
+          el.scrollHeight > el.clientHeight
+        ) {
+          const up = e.deltaY < 0;
+          const canScroll = up
+            ? el.scrollTop > 0
+            : el.scrollTop + el.clientHeight < el.scrollHeight - 1;
+          if (canScroll) return;
+        }
+      }
       vp.scrollLeft += e.deltaY;
       e.preventDefault();
     };
@@ -291,12 +305,18 @@ export function EntityColumns() {
   // Stop short of the settings drawer (live width) or, when it's hidden, the
   // gear button — plus the left dock margin.
   const rightReserve = panelHidden ? 64 : settingsPanelWidth + 12;
+  // With the City Directory overlay open (w-[21rem] at left-3), the column
+  // row slides to its right instead of stacking underneath (user 2026-07-08).
+  const leftOffset = directoryOpen ? 12 + 336 + 12 : 12;
 
   return (
     <div
       ref={rootRef}
-      className="pointer-events-auto fixed left-3 top-3 z-30"
-      style={{ maxWidth: `calc(100vw - ${12 + rightReserve}px)` }}
+      className="pointer-events-auto fixed top-16 z-30 tabular-nums"
+      style={{
+        left: leftOffset,
+        maxWidth: `calc(100vw - ${leftOffset + rightReserve}px)`,
+      }}
     >
       <ScrollAreaPrimitive.Root className="flex flex-col">
         {/* Horizontal scrollbar ABOVE the columns (user 2026-07-08) — the
@@ -306,6 +326,7 @@ export function EntityColumns() {
         <ScrollAreaPrimitive.Scrollbar
           orientation="horizontal"
           className="order-first mb-1 flex h-2 w-full touch-none flex-col select-none"
+          style={{ position: "static" }}
         >
           <ScrollAreaPrimitive.Thumb className="bg-border relative flex-1 rounded-full" />
         </ScrollAreaPrimitive.Scrollbar>
@@ -387,6 +408,16 @@ export function EntityColumns() {
                       <Cone />
                     </Button>
                   </IconTip>
+                  <IconTip label={`View: ${view.label}`}>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      onClick={() => setColumnsView(view.next)}
+                      aria-label={`Column view: ${view.label}. Switch view.`}
+                    >
+                      <view.icon />
+                    </Button>
+                  </IconTip>
                   <IconTip label="Back">
                     <Button
                       variant="ghost"
@@ -407,16 +438,6 @@ export function EntityColumns() {
                       aria-label="Forward one column"
                     >
                       <ChevronRight />
-                    </Button>
-                  </IconTip>
-                  <IconTip label={`View: ${view.label}`}>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={() => setColumnsView(view.next)}
-                      aria-label={`Column view: ${view.label}. Switch view.`}
-                    >
-                      <view.icon />
                     </Button>
                   </IconTip>
                   <IconTip label="Close">
@@ -442,10 +463,16 @@ export function EntityColumns() {
                 "super quick tween when expanding/collapsing"). Deck slivers
                 read as uniform tabs via the cap + fade-out mask; the inner
                 ScrollArea pins its scrollbar to the card's inner-right edge. */}
+            {/* Summary details stay pinned ABOVE the scrolling lists (user
+                2026-07-08) — expanding a long list scrolls below while the
+                stats stay put. */}
+            <div className="flex flex-col gap-2.5 px-3 pt-3">
+              <ColumnBody entityRef={ref} part="pinned" />
+            </div>
             <div
               className="overflow-hidden transition-[max-height] duration-200 ease-out motion-reduce:transition-none"
               style={{
-                maxHeight: deck && !isTop ? "14rem" : "min(72vh, calc(100vh - 7rem))",
+                maxHeight: deck && !isTop ? "11rem" : "min(60vh, calc(100vh - 16rem))",
                 maskImage:
                   deck && !isTop
                     ? "linear-gradient(to bottom, black 60%, transparent)"
@@ -456,9 +483,9 @@ export function EntityColumns() {
                     : undefined,
               }}
             >
-              <ScrollArea className="max-h-[min(72vh,calc(100vh-7rem))]">
+              <ScrollArea className="max-h-[min(60vh,calc(100vh-16rem))]">
                 <div className="flex flex-col gap-2.5 p-3 pr-4">
-                  <ColumnBody entityRef={ref} />
+                  <ColumnBody entityRef={ref} part="rest" />
                 </div>
               </ScrollArea>
             </div>

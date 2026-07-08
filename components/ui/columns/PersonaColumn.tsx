@@ -17,6 +17,7 @@ import {
 import type { CommuteMode } from "@/lib/seed/personas";
 import { COMMUTE_COLORS } from "@/components/scene/CommuteArc";
 import { useEntityIndexes } from "./entityData";
+import { FamilyTree } from "./FamilyTree";
 import { ColumnStat, IconTip } from "./EntityColumns";
 
 // Column port of the old PersonaPanel. Ordering is a hard design rule: badges
@@ -32,15 +33,63 @@ const COMMUTE_LABELS: Record<CommuteMode, string> = {
   bus: "Rides the school bus",
 };
 
+const MONTHS = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+function formatHeight(cm: number): string {
+  const totalIn = Math.round(cm / 2.54);
+  return `${Math.floor(totalIn / 12)}\u2032${totalIn % 12}\u2033`;
+}
+
+// Transit riders split between the rail spine and named bus routes — stable
+// per persona (hash of id). Real route mapping is a follow-up issue.
+function transitLineFor(personaId: string, indexes: ReturnType<typeof useEntityIndexes>): string {
+  let h = 0;
+  for (let i = 0; i < personaId.length; i++) h = (h * 31 + personaId.charCodeAt(i)) >>> 0;
+  const { transitLine, busLines } = indexes.names.city;
+  const options = [`the ${transitLine}`, `the ${transitLine}`, ...busLines];
+  return options[h % options.length];
+}
+
+function formatHour(hour: number): string {
+  if (hour === 0) return "midnight";
+  if (hour === 12) return "noon";
+  return hour < 12 ? `${hour} a.m.` : `${hour - 12} p.m.`;
+}
+
+const ELEMENT_COLORS: Record<string, string> = {
+  Wood: "#3fa87e",
+  Fire: "#e86f5a",
+  Earth: "#c9a35a",
+  Metal: "#a8b0bd",
+  Water: "#6fa8ff",
+};
+
 function capitalize(s: string): string {
   return s.length > 0 ? s[0].toUpperCase() + s.slice(1) : s;
 }
 
-export function PersonaColumn({ id }: { id: string }) {
+export function PersonaColumn({
+  id,
+  part,
+  hideFamilyTree = false,
+}: {
+  id: string;
+  part: "pinned" | "rest";
+  // True when embedded inside the FamilyTree dialog's detail pane — the tree
+  // trigger would open a dialog within its own dialog.
+  hideFamilyTree?: boolean;
+}) {
   const push = useSceneStore((s) => s.pushColumn);
   const indexes = useEntityIndexes();
   const persona = indexes.directory.personas.get(id);
-  if (!persona) return <div className="text-sm text-muted-foreground">Resident not found.</div>;
+  if (!persona) {
+    return part === "pinned" ? null : (
+      <div className="text-sm text-muted-foreground">Resident not found.</div>
+    );
+  }
 
   const story = persona.story;
   const business = persona.businessId
@@ -81,7 +130,8 @@ export function PersonaColumn({ id }: { id: string }) {
       : capitalize(persona.workStatus);
 
 
-  return (
+  if (part === "pinned") {
+    return (
     <>
       <div className="flex items-start justify-between gap-2">
         <div className="flex min-w-0 flex-col">
@@ -89,7 +139,18 @@ export function PersonaColumn({ id }: { id: string }) {
             <span className="truncate text-sm italic text-muted-foreground">{story.epithet}</span>
           )}
           <span className="text-xs text-muted-foreground">
-            {persona.pronouns} · {persona.age}
+            {[
+              persona.pronouns,
+              String(persona.age),
+              persona.heightCm ? formatHeight(persona.heightCm) : null,
+              persona.build,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </span>
+          <span className="text-xs text-muted-foreground">
+            b. {MONTHS[persona.birthday.month - 1]} {persona.birthday.day},{" "}
+            {persona.birthday.year} · ~{formatHour(persona.birthHour)}
           </span>
         </div>
         <div className="flex shrink-0 items-center gap-1">
@@ -132,13 +193,23 @@ export function PersonaColumn({ id }: { id: string }) {
           />
           <HoverCardContent>
             <div className="font-medium">
-              {persona.westernSign.symbol} {persona.westernSign.name}
+              {persona.westernSign.symbol} {persona.westernSign.name} Sun
             </div>
             <div className="text-xs text-muted-foreground">
               {persona.westernSign.element} · {persona.westernSign.modality} · born{" "}
               {persona.birthday.month}/{persona.birthday.day}
             </div>
             <p className="mt-1.5">{WESTERN_SIGN_TRAITS[persona.westernSign.name]}</p>
+            <div className="mt-2 border-t border-border pt-2 text-xs text-muted-foreground">
+              <div>
+                <span className="font-medium text-foreground">{persona.moonSign} Moon</span> · the
+                inner weather
+              </div>
+              <div className="mt-0.5">
+                <span className="font-medium text-foreground">{persona.risingSign} Rising</span> ·
+                the first impression
+              </div>
+            </div>
           </HoverCardContent>
         </HoverCard>
         <HoverCard>
@@ -155,10 +226,15 @@ export function PersonaColumn({ id }: { id: string }) {
               {CHINESE_ANIMAL_GLYPHS[persona.chineseSign.animal]} Year of the{" "}
               {persona.chineseSign.animal}
             </div>
-            <div className="text-xs text-muted-foreground">
-              {persona.chineseSign.element} — {CHINESE_ELEMENT_TRAITS[persona.chineseSign.element]}{" "}
-              · born {persona.birthday.year}
+            <div className="mt-1 flex items-center gap-1.5 text-sm font-medium">
+              <span
+                className="inline-block size-2.5 rounded-full"
+                style={{ background: ELEMENT_COLORS[persona.chineseSign.element] }}
+                aria-hidden
+              />
+              {persona.chineseSign.element} — {CHINESE_ELEMENT_TRAITS[persona.chineseSign.element]}
             </div>
+            <div className="text-xs text-muted-foreground">born {persona.birthday.year}</div>
             <p className="mt-1.5">
               The {persona.chineseSign.animal}: {CHINESE_ANIMAL_TRAITS[persona.chineseSign.animal]}.
             </p>
@@ -168,7 +244,7 @@ export function PersonaColumn({ id }: { id: string }) {
           <HoverCardTrigger
             render={
               <Badge variant="outline" className="cursor-help">
-                {persona.mbti}
+                {persona.mbtiNickname.replace(/^The /, "")}
               </Badge>
             }
           />
@@ -181,6 +257,12 @@ export function PersonaColumn({ id }: { id: string }) {
         </HoverCard>
       </div>
 
+    </>
+    );
+  }
+
+  return (
+    <>
       {story.wasIs && <p className="text-sm">{story.wasIs}</p>}
       {story.whyAwake && <p className="text-sm">{story.whyAwake}</p>}
 
@@ -223,7 +305,7 @@ export function PersonaColumn({ id }: { id: string }) {
                   aria-hidden
                 />
                 {persona.commute.mode === "transit"
-                  ? `Rides the ${indexes.names.city.transitLine}`
+                  ? `Rides ${transitLineFor(persona.id, indexes)}`
                   : COMMUTE_LABELS[persona.commute.mode]}{" "}
                 ·{" "}
                 {persona.commute.distance >= 1000
@@ -285,7 +367,10 @@ export function PersonaColumn({ id }: { id: string }) {
         <>
           <Separator />
           <div className="flex flex-col gap-0.5">
-            <div className="text-sm font-medium">Family</div>
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-medium">Family</div>
+              {!hideFamilyTree && <FamilyTree personaId={persona.id} indexes={indexes} />}
+            </div>
             {persona.family.map((link) => {
               const relative = indexes.directory.personas.get(link.personaId);
               if (!relative) return null;
