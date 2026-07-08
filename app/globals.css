@@ -189,3 +189,22 @@ body > div {
     @apply font-sans;
   }
 }
+/* Inspect-mode cursors (components/scene/InspectCursor.tsx). Class-based so
+   inline cursor writers (focal-pin scrub) still override while active. */
+canvas.inspect-cursor {
+  cursor: zoom-in;
+}
+canvas.inspect-grab {
+  cursor: grab;
+}
+canvas.inspect-grab:active {
+  cursor: grabbing;
+}
+
+/* City Directory resident marquee (components/ui/DirectoryPanel.tsx). The
+   track holds two copies of the name run; -50% loops seamlessly. */
+@keyframes directory-marquee {
+  to {
+    transform: translateX(-50%);
+  }
+}

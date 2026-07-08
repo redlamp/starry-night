@@ -1,16 +1,22 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
+import { Line2 } from "three/examples/jsm/lines/Line2.js";
+import { LineGeometry } from "three/examples/jsm/lines/LineGeometry.js";
+import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
+import { useFrame } from "@react-three/fiber";
 import { useSceneStore } from "@/lib/state/sceneStore";
 import { generateCity } from "@/lib/seed/cityGen";
 import { buildPersonaDirectory, type CommuteMode } from "@/lib/seed/personas";
 
-// Personas: when the selected persona has a workplace, arc a line from their
-// home roof to their work roof — drawn X-RAY (depthTest off) like the #87
-// selection outline, so the pair of buildings reads at any camera angle.
-// Colour encodes the commute mode (legend repeated in PersonaPanel's Commute
-// row). A tube, not a Line: 1px hairlines vanish at city scale on Windows.
+// Relationship arcs over the city, X-RAY drawn (depthTest off) like the #87
+// selection outline. Line2 with SCREEN-SPACE widths (user 2026-07-08: tubes
+// in world units vanished when zoomed out; pixel widths stay readable at any
+// distance). The arcs follow the TOP entity column: persona cards show their
+// commute (thick, mode-coloured) + connections (thin violet to partner/
+// family/relation homes); building/company cards show the workforce — one
+// thin arc per employee, workplace -> home.
 
 export const COMMUTE_COLORS: Record<CommuteMode, string> = {
   walk: "#3fa87e", // teal — the district-legend green family
@@ -19,6 +25,9 @@ export const COMMUTE_COLORS: Record<CommuteMode, string> = {
   drive: "#e8b04a", // sodium amber, same family as the window light
   bus: "#f5d90a", // school-bus yellow — kids' rides only
 };
+
+const ARC_SAMPLES = 48;
+const CONNECTION_COLOR = "#9b6bc9";
 
 export function CommuteArc({ masterSeed }: { masterSeed: string }) {
   const selectedPersonaId = useSceneStore((s) => s.selectedPersonaId);
@@ -29,16 +38,20 @@ export function CommuteArc({ masterSeed }: { masterSeed: string }) {
   const citySize = useSceneStore((s) => s.citySize);
   const citySketch = useSceneStore((s) => s.citySketch);
 
-  // The arcs follow the TOP entity column: persona cards show their commute +
-  // connections; building/company cards show where the workforce comes from
-  // (user 2026-07-08) — one thin arc per employee, workplace -> home.
   const topRef = columnCursor >= 0 ? columnPath[columnCursor] : undefined;
   const topKey = topRef ? `${topRef.kind}:${topRef.id}` : null;
 
-  const group = useMemo(() => {
+  // Line2 materials need the live viewport size for pixel-width rendering.
+  const materialsRef = useRef<LineMaterial[]>([]);
+  useFrame(({ size }) => {
+    for (const mat of materialsRef.current) mat.resolution.set(size.width, size.height);
+  });
+
+  const built = useMemo(() => {
     void citySize;
     void citySketch;
     void topKey;
+    const materials: LineMaterial[] = [];
     if (!selectedPersonaId && !topRef) return null;
     const directory = buildPersonaDirectory(masterSeed, cityShape, cityShapeScale);
     const { buildings } = generateCity(masterSeed, cityShape, cityShapeScale);
@@ -49,8 +62,8 @@ export function CommuteArc({ masterSeed }: { masterSeed: string }) {
     const addArc = (
       from: { x: number; height: number; z: number },
       to: { x: number; height: number; z: number },
-      color: THREE.Color,
-      radius: number,
+      color: string,
+      widthPx: number,
       opacity: number,
       withBeads: boolean,
     ) => {
@@ -63,23 +76,43 @@ export function CommuteArc({ masterSeed }: { masterSeed: string }) {
       const b = a.clone().lerp(d, 0.3).setY(apex);
       const c = a.clone().lerp(d, 0.7).setY(apex);
       const curve = new THREE.CubicBezierCurve3(a, b, c, d);
-      const mat = new THREE.MeshBasicMaterial({
-        color,
+
+      const positions: number[] = [];
+      for (let i = 0; i <= ARC_SAMPLES; i++) {
+        const p = curve.getPoint(i / ARC_SAMPLES);
+        positions.push(p.x, p.y, p.z);
+      }
+      const geometry = new LineGeometry();
+      geometry.setPositions(positions);
+      const material = new LineMaterial({
+        color: new THREE.Color(color).getHex(),
+        linewidth: widthPx, // px — worldUnits stays false
         transparent: true,
         opacity,
         depthTest: false,
         depthWrite: false,
-        fog: false,
-        toneMapped: false,
       });
-      const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, 64, radius, 6, false), mat);
-      tube.renderOrder = 1003; // above the selection outline (1002)
-      tube.frustumCulled = false;
-      g.add(tube);
+      material.toneMapped = false;
+      materials.push(material);
+      const line = new Line2(geometry, material);
+      line.computeLineDistances();
+      line.renderOrder = 1003; // above the selection outline (1002)
+      line.frustumCulled = false;
+      g.add(line);
+
       if (withBeads) {
-        const beadGeo = new THREE.SphereGeometry(radius * 2.2, 12, 8);
+        const beadMat = new THREE.MeshBasicMaterial({
+          color: new THREE.Color(color),
+          transparent: true,
+          opacity: 0.9,
+          depthTest: false,
+          depthWrite: false,
+          fog: false,
+          toneMapped: false,
+        });
+        const beadGeo = new THREE.SphereGeometry(Math.max(3, dist * 0.006), 12, 8);
         for (const p of [a, d]) {
-          const bead = new THREE.Mesh(beadGeo.clone(), mat);
+          const bead = new THREE.Mesh(beadGeo.clone(), beadMat);
           bead.position.copy(p);
           bead.renderOrder = 1003;
           bead.frustumCulled = false;
@@ -89,9 +122,7 @@ export function CommuteArc({ masterSeed }: { masterSeed: string }) {
       }
     };
 
-    // Employment arcs for a topmost building/company card: thin violet arcs
-    // from the workplace out to every employee's home.
-    const employmentColor = new THREE.Color("#9b6bc9");
+    // Employment arcs for a topmost building/company card.
     const employmentArcs = (bizIds: string[]) => {
       for (const bizId of bizIds) {
         const biz = directory.businesses.get(bizId);
@@ -102,18 +133,19 @@ export function CommuteArc({ masterSeed }: { masterSeed: string }) {
           const worker = directory.personas.get(pid);
           const home = worker ? buildingById.get(worker.homeBuildingId) : undefined;
           if (home && home.id !== site.id) {
-            addArc(site, home, employmentColor, 0.9, 0.5, false);
+            addArc(site, home, CONNECTION_COLOR, 1.5, 0.55, false);
           }
         }
       }
     };
+    const done = () => (g.children.length > 0 ? { group: g, materials } : null);
     if (topRef?.kind === "company") {
       employmentArcs([topRef.id]);
-      return g.children.length > 0 ? g : null;
+      return done();
     }
     if (topRef?.kind === "building") {
       employmentArcs((directory.byWorkBuilding.get(topRef.id) ?? []).map((b) => b.id));
-      return g.children.length > 0 ? g : null;
+      return done();
     }
 
     // Persona arcs (the selected persona, synced from the top persona column).
@@ -123,26 +155,16 @@ export function CommuteArc({ masterSeed }: { masterSeed: string }) {
     const home = buildingById.get(persona.homeBuildingId);
     if (!home) return null;
 
-    // The commute arc (thick, mode-coloured): workplace for the employed,
-    // school for kids — commuteTargetBuildingId covers both.
+    // The commute arc: workplace for the employed, school for kids.
     if (persona.commute && persona.commuteTargetBuildingId !== undefined) {
       const work = buildingById.get(persona.commuteTargetBuildingId);
       if (work) {
-        addArc(
-          home,
-          work,
-          new THREE.Color(COMMUTE_COLORS[persona.commute.mode]),
-          Math.max(1.4, Math.min(4, persona.commute.distance * 0.0035)),
-          0.8,
-          true,
-        );
+        addArc(home, work, COMMUTE_COLORS[persona.commute.mode], 3.5, 0.85, true);
       }
     }
 
-    // Connection arcs (thin, muted violet): the people this persona is tied
-    // to — partner, family, and the one-sided relation target — drawn to
-    // their HOMES, so the social graph reads on the skyline.
-    const connectionColor = new THREE.Color("#9b6bc9");
+    // Connection arcs: partner, family, and the one-sided relation target,
+    // drawn to their HOMES — the social graph on the skyline.
     const targets = new Set<string>();
     const connect = (pid: string | undefined) => {
       if (!pid || pid === persona.id || targets.has(pid)) return;
@@ -151,29 +173,32 @@ export function CommuteArc({ masterSeed }: { masterSeed: string }) {
       if (!other || other.homeBuildingId === persona.homeBuildingId) return;
       const theirHome = buildingById.get(other.homeBuildingId);
       if (!theirHome) return;
-      addArc(home, theirHome, connectionColor, 0.9, 0.55, false);
+      addArc(home, theirHome, CONNECTION_COLOR, 1.75, 0.6, false);
     };
     connect(persona.partnerId);
     for (const link of persona.family) connect(link.personaId);
     connect(persona.story.relation?.targetId);
 
-    return g.children.length > 0 ? g : null;
+    return done();
     // topRef's identity changes every store update; topKey is its stable key.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPersonaId, topKey, masterSeed, cityShape, cityShapeScale, citySize, citySketch]);
 
+  // Publish the memo's materials to the frame-loop ref OUTSIDE render.
   useEffect(() => {
+    materialsRef.current = built?.materials ?? [];
     return () => {
-      if (!group) return;
-      group.traverse((o) => {
-        if (o instanceof THREE.Mesh) {
+      materialsRef.current = [];
+      if (!built) return;
+      built.group.traverse((o) => {
+        if (o instanceof THREE.Mesh || o instanceof Line2) {
           o.geometry.dispose();
           (o.material as THREE.Material).dispose();
         }
       });
     };
-  }, [group]);
+  }, [built]);
 
-  if (!group) return null;
-  return <primitive object={group} />;
+  if (!built) return null;
+  return <primitive object={built.group} />;
 }

@@ -8,7 +8,7 @@ import { CaptureBoot } from "@/components/scene/CaptureBoot";
 import { ViewHotkeys } from "@/components/scene/ViewHotkeys";
 import { CameraSideView } from "@/components/scene/CameraSideView";
 import { ControlsGuide } from "@/components/ui/ControlsGuide";
-import { InspectModeButton } from "@/components/ui/InspectModeButton";
+import { ControlDock } from "@/components/ui/ControlDock";
 
 export default function Page() {
   return (
@@ -27,8 +27,8 @@ export default function Page() {
         <PerfOverlay />
         <CameraSideView />
         <ControlsGuide />
-        {/* #87 follow-up: inspect-mode toggle, sits just left of the "?" button. */}
-        <InspectModeButton />
+        {/* Top-left control dock: City Directory, Inspect, Resume. */}
+        <ControlDock />
       </div>
     </main>
   );

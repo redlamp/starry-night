@@ -3,7 +3,6 @@
 import { MapPin } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import { useSceneStore } from "@/lib/state/sceneStore";
 import { focusBuilding, unfocusBuilding } from "@/lib/scene/focusBuilding";
 import { buildingPopulation } from "@/lib/seed/population";
@@ -15,12 +14,16 @@ import { ColumnStat, IconTip } from "./EntityColumns";
 // Column port of the old BuildingInfoPanel: stats + the occupants list split
 // between companies and households, every entry a push into the next column.
 
-export function BuildingColumn({ id }: { id: number }) {
+export function BuildingColumn({ id, part }: { id: number; part: "pinned" | "rest" }) {
   const push = useSceneStore((s) => s.pushColumn);
   const focusedBuildingId = useSceneStore((s) => s.focusedBuildingId);
   const indexes = useEntityIndexes();
   const building = indexes.buildingById.get(id);
-  if (!building) return <div className="text-sm text-muted-foreground">Building not found.</div>;
+  if (!building) {
+    return part === "pinned" ? null : (
+      <div className="text-sm text-muted-foreground">Building not found.</div>
+    );
+  }
 
   const district = indexes.districtById.get(building.districtId);
   const address = indexes.names.addresses.get(id);
@@ -30,7 +33,8 @@ export function BuildingColumn({ id }: { id: number }) {
   const population = Math.round(buildingPopulation(building));
   const isFocused = focusedBuildingId === id;
 
-  return (
+  if (part === "pinned") {
+    return (
     <>
       <div className="flex items-center justify-between gap-2">
         <Badge variant="secondary">{ARCHETYPE_LABELS[building.archetype]}</Badge>
@@ -79,9 +83,12 @@ export function BuildingColumn({ id }: { id: number }) {
           muted
         />
       </div>
+    </>
+    );
+  }
 
-      <Separator />
-
+  return (
+    <>
       <div className="flex flex-col gap-1.5">
         <div className="text-sm font-medium">Occupants</div>
         {siftLine && <div className="text-sm italic text-muted-foreground">{siftLine}</div>}
@@ -112,8 +119,9 @@ export function BuildingColumn({ id }: { id: number }) {
 
         {households.length > 0 && (
           <div className="flex flex-col gap-1.5">
-            <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
-              Residents
+            <div className="flex items-baseline justify-between text-[11px] uppercase tracking-wide text-muted-foreground">
+              <span>Residents</span>
+              <span>Age</span>
             </div>
             {households.map((hh) => (
               <div key={`${hh.buildingId}:${hh.index}`} className="flex flex-col gap-0.5">
