@@ -32,6 +32,14 @@ import { focusBuilding } from "@/lib/scene/focusBuilding";
 
 const MAX_SEARCH_RESULTS = 50;
 
+// Pinned pins sit on a near-black or near-white plate — whichever contrasts
+// with the district colour (user 2026-07-08). Plain Rec.709 luma threshold.
+function pinPlateFor(hex: string): string {
+  const n = parseInt(hex.replace("#", ""), 16);
+  const luma = 0.2126 * ((n >> 16) & 255) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255);
+  return luma > 140 ? "rgba(10, 12, 16, 0.9)" : "rgba(245, 247, 250, 0.95)";
+}
+
 // Address numbers render as a right-aligned column sized by the city's widest
 // address (tabular-nums is inherited panel-wide), so "1203 Martin Parkway"
 // and "9 Martin Parkway" align their street names (user 2026-07-08).
@@ -468,8 +476,13 @@ export function DirectorySection() {
                     aria-label={`Pin ${d.properName}`}
                     aria-pressed={pinnedDistrictId === d.id}
                     onClick={() => pinDistrict(d)}
-                    className="size-6 shrink-0 text-muted-foreground hover:text-foreground [&_svg]:size-3.5"
-                    style={pinnedDistrictId === d.id ? { color: d.color } : undefined}
+                    className="size-6 shrink-0 [&_svg]:size-3.5"
+                    style={{
+                      color: d.color,
+                      ...(pinnedDistrictId === d.id
+                        ? { backgroundColor: pinPlateFor(d.color) }
+                        : {}),
+                    }}
                   >
                     <MapPin />
                   </Button>
