@@ -446,6 +446,11 @@ export const RELATION_TEMPLATES: Array<{ verb: string; context: "neighbor" | "co
   { verb: "covers for", context: "coworker", line: "Covers {Tfirst}'s shifts without being asked. {Tfirst} has noticed and said nothing." },
   { verb: "learned from", context: "coworker", line: "Everything useful, {given} learned watching {Tfirst} work. {Tfirst} thinks they've barely met." },
   { verb: "remembers", context: "street", line: "Remembers {T} from {lore:event}. {T} was facing the other way." },
+  { verb: "nods to", context: "street", line: "Nods to {T} at the corner most mornings. Neither has broken first." },
+  { verb: "borrowed from", context: "street", line: "Still has {T}'s ladder. Third winter now." },
+  { verb: "outbid", context: "street", line: "Outbid {T} for the apartment years ago. The elevator rides are efficient." },
+  { verb: "recognizes", context: "street", line: "Knows {T}'s dog by name and {T} not at all." },
+  { verb: "waits with", context: "street", line: "Waits at the same stop as {T}. They have perfected standing apart." },
 ];
 
 // The one legend per city — an outsized, fully-authored resident.
@@ -764,5 +769,17 @@ export function siftBuilding(dir: PersonaDirectory, buildingId: number): string 
   // An old guard.
   const oldGuard = residents.filter((p) => p.bornHere && p.age >= 60);
   if (oldGuard.length >= 2) return "Most of this building remembers the block before the towers.";
+  // Gentler fallbacks so most buildings say SOMETHING (user 2026-07-08: the
+  // sift line rarely appeared).
+  const kids = residents.filter((p) => p.age < 13).length;
+  if (kids >= 3) return `${kids} kids under thirteen live here. The stairwell knows all of them.`;
+  const newcomers = residents.filter((p) => !p.bornHere && p.yearsInCity <= 3).length;
+  if (newcomers >= 2) return "Half the mailbox labels here are still the previous tenants'.";
+  const singles = residents.filter((p) => p.relationshipStatus === "single" && p.age >= 25);
+  if (singles.length >= 3) return "Three residents here cook for one. The hallway smells argue about it.";
+  const elders = residents.filter((p) => p.age >= 70).length;
+  if (elders >= 1 && kids >= 1) return "The oldest and youngest residents here are sixty years apart and keep the same hours.";
+  if (residents.length >= 4) return "The walls here are thin enough that everyone knows everyone's schedule.";
+  if (residents.length >= 1) return "Quiet building. The kind where the lights say more than the neighbors do.";
   return undefined;
 }

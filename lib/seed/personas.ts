@@ -20,7 +20,7 @@ import {
   DEGREE_SUBJECTS,
   MBTI_AXIS_WEIGHTS,
   MBTI_NICKNAMES,
-  PRONOUNS,
+  WESTERN_ZODIAC,
   westernSignFor,
   chineseSignFor,
   type Profession,
@@ -83,8 +83,16 @@ export type Persona = {
   fullName: string;
   age: number;
   birthday: { year: number; month: number; day: number };
-  westernSign: WesternSign;
+  westernSign: WesternSign; // the sun sign
+  // The rest of the "big three" — fake ephemeris, seeded per persona (real
+  // moon/ascendant need birth-time astronomy; these are character flavour).
+  moonSign: string;
+  risingSign: string;
+  birthHour: number; // 0-23, the "birth time" the rising sign hangs off
   chineseSign: ChineseSign;
+  // Physical descriptors (adults only; undefined for kids).
+  heightCm?: number;
+  build?: string;
   mbti: string;
   mbtiNickname: string;
   ethnicity: Ethnicity;
@@ -347,11 +355,38 @@ function drawFamilyName(rng: () => number, ethnicity: Ethnicity): string {
 }
 
 function drawGenderIdentity(rng: () => number, presentation: "m" | "f"): GenderIdentity {
+  // Slightly above current US population estimates by design (user
+  // 2026-07-08) — see wiki/notes/pronoun-distribution.md for sources.
   const r = rng();
-  if (r < 0.006) return presentation === "m" ? "trans man" : "trans woman";
-  if (r < 0.018) return "nonbinary";
+  if (r < 0.008) return presentation === "m" ? "trans man" : "trans woman";
+  if (r < 0.033) return "nonbinary";
   return presentation === "m" ? "cis man" : "cis woman";
 }
+
+// Pronouns are drawn, not mapped 1:1 from identity — she/they and he/they
+// exist among cis folks, and a slice of nonbinary residents use neopronouns.
+function drawPronouns(rng: () => number, identity: GenderIdentity): string {
+  const r = rng();
+  switch (identity) {
+    case "nonbinary":
+      if (r < 0.7) return "they/them";
+      if (r < 0.8) return "she/they";
+      if (r < 0.9) return "he/they";
+      return r < 0.95 ? "xe/xem" : "ze/zir";
+    case "trans man":
+      return r < 0.9 ? "he/him" : "he/they";
+    case "trans woman":
+      return r < 0.9 ? "she/her" : "she/they";
+    case "cis man":
+      return r < 0.97 ? "he/him" : "he/they";
+    case "cis woman":
+      return r < 0.96 ? "she/her" : "she/they";
+  }
+}
+
+// T-shirt sizing for body descriptors (user 2026-07-08) — impersonal and
+// judgment-free. Repeats weight the draw toward M/L.
+const BUILDS = ["XS", "S", "S", "M", "M", "M", "M", "L", "L", "L", "XL", "XL", "XXL"];
 
 function drawMbti(rng: () => number): string {
   return (
@@ -631,6 +666,20 @@ function buildDirectoryImpl(
         const mbti = drawMbti(rng);
         const edu = drawEducation(rng, profession, age, names);
 
+        const pronouns = drawPronouns(rng, genderIdentity);
+        // Fake-ephemeris big three: moon + rising drawn per persona; the
+        // rising sign notionally hangs off a generated birth hour.
+        const birthHour = Math.floor(rng() * 24);
+        const moonSign = WESTERN_ZODIAC[Math.floor(rng() * 12)].name;
+        const risingSign = WESTERN_ZODIAC[Math.floor(rng() * 12)].name;
+        // Physical descriptors, adults only.
+        const heightCm = isAdult
+          ? Math.round(
+              (spec.presentation === "m" ? 178 : 164) + (rng() + rng() + rng() - 1.5) * 9,
+            )
+          : undefined;
+        const build = isAdult ? pick(rng, BUILDS) : undefined;
+
         // Sparse offstage relatives — negative space, not a full tree.
         const offstage: OffstageRelative[] = [];
         if (isAdult && rng() < 0.4) {
@@ -655,7 +704,12 @@ function buildDirectoryImpl(
           mbtiNickname: MBTI_NICKNAMES[mbti] ?? "",
           ethnicity: spec.ethnicity,
           genderIdentity,
-          pronouns: PRONOUNS[genderIdentity],
+          pronouns,
+          moonSign,
+          risingSign,
+          birthHour,
+          heightCm,
+          build,
           homeBuildingId: b.id,
           homeDistrictId: b.districtId,
           householdIndex: h,
@@ -935,6 +989,14 @@ function buildDirectoryImpl(
       list.push(biz);
       byKind.set(biz.kind, list);
     }
+    // One-of-a-kind roles (user 2026-07-08: "only need 1 principal of a
+    // school"): a business takes at most ONE hire with these titles; when
+    // every candidate already has one, the extra hire teaches instead.
+    const SINGLETON_TITLES = new Set(["School Principal"]);
+    const singletonFilled = new Set<string>(); // `${businessId}::${title}`
+    const teacherFallback = PROFESSIONS.find(
+      (x) => x.title === "High School Teacher" && x.workplaceType === "school",
+    );
     // Stable worker order: persona insertion order is already building-ascending.
     for (const p of personas.values()) {
       if (p.workStatus !== "employed" || !p.profession) continue;
@@ -943,17 +1005,34 @@ function buildDirectoryImpl(
         p.workStatus = "commutes out of the city";
         continue;
       }
+      if (
+        SINGLETON_TITLES.has(p.profession.title) &&
+        teacherFallback &&
+        candidates.every((c) => singletonFilled.has(`${c.id}::${p.profession!.title}`))
+      ) {
+        p.profession = teacherFallback;
+      }
       // Preference ladder: exact title match ("{F} Dental" wants dentists) >
       // category match (bellhops to the hotel, paralegals to the law firm) >
       // unmarked businesses > anything with the right workplace kind.
       const category = p.profession.category;
       const title = p.profession.title;
+      const singleton = SINGLETON_TITLES.has(title);
+      const slotOpen = (c: Business) => !singletonFilled.has(`${c.id}::${title}`);
       const byTitle = candidates.filter((c) => c.titleAffinity?.includes(title));
       const byCategory = candidates.filter((c) => c.affinity?.includes(category) && !c.titleAffinity);
       const open = candidates.filter((c) => !c.affinity && !c.titleAffinity);
-      const pool =
+      let pool =
         byTitle.length > 0 ? byTitle : byCategory.length > 0 ? byCategory : open.length > 0 ? open : candidates;
+      if (singleton) {
+        const freeInPool = pool.filter(slotOpen);
+        const freeAnywhere = candidates.filter(slotOpen);
+        // Every slot taken AND no teacher fallback — tolerate the duplicate
+        // rather than crash on an empty pool.
+        pool = freeInPool.length > 0 ? freeInPool : freeAnywhere.length > 0 ? freeAnywhere : pool;
+      }
       const biz = pool[Math.floor(rng() * pool.length)];
+      if (singleton) singletonFilled.add(`${biz.id}::${title}`);
       p.businessId = biz.id;
       biz.employeeIds.push(p.id);
     }

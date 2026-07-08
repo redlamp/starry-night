@@ -62,6 +62,18 @@ import type { CityShapeSetting } from "./cityShape";
 // transit legs: the leg schema, the shader, and the dir carry-forward are
 // all untouched — there are simply more, shorter sub-legs.
 //
+// #89 v4 (user feedback, 2026-07-08): v3's hops joined the spline directly
+// at pad height on both ends, so a departure/arrival at a landed stop read
+// as teleporting onto the tour rather than lifting off or touching down.
+// Now, whenever a hop departs a stop the loop treats as landed (the loop's
+// base at hop 0, or any stop that hovered on the previous hop's arrival), it
+// gets an explicit vertical lift-off leg first; whenever a hop arrives at a
+// stop that will hover, the spline ends at a lifted point and a vertical
+// descent leg brings it down to the exact pad before the orbit. Fly-through
+// stops (no hover) are unaffected. Both are still plain "transit" legs, just
+// vertical ones — see LIFT_MIN_M/LIFT_MAX_M/VERTICAL_SPEED and the
+// departingLanded tracking in buildHelicopter.
+//
 // Journey-window technique (mirrors Traffic's minor-tier journeys,
 // lib/seed/traffic.ts + lib/shaders/traffic.ts): the whole closed loop is
 // ONE shared clock per helicopter (phase + cycleSec); each leg carries a
@@ -150,6 +162,16 @@ const CLIMB_LEN_CAP_M = 60; // …capped here
 const ORBIT_SEGMENTS = 6;
 const ORBIT_RADIUS_MIN_M = 35;
 const ORBIT_RADIUS_MAX_M = 90;
+
+// #89 follow-up (user feedback, 2026-07-08): a hop departing/arriving at a
+// landed stop used to join the spline directly at pad height — no sense of
+// lifting off or touching down. Explicit vertical legs, MUCH slower than
+// cruise so the rise/descent reads as its own event rather than a blip. See
+// buildHelicopter's hop loop (the departingLanded tracking) and
+// sampleHopPoints' startLift/endLift.
+const LIFT_MIN_M = 12;
+const LIFT_MAX_M = 22;
+const VERTICAL_SPEED = 3.5; // m/s — well under cruise's 18-25
 
 type Waypoint = { x: number; y: number; z: number };
 
@@ -299,6 +321,12 @@ function sampleHopPoints(
   tour: { curve: THREE.CatmullRomCurve3; stopCtrl: number[]; controlCount: number },
   stops: Waypoint[],
   hop: number,
+  // #89 follow-up: when the departing/arriving stop gets a vertical lift-off
+  // or landing leg (built by the caller), the ramp itself only needs to span
+  // LIFTED height to LIFTED height — the vertical leg covers the pad-to-lift
+  // stretch. Undefined means "start/end at the pad itself", today's behavior.
+  startLift?: number,
+  endLift?: number,
 ): Waypoint[] {
   const a = stops[hop];
   const b = stops[(hop + 1) % stops.length];
@@ -311,6 +339,8 @@ function sampleHopPoints(
     CLIMB_MIN_M +
     rng() * (CLIMB_MAX_M - CLIMB_MIN_M) +
     Math.min(CLIMB_LEN_CAP_M, hopLen * CLIMB_LEN_FRAC);
+  const aY = a.y + (startLift ?? 0);
+  const bY = b.y + (endLift ?? 0);
 
   const pts: Waypoint[] = [];
   const v = new THREE.Vector3();
@@ -320,12 +350,12 @@ function sampleHopPoints(
     tour.curve.getPoint(t0 + (t1 - t0) * f, v);
     pts.push({
       x: v.x,
-      y: a.y + (b.y - a.y) * f + climb * 4 * f * (1 - f),
+      y: aY + (bY - aY) * f + climb * 4 * f * (1 - f),
       z: v.z,
     });
   }
-  pts[0] = { ...a };
-  pts[pts.length - 1] = { ...b };
+  pts[0] = startLift !== undefined ? { x: a.x, y: aY, z: a.z } : { ...a };
+  pts[pts.length - 1] = endLift !== undefined ? { x: b.x, y: bY, z: b.z } : { ...b };
   return pts;
 }
 
@@ -384,14 +414,49 @@ function buildHelicopter(rng: () => number, pool: Waypoint[]): Helicopter {
     carriedDir = dir;
     raw.push({ aA: a, aB: b, dir, kind: "transit", durationSec: dist3(a, b) / speed });
   };
+  // #89 follow-up: vertical lift-off/landing legs are plain "transit" legs
+  // too, just vertical ones — headingXZ(a, liftedPt) would be zero-length
+  // (same x/z, NaN heading), so these take an explicit dir instead of one
+  // derived from the two endpoints. carriedDir still updates, same contract.
+  const pushVertical = (
+    a: Waypoint,
+    b: Waypoint,
+    dir: [number, number, number],
+    durationSec: number,
+  ) => {
+    carriedDir = dir;
+    raw.push({ aA: a, aB: b, dir, kind: "transit", durationSec });
+  };
+  // Whether the helicopter is departing a stop it actually landed at (so a
+  // lift-off leg is warranted). The loop starts at its own base, which reads
+  // as landed regardless of how the final hop's arrival there happens to roll.
+  let departingLanded = true;
   for (let i = 0; i < stops.length; i++) {
+    const a = stops[i];
     const b = stops[(i + 1) % stops.length];
 
-    const arcPts = sampleHopPoints(rng, tour, stops, i);
+    let startLift: number | undefined;
+    if (departingLanded) {
+      const liftM = LIFT_MIN_M + rng() * (LIFT_MAX_M - LIFT_MIN_M);
+      const liftDir = headingXZ(a, b); // nose toward the destination while lifting
+      pushVertical(a, { x: a.x, y: a.y + liftM, z: a.z }, liftDir, liftM / VERTICAL_SPEED);
+      startLift = liftM;
+    }
+
+    // Roll the arrival's fate BEFORE sampling the hop, so the spline ramp
+    // already knows its landing lift height (endLift) — see sampleHopPoints.
+    const skipHover = rng() < HOVER_SKIP_PROB;
+    let endLift: number | undefined;
+    if (!skipHover) endLift = LIFT_MIN_M + rng() * (LIFT_MAX_M - LIFT_MIN_M);
+
+    const arcPts = sampleHopPoints(rng, tour, stops, i, startLift, endLift);
     for (let s = 0; s < arcPts.length - 1; s++) pushTransit(arcPts[s], arcPts[s + 1]);
 
-    const skipHover = rng() < HOVER_SKIP_PROB;
     if (!skipHover) {
+      // Descend from the hop's lifted arrival down to the exact pad BEFORE
+      // the orbit — the orbit circles at pad height and starts/ends exactly
+      // at b, so descending first keeps that composition exact.
+      pushVertical({ x: b.x, y: b.y + endLift!, z: b.z }, b, carriedDir, endLift! / VERTICAL_SPEED);
       const orbitPts = buildOrbitPoints(rng, b);
       for (let s = 0; s < orbitPts.length - 1; s++) pushTransit(orbitPts[s], orbitPts[s + 1]);
     }
@@ -401,6 +466,7 @@ function buildHelicopter(rng: () => number, pool: Waypoint[]): Helicopter {
     if (hoverDur > 0) {
       raw.push({ aA: b, aB: b, dir: carriedDir, kind: "hover", durationSec: hoverDur });
     }
+    departingLanded = !skipHover;
   }
 
   const cycleSec = raw.reduce((sum, l) => sum + l.durationSec, 0);

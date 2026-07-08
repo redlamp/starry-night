@@ -73,13 +73,17 @@ export function RoadHover({ masterSeed }: { masterSeed: string }) {
       if (Math.hypot(e.clientX - downX, e.clientY - downY) > 4) return;
       const road = hitRef.current;
       if (!road) return;
-      // A building under the cursor wins — its own click handler runs.
-      const s = useSceneStore.getState();
-      if (s.pickInstance >= 0) return;
-      // With a stack already open, the street JOINS the drill; a street click
-      // from nothing starts a fresh path.
-      if (s.columnCursor >= 0) s.pushColumn({ kind: "street", id: road.roadId });
-      else resetColumns([{ kind: "street", id: road.roadId }]);
+      const buildingBefore = useSceneStore.getState().selectedBuildingId;
+      // Defer one tick: if InstancedCity's click handler selected a building
+      // from this same gesture, the building won. (The old pickInstance veto
+      // also fired for buildings BEHIND the road point along the ray, eating
+      // legitimate road clicks — user 2026-07-08.)
+      window.setTimeout(() => {
+        const s = useSceneStore.getState();
+        if (s.selectedBuildingId !== buildingBefore) return; // building handled it
+        if (s.columnCursor >= 0) s.pushColumn({ kind: "street", id: road.roadId });
+        else resetColumns([{ kind: "street", id: road.roadId }]);
+      }, 0);
     };
     window.addEventListener("pointerdown", onDown);
     window.addEventListener("pointerup", onUp);

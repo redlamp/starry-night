@@ -49,7 +49,7 @@ const WHEEL_ZOOM_SPEED = 1.0; // GE/OrbitControls wheel curve: ~5% dolly per not
 // Focused building's apparent size (user 2026-07-08): its bounding sphere
 // should span ~a third of the DISPLAY HEIGHT — a comfortable subject-in-scene
 // framing rather than filling the frame.
-const FOCUS_HEIGHT_FRACTION = 0.33;
+const FOCUS_HEIGHT_FRACTION = 0.4; // 0.33 read as too zoomed-out (user 2026-07-08)
 const FOCUS_MIN_DIST = 60 * CITY_SCALE; // don't dolly closer than this on focus (keeps small houses at a sane size)
 const FOCUS_SMOOTH_TIME = 0.18; // camera-controls smoothTime DURING a focus (< default 0.25 = snappier pan/dolly out)
 const ORTHO_FOCUS_DURATION = 0.6; // seconds for the ortho size ramp; > the pan settle so the zoom trails it

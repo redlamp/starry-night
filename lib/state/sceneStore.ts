@@ -516,6 +516,22 @@ type SceneState = {
   columnForward: () => void;
   jumpToColumn: (index: number) => void;
   closeColumns: () => void;
+  // The stack closeColumns dismissed, so the Resume dock button can bring it
+  // back after an accidental empty-ground click (user 2026-07-08).
+  lastColumnPath: EntityRef[];
+  resumeColumns: () => void;
+  // City Directory overlay (ControlDock) — in the store so the entity-columns
+  // dock can shift to its right while it's open. Runtime tier.
+  directoryOpen: boolean;
+  setDirectoryOpen: (v: boolean) => void;
+  // District highlight from the directory (user 2026-07-08): hovering a
+  // district header traces its border on the map (transient); the header's
+  // pin button makes it stick + flies the camera. Outline renders
+  // hover ?? pinned ?? selected-building's district. Runtime tier.
+  hoverDistrictId: string | null;
+  setHoverDistrictId: (id: string | null) => void;
+  pinnedDistrictId: string | null;
+  setPinnedDistrictId: (id: string | null) => void;
   setColumnsView: (v: "side" | "deck" | "collapsed") => void;
   // Inspect mode (user-facing, toggled by the Info button). When on, buildings
   // highlight on hover and a click selects one (info panel + outline + pin);
@@ -1180,8 +1196,30 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     syncColumnSelection(get);
   },
   closeColumns: () => {
-    set({ columnPath: [], columnCursor: -1 });
+    const path = get().columnPath;
+    set({
+      columnPath: [],
+      columnCursor: -1,
+      ...(path.length > 0 ? { lastColumnPath: path } : {}),
+    });
     syncColumnSelection(get);
+  },
+  lastColumnPath: [],
+  directoryOpen: false,
+  setDirectoryOpen: (directoryOpen) =>
+    set(
+      directoryOpen
+        ? { directoryOpen }
+        : // Closing the directory drops both district highlights with it.
+          { directoryOpen, hoverDistrictId: null, pinnedDistrictId: null },
+    ),
+  hoverDistrictId: null,
+  setHoverDistrictId: (hoverDistrictId) => set({ hoverDistrictId }),
+  pinnedDistrictId: null,
+  setPinnedDistrictId: (pinnedDistrictId) => set({ pinnedDistrictId }),
+  resumeColumns: () => {
+    const last = get().lastColumnPath;
+    if (last.length > 0) get().resetColumns(last);
   },
   setColumnsView: (columnsView) => set({ columnsView }),
   settingsPanelWidth: 448,

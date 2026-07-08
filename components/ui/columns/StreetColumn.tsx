@@ -11,18 +11,23 @@ const LIST_CAP = 8;
 
 const TIER_LABEL = { highway: "Highway", arterial: "Arterial", minor: "Local street" } as const;
 
-export function StreetColumn({ id }: { id: string }) {
+export function StreetColumn({ id, part }: { id: string; part: "pinned" | "rest" }) {
   const push = useSceneStore((s) => s.pushColumn);
   const indexes = useEntityIndexes();
   const [allBuildings, setAllBuildings] = useState(false);
   const [allCompanies, setAllCompanies] = useState(false);
   const [allPeople, setAllPeople] = useState(false);
   const agg = indexes.streetAgg(id);
-  if (!agg) return <div className="text-sm text-muted-foreground">Street not found.</div>;
+  if (!agg) {
+    return part === "pinned" ? null : (
+      <div className="text-sm text-muted-foreground">Street not found.</div>
+    );
+  }
 
-  return (
-    <>
-      <div className="flex flex-wrap items-center gap-1.5">
+  if (part === "pinned") {
+    return (
+      <>
+        <div className="flex flex-wrap items-center gap-1.5">
         <Badge variant="outline">{TIER_LABEL[agg.road.tier]}</Badge>
         {agg.districts.map((d) => (
           <button
@@ -41,11 +46,15 @@ export function StreetColumn({ id }: { id: string }) {
         <ColumnStat label="Buildings" value={agg.buildingIds.length.toLocaleString()} />
         <ColumnStat label="Companies" value={agg.companies.length.toLocaleString()} />
         <ColumnStat label="Residents" value={agg.residentCount.toLocaleString()} />
-      </div>
+        </div>
+      </>
+    );
+  }
 
+  return (
+    <>
       {agg.buildingIds.length > 0 && (
         <>
-          <Separator />
           <div className="flex flex-col gap-0.5">
             <div className="text-sm font-medium">Buildings</div>
             {(allBuildings ? agg.buildingIds : agg.buildingIds.slice(0, LIST_CAP)).map((buildingId) => {
@@ -59,7 +68,23 @@ export function StreetColumn({ id }: { id: string }) {
                   className="-mx-1 flex items-baseline justify-between gap-2 rounded px-1 text-left text-sm hover:bg-foreground/10"
                 >
                   <span className="truncate">
-                    {name ?? (address ? `${address.number} ${address.street}` : `#${buildingId}`)}
+                    {name ??
+                      (address ? (
+                        <>
+                          {/* Fixed-width number column: widest address in the
+                              city, right-aligned, tabular digits — numbers and
+                              street names align down the list. */}
+                          <span
+                            className="inline-block text-right"
+                            style={{ minWidth: `${indexes.names.maxAddressDigits}ch` }}
+                          >
+                            {address.number}
+                          </span>{" "}
+                          {address.street}
+                        </>
+                      ) : (
+                        `#${buildingId}`
+                      ))}
                   </span>
                   {name && address && (
                     <span className="shrink-0 tabular-nums text-muted-foreground">

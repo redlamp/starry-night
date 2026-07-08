@@ -34,6 +34,7 @@ import { SelectedBuildingOutline } from "./SelectedBuildingOutline";
 import { CommuteArc } from "./CommuteArc";
 import { RoadHover } from "./RoadHover";
 import { StreetHighlight } from "./StreetHighlight";
+import { InspectCursor } from "./InspectCursor";
 import { GroundHaze } from "./GroundHaze";
 import { Roads } from "./Roads";
 import { DistrictShells } from "./DistrictShells";
@@ -210,6 +211,7 @@ export function Scene() {
         {cityReady && <CommuteArc masterSeed={masterSeed} />}
         {/* Inspect: street-name hover chip + hovered-road highlight. */}
         {cityReady && <RoadHover masterSeed={masterSeed} />}
+        <InspectCursor />
         {/* Entity columns: persistent highlight for a selected street. */}
         {cityReady && <StreetHighlight masterSeed={masterSeed} />}
         {/* old controller's store-based indicator; the drei bridge renders its own
