@@ -13,6 +13,20 @@ import {
 import type { SketchTensorSource } from "@/lib/sketch/orientationField";
 import type { FlightClass } from "@/lib/seed/flights";
 
+// Entity columns (Miller-columns drill): one typed reference per column.
+// Districts/streets/companies/personas key by their stable string ids,
+// buildings by their stable numeric id.
+export type EntityRef =
+  | { kind: "district"; id: string }
+  | { kind: "street"; id: string }
+  | { kind: "building"; id: number }
+  | { kind: "company"; id: string }
+  | { kind: "persona"; id: string };
+
+export function sameEntityRef(a: EntityRef, b: EntityRef): boolean {
+  return a.kind === b.kind && a.id === b.id;
+}
+
 // ---------------------------------------------------------------------------
 // Re-export everything from the sub-files so existing importers of
 // "@/lib/state/sceneStore" continue to resolve without changes.
@@ -470,6 +484,39 @@ type SceneState = {
   // Cleared on regen, an empty-space click, and Escape.
   selectedBuildingId: number | null;
   setSelectedBuildingId: (id: number | null) => void;
+  // Personas feature: which persona's character sheet is open. Kept in sync
+  // with the column path below (topmost persona column wins) — scene overlays
+  // (commute/connection arcs) read this rather than walking the path.
+  // Runtime tier only — never in SETTINGS_REGISTRY/SavedConfig/share codes.
+  selectedPersonaId: string | null;
+  setSelectedPersonaId: (id: string | null) => void;
+  // Entity columns (Miller-columns drill): the selection path, left→right —
+  // e.g. [district, building, company, persona, persona]. `columnCursor` is
+  // the visible end of the path; Back/Forward move the cursor WITHOUT
+  // truncating, so forward history survives until a new push branches off.
+  // All runtime tier. selectedBuildingId/selectedPersonaId are derived from
+  // the visible slice on every mutation (last ref of each kind wins).
+  columnPath: EntityRef[];
+  columnCursor: number; // -1 = closed; visible = columnPath.slice(0, cursor+1)
+  // Three display states (user 2026-07-08): "side" = flat macOS-style columns
+  // side by side, "deck" = the CSS-3D receding stack, "collapsed" = only the
+  // top card.
+  columnsView: "side" | "deck" | "collapsed";
+  // Live width of the settings drawer (CameraPanel publishes it on mount and
+  // on resize) so the column row can stop short of it. Runtime tier.
+  settingsPanelWidth: number;
+  setSettingsPanelWidth: (w: number) => void;
+  // Cone-follow (user 2026-07-08): while on, the camera re-frames to the top
+  // card's location set every time the drill moves. Runtime tier.
+  coneFollow: boolean;
+  setConeFollow: (v: boolean) => void;
+  pushColumn: (ref: EntityRef) => void;
+  resetColumns: (path: EntityRef[]) => void;
+  columnBack: () => void;
+  columnForward: () => void;
+  jumpToColumn: (index: number) => void;
+  closeColumns: () => void;
+  setColumnsView: (v: "side" | "deck" | "collapsed") => void;
   // Inspect mode (user-facing, toggled by the Info button). When on, buildings
   // highlight on hover and a click selects one (info panel + outline + pin);
   // when off, pointer picking is inert. Turning it off clears any selection.
@@ -481,8 +528,13 @@ type SceneState = {
   // selected object"), then keep orbiting there. The model consumes + clears it,
   // fitting `radius` to its live fov/aspect so the whole object stays on screen.
   // Runtime tier only.
-  focusRequest: { x: number; y: number; z: number; radius: number } | null;
-  setFocusRequest: (r: { x: number; y: number; z: number; radius: number } | null) => void;
+  // fit: "height" (default) frames the sphere at ~a third of display height
+  // (single-building focus); "fill" fits it to the whole available frame
+  // (the cone's multi-location sets — user 2026-07-08).
+  focusRequest: { x: number; y: number; z: number; radius: number; fit?: "height" | "fill" } | null;
+  setFocusRequest: (
+    r: { x: number; y: number; z: number; radius: number; fit?: "height" | "fill" } | null,
+  ) => void;
   // Inspect focus-lock: while inspecting a FOCUSED building, LMB-orbit pivots on
   // its 3D centre (this point) instead of the ground pick. Set by focusBuilding,
   // cleared when the selection or inspect mode clears. Runtime tier only.
@@ -1089,6 +1141,53 @@ export const useSceneStore = create<SceneState>((set, get) => ({
         ? { selectedBuildingId }
         : { selectedBuildingId, focusPivot: null, focusedBuildingId: null },
     ),
+  selectedPersonaId: null,
+  setSelectedPersonaId: (selectedPersonaId) => set({ selectedPersonaId }),
+  // --- Entity columns ---
+  // Every mutation re-derives the scene-selection sync (last visible building/
+  // persona ref wins) through the EXISTING setters, so focus-marker clearing
+  // and the arc overlays keep their semantics without duplicating them here.
+  columnPath: [],
+  columnCursor: -1,
+  columnsView: "deck",
+  pushColumn: (ref) => {
+    const s = get();
+    const path = s.columnPath.slice(0, s.columnCursor + 1);
+    if (path.length > 0 && sameEntityRef(path[path.length - 1], ref)) return;
+    path.push(ref);
+    get().resetColumns(path);
+  },
+  resetColumns: (columnPath) => {
+    set({ columnPath, columnCursor: columnPath.length - 1 });
+    syncColumnSelection(get);
+  },
+  columnBack: () => {
+    const s = get();
+    if (s.columnCursor < 0) return;
+    set({ columnCursor: s.columnCursor - 1 }); // -1 = closed, path kept for Forward
+    syncColumnSelection(get);
+  },
+  columnForward: () => {
+    const s = get();
+    if (s.columnCursor >= s.columnPath.length - 1) return;
+    set({ columnCursor: s.columnCursor + 1 });
+    syncColumnSelection(get);
+  },
+  jumpToColumn: (index) => {
+    const s = get();
+    if (index < 0 || index >= s.columnPath.length) return;
+    set({ columnCursor: index });
+    syncColumnSelection(get);
+  },
+  closeColumns: () => {
+    set({ columnPath: [], columnCursor: -1 });
+    syncColumnSelection(get);
+  },
+  setColumnsView: (columnsView) => set({ columnsView }),
+  settingsPanelWidth: 448,
+  setSettingsPanelWidth: (settingsPanelWidth) => set({ settingsPanelWidth }),
+  coneFollow: false,
+  setConeFollow: (coneFollow) => set({ coneFollow }),
   inspectMode: false,
   setInspectMode: (on) =>
     set(
@@ -1251,6 +1350,22 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     }));
   },
 }));
+
+// Re-derive the scene-selection sync fields from the visible column slice —
+// the LAST building/persona ref wins (a path can hold several of each). Runs
+// through the existing setters so focus-marker clearing keeps its semantics.
+function syncColumnSelection(get: () => SceneState) {
+  const s = get();
+  const visible = s.columnPath.slice(0, s.columnCursor + 1);
+  let building: number | null = null;
+  let persona: string | null = null;
+  for (const ref of visible) {
+    if (ref.kind === "building") building = ref.id;
+    else if (ref.kind === "persona") persona = ref.id;
+  }
+  if (s.selectedBuildingId !== building) s.setSelectedBuildingId(building);
+  if (s.selectedPersonaId !== persona) s.setSelectedPersonaId(persona);
+}
 
 // Boot hydration (user 2026-06-08: "when I press save the city size and all
 // other settings should be… present after refreshing the page"). The Save
