@@ -171,7 +171,15 @@ function showLocations(ref: EntityRef, indexes: EntityIndexes): void {
   st.setFocusRequest({ x: cx, y: cy, z: cz, radius, fit: "fill" });
 }
 
-function ColumnBody({ entityRef, part }: { entityRef: EntityRef; part: "pinned" | "rest" }) {
+function ColumnBody({
+  entityRef,
+  part,
+  hideFamilyTree,
+}: {
+  entityRef: EntityRef;
+  part: "pinned" | "rest";
+  hideFamilyTree?: boolean;
+}) {
   switch (entityRef.kind) {
     case "district":
       return <DistrictColumn id={entityRef.id} part={part} />;
@@ -182,7 +190,7 @@ function ColumnBody({ entityRef, part }: { entityRef: EntityRef; part: "pinned" 
     case "company":
       return <CompanyColumn id={entityRef.id} part={part} />;
     case "persona":
-      return <PersonaColumn id={entityRef.id} part={part} />;
+      return <PersonaColumn id={entityRef.id} part={part} hideFamilyTree={hideFamilyTree} />;
   }
 }
 
@@ -483,7 +491,10 @@ export function EntityColumns() {
                     : undefined,
               }}
             >
-              <ScrollArea className="max-h-[min(60vh,calc(100vh-16rem))]">
+              {/* Cap the VIEWPORT, not the root — the card's height chain is
+                  indefinite, so a root max-h never makes the viewport scroll
+                  (see the directory scroll lesson, 2026-07-08). */}
+              <ScrollArea className="**:data-[slot=scroll-area-viewport]:max-h-[min(60vh,calc(100vh-16rem))]">
                 <div className="flex flex-col gap-2.5 p-3 pr-4">
                   <ColumnBody entityRef={ref} part="rest" />
                 </div>
@@ -495,6 +506,49 @@ export function EntityColumns() {
           </div>
         </ScrollAreaPrimitive.Viewport>
       </ScrollAreaPrimitive.Root>
+    </div>
+  );
+}
+
+// The SAME card the columns dock renders, standing alone — frame, kind-chip
+// header, pinned stats, scrolling body. Used by the FamilyTree dialog so the
+// selected member's details are literally the 3D card, not a bespoke pane
+// (user 2026-07-08). `actions` fills the header's right cluster.
+export function StandaloneEntityCard({
+  entityRef,
+  actions,
+  hideFamilyTree,
+}: {
+  entityRef: EntityRef;
+  actions?: ReactNode;
+  hideFamilyTree?: boolean;
+}) {
+  const indexes = useEntityIndexes();
+  const Icon = KIND_ICON[entityRef.kind];
+  return (
+    <div className="flex w-72 shrink-0 flex-col rounded-xl border border-border bg-popover/95 text-popover-foreground shadow-lg backdrop-blur-md tabular-nums">
+      <div className="flex flex-col gap-0.5 border-b border-border/60 px-3 py-2">
+        <div className="flex items-center justify-between gap-1">
+          <div className="flex min-w-0 items-center gap-1.5">
+            <Icon className="size-4 shrink-0 text-muted-foreground" />
+            <span className="truncate text-[11px] uppercase tracking-wide text-muted-foreground">
+              {KIND_LABEL[entityRef.kind]}
+            </span>
+          </div>
+          {actions && <div className="flex shrink-0 items-center">{actions}</div>}
+        </div>
+        <div className="text-sm font-medium leading-snug [overflow-wrap:anywhere]">
+          {refTitle(entityRef, indexes)}
+        </div>
+      </div>
+      <div className="flex flex-col gap-2.5 px-3 pt-3">
+        <ColumnBody entityRef={entityRef} part="pinned" hideFamilyTree={hideFamilyTree} />
+      </div>
+      <ScrollArea className="**:data-[slot=scroll-area-viewport]:max-h-[min(60vh,calc(100vh-16rem))]">
+        <div className="flex flex-col gap-2.5 p-3 pr-4">
+          <ColumnBody entityRef={entityRef} part="rest" hideFamilyTree={hideFamilyTree} />
+        </div>
+      </ScrollArea>
     </div>
   );
 }

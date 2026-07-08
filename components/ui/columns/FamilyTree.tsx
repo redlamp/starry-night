@@ -1,7 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState } from "react";
-import { Network, X } from "lucide-react";
+import { Maximize2, Network, Pin, Undo2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -13,14 +13,11 @@ import {
   DialogClose,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { useSceneStore } from "@/lib/state/sceneStore";
 import type { Persona } from "@/lib/seed/personas";
 import type { EntityIndexes } from "./entityData";
-import { IconTip } from "./EntityColumns";
-import { PersonaColumn } from "./PersonaColumn";
+import { IconTip, StandaloneEntityCard } from "./EntityColumns";
 
 // Family tree explorer v3 (user 2026-07-08): a traditional hourglass chart
 // centered on a UNION, not a person — both partners' ancestries render side by
@@ -43,15 +40,20 @@ type Side = {
   siblings: Persona[]; // of this side's partner, ordered, deduped
 };
 
+// A descendant plus their partner (if any) — the partner renders beside them
+// joined by a DOTTED union line, marking who married in vs who is direct
+// blood in this line (user 2026-07-08).
+type Descendant = { person: Persona; partner?: Persona };
+
 type Chart = {
   left: Persona;
   right?: Persona;
   leftSide: Side;
   rightSide?: Side;
-  sharedChildren: Persona[];
-  leftOnlyChildren: Persona[];
-  rightOnlyChildren: Persona[];
-  grandchildGroups: Array<{ parentId: string; kids: Persona[] }>;
+  sharedChildren: Descendant[];
+  leftOnlyChildren: Descendant[];
+  rightOnlyChildren: Descendant[];
+  grandchildGroups: Array<{ parentId: string; kids: Descendant[] }>;
 };
 
 function isMan(p: Persona): boolean {
@@ -123,14 +125,23 @@ function buildChart(indexes: EntityIndexes, focus: Persona): Chart {
   const rightOnly = right
     ? byRole(right, "child").filter((k) => !leftKids.some((c) => c.id === k.id))
     : [];
-  const sharedChildren = claim(byAge(shared));
-  const leftOnlyChildren = claim(byAge(leftOnly));
-  const rightOnlyChildren = claim(byAge(rightOnly));
+  // A descendant's partner joins the chart beside them (dotted union) unless
+  // they already render elsewhere.
+  const withPartner = (list: Persona[]): Descendant[] =>
+    list.map((person) => {
+      const q = person.partnerId ? get(person.partnerId) : undefined;
+      if (!q || seen.has(q.id)) return { person };
+      seen.add(q.id);
+      return { person, partner: q };
+    });
+  const sharedChildren = withPartner(claim(byAge(shared)));
+  const leftOnlyChildren = withPartner(claim(byAge(leftOnly)));
+  const rightOnlyChildren = withPartner(claim(byAge(rightOnly)));
 
-  const grandchildGroups: Array<{ parentId: string; kids: Persona[] }> = [];
+  const grandchildGroups: Array<{ parentId: string; kids: Descendant[] }> = [];
   for (const child of [...leftOnlyChildren, ...sharedChildren, ...rightOnlyChildren]) {
-    const kids = claim(byAge(byRole(child, "child")));
-    if (kids.length) grandchildGroups.push({ parentId: child.id, kids });
+    const kids = withPartner(claim(byAge(byRole(child.person, "child"))));
+    if (kids.length) grandchildGroups.push({ parentId: child.person.id, kids });
   }
 
   return {
@@ -145,16 +156,20 @@ function buildChart(indexes: EntityIndexes, focus: Persona): Chart {
   };
 }
 
-type Seg = { x1: number; y1: number; x2: number; y2: number };
+type Seg = { x1: number; y1: number; x2: number; y2: number; dotted?: boolean };
 
 function PersonBox({
   persona,
   focused,
+  pinned,
   onSelect,
   boxRef,
 }: {
   persona: Persona;
   focused: boolean;
+  // The tree's entry point (the sheet that opened it) — marked with a pin,
+  // reinforcing the right-aligned "Back to {name}" control (user 2026-07-08).
+  pinned?: boolean;
   onSelect: () => void;
   boxRef: (el: HTMLButtonElement | null) => void;
 }) {
@@ -169,8 +184,14 @@ function PersonBox({
         focused ? "border-primary bg-primary/10" : "border-border bg-background hover:bg-muted",
       )}
     >
-      <span className={cn("whitespace-nowrap", focused ? "font-semibold" : "font-medium")}>
+      <span
+        className={cn(
+          "flex items-center gap-1 whitespace-nowrap",
+          focused ? "font-semibold" : "font-medium",
+        )}
+      >
         {persona.givenName} {persona.familyName}
+        {pinned && <Pin className="text-muted-foreground size-3 shrink-0" aria-hidden />}
       </span>
       <span className="text-muted-foreground">{persona.age}</span>
     </button>
@@ -180,10 +201,12 @@ function PersonBox({
 function FamilyChart({
   chart,
   focusId,
+  originId,
   onSelect,
 }: {
   chart: Chart;
   focusId: string;
+  originId?: string;
   onSelect: (id: string) => void;
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -221,14 +244,20 @@ function FamilyChart({
       const next: Seg[] = [];
       // Union line between adjacent partners; returns the anchor children
       // hang from (line midpoint for a couple, box bottom for a single).
-      const coupleAnchor = (aId: string, bId?: string): { x: number; y: number } | null => {
+      // Dotted unions mark a partner who married INTO this line (descendants'
+      // spouses); blood connectors stay solid.
+      const coupleAnchor = (
+        aId: string,
+        bId?: string,
+        dotted?: boolean,
+      ): { x: number; y: number } | null => {
         const a = box(aId);
         if (!a) return null;
         const b = bId ? box(bId) : null;
         if (!b) return { x: a.cx, y: a.bottom };
         const [l, r] = a.cx <= b.cx ? [a, b] : [b, a];
         const y = (Math.max(l.top, r.top) + Math.min(l.bottom, r.bottom)) / 2;
-        next.push({ x1: l.right + 1, y1: y, x2: r.left - 1, y2: y });
+        next.push({ x1: l.right + 1, y1: y, x2: r.left - 1, y2: y, dotted });
         return { x: (l.right + r.left) / 2, y };
       };
       // Drop + horizontal bus + a stub into each child's top edge.
@@ -261,7 +290,7 @@ function FamilyChart({
       if (chart.sharedChildren.length) {
         connect(
           union,
-          chart.sharedChildren.map((c) => c.id),
+          chart.sharedChildren.map((c) => c.person.id),
         );
       }
       // Prior-relationship children hang from their own parent's box, not the
@@ -271,7 +300,7 @@ function FamilyChart({
         if (a)
           connect(
             { x: a.cx - 14, y: a.bottom },
-            chart.leftOnlyChildren.map((c) => c.id),
+            chart.leftOnlyChildren.map((c) => c.person.id),
           );
       }
       if (chart.rightOnlyChildren.length && chart.right) {
@@ -279,14 +308,28 @@ function FamilyChart({
         if (b)
           connect(
             { x: b.cx + 14, y: b.bottom },
-            chart.rightOnlyChildren.map((c) => c.id),
+            chart.rightOnlyChildren.map((c) => c.person.id),
           );
+      }
+      // Descendant unions: dotted line to the married-in partner; the couple's
+      // own children then hang from that union's midpoint.
+      const allDescendants = [
+        ...chart.leftOnlyChildren,
+        ...chart.sharedChildren,
+        ...chart.rightOnlyChildren,
+      ];
+      const descendantAnchors = new Map<string, { x: number; y: number } | null>();
+      for (const d of allDescendants) {
+        descendantAnchors.set(d.person.id, coupleAnchor(d.person.id, d.partner?.id, true));
       }
       for (const g of chart.grandchildGroups) {
         connect(
-          coupleAnchor(g.parentId),
-          g.kids.map((k) => k.id),
+          descendantAnchors.get(g.parentId) ?? coupleAnchor(g.parentId),
+          g.kids.map((k) => k.person.id),
         );
+        for (const k of g.kids) {
+          if (k.partner) coupleAnchor(k.person.id, k.partner.id, true);
+        }
       }
 
       setSegs(next);
@@ -304,12 +347,23 @@ function FamilyChart({
       key={p.id}
       persona={p}
       focused={p.id === focusId}
+      pinned={p.id === originId}
       onSelect={() => onSelect(p.id)}
       boxRef={refFor(p.id)}
     />
   );
   const coupleRow = (people: Persona[]) => (
     <div className="flex items-start gap-2.5">{people.map(renderBox)}</div>
+  );
+  // Married-in partners sit on the OUTSIDE of the tree (user 2026-07-08): in
+  // the left half of a row the partner renders before the blood member, in
+  // the right half after — the blood line stays contiguous in the middle.
+  const descPair = (d: Descendant, outboardLeft: boolean) => (
+    <div key={d.person.id} className="flex items-start gap-2.5">
+      {outboardLeft && d.partner && renderBox(d.partner)}
+      {renderBox(d.person)}
+      {!outboardLeft && d.partner && renderBox(d.partner)}
+    </div>
   );
 
   const grandCouples = [
@@ -323,9 +377,12 @@ function FamilyChart({
   ];
 
   return (
-    <div ref={hostRef} className="relative flex w-max min-w-full flex-col items-center gap-9 p-3">
+    <div
+      ref={hostRef}
+      className="relative flex w-max min-w-full flex-1 flex-col items-center justify-center gap-9 p-3"
+    >
       <svg
-        className="text-border pointer-events-none absolute top-0 left-0"
+        className="text-muted-foreground/80 pointer-events-none absolute top-0 left-0"
         width={size.w}
         height={size.h}
         aria-hidden
@@ -338,7 +395,9 @@ function FamilyChart({
             x2={s.x2}
             y2={s.y2}
             stroke="currentColor"
-            strokeWidth={1}
+            strokeWidth={1.5}
+            strokeLinecap="round"
+            strokeDasharray={s.dotted ? "2 5" : undefined}
           />
         ))}
       </svg>
@@ -362,13 +421,17 @@ function FamilyChart({
         {chart.rightSide?.siblings.map(renderBox)}
       </div>
       {childrenRow.length > 0 && (
-        <div className="flex items-start justify-center gap-2.5">{childrenRow.map(renderBox)}</div>
+        <div className="flex items-start justify-center gap-4">
+          {childrenRow.map((d, i) => descPair(d, i < (childrenRow.length - 1) / 2))}
+        </div>
       )}
       {chart.grandchildGroups.length > 0 && (
         <div className="flex items-start justify-center gap-8">
-          {chart.grandchildGroups.map((g) => (
-            <div key={g.parentId} className="flex items-start gap-2.5">
-              {g.kids.map(renderBox)}
+          {chart.grandchildGroups.map((g, gi) => (
+            <div key={g.parentId} className="flex items-start gap-4">
+              {g.kids.map((d) =>
+                descPair(d, gi < (chart.grandchildGroups.length - 1) / 2),
+              )}
             </div>
           ))}
         </div>
@@ -415,55 +478,68 @@ export function FamilyTree({ personaId, indexes }: { personaId: string; indexes:
       </IconTip>
       <DialogPortal>
         <DialogBackdrop />
-        <DialogPopup>
-          <DialogContent className="max-h-[85vh] w-full max-w-5xl gap-3 overflow-hidden border-border bg-popover p-5 text-popover-foreground tabular-nums">
-            <DialogClose aria-label="Close family tree">
-              <X className="size-4" />
-            </DialogClose>
-            <DialogTitle className="text-sm font-medium text-foreground">
-              The {focus.familyName} Family
-              {origin && focus.id !== origin.id && (
-                <button
-                  type="button"
-                  onClick={() => setFocusId(origin.id)}
-                  className="ml-2 text-xs font-normal text-muted-foreground hover:underline"
-                >
-                  back to {origin.givenName}
-                </button>
-              )}
-            </DialogTitle>
-            <div className="flex min-h-0 gap-4">
-              {/* Left: the hourglass chart. Clicking a box re-roots on them. */}
-              <div className="max-h-[68vh] min-w-0 flex-1 overflow-auto">
-                <FamilyChart chart={chart} focusId={focus.id} onSelect={setFocusId} />
+        {/* Top-anchored (not centered): the panels keep the SAME Y as the
+            tree grows/shrinks between re-roots, so the resident card never
+            bounces (user 2026-07-08). */}
+        <DialogPopup className="items-start pt-[6vh]">
+          <DialogContent className="w-fit max-w-[96vw] border-0 bg-transparent p-0 shadow-none">
+            <div className="flex items-start gap-3">
+              {/* Tree panel: its own surface, width FITS the chart (user
+                  2026-07-08 — mitigate scrollbars); it only scrolls past the
+                  viewport caps. Clicking a box re-roots the chart. */}
+              {/* Generous minimum so re-rooting between typical families
+                  doesn't resize the panel — only genuinely big charts grow
+                  (user 2026-07-08). */}
+              <div className="relative flex max-h-[85vh] min-h-[26rem] w-fit min-w-[36rem] max-w-[calc(96vw-19.5rem)] flex-col overflow-auto rounded-xl border border-border bg-popover/95 p-4 text-popover-foreground shadow-lg backdrop-blur-md tabular-nums">
+                <DialogClose aria-label="Close family tree">
+                  <X className="size-4" />
+                </DialogClose>
+                <DialogTitle className="flex items-center justify-between gap-2 pr-8 text-sm font-medium text-foreground">
+                  <span>The {focus.familyName} Family</span>
+                  {origin && focus.id !== origin.id && (
+                    <button
+                      type="button"
+                      onClick={() => setFocusId(origin.id)}
+                      className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs font-normal"
+                    >
+                      Back to {origin.givenName}
+                      <Undo2 className="size-3.5" aria-hidden />
+                    </button>
+                  )}
+                </DialogTitle>
+                <FamilyChart
+                  chart={chart}
+                  focusId={focus.id}
+                  originId={origin?.id}
+                  onSelect={setFocusId}
+                />
                 {focus.offstage.length > 0 && (
-                  <div className="px-3 pb-2 text-xs text-muted-foreground">
+                  <div className="px-3 pb-1 text-xs text-muted-foreground">
                     Elsewhere: {focus.offstage.map((rel) => `${rel.name} (${rel.role})`).join(" · ")}
                   </div>
                 )}
               </div>
-              {/* Right: the SAME persona card the inspector columns show. */}
-              <div className="flex w-80 shrink-0 flex-col border-l border-border pl-4">
-                <div className="text-sm font-medium">{focus.fullName}</div>
-                <ScrollArea className="mt-1.5 **:data-[slot=scroll-area-viewport]:max-h-[58vh]">
-                  <div className="flex flex-col gap-2.5 pr-3">
-                    <PersonaColumn id={focus.id} part="pinned" hideFamilyTree />
-                    <Separator />
-                    <PersonaColumn id={focus.id} part="rest" hideFamilyTree />
-                  </div>
-                </ScrollArea>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  className="mt-2 self-start"
-                  onClick={() => {
-                    push({ kind: "persona", id: focus.id });
-                    setOpen(false);
-                  }}
-                >
-                  Open Full Card
-                </Button>
-              </div>
+              {/* The member's details: the SAME card the columns dock shows,
+                  standing beside the tree — not nested in its container. */}
+              <StandaloneEntityCard
+                entityRef={{ kind: "persona", id: focus.id }}
+                hideFamilyTree
+                actions={
+                  <IconTip label="Open Full Card">
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label="Open full card in the columns"
+                      onClick={() => {
+                        push({ kind: "persona", id: focus.id });
+                        setOpen(false);
+                      }}
+                    >
+                      <Maximize2 />
+                    </Button>
+                  </IconTip>
+                }
+              />
             </div>
           </DialogContent>
         </DialogPopup>
