@@ -7,7 +7,6 @@ import { cn, isTypingTarget } from "@/lib/utils";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { useIdle } from "@/lib/useIdle";
 import {
-  BookUser,
   Bug,
   Building2,
   Camera,
@@ -54,7 +53,6 @@ import {
   DistrictShellsAction,
   PopulationHeatAction,
 } from "@/components/ui/DistrictsPanel";
-import { DirectorySection } from "@/components/ui/DirectoryPanel";
 import {
   RoadHighlightTiers,
   CityDetailsSection,
@@ -137,11 +135,6 @@ const SETTINGS_SECTIONS: { value: string; label: string; keywords: string }[] = 
     label: "Population",
     keywords:
       "districts shells borders outline color region zones density heat map heatmap people residents traffic coupling estimate profile centres centers spread shoulder satellites gradient",
-  },
-  {
-    value: "directory",
-    label: "City Directory",
-    keywords: "directory residents people personas census phone book search spotlight households businesses",
   },
   {
     value: "city-details",
@@ -425,7 +418,7 @@ export function CameraPanel() {
             className="flex flex-col gap-1.5"
           >
             {/* Section order (2026-07-08): Camera, Orbit, Intro, Roads, Buildings,
-                Population, City Directory, City Details*, Stars, Moon, Atmosphere,
+                Population, City Details*, Stars, Moon, Atmosphere,
                 Debug, Performance. (*unlisted — kept with the city group.) */}
             <Section
               value="pose"
@@ -563,15 +556,6 @@ export function CameraPanel() {
               <SubGroup label="Districts" action={<DistrictShellsAction />}>
                 <DistrictsSection />
               </SubGroup>
-            </Section>
-
-            <Section
-              value="directory"
-              icon={BookUser}
-              label="City Directory"
-              hidden={!show("directory")}
-            >
-              <DirectorySection />
             </Section>
 
             <Section

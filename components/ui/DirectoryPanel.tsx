@@ -1,24 +1,47 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { Briefcase, Building2, MapPin, Route, Users, type LucideIcon } from "lucide-react";
 import { useSceneStore } from "@/lib/state/sceneStore";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { SubGroup } from "@/components/ui/panels/shared";
+import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { HoverCard, HoverCardTrigger, HoverCardContent } from "@/components/ui/hover-card";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { IconTip } from "@/components/ui/columns/EntityColumns";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
 import { generateCity, type Building } from "@/lib/seed/cityGen";
-import { buildPersonaDirectory, type Persona, type PersonaId } from "@/lib/seed/personas";
+import type { Address } from "@/lib/seed/naming";
+import { buildPersonaDirectory, type Persona } from "@/lib/seed/personas";
 import { focusBuilding } from "@/lib/scene/focusBuilding";
 
-// City Directory: a settings-drawer section (not a floating overlay like
-// BuildingInfoPanel/PersonaPanel) that surfaces the persona directory as a
-// browsable phone book — a seeded "who's up tonight" spotlight, a name
-// search, and a district → building → household browse tree. Every list is
-// recomputed from the seed in the useMemo below; nothing derived is stored in
-// Zustand (only query text and the spotlight step are UI-only React state).
+// City Directory (ControlDock overlay): search-first phone book over the
+// whole city — streets, buildings, companies, AND people (user 2026-07-08:
+// search on top, a kind filter under it, then the spotlight, then the
+// district browse tree with colored single-line headers). Everything derived
+// recomputes from the seed; only query/filter/spotlight-step are UI state.
 
-const MAX_SEARCH_RESULTS = 20;
+const MAX_SEARCH_RESULTS = 50;
+
+// Address numbers render as a right-aligned column sized by the city's widest
+// address (tabular-nums is inherited panel-wide), so "1203 Martin Parkway"
+// and "9 Martin Parkway" align their street names (user 2026-07-08).
+function AddrNum({ n, width }: { n: number; width: number }) {
+  return (
+    <span className="inline-block text-right" style={{ minWidth: `${width}ch` }}>
+      {n}
+    </span>
+  );
+}
 
 // Deterministic index into an array of length `mod`, seeded on the master
 // seed's own characters (FNV-1a) — never Math.random/Date.now. Gives every
@@ -33,12 +56,64 @@ function hashSeedIndex(seed: string, mod: number): number {
   return (h >>> 0) % mod;
 }
 
+type SearchKind = "street" | "building" | "company" | "person";
+type KindFilter = "all" | SearchKind;
+
+// "All" stays a word; the entity kinds are icons with a tooltip title
+// (user 2026-07-08).
+const KIND_FILTERS: Array<{ value: KindFilter; label: string; icon?: LucideIcon }> = [
+  { value: "all", label: "All" },
+  { value: "street", label: "Streets", icon: Route },
+  { value: "building", label: "Buildings", icon: Building2 },
+  { value: "company", label: "Companies", icon: Briefcase },
+  { value: "person", label: "People", icon: Users },
+];
+
+// How many names ride the marquee (two copies render for the seamless loop).
+const MARQUEE_COUNT = 24;
+
+type DistrictSort = "residents" | "roads" | "businesses" | "name";
+
+const DISTRICT_SORTS: Array<{ value: DistrictSort; label: string }> = [
+  { value: "residents", label: "By Residents" },
+  { value: "roads", label: "By Roads" },
+  { value: "businesses", label: "By Businesses" },
+  { value: "name", label: "By Name" },
+];
+
+const KIND_BADGE: Record<SearchKind, string> = {
+  street: "Street",
+  building: "Building",
+  company: "Company",
+  person: "Person",
+};
+
+type SearchEntry = {
+  kind: SearchKind;
+  id: string; // roadId | buildingId as string | businessId | personaId
+  label: string;
+  sub: string;
+  // Structured address for building rows — rendered as a fixed-width number
+  // column so search results align like the street lists.
+  addr?: { number: number; street: string };
+  lower: string;
+};
+
 type DistrictAgg = {
   id: string;
   properName: string;
   displayName: string;
+  color: string;
   residentCount: number;
-  buildings: Array<{ buildingId: number; label: string; householdCount: number }>;
+  roadCount: number;
+  businessCount: number;
+  buildings: Array<{
+    buildingId: number;
+    name?: string;
+    address?: Address;
+    householdCount: number;
+  }>;
+  bounds?: { minX: number; maxX: number; minZ: number; maxZ: number };
 };
 
 export function DirectorySection() {
@@ -46,205 +121,465 @@ export function DirectorySection() {
   const cityShape = useSceneStore((s) => s.cityShape);
   const cityShapeScale = useSceneStore((s) => s.cityShapeScale);
   // citySize/citySketch don't feed generateCity's args directly, but are
-  // listed as memo deps (matching BuildingInfoPanel/PersonaPanel's memo) so a
-  // tier/sketch switch rebuilds the directory instead of serving a stale one.
+  // listed as memo deps (matching the columns' memo) so a tier/sketch switch
+  // rebuilds the directory instead of serving a stale one.
   const citySize = useSceneStore((s) => s.citySize);
   const citySketch = useSceneStore((s) => s.citySketch);
   const pushColumn = useSceneStore((s) => s.pushColumn);
   const resetColumns = useSceneStore((s) => s.resetColumns);
+  const setHoverDistrictId = useSceneStore((s) => s.setHoverDistrictId);
+  const pinnedDistrictId = useSceneStore((s) => s.pinnedDistrictId);
+  const setPinnedDistrictId = useSceneStore((s) => s.setPinnedDistrictId);
 
   const [query, setQuery] = useState("");
-  const [spotlightStep, setSpotlightStep] = useState(0);
-  // Reset the spotlight step when the seed changes — adjust state during
-  // render (React docs pattern, same idiom as CameraPanel's SeedRow) rather
-  // than an effect.
-  const [prevSeed, setPrevSeed] = useState(masterSeed);
-  if (masterSeed !== prevSeed) {
-    setPrevSeed(masterSeed);
-    setSpotlightStep(0);
-  }
+  const [kindFilter, setKindFilter] = useState<KindFilter>("all");
+  const [districtSort, setDistrictSort] = useState<DistrictSort>("residents");
 
-  const { directory, idToBuilding, adults, nameIndex, districtList } = useMemo(() => {
+  const { directory, idToBuilding, adults, searchIndex, districtList } = useMemo(() => {
     void citySize;
     void citySketch;
     const directory = buildPersonaDirectory(masterSeed, cityShape, cityShapeScale);
     const { buildings, districts } = generateCity(masterSeed, cityShape, cityShapeScale);
     const idToBuilding = new Map<number, Building>(buildings.map((b) => [b.id, b]));
     const idToDistrict = new Map(districts.map((d) => [d.id, d]));
+    const names = directory.names;
 
-    // Adults for the spotlight, in the directory's own (building-ascending,
-    // order-stable) iteration order.
+    // One flat search index across every entity kind.
+    const searchIndex: SearchEntry[] = [];
     const adults: Persona[] = [];
-    // Lowercase name index for search, built once here rather than per keystroke.
-    const nameIndex: Array<{ id: PersonaId; lower: string }> = [];
     for (const p of directory.personas.values()) {
       if (p.age >= 18) adults.push(p);
-      nameIndex.push({ id: p.id, lower: p.fullName.toLowerCase() });
+      searchIndex.push({
+        kind: "person",
+        id: p.id,
+        label: p.fullName,
+        sub: `${p.age} · ${names.districtNames.get(p.homeDistrictId) ?? ""}`,
+        lower: p.fullName.toLowerCase(),
+      });
+    }
+    for (const [roadId, name] of names.streetNames) {
+      const count = names.buildingsByRoad.get(roadId)?.length ?? 0;
+      searchIndex.push({
+        kind: "street",
+        id: roadId,
+        label: name,
+        sub: `${count} building${count === 1 ? "" : "s"}`,
+        lower: name.toLowerCase(),
+      });
+    }
+    for (const [buildingId, name] of names.buildingNames) {
+      const address = names.addresses.get(buildingId);
+      searchIndex.push({
+        kind: "building",
+        id: String(buildingId),
+        label: name,
+        sub: "",
+        addr: address ? { number: address.number, street: address.street } : undefined,
+        lower: name.toLowerCase(),
+      });
+    }
+    for (const biz of directory.businesses.values()) {
+      const address = names.addresses.get(biz.buildingId);
+      searchIndex.push({
+        kind: "company",
+        id: biz.id,
+        label: biz.name,
+        sub: `${biz.kind}${address ? ` · ${address.street}` : ""}`,
+        lower: biz.name.toLowerCase(),
+      });
     }
 
-    // Per-district aggregates: resident count + the buildings that host a
-    // featured household, sorted by household count within the district.
+    // Per-district aggregates: residents + roads + businesses + the buildings
+    // that host featured households.
     const byDistrict = new Map<string, DistrictAgg>();
+    const districtRoads = new Map<string, Set<string>>();
+    const agg = (districtId: string): DistrictAgg => {
+      let a = byDistrict.get(districtId);
+      if (!a) {
+        const d = idToDistrict.get(districtId);
+        a = {
+          id: districtId,
+          properName: names.districtNames.get(districtId) ?? districtId,
+          displayName: d?.displayName ?? districtId,
+          color: d?.color ?? "#8a94a8",
+          residentCount: 0,
+          roadCount: 0,
+          businessCount: 0,
+          buildings: [],
+          bounds: d ? { minX: d.minX, maxX: d.maxX, minZ: d.minZ, maxZ: d.maxZ } : undefined,
+        };
+        byDistrict.set(districtId, a);
+      }
+      return a;
+    };
     for (const [buildingId, households] of directory.byHomeBuilding) {
       const building = idToBuilding.get(buildingId);
       if (!building) continue;
-      const districtId = building.districtId;
-      let agg = byDistrict.get(districtId);
-      if (!agg) {
-        agg = {
-          id: districtId,
-          properName: directory.names.districtNames.get(districtId) ?? districtId,
-          displayName: idToDistrict.get(districtId)?.displayName ?? districtId,
-          residentCount: 0,
-          buildings: [],
-        };
-        byDistrict.set(districtId, agg);
+      const a = agg(building.districtId);
+      a.residentCount += households.reduce((sum, hh) => sum + hh.memberIds.length, 0);
+      a.buildings.push({
+        buildingId,
+        name: names.buildingNames.get(buildingId),
+        address: names.addresses.get(buildingId),
+        householdCount: households.length,
+      });
+    }
+    for (const [buildingId, address] of names.addresses) {
+      const building = idToBuilding.get(buildingId);
+      if (!building) continue;
+      let roads = districtRoads.get(building.districtId);
+      if (!roads) {
+        roads = new Set();
+        districtRoads.set(building.districtId, roads);
       }
-      agg.residentCount += households.reduce((sum, hh) => sum + hh.memberIds.length, 0);
-      const buildingName = directory.names.buildingNames.get(buildingId);
-      const address = directory.names.addresses.get(buildingId);
-      const label =
-        buildingName ?? (address ? `${address.number} ${address.street}` : `Building #${buildingId}`);
-      agg.buildings.push({ buildingId, label, householdCount: households.length });
+      roads.add(address.roadId);
+    }
+    for (const biz of directory.businesses.values()) {
+      const building = idToBuilding.get(biz.buildingId);
+      if (building && byDistrict.has(building.districtId)) {
+        agg(building.districtId).businessCount += 1;
+      }
+    }
+    for (const [districtId, roads] of districtRoads) {
+      if (byDistrict.has(districtId)) agg(districtId).roadCount = roads.size;
     }
     const districtList = [...byDistrict.values()].sort((a, b) => b.residentCount - a.residentCount);
     for (const d of districtList) d.buildings.sort((a, b) => b.householdCount - a.householdCount);
 
-    return { directory, idToBuilding, adults, nameIndex, districtList };
+    return { directory, idToBuilding, adults, searchIndex, districtList };
   }, [masterSeed, cityShape, cityShapeScale, citySize, citySketch]);
 
-  const spotlightIndex =
-    adults.length > 0 ? (hashSeedIndex(masterSeed, adults.length) + spotlightStep) % adults.length : -1;
-  const spotlight = spotlightIndex >= 0 ? adults[spotlightIndex] : undefined;
+  // Marquee cast: a seed-stable run of adults starting at the old spotlight
+  // index (the "resident of the night" now leads the parade).
+  const marqueeCast = useMemo(() => {
+    if (adults.length === 0) return [];
+    const start = hashSeedIndex(masterSeed, adults.length);
+    const count = Math.min(MARQUEE_COUNT, adults.length);
+    return Array.from({ length: count }, (_, i) => adults[(start + i) % adults.length]);
+  }, [adults, masterSeed]);
 
   const trimmedQuery = query.trim().toLowerCase();
-  const allMatches = trimmedQuery ? nameIndex.filter((n) => n.lower.includes(trimmedQuery)) : [];
+  const allMatches = trimmedQuery
+    ? searchIndex.filter(
+        (n) => (kindFilter === "all" || n.kind === kindFilter) && n.lower.includes(trimmedQuery),
+      )
+    : [];
   const shownMatches = allMatches.slice(0, MAX_SEARCH_RESULTS);
 
   const goToBuilding = (buildingId: number) => {
     const building = idToBuilding.get(buildingId);
     if (building) focusBuilding(building);
-    resetColumns(
-      building
-        ? [
-            { kind: "district", id: building.districtId },
-            { kind: "building", id: buildingId },
-          ]
-        : [{ kind: "building", id: buildingId }],
+    resetColumns([{ kind: "building", id: buildingId }]);
+  };
+
+  // Pin: sticky district highlight + a 45° glide framing the district bounds
+  // (same focus mechanism as the columns' cone). Clicking the pinned pin
+  // again unpins.
+  const pinDistrict = (d: DistrictAgg) => {
+    if (pinnedDistrictId === d.id) {
+      setPinnedDistrictId(null);
+      return;
+    }
+    setPinnedDistrictId(d.id);
+    if (!d.bounds) return;
+    const cx = (d.bounds.minX + d.bounds.maxX) / 2;
+    const cz = (d.bounds.minZ + d.bounds.maxZ) / 2;
+    const corner = Math.hypot(
+      (d.bounds.maxX - d.bounds.minX) / 2,
+      (d.bounds.maxZ - d.bounds.minZ) / 2,
     );
+    const radius = Math.min(1800, Math.max(150, corner * 1.15 + 40));
+    const st = useSceneStore.getState();
+    st.setFocusPivot([cx, 6, cz]);
+    st.setFocusRequest({ x: cx, y: 6, z: cz, radius, fit: "fill" });
+  };
+
+  const openResult = (entry: SearchEntry) => {
+    switch (entry.kind) {
+      case "person":
+        pushColumn({ kind: "persona", id: entry.id });
+        break;
+      case "street":
+        resetColumns([{ kind: "street", id: entry.id }]);
+        break;
+      case "building":
+        goToBuilding(Number(entry.id));
+        break;
+      case "company":
+        pushColumn({ kind: "company", id: entry.id });
+        break;
+    }
   };
 
   return (
-    <div className="flex flex-col gap-3 pt-1">
-      <div className="text-muted-foreground text-sm">
-        {directory.names.city.name} · {directory.totals.personas.toLocaleString()} residents ·{" "}
-        {directory.totals.businesses.toLocaleString()} businesses
+    <div className="flex min-h-0 flex-1 flex-col gap-3 pt-1 tabular-nums">
+      {/* Masthead: city name in caps, icon stats below (user 2026-07-08). */}
+      <div className="flex shrink-0 flex-col gap-1">
+        <div className="text-base font-semibold tracking-[0.14em] uppercase">
+          {directory.names.city.name}
+        </div>
+        <div className="text-muted-foreground flex items-center gap-3 text-xs">
+          <IconTip label="Residents">
+            <span className="flex items-center gap-1 tabular-nums">
+              <Users className="size-3.5" aria-hidden />
+              {directory.totals.personas.toLocaleString()}
+            </span>
+          </IconTip>
+          <IconTip label="Businesses">
+            <span className="flex items-center gap-1 tabular-nums">
+              <Briefcase className="size-3.5" aria-hidden />
+              {directory.totals.businesses.toLocaleString()}
+            </span>
+          </IconTip>
+        </div>
       </div>
 
-      {spotlight && (
-        <div className="border-foreground/10 bg-foreground/[0.03] flex flex-col gap-1.5 rounded-lg border p-2.5">
-          <div className="flex items-start justify-between gap-2">
-            <button
-              type="button"
-              onClick={() => pushColumn({ kind: "persona", id: spotlight.id })}
-              className="flex min-w-0 flex-col text-left hover:underline"
-            >
-              <span className="truncate text-sm font-medium">{spotlight.fullName}</span>
-              {spotlight.story.epithet && (
-                <span className="text-muted-foreground truncate text-sm italic">
-                  {spotlight.story.epithet}
-                </span>
-              )}
-            </button>
-            <Button
-              variant="secondary"
-              size="sm"
-              className="h-6 shrink-0 px-2 text-xs"
-              onClick={() => setSpotlightStep((n) => n + 1)}
-            >
-              Next
-            </Button>
-          </div>
-          <div className="text-muted-foreground text-sm">
-            {spotlight.age} · {spotlight.pronouns} ·{" "}
-            {directory.names.districtNames.get(spotlight.homeDistrictId) ?? spotlight.homeDistrictId}
-          </div>
-          {spotlight.story.hook && (
-            <div className="border-l-2 pl-2 text-sm italic">{spotlight.story.hook}</div>
-          )}
-        </div>
+      {marqueeCast.length > 0 && (
+        <ResidentMarquee
+          cast={marqueeCast}
+          districtNames={directory.names.districtNames}
+          onOpen={(id) => pushColumn({ kind: "persona", id })}
+        />
       )}
 
-      <div className="flex flex-col gap-1.5">
+      {/* Search + kind filter stay pinned; only the list below scrolls. */}
+      <div className="flex shrink-0 flex-col gap-1.5">
         <Input
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search residents…"
-          aria-label="Search residents"
+          placeholder="Search the city…"
+          aria-label="Search streets, buildings, companies, and people"
           className="h-8"
         />
-        {trimmedQuery && (
-          <div className="flex flex-col gap-0.5">
+        <Tabs value={kindFilter} onValueChange={(v) => setKindFilter(v as KindFilter)}>
+          <TabsList className="h-7 w-full">
+            {KIND_FILTERS.map((f) =>
+              f.icon ? (
+                <IconTip key={f.value} label={f.label}>
+                  <TabsTrigger value={f.value} aria-label={f.label} className="px-2 text-xs">
+                    <f.icon className="size-3.5" />
+                  </TabsTrigger>
+                </IconTip>
+              ) : (
+                <TabsTrigger key={f.value} value={f.value} className="px-2 text-xs">
+                  {f.label}
+                </TabsTrigger>
+              ),
+            )}
+          </TabsList>
+        </Tabs>
+      </div>
+
+      {/* Both lists cap the VIEWPORT's max-height directly (vh units are
+          always definite). The overlay is max-h-sized, so any height:100%
+          chain resolves to auto and nothing ever scrolls; capping the
+          viewport makes it the real scroll container and keeps the panel
+          content-sized when the list is short. */}
+      {trimmedQuery ? (
+        <ScrollArea className="**:data-[slot=scroll-area-viewport]:max-h-[calc(100vh-21rem)]">
+          <div className="flex flex-col gap-0.5 pr-2">
             {allMatches.length > MAX_SEARCH_RESULTS && (
               <div className="text-muted-foreground px-1 text-sm">{allMatches.length} matches</div>
             )}
             {allMatches.length === 0 && (
-              <div className="text-muted-foreground px-1 text-sm">No residents match &quot;{query.trim()}&quot;.</div>
+              <div className="text-muted-foreground px-1 text-sm">
+                Nothing matches &quot;{query.trim()}&quot;.
+              </div>
             )}
-            {shownMatches.map(({ id }) => {
-              const persona = directory.personas.get(id);
-              if (!persona) return null;
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => pushColumn({ kind: "persona", id })}
-                  className="hover:bg-foreground/10 -mx-1 flex items-center justify-between gap-2 rounded px-1 text-left text-sm"
-                >
-                  <span className="truncate">{persona.fullName}</span>
-                  <span className="text-muted-foreground shrink-0 tabular-nums">
-                    {persona.age} ·{" "}
-                    {directory.names.districtNames.get(persona.homeDistrictId) ?? persona.homeDistrictId}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      <Separator />
-
-      <ScrollArea className="max-h-[50vh]">
-        <div className="flex flex-col gap-0.5 pr-2">
-          {districtList.map((d) => (
-            <SubGroup
-              key={d.id}
-              label={d.properName}
-              action={
-                <span className="text-muted-foreground text-[11px] normal-case">
-                  {d.displayName} · {d.residentCount.toLocaleString()} residents
+            {shownMatches.map((entry) => (
+              <button
+                key={`${entry.kind}:${entry.id}`}
+                type="button"
+                onClick={() => openResult(entry)}
+                className="hover:bg-foreground/10 -mx-1 flex items-center justify-between gap-2 rounded px-1 text-left text-sm"
+              >
+                <span className="min-w-0">
+                  <span className="block truncate">{entry.label}</span>
+                  {(entry.sub || entry.addr) && (
+                    <span className="text-muted-foreground block truncate text-xs">
+                      {entry.addr ? (
+                        <>
+                          <AddrNum n={entry.addr.number} width={directory.names.maxAddressDigits} />{" "}
+                          {entry.addr.street}
+                        </>
+                      ) : (
+                        entry.sub
+                      )}
+                    </span>
+                  )}
                 </span>
-              }
-            >
-              {d.buildings.map((b) => (
-                <button
-                  key={b.buildingId}
-                  type="button"
-                  onClick={() => goToBuilding(b.buildingId)}
-                  className="hover:bg-foreground/10 -mx-1 flex items-center justify-between gap-2 rounded px-1 text-left text-sm"
-                >
-                  <span className="truncate">{b.label}</span>
-                  <span className="text-muted-foreground shrink-0 tabular-nums">
-                    {b.householdCount} household{b.householdCount === 1 ? "" : "s"}
+                <Badge variant="outline" className="shrink-0">
+                  {KIND_BADGE[entry.kind]}
+                </Badge>
+              </button>
+            ))}
+          </div>
+        </ScrollArea>
+      ) : (
+        <>
+          <Separator className="shrink-0" />
+
+          <div className="flex shrink-0 items-center justify-between gap-2">
+            <span className="text-sm font-medium">Districts</span>
+            <Select value={districtSort} onValueChange={(v) => setDistrictSort(v as DistrictSort)}>
+              <SelectTrigger size="sm" className="w-32">
+                <SelectValue>
+                  {(v: DistrictSort) => DISTRICT_SORTS.find((o) => o.value === v)?.label ?? "Sort"}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {DISTRICT_SORTS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <ScrollArea className="**:data-[slot=scroll-area-viewport]:max-h-[calc(100vh-24rem)]">
+            <div className="flex flex-col gap-1 pr-2">
+          {[...districtList]
+            .sort((a, b) =>
+              districtSort === "name"
+                ? a.properName.localeCompare(b.properName)
+                : districtSort === "roads"
+                  ? b.roadCount - a.roadCount
+                  : districtSort === "businesses"
+                    ? b.businessCount - a.businessCount
+                    : b.residentCount - a.residentCount,
+            )
+            .map((d) => (
+            <Collapsible key={d.id}>
+              {/* The WHOLE header expands (user 2026-07-08): district name in
+                  its legend color on one line, counts below. Hovering traces
+                  the district border on the map; the pin makes it stick and
+                  flies the camera to the district. */}
+              <div
+                className="flex items-center"
+                onMouseEnter={() => setHoverDistrictId(d.id)}
+                onMouseLeave={() => setHoverDistrictId(null)}
+              >
+                <IconTip label="Pin District">
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`Pin ${d.properName}`}
+                    aria-pressed={pinnedDistrictId === d.id}
+                    onClick={() => pinDistrict(d)}
+                    className="size-6 shrink-0 text-muted-foreground hover:text-foreground [&_svg]:size-3.5"
+                    style={pinnedDistrictId === d.id ? { color: d.color } : undefined}
+                  >
+                    <MapPin />
+                  </Button>
+                </IconTip>
+                <CollapsibleTrigger className="min-w-0 flex-1 rounded-md px-1.5 py-1.5 hover:bg-muted/60">
+                <span className="flex min-w-0 flex-1 flex-col gap-0.5 text-left">
+                  <span className="truncate text-sm">
+                    <span className="font-medium" style={{ color: d.color }}>
+                      {d.properName}
+                    </span>
+                    <span className="text-muted-foreground text-xs"> · {d.displayName}</span>
                   </span>
-                </button>
-              ))}
-            </SubGroup>
+                  <span className="text-muted-foreground truncate text-xs">
+                    {d.roadCount} roads · {d.businessCount} businesses ·{" "}
+                    {d.residentCount.toLocaleString()} residents
+                  </span>
+                </span>
+                </CollapsibleTrigger>
+              </div>
+              <CollapsiblePanel>
+                <div className="flex flex-col gap-0.5 py-1 pl-2">
+                  {d.buildings.map((b) => (
+                    <button
+                      key={b.buildingId}
+                      type="button"
+                      onClick={() => goToBuilding(b.buildingId)}
+                      className="hover:bg-foreground/10 -mx-1 flex items-center justify-between gap-2 rounded px-1 text-left text-sm"
+                    >
+                      <span className="truncate">
+                        {b.name ??
+                          (b.address ? (
+                            <>
+                              <AddrNum
+                                n={b.address.number}
+                                width={directory.names.maxAddressDigits}
+                              />{" "}
+                              {b.address.street}
+                            </>
+                          ) : (
+                            `Building #${b.buildingId}`
+                          ))}
+                      </span>
+                      <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
+                        {b.householdCount} hh
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </CollapsiblePanel>
+            </Collapsible>
           ))}
-        </div>
-      </ScrollArea>
+            </div>
+          </ScrollArea>
+        </>
+      )}
+    </div>
+  );
+}
+
+// Slow single-line parade of residents above the search field (user
+// 2026-07-08, replaces the spotlight card): hover pauses the run and opens a
+// hover card; click pulls the persona up in the columns. Two copies of the
+// cast + translateX(-50%) make the loop seamless (keyframes in globals.css).
+function ResidentMarquee({
+  cast,
+  districtNames,
+  onOpen,
+}: {
+  cast: Persona[];
+  districtNames: Map<string, string>;
+  onOpen: (personaId: string) => void;
+}) {
+  return (
+    <div className="group relative shrink-0 overflow-hidden [mask-image:linear-gradient(90deg,transparent,black_10%,black_90%,transparent)]">
+      <div className="flex w-max animate-[directory-marquee_90s_linear_infinite] group-hover:[animation-play-state:paused] motion-reduce:animate-none">
+        {[0, 1].map((copy) => (
+          <div key={copy} className="flex shrink-0" aria-hidden={copy === 1}>
+            {cast.map((p) => (
+              <HoverCard key={p.id}>
+                <HoverCardTrigger
+                  render={
+                    <button
+                      type="button"
+                      tabIndex={copy === 1 ? -1 : 0}
+                      onClick={() => onOpen(p.id)}
+                      className="text-muted-foreground hover:text-foreground pr-5 text-xs whitespace-nowrap transition-colors"
+                    >
+                      {p.fullName}
+                    </button>
+                  }
+                />
+                <HoverCardContent>
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex flex-col">
+                      <span className="font-medium">{p.fullName}</span>
+                      {p.story.epithet && (
+                        <span className="text-muted-foreground italic">{p.story.epithet}</span>
+                      )}
+                    </div>
+                    <div className="text-muted-foreground text-xs">
+                      {p.age} · {p.pronouns} · {districtNames.get(p.homeDistrictId) ?? ""}
+                    </div>
+                    {p.story.hook && <div className="border-l-2 pl-2 italic">{p.story.hook}</div>}
+                  </div>
+                </HoverCardContent>
+              </HoverCard>
+            ))}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

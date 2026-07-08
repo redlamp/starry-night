@@ -5,20 +5,22 @@ import * as THREE from "three";
 import { useSceneStore } from "@/lib/state/sceneStore";
 import { generateCity, tensorDistrictField } from "@/lib/seed/cityGen";
 
-// #87 follow-up: trace an outline around the district the SELECTED building
-// belongs to. Samples the district field on a grid (the SAME field DistrictShells
-// draws from) and emits a segment on every cell edge where the selected district
-// meets a different district or the field edge — the district's true, irregular
-// perimeter, not its bounding box. Coloured by the district's own colour, so it
-// matches the info panel's district label and the plan-view legend. Drawn as a
-// GIS-style overlay (depthTest off) so the whole boundary reads regardless of
-// building occlusion. Renders null until a building is selected (inspect mode
-// only — selectedBuildingId is cleared when inspect turns off).
+// #87 follow-up: trace an outline around a district's true, irregular
+// perimeter. Samples the district field on a grid (the SAME field DistrictShells
+// draws from) and emits a segment on every cell edge where the target district
+// meets a different district or the field edge. Coloured by the district's own
+// colour, so it matches the info panel's district label and the plan-view
+// legend. Drawn as a GIS-style overlay (depthTest off) so the whole boundary
+// reads regardless of building occlusion. The target district is, in priority
+// order: the directory's hovered district, its pinned district (user
+// 2026-07-08), else the SELECTED building's district (inspect mode).
 const STEPS = 80; // match DistrictShells' sampling resolution
 const OUTLINE_Y = 0.35; // just above DistrictShells' border line (0.3)
 
 export function SelectedDistrictOutline({ masterSeed }: { masterSeed: string }) {
   const selectedBuildingId = useSceneStore((s) => s.selectedBuildingId);
+  const hoverDistrictId = useSceneStore((s) => s.hoverDistrictId);
+  const pinnedDistrictId = useSceneStore((s) => s.pinnedDistrictId);
   const cityShape = useSceneStore((s) => s.cityShape);
   const cityShapeScale = useSceneStore((s) => s.cityShapeScale);
   const citySize = useSceneStore((s) => s.citySize);
@@ -27,21 +29,27 @@ export function SelectedDistrictOutline({ masterSeed }: { masterSeed: string }) 
   const lines = useMemo(() => {
     void citySize; // tier drives the module-level gen extent — a switch must resample
     void citySketch; // sketch field likewise — a different city
-    if (selectedBuildingId === null) return null;
+    const directDistrictId = hoverDistrictId ?? pinnedDistrictId;
+    if (directDistrictId === null && selectedBuildingId === null) return null;
 
-    // Which district does the selected building belong to? (generateCity is
-    // module-cached — this repeat call is free, and matches the info panel's
-    // building -> district resolution.)
+    // Resolve the target district: directory-driven id wins; otherwise the
+    // selected building's owner. (generateCity is module-cached — this repeat
+    // call is free, and matches the info panel's building -> district
+    // resolution.)
     const { buildings, districts } = generateCity(masterSeed, cityShape, cityShapeScale);
-    const b = buildings.find((x) => x.id === selectedBuildingId);
-    if (!b) return null;
-    const owner = districts.find((d) => d.id === b.districtId);
+    let districtId = directDistrictId;
+    if (districtId === null) {
+      const b = buildings.find((x) => x.id === selectedBuildingId);
+      if (!b) return null;
+      districtId = b.districtId;
+    }
+    const owner = districts.find((d) => d.id === districtId);
     if (!owner) return null;
 
     const field = tensorDistrictField(masterSeed);
     // classify() returns a district's `.index`; use that value directly rather
     // than assuming the districts array is ordered by index.
-    const target = field.districts.find((d) => d.id === b.districtId);
+    const target = field.districts.find((d) => d.id === districtId);
     if (!target) return null;
     const targetIdx = target.index;
 
@@ -95,7 +103,16 @@ export function SelectedDistrictOutline({ masterSeed }: { masterSeed: string }) 
     seg.frustumCulled = false;
     seg.renderOrder = 1001; // above the district shells' fill (999) + seams (1000)
     return seg;
-  }, [selectedBuildingId, masterSeed, cityShape, cityShapeScale, citySize, citySketch]);
+  }, [
+    selectedBuildingId,
+    hoverDistrictId,
+    pinnedDistrictId,
+    masterSeed,
+    cityShape,
+    cityShapeScale,
+    citySize,
+    citySketch,
+  ]);
 
   useEffect(() => {
     return () => {
