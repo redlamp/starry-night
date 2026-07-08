@@ -28,9 +28,10 @@ function check(name: string, ok: boolean, detail?: string) {
 }
 
 // (1) dataset counts
-check("50 masculine first names", MASCULINE_FIRST_NAMES.length === 50, String(MASCULINE_FIRST_NAMES.length));
-check("50 feminine first names", FEMININE_FIRST_NAMES.length === 50, String(FEMININE_FIRST_NAMES.length));
-check("100 last names", LAST_NAMES.length === 100, String(LAST_NAMES.length));
+check("75 masculine first names", MASCULINE_FIRST_NAMES.length === 75, String(MASCULINE_FIRST_NAMES.length));
+check("75 feminine first names", FEMININE_FIRST_NAMES.length === 75, String(FEMININE_FIRST_NAMES.length));
+check("200 last names", LAST_NAMES.length === 200, String(LAST_NAMES.length));
+check("no duplicate last names", new Set(LAST_NAMES).size === LAST_NAMES.length);
 check("200 professions", PROFESSIONS.length === 200, String(PROFESSIONS.length));
 check(
   "no duplicate profession titles",

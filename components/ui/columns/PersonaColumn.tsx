@@ -102,10 +102,13 @@ export function PersonaColumn({
     ? indexes.directory.personas.get(persona.partnerId)
     : undefined;
 
+  // District names take internal non-breaking spaces so a wrapping address
+  // never splits "Grove Glen" mid-name — the district drops to its own line
+  // as a unit instead (user 2026-07-08).
   const homeText = [
     homeAddress ? `${homeAddress.number} ${homeAddress.street}` : null,
     persona.unit ? `Unit ${persona.unit}` : null,
-    homeDistrictName,
+    homeDistrictName?.replace(/ /g, " "),
   ]
     .filter(Boolean)
     .join(" · ");
