@@ -139,7 +139,8 @@ export type CityIdentity = {
   college: string;
   hospital: string;
   newspaper: string;
-  transitLine: string;
+  transitLine: string; // the rail spine
+  busLines: string[]; // named bus routes (mapping actual routes: issue TBD)
 };
 
 export type Address = {
@@ -162,6 +163,10 @@ export type CityNames = {
   buildingNames: Map<number, string>;
   // Road id → the buildings addressed onto it (the road-hover list).
   buildingsByRoad: Map<string, number[]>;
+  // Widest address number in the city (digit count). List renderers size a
+  // right-aligned `${n}ch` column with tabular-nums so numbers + street names
+  // align down a list.
+  maxAddressDigits: number;
 };
 
 // --- City identity -----------------------------------------------------------
@@ -194,6 +199,11 @@ function makeCityIdentity(masterSeed: string): CityIdentity {
     hospital: rng() < 0.5 ? `${name} General` : `St. ${pick(rng, FOUNDER_NAMES)} Medical Center`,
     newspaper: `The ${name} ${pick(rng, PAPER_NAMES)}`,
     transitLine: `${pick(rng, ["Blue", "Green", "Copper", "Harbor", "Crosstown"])} Line`,
+    busLines: [
+      `the ${1 + Math.floor(rng() * 8)} bus`,
+      `the ${10 + Math.floor(rng() * 30)} bus`,
+      `the ${pick(rng, ["Nightowl", "Circulator", "Express", "Limited"])}`,
+    ],
   };
 }
 
@@ -297,7 +307,21 @@ function nameStreets(masterSeed: string, roads: NamedRoad[]): Map<string, string
       ordinalsLeft--;
       used.add(name);
     } else {
-      const suffixes = road.tier === "arterial" ? ARTERIAL_SUFFIXES : MINOR_SUFFIXES;
+      // Suffix pool follows the road's actual LENGTH, not just its tier — a
+      // 2 km "minor" road named Court reads wrong (user 2026-07-08).
+      let length = 0;
+      for (let i = 0; i < road.vertices.length - 1; i++) {
+        length += Math.hypot(
+          road.vertices[i + 1].x - road.vertices[i].x,
+          road.vertices[i + 1].z - road.vertices[i].z,
+        );
+      }
+      const suffixes =
+        road.tier === "arterial" || length > 1200
+          ? ARTERIAL_SUFFIXES
+          : length > 500
+            ? ["Street", "Street", "Way", "Terrace", "Row"]
+            : MINOR_SUFFIXES;
       for (let attempt = 0; ; attempt++) {
         const candidate = `${baseName()} ${pick(rng, suffixes)}`;
         if (!used.has(candidate)) {
@@ -488,6 +512,10 @@ function buildCityNamesImpl(
   for (const list of buildingsByRoad.values()) {
     list.sort((a, b) => (addresses.get(a)?.number ?? 0) - (addresses.get(b)?.number ?? 0));
   }
+  let maxAddressDigits = 1;
+  for (const address of addresses.values()) {
+    maxAddressDigits = Math.max(maxAddressDigits, String(address.number).length);
+  }
   return {
     city: makeCityIdentity(masterSeed),
     districtNames: nameDistricts(masterSeed, city.districts),
@@ -495,6 +523,7 @@ function buildCityNamesImpl(
     addresses,
     buildingNames: nameBuildings(masterSeed, city.buildings),
     buildingsByRoad,
+    maxAddressDigits,
   };
 }
 

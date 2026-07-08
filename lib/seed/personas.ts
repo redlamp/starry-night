@@ -20,7 +20,7 @@ import {
   DEGREE_SUBJECTS,
   MBTI_AXIS_WEIGHTS,
   MBTI_NICKNAMES,
-  PRONOUNS,
+  WESTERN_ZODIAC,
   westernSignFor,
   chineseSignFor,
   type Profession,
@@ -83,8 +83,16 @@ export type Persona = {
   fullName: string;
   age: number;
   birthday: { year: number; month: number; day: number };
-  westernSign: WesternSign;
+  westernSign: WesternSign; // the sun sign
+  // The rest of the "big three" — fake ephemeris, seeded per persona (real
+  // moon/ascendant need birth-time astronomy; these are character flavour).
+  moonSign: string;
+  risingSign: string;
+  birthHour: number; // 0-23, the "birth time" the rising sign hangs off
   chineseSign: ChineseSign;
+  // Physical descriptors (adults only; undefined for kids).
+  heightCm?: number;
+  build?: string;
   mbti: string;
   mbtiNickname: string;
   ethnicity: Ethnicity;
@@ -347,11 +355,38 @@ function drawFamilyName(rng: () => number, ethnicity: Ethnicity): string {
 }
 
 function drawGenderIdentity(rng: () => number, presentation: "m" | "f"): GenderIdentity {
+  // Slightly above current US population estimates by design (user
+  // 2026-07-08) — see wiki/notes/pronoun-distribution.md for sources.
   const r = rng();
-  if (r < 0.006) return presentation === "m" ? "trans man" : "trans woman";
-  if (r < 0.018) return "nonbinary";
+  if (r < 0.008) return presentation === "m" ? "trans man" : "trans woman";
+  if (r < 0.033) return "nonbinary";
   return presentation === "m" ? "cis man" : "cis woman";
 }
+
+// Pronouns are drawn, not mapped 1:1 from identity — she/they and he/they
+// exist among cis folks, and a slice of nonbinary residents use neopronouns.
+function drawPronouns(rng: () => number, identity: GenderIdentity): string {
+  const r = rng();
+  switch (identity) {
+    case "nonbinary":
+      if (r < 0.7) return "they/them";
+      if (r < 0.8) return "she/they";
+      if (r < 0.9) return "he/they";
+      return r < 0.95 ? "xe/xem" : "ze/zir";
+    case "trans man":
+      return r < 0.9 ? "he/him" : "he/they";
+    case "trans woman":
+      return r < 0.9 ? "she/her" : "she/they";
+    case "cis man":
+      return r < 0.97 ? "he/him" : "he/they";
+    case "cis woman":
+      return r < 0.96 ? "she/her" : "she/they";
+  }
+}
+
+// T-shirt sizing for body descriptors (user 2026-07-08) — impersonal and
+// judgment-free. Repeats weight the draw toward M/L.
+const BUILDS = ["XS", "S", "S", "M", "M", "M", "M", "L", "L", "L", "XL", "XL", "XXL"];
 
 function drawMbti(rng: () => number): string {
   return (
@@ -631,6 +666,20 @@ function buildDirectoryImpl(
         const mbti = drawMbti(rng);
         const edu = drawEducation(rng, profession, age, names);
 
+        const pronouns = drawPronouns(rng, genderIdentity);
+        // Fake-ephemeris big three: moon + rising drawn per persona; the
+        // rising sign notionally hangs off a generated birth hour.
+        const birthHour = Math.floor(rng() * 24);
+        const moonSign = WESTERN_ZODIAC[Math.floor(rng() * 12)].name;
+        const risingSign = WESTERN_ZODIAC[Math.floor(rng() * 12)].name;
+        // Physical descriptors, adults only.
+        const heightCm = isAdult
+          ? Math.round(
+              (spec.presentation === "m" ? 178 : 164) + (rng() + rng() + rng() - 1.5) * 9,
+            )
+          : undefined;
+        const build = isAdult ? pick(rng, BUILDS) : undefined;
+
         // Sparse offstage relatives — negative space, not a full tree.
         const offstage: OffstageRelative[] = [];
         if (isAdult && rng() < 0.4) {
@@ -655,7 +704,12 @@ function buildDirectoryImpl(
           mbtiNickname: MBTI_NICKNAMES[mbti] ?? "",
           ethnicity: spec.ethnicity,
           genderIdentity,
-          pronouns: PRONOUNS[genderIdentity],
+          pronouns,
+          moonSign,
+          risingSign,
+          birthHour,
+          heightCm,
+          build,
           homeBuildingId: b.id,
           homeDistrictId: b.districtId,
           householdIndex: h,
