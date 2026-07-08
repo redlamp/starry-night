@@ -6,6 +6,7 @@ import { CITY_SHAPES, type CityShapeSetting } from "@/lib/seed/cityShape";
 import { readTileCull } from "@/lib/scene/tileCullDebug";
 import { sharedTime } from "@/lib/shaders/sharedTime";
 import { applyDeviceFit } from "@/lib/perf/applyDeviceFit";
+import { buildPersonaDirectory } from "@/lib/seed/personas";
 import { parseCamParam, encodeCamParam, liveViewPose } from "@/lib/scene/viewLink";
 
 /**
@@ -67,6 +68,9 @@ export function CaptureBoot() {
       // advancing it, so a verification script can pin an exact uTime and get
       // a reproducible frame — e.g. a plane at a known point along its corridor.
       (window as unknown as Record<string, unknown>).__sharedTime = sharedTime;
+      // Personas: directory access so capture scripts can find a persona by
+      // predicate (e.g. "first resident with a commute") instead of guessing ids.
+      (window as unknown as Record<string, unknown>).__personaDirectory = buildPersonaDirectory;
     }
     if (params.get("intro") === "instant") {
       // Wake everything within ~1s and park the on/off cycle so a still a few
