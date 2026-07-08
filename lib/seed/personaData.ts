@@ -74,6 +74,12 @@ export const MASCULINE_FIRST_NAMES: string[] = [
   "Benjamin", "Samuel", "Alexander", "Nicholas", "Ryan",
   "Nathan", "Jacob", "Ethan", "Logan", "Mason",
   "Elijah", "Noah", "Liam", "Lucas", "Owen",
+  // 2026-07-08 growth (multi-household round): +25, same era spread.
+  "Aaron", "Adam", "Alan", "Arthur", "Austin",
+  "Caleb", "Carl", "Christian", "Dennis", "Douglas",
+  "Dylan", "Eric", "Gabriel", "Harold", "Isaac",
+  "Jesse", "Jonathan", "Jordan", "Joshua", "Juan",
+  "Justin", "Keith", "Kyle", "Miguel", "Tyler",
 ];
 
 export const FEMININE_FIRST_NAMES: string[] = [
@@ -87,10 +93,18 @@ export const FEMININE_FIRST_NAMES: string[] = [
   "Christina", "Samantha", "Ashley", "Kimberly", "Jessica",
   "Emily", "Hannah", "Madison", "Abigail", "Grace",
   "Victoria", "Emma", "Olivia", "Sophia", "Isabella",
+  // 2026-07-08 growth (multi-household round): +25, same era spread.
+  "Alice", "Amber", "Amy", "Anna", "Ava",
+  "Carolyn", "Catherine", "Charlotte", "Chloe", "Christine",
+  "Danielle", "Diana", "Frances", "Helen", "Jacqueline",
+  "Joan", "Joyce", "Julia", "Julie", "Katherine",
+  "Kayla", "Lauren", "Megan", "Mia", "Natalie",
 ];
 
 // --- Surnames --------------------------------------------------------------
-// The 100 most common US surnames per the 2010 Census, in rank order.
+// The 200 most common US surnames per the 2010 Census, in rank order
+// (2026-07-08: doubled from 100 for the multi-household round — 17k
+// households over 100 surnames repeated hard).
 
 export const LAST_NAMES: string[] = [
   "Smith", "Johnson", "Williams", "Brown", "Jones",
@@ -113,6 +127,26 @@ export const LAST_NAMES: string[] = [
   "Bennett", "Gray", "Mendoza", "Ruiz", "Hughes",
   "Price", "Alvarez", "Castillo", "Sanders", "Patel",
   "Myers", "Long", "Ross", "Foster", "Jimenez",
+  "Powell", "Jenkins", "Perry", "Russell", "Sullivan",
+  "Bell", "Coleman", "Butler", "Henderson", "Barnes",
+  "Gonzales", "Fisher", "Vasquez", "Simmons", "Romero",
+  "Jordan", "Patterson", "Alexander", "Hamilton", "Graham",
+  "Reynolds", "Griffin", "Wallace", "Moreno", "West",
+  "Cole", "Hayes", "Bryant", "Herrera", "Gibson",
+  "Ellis", "Tran", "Medina", "Aguilar", "Stevens",
+  "Murray", "Ford", "Castro", "Marshall", "Owens",
+  "Harrison", "Fernandez", "McDonald", "Woods", "Washington",
+  "Kennedy", "Wells", "Vargas", "Henry", "Chen",
+  "Freeman", "Webb", "Tucker", "Guzman", "Burns",
+  "Crawford", "Olson", "Simpson", "Porter", "Hunter",
+  "Gordon", "Mendez", "Silva", "Shaw", "Snyder",
+  "Mason", "Dixon", "Munoz", "Hunt", "Hicks",
+  "Holmes", "Palmer", "Wagner", "Black", "Robertson",
+  "Boyd", "Rose", "Stone", "Salazar", "Fox",
+  "Warren", "Mills", "Meyer", "Rice", "Schmidt",
+  "Garza", "Daniels", "Ferguson", "Nichols", "Stephens",
+  "Soto", "Weaver", "Ryan", "Gardner", "Payne",
+  "Grant", "Dunn", "Kelley", "Spencer", "Hawkins",
 ];
 
 // --- Professions -----------------------------------------------------------
@@ -359,7 +393,7 @@ export const PROFESSIONS: Profession[] = [
   { title: "Pest Control Technician", category: "Other", educationTier: 1, workplaceType: "outdoor" },
   { title: "Funeral Director", category: "Other", educationTier: 3, workplaceType: "civic" },
 ];
-// Counts: MASCULINE_FIRST_NAMES 50, FEMININE_FIRST_NAMES 50, LAST_NAMES 100,
+// Counts: MASCULINE_FIRST_NAMES 75, FEMININE_FIRST_NAMES 75, LAST_NAMES 200,
 // PROFESSIONS 200 (verified by scripts/personaCheck.ts).
 
 // --- Astrology ---------------------------------------------------------------
@@ -554,9 +588,13 @@ export const SURNAME_AFFINITY: Partial<Record<Ethnicity, string[]>> = {
     "Sanchez", "Ramirez", "Torres", "Flores", "Rivera", "Gomez", "Diaz", "Cruz",
     "Reyes", "Morales", "Gutierrez", "Ortiz", "Ramos", "Chavez", "Mendoza",
     "Ruiz", "Alvarez", "Castillo", "Jimenez",
+    // Ranks 101-200 additions (2026-07-08 pool growth).
+    "Gonzales", "Vasquez", "Romero", "Moreno", "Herrera", "Medina", "Aguilar",
+    "Castro", "Fernandez", "Vargas", "Guzman", "Mendez", "Munoz", "Salazar",
+    "Garza", "Soto", "Silva",
   ],
-  "East Asian": ["Kim", "Lee", "Chen" /* not in top-100 list; kept for future pool growth */],
-  "Southeast Asian": ["Nguyen"],
+  "East Asian": ["Kim", "Lee", "Chen"],
+  "Southeast Asian": ["Nguyen", "Tran"],
   "South Asian": ["Patel"],
 };
 
