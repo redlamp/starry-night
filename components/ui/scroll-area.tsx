@@ -35,7 +35,12 @@ function ScrollBar({
       data-orientation={orientation}
       orientation={orientation}
       className={cn(
-        "flex touch-none p-px transition-colors select-none data-horizontal:h-2.5 data-horizontal:flex-col data-horizontal:border-t data-horizontal:border-t-transparent data-vertical:h-full data-vertical:w-2.5 data-vertical:border-l data-vertical:border-l-transparent",
+        // Positioned INSIDE the scroll surface (base-ui scrollbars are
+        // unstyled and would otherwise flow after the viewport, i.e. render
+        // outside the panel — user 2026-07-08).
+        "flex touch-none p-px transition-colors select-none",
+        "data-horizontal:absolute data-horizontal:inset-x-0 data-horizontal:bottom-0 data-horizontal:h-2.5 data-horizontal:flex-col data-horizontal:border-t data-horizontal:border-t-transparent",
+        "data-vertical:absolute data-vertical:inset-y-0 data-vertical:right-0 data-vertical:h-full data-vertical:w-2.5 data-vertical:border-l data-vertical:border-l-transparent",
         className,
       )}
       {...props}

@@ -1,0 +1,406 @@
+<title>Personas — Overnight Build Report</title>
+<style>
+  :root {
+    --bg: #0c101b;
+    --panel: #121828;
+    --panel-2: #0f1522;
+    --ink: #cdd5e3;
+    --ink-strong: #eef2f8;
+    --muted: #8a94a8;
+    --amber: #e8b04a;
+    --amber-dim: rgba(232, 176, 74, 0.14);
+    --teal: #4fb98d;
+    --line: rgba(160, 176, 205, 0.16);
+    --code-bg: rgba(160, 176, 205, 0.08);
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f3f5f9;
+      --panel: #ffffff;
+      --panel-2: #eaeef5;
+      --ink: #2a3245;
+      --ink-strong: #141b2c;
+      --muted: #5a6478;
+      --amber: #b07914;
+      --amber-dim: rgba(176, 121, 20, 0.1);
+      --teal: #1e7a55;
+      --line: rgba(40, 56, 90, 0.16);
+      --code-bg: rgba(40, 56, 90, 0.07);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0c101b; --panel: #121828; --panel-2: #0f1522; --ink: #cdd5e3; --ink-strong: #eef2f8;
+    --muted: #8a94a8; --amber: #e8b04a; --amber-dim: rgba(232,176,74,0.14); --teal: #4fb98d;
+    --line: rgba(160,176,205,0.16); --code-bg: rgba(160,176,205,0.08);
+  }
+  :root[data-theme="light"] {
+    --bg: #f3f5f9; --panel: #ffffff; --panel-2: #eaeef5; --ink: #2a3245; --ink-strong: #141b2c;
+    --muted: #5a6478; --amber: #b07914; --amber-dim: rgba(176,121,20,0.1); --teal: #1e7a55;
+    --line: rgba(40,56,90,0.16); --code-bg: rgba(40,56,90,0.07);
+  }
+  html { background: var(--bg); }
+  body {
+    background: var(--bg); color: var(--ink);
+    font-family: "Segoe UI Variable Text", "Segoe UI", "Avenir Next", -apple-system, sans-serif;
+    line-height: 1.55; margin: 0;
+  }
+  .wrap { max-width: 800px; margin: 0 auto; padding: 0 20px 72px; }
+  a { color: var(--amber); text-decoration: none; }
+  a:hover, a:focus-visible { text-decoration: underline; outline: none; }
+
+  /* header */
+  header { position: relative; overflow: hidden; border-bottom: 1px solid var(--line); }
+  .sky { position: absolute; inset: 0; pointer-events: none; }
+  .sky i { position: absolute; width: 2px; height: 2px; border-radius: 50%; background: var(--muted); opacity: 0.5; }
+  .sky i.b { background: var(--amber); opacity: 0.8; }
+  @media (prefers-reduced-motion: no-preference) {
+    .sky i.b { animation: tw 4s ease-in-out infinite alternate; }
+    @keyframes tw { from { opacity: 0.35; } to { opacity: 0.9; } }
+  }
+  .head-in { position: relative; max-width: 800px; margin: 0 auto; padding: 56px 20px 36px; }
+  .eyebrow {
+    font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+    font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted);
+  }
+  h1 {
+    color: var(--ink-strong); font-size: clamp(28px, 5vw, 40px); line-height: 1.12;
+    margin: 10px 0 8px; text-wrap: balance; font-weight: 650;
+    font-family: "Segoe UI Variable Display", "Segoe UI", "Avenir Next", sans-serif;
+  }
+  .sub { color: var(--muted); max-width: 60ch; margin: 0 0 18px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip {
+    font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 12px;
+    border: 1px solid var(--line); border-radius: 999px; padding: 3px 11px; color: var(--ink);
+    background: var(--panel);
+  }
+  .chip.ok { color: var(--teal); border-color: var(--teal); }
+  .chip.seed { color: var(--amber); border-color: var(--amber); background: var(--amber-dim); }
+
+  /* sections */
+  section { margin-top: 44px; }
+  h2 {
+    color: var(--ink-strong); font-size: 21px; font-weight: 650; margin: 6px 0 12px; text-wrap: balance;
+  }
+  h2 .no {
+    font-family: ui-monospace, "Cascadia Code", Consolas, monospace; color: var(--amber);
+    font-size: 13px; font-weight: 400; margin-right: 10px; letter-spacing: 0.08em;
+  }
+  p { margin: 0 0 12px; max-width: 70ch; }
+  .muted { color: var(--muted); }
+  code, .mono {
+    font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 0.92em;
+    background: var(--code-bg); border-radius: 4px; padding: 1px 5px;
+  }
+
+  /* stat tiles */
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin: 18px 0 0; }
+  .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  .stat b {
+    display: block; color: var(--ink-strong); font-size: 22px; font-weight: 650;
+    font-variant-numeric: tabular-nums; letter-spacing: -0.01em;
+  }
+  .stat span { font-size: 12.5px; color: var(--muted); }
+
+  /* screenshot */
+  figure { margin: 16px 0 0; }
+  figure img { width: 100%; height: auto; border-radius: 12px; border: 1px solid var(--line); display: block; }
+  figcaption { font-size: 13px; color: var(--muted); margin-top: 8px; max-width: 75ch; }
+
+  /* persona sheets */
+  .sheets { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 14px; margin-top: 14px; }
+  .sheet { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; }
+  .sheet .name { color: var(--ink-strong); font-weight: 650; font-size: 16.5px; }
+  .sheet .epithet { font-family: Georgia, "Iowan Old Style", serif; font-style: italic; color: var(--amber); font-size: 14.5px; }
+  .sheet .meta { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 12px; color: var(--muted); margin: 3px 0 10px; }
+  .sheet .row { display: flex; justify-content: space-between; gap: 14px; font-size: 13.5px; padding: 2.5px 0; }
+  .sheet .row .k { color: var(--muted); flex-shrink: 0; }
+  .sheet .row .v { text-align: right; }
+  .sheet .fiction {
+    font-family: Georgia, "Iowan Old Style", serif; font-style: italic; font-size: 14.5px;
+    color: var(--ink); margin: 10px 0 0; line-height: 1.5;
+  }
+  .sheet .hook {
+    border-left: 2px solid var(--amber); padding: 2px 0 2px 12px; margin-top: 12px;
+    font-family: Georgia, "Iowan Old Style", serif; font-style: italic; font-size: 15px; color: var(--ink-strong);
+  }
+  .sheet hr { border: 0; border-top: 1px solid var(--line); margin: 10px 0; }
+
+  /* lists & tables */
+  ul, ol { padding-left: 22px; margin: 0 0 12px; }
+  li { margin: 5px 0; max-width: 70ch; }
+  li::marker { color: var(--amber); }
+  .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+  th, td { text-align: left; padding: 9px 14px; border-top: 1px solid var(--line); vertical-align: top; }
+  thead th {
+    border-top: 0; font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+    font-size: 11.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 500;
+    background: var(--panel-2);
+  }
+  tbody tr { background: var(--panel); }
+  td code { white-space: nowrap; }
+
+  .two-col { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 4px 28px; }
+  .callout {
+    background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--amber);
+    border-radius: 10px; padding: 12px 16px; margin: 14px 0; max-width: none;
+  }
+  .callout p { margin: 0; }
+  footer { margin-top: 56px; border-top: 1px solid var(--line); padding-top: 16px; font-size: 13px; color: var(--muted); }
+</style>
+
+<header>
+  <div class="sky" aria-hidden="true">
+    <i style="top:18%;left:7%"></i><i style="top:32%;left:14%" class="b"></i><i style="top:12%;left:23%"></i>
+    <i style="top:45%;left:31%"></i><i style="top:22%;left:44%" class="b"></i><i style="top:9%;left:56%"></i>
+    <i style="top:38%;left:63%"></i><i style="top:16%;left:71%" class="b"></i><i style="top:29%;left:83%"></i>
+    <i style="top:11%;left:91%"></i><i style="top:52%;left:88%" class="b"></i><i style="top:58%;left:12%"></i>
+    <i style="top:64%;left:52%"></i><i style="top:70%;left:76%" class="b"></i><i style="top:75%;left:28%"></i>
+  </div>
+  <div class="head-in">
+    <div class="eyebrow">Starry Night · Overnight Report · 2026-07-08 · living document, updated through the day</div>
+    <h1>Every lit window is now somebody</h1>
+    <p class="sub">The persona system v1: seeded residents with names, birthdays, jobs, families, addresses — and story hooks built to Heat Signature's bar. Built, verified, and documented while you slept.</p>
+    <div class="chips">
+      <span class="chip seed">seed "starry-night" → Havenwood</span>
+      <span class="chip">branch feat/personas</span>
+      <span class="chip ok">typecheck ✓</span>
+      <span class="chip ok">lint ✓</span>
+      <span class="chip ok">golden byte-identical ✓</span>
+      <span class="chip ok">personaCheck 15/15 ✓</span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+<section>
+  <h2>TL;DR</h2>
+  <p>Click any building and meet the people inside. The default seed now generates <b>Havenwood</b>: 43 named districts, every road named, every building addressed, and 23,529 fully-realised residents in 10,188 households working at 7,398 named businesses — all a pure function of the master seed, on new <code>::personas</code> / <code>::names</code> rng streams that leave existing city generation byte-identical (golden test passes untouched).</p>
+  <p>Two research passes (the games that do this best, plus the academic literature) shaped a story layer that goes beyond the stat sheet you asked for: epithets, two-beat backstories, one-sided grudges between neighbors, shared city lore, and an unresolved hook that always ends the sheet.</p>
+  <div class="stats">
+    <div class="stat"><b>23,529</b><span>residents</span></div>
+    <div class="stat"><b>10,188</b><span>households</span></div>
+    <div class="stat"><b>7,398</b><span>businesses</span></div>
+    <div class="stat"><b>43</b><span>named districts</span></div>
+    <div class="stat"><b>~500 ms</b><span>cold build, 0 ms warm</span></div>
+    <div class="stat"><b>15/15</b><span>invariant checks</span></div>
+  </div>
+</section>
+
+<section>
+  <h2>It runs</h2>
+  <figure>
+    <div class="muted" style="border:1px dashed var(--line);border-radius:12px;padding:18px;text-align:center">[ screenshot omitted from the repo copy to keep git history light — the full illustrated report lives locally at <code>samples/personas-report-full.html</code> and at the claude.ai artifact ]</div>
+    <figcaption>Live capture from the worktree dev server. Left: the building panel with its new address, district proper name, occupants, and a "sift" line surfacing the building's most interesting pattern. Right: the character sheet — note it ends on the hook, unresolved.</figcaption>
+  </figure>
+  <div class="callout"><p><b>Meet Owen T. Taylor</b> — <i>the night guard</i>. Scorpio, Fire Rabbit, ISTP. Security guard, born here, married to Pamela, still living with his mother Brenda. His sheet admits he used to date Kathleen Flores down the street, and ends: <i>"Walks past the 4 a.m. ferry on the way home. It is not on the way home."</i> Nothing wrote that sentence pair on purpose — the template system cast it. That's the apophenia engine working.</p></div>
+  <p class="muted">Try it: <code>cd C:\workspace\starry-night-personas</code> → <code>bun dev</code> → press <code>I</code> for inspect, click a building, click a name. (A dev server is still running on <code>localhost:7911</code>.)</p>
+</section>
+
+<section>
+  <h2>Two more sheets, straight from the generator</h2>
+  <div class="sheets">
+    <div class="sheet">
+      <div class="name">Frank K. Ramirez</div>
+      <div class="epithet">the fortune keeper</div>
+      <div class="meta">he/him · 40 · ♒ Aquarius · Fire Tiger · ESTJ</div>
+      <div class="row"><span class="k">Work</span><span class="v">Custodian · Little Havenwood Daycare</span></div>
+      <div class="row"><span class="k">Home</span><span class="v">223 Martin Parkway</span></div>
+      <div class="row"><span class="k">In city</span><span class="v">Born here · married</span></div>
+      <hr />
+      <p class="fiction">Dealt cards on a riverboat. Now a custodian at Little Havenwood Daycare.</p>
+      <p class="fiction">Tapes every fortune-cookie fortune to the fridge, verbatim.</p>
+      <div class="hook">The calendar has one date crossed out so hard the paper tore.</div>
+    </div>
+    <div class="sheet">
+      <div class="name">Ronald V. Evans</div>
+      <div class="epithet">&nbsp;</div>
+      <div class="meta">he/him · 51 · ♋ Cancer · Wood Rabbit · INFP</div>
+      <div class="row"><span class="k">Work</span><span class="v">Glazier · trade certification</span></div>
+      <div class="row"><span class="k">Home</span><span class="v">2012 Young Terrace</span></div>
+      <div class="row"><span class="k">In city</span><span class="v">Born here · married</span></div>
+      <hr />
+      <p class="fiction">Practices signatures on junk mail.</p>
+      <p class="fiction">Hasn't taken the elevator since the spring.</p>
+      <div class="hook">Can hear which machine is wrong from the parking lot. Hasn't told the foreman which.</div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>What the research said (and how it's applied)</h2>
+  <p>Two parallel research agents: one on shipped games (Heat Signature, Nemesis, RimWorld, Watch Dogs Legion, Dwarf Fortress), one on the academic/professional literature (Talk of the Town, Prom Week, the Oz Project, Grinblat's Caves of Qud talks, Kate Compton, Emily Short). Full digests in the wiki under the new <code>#domain/procgen</code> tag. The five findings that shaped the build:</p>
+  <ol>
+    <li><b>Players attach to inferences, not data.</b> Few, specific, mutually consistent facts with deliberate gaps beat rich profiles. Watch Dogs Legion had the deepest database and the flattest characters — its dialogue wasn't conditioned on the data. So: every sentence on our sheets is generated <i>from</i> the persona's life cluster; a night nurse and a payroll clerk cannot draw the same line.</li>
+    <li><b>One unresolved hook, ending the sheet</b> (Heat Signature). Hooks name a relationship and a want, and never resolve. Template authoring rules: concrete nouns, no emotion words, no "because".</li>
+    <li><b>Asymmetric edges</b> (Nemesis, by way of no-combat). ~30% of adults get a one-sided line about a specific neighbor, coworker, or someone on their street — clickable, and the other person's sheet doesn't know. The player who clicks both is the only one who sees the whole story.</li>
+    <li><b>Shared lore nouns</b> (Dwarf Fortress legends). Each city generates ~15 named entities — the blackout of '18, The Okafor Radio, the diner that used to be the bank — that many sheets touch. Two strangers mentioning the same bakery is the cheapest "this world existed before you looked."</li>
+    <li><b>Curation over dumping</b> (James Ryan's story sifting). Each building's occupants list leads with its most interesting pattern: <i>"Two residents here are seeing each other. The floors between them don't know yet."</i></li>
+  </ol>
+</section>
+
+<section>
+  <h2>The apophenia engine — the thesis, in one place</h2>
+  <p><b>Apophenia</b> is the human tendency to perceive meaningful patterns and intent where none exists. The term entered procgen design mainly via Tynan Sylvester (RimWorld), from "The Simulation Dream": <i>"This apophenia — this perception of personality and intent where there is none — is the key to making a simulation game work… we only need to show the simulation equivalent of moving balls and let the player layer in their own emotional perceptions."</i> The film-world cousin is the Kuleshov effect: the same neutral face reads as hunger or grief depending on the shot it's cut against — meaning comes from juxtaposition, supplied by the viewer.</p>
+  <p>The overnight research converged on one finding: <b>players don't attach to generated data, they attach to the inferences the data forces them to make.</b> Watch Dogs Legion had the richest NPC database and the flattest characters; Heat Signature's characters are a name plus one sentence and people remember them. So this system doesn't generate stories — it generates <b>evidence</b>, engineered so your mind builds the story:</p>
+  <ul>
+    <li><b>Template authoring rules</b>: concrete nouns only, no emotion words, no "because", never resolve. "The second toothbrush is still in the cup" — the system never says <i>lonely</i>; you do.</li>
+    <li><b>The hook always ends the sheet, unresolved</b> — the last thing you read is an open question.</li>
+    <li><b>Domain words</b> (Jason Grinblat, Caves of Qud): one noun-world per persona threaded through detail, hook, and epithet, so independently drawn lines read as one coherent obsession.</li>
+    <li><b>One-sided relations</b>: A's sheet mentions B; B's sheet doesn't know. Only the player who clicks both witnesses the "story", and neither resident is aware they're in it.</li>
+    <li><b>Shared lore nouns</b>: ~15 per city (the blackout of '18, the 4 a.m. ferry) recur across strangers' sheets, so coincidences feel like one pre-existing world.</li>
+  </ul>
+  <div class="callout"><p>Recall Owen T. Taylor: night-shift security guard, hook <i>"Walks past the 4 a.m. ferry on the way home. It is not on the way home."</i> His shift, the ferry (a city lore noun), and the detour were drawn by separate template rolls — no code connected them. Your brain instantly manufactures motive: what's at the ferry? Who is he hoping to see? That involuntary inference is the engine working; the system's job is to reliably produce material with exactly that kind of gap in it, then stop one sentence early.</p></div>
+  <p class="muted">Canonical wiki note: <code>wiki/notes/apophenia-engine.md</code> (tagged <code>domain/procgen</code>), linked from the architecture decision.</p>
+</section>
+
+<section>
+  <h2>What got built</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Module</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td><code>lib/seed/personaData.ts</code></td><td>Datasets: 50+50 first names (decade-ordered so a 78-year-old is Dorothy and a 26-year-old is Madison), 100 census surnames, 200 BLS-grounded professions with education tier + workplace type, western + Chinese zodiac tables, MBTI axis weights, ethnicity weights, education labels.</td></tr>
+      <tr><td><code>lib/seed/naming.ts</code></td><td>City identity (Havenwood, its university, hospital, paper, transit line), district proper names by character ("The Foundry", "Alder Heights", "Little Harbor"), tiered street names, US-style addresses via a 150 m spatial hash (19.4 s brute force → 224 ms), building names by archetype.</td></tr>
+      <tr><td><code>lib/seed/personas.ts</code></td><td>The directory: 5 deterministic passes — households (7 compositions incl. multigenerational and widowed elders) → businesses (typed subpools, so dentists land at Dental practices and bellhops at hotels) → employment weave → cross-building dating weave → story weave. Reciprocal family links, off-stage relatives as name-only stubs.</td></tr>
+      <tr><td><code>lib/seed/personaStory.ts</code></td><td>~130 hand-authored template lines across 16 life clusters: epithets, was/is pairs, whyAwake (anchored to the lit window), details, refusals, hooks, relations, city lore, one legend persona per city, per-household/building dedupe, <code>siftBuilding()</code>.</td></tr>
+      <tr><td><code>components/ui/PersonaPanel.tsx</code></td><td>The character sheet (bottom-right): badges, story lines, family/partner/relation links that navigate sheet-to-sheet, Go Home / Go to Work camera fly-to. Only <code>selectedPersonaId</code> touches Zustand.</td></tr>
+      <tr><td><code>BuildingInfoPanel.tsx</code> +</td><td>Building name, street address, proper district name, sift line, businesses, and clickable households.</td></tr>
+      <tr><td><code>scripts/personaCheck.ts</code></td><td>The verification gate: determinism (same seed → identical, different seed → different), reciprocal links, no leaked template slots, dataset counts, plus printed sheets for the human "fanfic test".</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section>
+  <h2>Guardrails held</h2>
+  <ul>
+    <li><b>Determinism contract:</b> all new streams are namespaced (<code>::personas::*</code>, <code>::names::*</code>); no <code>Math.random()</code>/<code>Date.now()</code>; ages measured against a fixed in-world date. <code>cityGolden</code> still passes byte-identical.</li>
+    <li><b>Derived, never stored:</b> the whole directory recomputes from seed, module-cached with the shared cache-key recipe. Zustand holds one new runtime field.</li>
+    <li><b>The stereotype trap</b> (flagged by the name-bias literature): ethnicity influences surname only, softly; profession weights key off district character only. Name pools and a building's income band never condition each other.</li>
+    <li><b>Quality review caught and fixed:</b> bellhops at law firms (employment affinity ladder), kids whose tenure contradicted their parents' (household move-history inheritance), a married couple sharing the same 3 a.m. line (per-household dedupe), two buildings at the same address (collision bump).</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Proposed next: presentation &amp; finding people</h2>
+  <div class="two-col">
+    <div>
+      <p><b>Presentation (shadcn panels)</b></p>
+      <ul>
+        <li>City directory: browse district → building → household; name search; seeded "resident of the night" spotlight.</li>
+        <li>District census cards in DistrictsPanel (population, professions, local lore).</li>
+        <li>Business directory — the phone book view.</li>
+        <li>Lore index: click "the blackout of '18", see everyone who remembers it.</li>
+      </ul>
+    </div>
+    <div>
+      <p><b>Finding them in the world</b></p>
+      <ul>
+        <li>Window-level assignment: households mapped to window rows; click a window, meet that family; highlight theirs from the sheet.</li>
+        <li>Schedule-driven window lights — the fiction becomes visible; author near-miss pairs (his light dies as hers wakes).</li>
+        <li>Storylet reveal: deeper facts unlock on repeat visits.</li>
+        <li>Relation trails: a faint arc between two buildings while both sheets are open.</li>
+      </ul>
+    </div>
+  </div>
+  <p>Ranked iteration backlog (research-scored) lives in <code>wiki/projects/personas.md</code> — top three: Grinblat's per-persona "domain word", SSA cohort-dated name tables, schedules → window lights.</p>
+</section>
+
+<section>
+  <h2>Round 2 — while you slept a little more</h2>
+  <p>You asked me to kick off the recommended backlog before you returned, then added two feature requests and an issue sweep mid-flight. All landed:</p>
+  <ul>
+    <li><b>SSA cohort-dated names</b> (<code>lib/seed/nameCohorts.ts</code>): first names now draw from the birth decade's real SSA popularity table (9 decades, weighted) — a 1948-born persona is Barbara/Linda, a 2000-born one Madison/Hannah — with an exactly-one-rng-draw guarantee so streams never shift.</li>
+    <li><b>Domain words</b> (Grinblat's trick, backlog #1): every persona gets one obsession-noun — crows, tide charts, matchbooks (32-noun pool, deduped per building) — that their detail, hook, and epithet can all orbit. ~6,400 sheets repeat their noun; when it happens the sheet reads as one person, not dice rolls.</li>
+    <li><b>Cross-building families</b>: adult children now link to parents across town (surname + parent-shaped age gap, reciprocal, navigable) — 3,472 links at the big tier.</li>
+    <li><b>City Directory panel</b>: a new settings-drawer section — city stats, a seeded "Resident of the Night" spotlight, name search over 21k residents, and a district → building browse tree.</li>
+    <li><b>Repetition audit</b> (<code>scripts/personaAudit.ts</code>): counts every rendered line citywide; kid/teen hooks and day-shift whyAwake pools were the thin ones and got grown (max hook repeat 857 → 591).</li>
+  </ul>
+
+  <figure>
+    <div class="muted" style="border:1px dashed var(--line);border-radius:12px;padding:18px;text-align:center">[ screenshot omitted from the repo copy to keep git history light — the full illustrated report lives locally at <code>samples/personas-report-full.html</code> and at the claude.ai artifact ]</div>
+    <figcaption>The City Directory: seeded spotlight (Barbara Torres, 64, Hazel Heights — her hook is a domain-word line about tide charts), name search, and the district browse tree.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2>Your two feature requests</h2>
+  <p><b>Commute lines.</b> Every employed persona gets a deterministic commute mode — walk, cycle, transit, or drive — from distance, age, and district (downtown/subcentre/mixed homes sit on the transit spine). Selecting a persona draws a mode-coloured arc from their home roof to their work roof, x-ray so it reads through buildings, with height scaled to the span. The sheet shows the matching row ("Drives · 1.8 km"; transit riders name the actual line: "Rides the Crosstown Line"). Street-following routes are the noted upgrade path once a road-graph router exists.</p>
+  <figure>
+    <div class="muted" style="border:1px dashed var(--line);border-radius:12px;padding:18px;text-align:center">[ screenshot omitted from the repo copy to keep git history light — the full illustrated report lives locally at <code>samples/personas-report-full.html</code> and at the claude.ai artifact ]</div>
+    <figcaption>Robert Ramirez, "the one with the telescope" — bellhop at The Scott Arms Hotel (the employment affinity ladder at work), driving 1.8 km. His domain word is doing its job: telescope detail up top, "sold the constellations collection" hook at the bottom.</figcaption>
+  </figure>
+  <p><b>Road hover.</b> In inspect mode, pointing at a street now resolves it through the same segment grid that assigned the addresses: the road highlights x-ray and a chip names it — "Martin Parkway · Avenue · 174 buildings" — with the first few street numbers. Verified headless (7/7 sample roads resolve correctly, void points miss); the on-screen hover feel is yours to gate on the live build.</p>
+</section>
+
+<section>
+  <h2>Issue sweep (your six)</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Issue</th><th>Outcome</th></tr></thead>
+    <tbody>
+      <tr><td><code>#87</code> info panel on click</td><td><b>Closed</b> — shipped 2026-07-05 (BuildingInfoPanel + inspect batch); evidence comment links the decision note.</td></tr>
+      <tr><td><code>#83</code> top-down shortest-arc tween</td><td><b>Closed</b> — shipped 2026-07-05 (TopDownModel: held-azimuth arc in, T returns to prior model).</td></tr>
+      <tr><td><code>#84</code> blend size-breathing</td><td><b>Closed</b> — shipped 2026-07-05 (restPerspK frozen through the ortho/persp blend).</td></tr>
+      <tr><td><code>#57</code> traffic per-segment streams</td><td><b>Closed</b> — shipped 2026-07-04 (journey streams, seeded respawn gaps, crop-invariant).</td></tr>
+      <tr><td><code>#60</code> /build step-through bench</td><td><b>Open, planned</b> — never built; left a scoped 10-stage implementation plan as a comment (mostly reuses existing overlay renderers; the new naming layer makes stages 4–5 label streets and districts).</td></tr>
+      <tr><td><code>#89</code> helicopter flight paths</td><td><b>Closed</b> — spline work implemented as v3 on <code>feat/heli-splines</code> (below).</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section>
+  <h2>#89 v3 — helicopter tours as real splines</h2>
+  <p>The v2 model bowed each hop with a quadratic bezier but sampled it at only 4 chords and met every pad at a hard corner. v3 threads <b>one closed centripetal Catmull-Rom spline through the whole tour</b> (stops + the seeded bow midpoints as control points), samples 10 sub-legs per hop, and adds a seeded climb-out/descend altitude bump per hop — so curvature is continuous through every stop and cross-town legs get real air under them. The leg schema and shader are untouched; it's just more, shorter transit legs. Verified: deterministic, legs chain continuously around the closed loop, time windows tile 0..1 exactly, typecheck/lint/golden clean.</p>
+  <figure>
+    <div class="muted" style="border:1px dashed var(--line);border-radius:12px;padding:18px;text-align:center">[ screenshot omitted from the repo copy to keep git history light — the full illustrated report lives locally at <code>samples/personas-report-full.html</code> and at the claude.ai artifact ]</div>
+    <figcaption>The route overlay after v3: smooth banking sweeps, tight pad orbits, climb bumps between rooftops. Compare the old model's 4-chord polygons — these read as aircraft, not connect-the-dots. Lives on <code>feat/heli-splines</code> (own worktree), awaiting your merge signal.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2>Round 3 — the columns, the schools, the connections</h2>
+  <p>Morning direction, delivered: the three detail panels became <b>one progressive-disclosure system</b> — Miller columns, like the macOS Finder. Click a building and the drill starts: district → building → its occupants split into companies and residents → a company's staff → an employee's sheet → the person their story points at. Every hop is one column to the right; Back/Forward walk the trail without losing it.</p>
+  <ul>
+    <li><b>Three views</b>, cycled from the header: flat <b>side-by-side</b> columns with aligned headers (top-left dock), the <b>CSS-3D deck</b> where earlier columns recede as tilted slivers you click to jump back, and <b>collapsed</b> — just the top card with "· N behind".</li>
+    <li><b>Streets are entities now</b>: click a road in inspect mode and its column lists every building, company, and resident on it, with the street lit up x-ray in the scene.</li>
+    <li><b>Connection arcs</b>: selecting a person draws their commute arc (thick, mode-coloured) plus thin violet arcs to the homes of their partner, family, and the neighbor their story mentions — the social graph, readable on the skyline.</li>
+    <li><b>Schools</b>: 71 real ones at the default seed (46 elementary — one per home district, 16 middle, 9 high), every kid enrolled at the nearest school of their age tier. 90% walk; the rest ride a <b>school-bus yellow</b> arc. Teachers hire in through the normal employment ladder, and a school's column lists staff and students.</li>
+    <li><b>Badge hovers</b>: the astrology and MBTI badges now explain themselves — hover Taurus and get "Immovable once settled; keeps the good chair and the grudge."</li>
+  </ul>
+  <figure>
+    <div class="muted" style="border:1px dashed var(--line);border-radius:12px;padding:18px;text-align:center">[ screenshot omitted from the repo copy to keep git history light — the full illustrated report lives locally at <code>samples/personas-report-full.html</code> and at the claude.ai artifact ]</div>
+    <figcaption>Side-by-side view after the polish pass: docked snug top-left with aligned headers, width capped by the settings drawer, per-card scrollbars inside the panels, and the MBTI badge showing its shadcn hover card (“ISFP · The Composer”).</figcaption>
+  </figure>
+  <figure>
+    <div class="muted" style="border:1px dashed var(--line);border-radius:12px;padding:18px;text-align:center">[ screenshot omitted from the repo copy to keep git history light — the full illustrated report lives locally at <code>samples/personas-report-full.html</code> and at the claude.ai artifact ]</div>
+    <figcaption>The 3D deck: earlier columns tilt away as clickable slivers. Behind the card, Teresa's amber drive-arc to work and the thin violet arcs to her people.</figcaption>
+  </figure>
+  <p class="muted">Retired in the process: BuildingInfoPanel and PersonaPanel (fully ported into the column bodies). Polish pass from your feedback: top-left alignment, width capped by the live settings-drawer width, horizontal scrollbar above the row with wheel panning, scrollbars fixed to render inside panels (a real bug in the base-ui ScrollArea wrapper — every long card was silently unscrollable), and trait badges upgraded to shadcn hover cards. All checks green: typecheck, lint, personaCheck 15/15, schools spot-check (100% enrollment).</p>
+</section>
+
+<section>
+  <h2>Round 4 — interconnection, follow mode, and the writing lab</h2>
+  <ul>
+    <li><b>Cone / Follow Locations</b>: a header toggle that frames everything the current card touches — a commuter's home + work + their connections' homes; a company's building + every employee's home (a school's cone is literally its catchment); a street's full run; a district's bounds. Fill-frame fit with an 85th-percentile radius so one cross-town outlier can't blow out the zoom; as a <i>follow mode</i> it re-frames on every hop through the columns.</li>
+    <li><b>Employment arcs</b>: building and company cards draw thin violet arcs workplace → each employee's home, so "why is the camera framing half the city" is answered on the skyline itself.</li>
+    <li><b>Deck refinements from live testing</b>: uniform tab slivers with fade masks, per-card perspective (tilt without drift or spill), height tween between tab and full card, two-row headers so long names wrap instead of cropping, stacked stat rows for long values, hover cards on the trait badges, 45°/33%-height focus framing on fly-tos.</li>
+    <li><b>/writing-lab</b>: the editorial workbench over every authored pool — ~50 pools, ~947 entries (story templates by life cluster, names, professions, place/business name pools, trait readings). Per entry: <b>author</b> (AI / Human / Edited — flips automatically when you touch AI text) and <b>status</b> (Draft → Review → Final, plus Cut, which strikes the line and drops it from export). Inline click-to-edit, filters, per-pool progress, and the ship path: "Copy Pool as TS" emits the edited array to paste over the source const — content ships through git, so determinism never depends on browser state. All 947 entries currently sit at AI/Draft, honestly labeled. A Lokalise-style design pass (collapsible sidebar IA, dropdown cells, resizable columns, global search) is in flight.</li>
+  </ul>
+  <figure>
+    <div class="muted" style="border:1px dashed var(--line);border-radius:12px;padding:18px;text-align:center">[ screenshot omitted from the repo copy to keep git history light — the full illustrated report lives locally at <code>samples/personas-report-full.html</code> and at the claude.ai artifact ]</div>
+    <figcaption>The writing lab, v1: every authored line in the system, reviewable and editable, with authorship and editorial status per entry. 947 entries, all honestly marked AI · Draft until a human says otherwise.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2>State of the branch</h2>
+  <p>Two branches, both uncommitted for your review (per the no-commit-without-signal rule): <code>feat/personas</code> at <code>C:\workspace\starry-night-personas</code> (dev server <b>localhost:7911</b>) and <code>feat/heli-splines</code> at <code>C:\workspace\starry-night-heli</code> (dev server <b>localhost:7912</b>, flip Debug &gt; Heli Routes to see the splines). <code>fable</code> was fast-forwarded to <code>dev</code> (c5e188a) first. Note for merge day: the new wiki notes were copied untracked into the main tree so Obsidian sees them — delete those copies before merging (the caveat is pinned in project memory). Wiki notes: <code>decision-persona-architecture</code>, <code>projects/personas</code>, two research digests, daily log — all tagged <code>#domain/procgen</code>.</p>
+  <p class="muted">Delegation per your note: research ×2 and the panel UI ran on Sonnet agents (diffs reviewed — the panel agent also caught a type bug of mine); the generator core, template writing, and integration stayed on Fable.</p>
+</section>
+
+<footer>
+  Starry Night · feat/personas overnight run · 2026-07-08 · report generated from live <code>personaCheck</code> output; nothing in the sample sheets is mocked.
+</footer>
+
+</div>

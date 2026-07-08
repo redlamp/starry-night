@@ -46,7 +46,10 @@ const PAN_EYE_REACH_MULT = 2.0; // how far past the ground disc the EYE may trav
 // multiple of the ground-disc radius — keeps the aim on the ground but lets the camera back out to
 // view the "snow globe" from outside
 const WHEEL_ZOOM_SPEED = 1.0; // GE/OrbitControls wheel curve: ~5% dolly per notch at speed 1
-const FOCUS_FIT_MARGIN = 1.25; // padding around a focused building's bounding sphere (1.0 = edges touch the frame)
+// Focused building's apparent size (user 2026-07-08): its bounding sphere
+// should span ~a third of the DISPLAY HEIGHT — a comfortable subject-in-scene
+// framing rather than filling the frame.
+const FOCUS_HEIGHT_FRACTION = 0.33;
 const FOCUS_MIN_DIST = 60 * CITY_SCALE; // don't dolly closer than this on focus (keeps small houses at a sane size)
 const FOCUS_SMOOTH_TIME = 0.18; // camera-controls smoothTime DURING a focus (< default 0.25 = snappier pan/dolly out)
 const ORTHO_FOCUS_DURATION = 0.6; // seconds for the ortho size ramp; > the pan settle so the zoom trails it
@@ -378,16 +381,29 @@ export function StarryNightV2Model() {
       if (!c || s.cameraMode !== "orbit") return;
       const pc = c.camera as THREE.PerspectiveCamera;
       const vFov = (pc.fov * DEG) / 2; // vertical half-fov
-      const hFov = Math.atan(Math.tan(vFov) * (pc.aspect || 1)); // horizontal half-fov
-      const halfFov = Math.max(1e-3, Math.min(vFov, hFov)); // the limiting one
-      const dist = Math.max((f.radius / Math.sin(halfFov)) * FOCUS_FIT_MARGIN, FOCUS_MIN_DIST);
+      // Two framings: "fill" fits the sphere to the limiting fov (the cone's
+      // multi-location sets should use the whole frame); the default frames
+      // it at FOCUS_HEIGHT_FRACTION of display height (single buildings).
+      const hFov = Math.atan(Math.tan(vFov) * (pc.aspect || 1));
+      const dist =
+        f.fit === "fill"
+          ? Math.max((f.radius / Math.sin(Math.max(1e-3, Math.min(vFov, hFov)))) * 1.08, FOCUS_MIN_DIST)
+          : Math.max(f.radius / (Math.max(1e-3, Math.tan(vFov)) * FOCUS_HEIGHT_FRACTION), FOCUS_MIN_DIST);
       // POSITION/rotation get a stronger ease-out: run this transition at a shorter
       // smoothTime so the pivot zeroes in decisively, then restore the default.
       // (camera-controls' smoothTime is global to transitions, so save/restore it.)
       if (baseSmoothTime.current === null) baseSmoothTime.current = c.smoothTime;
       const base = baseSmoothTime.current;
       c.smoothTime = FOCUS_SMOOTH_TIME;
-      void Promise.all([c.moveTo(f.x, f.y, f.z, true), c.dollyTo(dist, true)]).finally(() => {
+      // Elevated vantage (user 2026-07-08): settle at a 45-degree look-down on
+      // the target. Only the POLAR angle tweens - azimuth stays put, so this
+      // keeps the no-long-revolve guarantee documented above while still
+      // lifting the camera diagonally over the building.
+      void Promise.all([
+        c.moveTo(f.x, f.y, f.z, true),
+        c.dollyTo(dist, true),
+        c.rotateTo(c.azimuthAngle, Math.PI / 4, true),
+      ]).finally(() => {
         c.smoothTime = base;
       });
       // In ORTHO, apparent size is orthoSize (not distance), so dollyTo doesn't
@@ -399,8 +415,11 @@ export function StarryNightV2Model() {
       if (s.projection === "orthographic") {
         orthoFocusStart.current = s.orthoSize;
         orthoFocusT.current = 0;
+        // Ortho mirrors the two framings: fill -> sphere spans the frame
+        // (oeff = r, small margin); height -> the 33% rule (oeff = r/fraction).
         orthoFocusTarget.current = THREE.MathUtils.clamp(
-          (2 * f.radius) / orbitFramingFactor(pc.aspect || 1),
+          (f.fit === "fill" ? f.radius * 1.08 : f.radius / FOCUS_HEIGHT_FRACTION) /
+            orbitFramingFactor(pc.aspect || 1),
           ORTHO_SIZE_MIN,
           ORTHO_SIZE_MAX,
         );
