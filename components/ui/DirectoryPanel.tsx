@@ -19,6 +19,7 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 import { generateCity, type Building } from "@/lib/seed/cityGen";
 import type { Address } from "@/lib/seed/naming";
 import { buildPersonaDirectory, type Persona } from "@/lib/seed/personas";
@@ -135,6 +136,17 @@ export function DirectorySection() {
   const citySketch = useSceneStore((s) => s.citySketch);
   const pushColumn = useSceneStore((s) => s.pushColumn);
   const resetColumns = useSceneStore((s) => s.resetColumns);
+  // Whatever the columns currently show on top gets highlighted here
+  // (user 2026-07-08: "if something is selected, highlight it").
+  const columnPath = useSceneStore((s) => s.columnPath);
+  const columnCursor = useSceneStore((s) => s.columnCursor);
+  const topRef = columnCursor >= 0 ? columnPath[columnCursor] : undefined;
+  const isSelected = (kind: SearchKind, id: string) =>
+    topRef !== undefined &&
+    ((kind === "person" && topRef.kind === "persona" && topRef.id === id) ||
+      (kind === "street" && topRef.kind === "street" && topRef.id === id) ||
+      (kind === "company" && topRef.kind === "company" && topRef.id === id) ||
+      (kind === "building" && topRef.kind === "building" && String(topRef.id) === id));
   const setHoverDistrictId = useSceneStore((s) => s.setHoverDistrictId);
   const pinnedDistrictId = useSceneStore((s) => s.pinnedDistrictId);
   const setPinnedDistrictId = useSceneStore((s) => s.setPinnedDistrictId);
@@ -400,10 +412,16 @@ export function DirectorySection() {
                 key={`${entry.kind}:${entry.id}`}
                 type="button"
                 onClick={() => openResult(entry)}
-                className="hover:bg-foreground/10 -mx-1 flex items-center justify-between gap-2 rounded px-1 text-left text-sm"
+                className={cn(
+                  "hover:bg-foreground/10 -mx-1 flex items-center justify-between gap-2 rounded px-1 text-left text-sm",
+                  isSelected(entry.kind, entry.id) && "bg-primary/15",
+                )}
               >
                 <span className="min-w-0">
-                  <span className="block truncate">{entry.label}</span>
+                  {/* Named buildings read in italic (user 2026-07-08). */}
+                  <span className={cn("block truncate", entry.kind === "building" && "italic")}>
+                    {entry.label}
+                  </span>
                   {(entry.sub || entry.addr) && (
                     <span className="text-muted-foreground block truncate text-xs">
                       {entry.addr ? (
@@ -465,7 +483,10 @@ export function DirectorySection() {
                   the district border on the map; the pin makes it stick and
                   flies the camera to the district. */}
               <div
-                className="flex items-center"
+                className={cn(
+                  "flex items-center",
+                  topRef?.kind === "district" && topRef.id === d.id && "rounded-md bg-primary/15",
+                )}
                 onMouseEnter={() => setHoverDistrictId(d.id)}
                 onMouseLeave={() => setHoverDistrictId(null)}
               >
@@ -504,29 +525,27 @@ export function DirectorySection() {
               </div>
               <CollapsiblePanel>
                 <div className="flex flex-col gap-0.5 py-1 pl-2">
+                  {/* Building rows (user 2026-07-08): italic building name OR
+                      plain street name on the left; the address number right-
+                      aligned, then a gap, then the household count. */}
                   {d.buildings.map((b) => (
                     <button
                       key={b.buildingId}
                       type="button"
                       onClick={() => goToBuilding(b.buildingId)}
-                      className="hover:bg-foreground/10 -mx-1 flex items-center justify-between gap-2 rounded px-1 text-left text-sm"
+                      className={cn(
+                        "hover:bg-foreground/10 -mx-1 flex items-baseline justify-between gap-2 rounded px-1 text-left text-sm",
+                        isSelected("building", String(b.buildingId)) && "bg-primary/15",
+                      )}
                     >
-                      <span className="truncate">
-                        {b.name ??
-                          (b.address ? (
-                            <>
-                              <AddrNum
-                                n={b.address.number}
-                                width={directory.names.maxAddressDigits}
-                              />{" "}
-                              {b.address.street}
-                            </>
-                          ) : (
-                            `Building #${b.buildingId}`
-                          ))}
+                      <span className={cn("min-w-0 truncate", b.name && "italic")}>
+                        {b.name ?? b.address?.street ?? `Building #${b.buildingId}`}
                       </span>
-                      <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
-                        {b.householdCount} hh
+                      <span className="text-muted-foreground flex shrink-0 items-baseline gap-3 text-xs">
+                        {b.address && (
+                          <AddrNum n={b.address.number} width={directory.names.maxAddressDigits} />
+                        )}
+                        <span className="inline-block w-9 text-right">{b.householdCount} hh</span>
                       </span>
                     </button>
                   ))}
