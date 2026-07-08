@@ -252,6 +252,31 @@ export function EntityColumns() {
     return () => window.removeEventListener("keydown", onKey);
   }, [open, closeColumns]);
 
+  // ←/→ walk the stack (user 2026-07-08) — the same moves as the header
+  // chevrons. Inert while typing or while any dialog is up (family tree,
+  // tutorial), so arrows there keep their native meaning.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      if (document.querySelector('[data-slot="dialog-popup"]')) return;
+      const st = useSceneStore.getState();
+      if (e.key === "ArrowLeft") {
+        if (st.columnCursor > 0) {
+          e.preventDefault();
+          st.columnBack();
+        }
+      } else if (st.columnCursor < st.columnPath.length - 1) {
+        e.preventDefault();
+        st.columnForward();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+
   // The row can outgrow its slot — keep the newest column in view, and let
   // the mouse wheel pan the row horizontally while hovering it (native
   // listener: React's onWheel can't preventDefault reliably).

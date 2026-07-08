@@ -170,12 +170,16 @@ export type PersonaDirectory = {
 
 // --- Tuning ---------------------------------------------------------------------
 
-// People-equivalent → featured households: one household per ~40 population,
-// capped so towers don't become phone books. A global soft cap rescales in
-// huge extent tiers so the directory stays a few thousand personas.
-const POP_PER_HOUSEHOLD = 40;
-const MAX_HOUSEHOLDS_PER_BUILDING = 6;
-const TARGET_MAX_PERSONAS = 4000;
+// People-equivalent → featured households: one household per ~22 population,
+// capped so towers don't become phone books. Retuned 2026-07-08 (user: "too
+// many residential buildings only have 1 household") — at the 6 km tier this
+// yields ~17k households / ~41k personas: cottages stay single-family, most
+// mid-rises host 2-4, towers 5-8. The global soft cap only bites at bigger
+// extent tiers now (the old 4000 target was silently defeated by the
+// max(1, ...) floor anyway — every building collapsed to exactly 1).
+const POP_PER_HOUSEHOLD = 22;
+const MAX_HOUSEHOLDS_PER_BUILDING = 8;
+const TARGET_MAX_PERSONAS = 42000;
 
 // Residential capacity by archetype — mirrors population.ts's occupancy story.
 const RESIDENTIAL_ARCHETYPES: ReadonlySet<Archetype> = new Set([
@@ -1031,7 +1035,13 @@ function buildDirectoryImpl(
         // rather than crash on an empty pool.
         pool = freeInPool.length > 0 ? freeInPool : freeAnywhere.length > 0 ? freeAnywhere : pool;
       }
-      const biz = pool[Math.floor(rng() * pool.length)];
+      // Spread hires: within the chosen tier, staff the LEAST-staffed
+      // businesses first (user 2026-07-08: "lots of companies have 0 staff")
+      // — every business fills to 1 before any gets its 2nd, and so on.
+      let minStaff = Infinity;
+      for (const c of pool) minStaff = Math.min(minStaff, c.employeeIds.length);
+      const leastStaffed = pool.filter((c) => c.employeeIds.length === minStaff);
+      const biz = leastStaffed[Math.floor(rng() * leastStaffed.length)];
       if (singleton) singletonFilled.add(`${biz.id}::${title}`);
       p.businessId = biz.id;
       biz.employeeIds.push(p.id);
