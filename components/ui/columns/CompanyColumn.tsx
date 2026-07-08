@@ -59,6 +59,22 @@ export function CompanyColumn({ id, part }: { id: string; part: "pinned" | "rest
             {biz.employeeIds.map((pid) => {
               const persona = indexes.directory.personas.get(pid);
               if (!persona) return null;
+              const title = persona.profession?.title ?? persona.workStatus;
+              // Long name+title pairs stack to two lines instead of
+              // truncating against each other (user 2026-07-08).
+              if (persona.fullName.length + title.length > 32) {
+                return (
+                  <button
+                    key={pid}
+                    type="button"
+                    onClick={() => push({ kind: "persona", id: pid })}
+                    className="-mx-1 flex flex-col rounded px-1 text-left text-sm hover:bg-foreground/10"
+                  >
+                    <span className="truncate">{persona.fullName}</span>
+                    <span className="text-muted-foreground truncate text-xs">{title}</span>
+                  </button>
+                );
+              }
               return (
                 <button
                   key={pid}
@@ -68,7 +84,7 @@ export function CompanyColumn({ id, part }: { id: string; part: "pinned" | "rest
                 >
                   <span className="truncate">{persona.fullName}</span>
                   <span className="max-w-[9rem] shrink-0 truncate text-right text-muted-foreground">
-                    {persona.profession?.title ?? persona.workStatus}
+                    {title}
                   </span>
                 </button>
               );
@@ -81,7 +97,10 @@ export function CompanyColumn({ id, part }: { id: string; part: "pinned" | "rest
         <>
           <Separator />
           <div className="flex flex-col gap-0.5">
-            <div className="text-sm font-medium">Students</div>
+            <div className="flex items-baseline justify-between">
+              <div className="text-sm font-medium">Students</div>
+              <span className="text-muted-foreground text-[11px] tracking-wide uppercase">Age</span>
+            </div>
             {(allStudents ? students : students.slice(0, STUDENT_CAP)).map((pid) => {
               const persona = indexes.directory.personas.get(pid);
               if (!persona) return null;

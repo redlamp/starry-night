@@ -119,8 +119,9 @@ export function BuildingColumn({ id, part }: { id: number; part: "pinned" | "res
 
         {households.length > 0 && (
           <div className="flex flex-col gap-1.5">
-            <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
-              Residents
+            <div className="flex items-baseline justify-between text-[11px] uppercase tracking-wide text-muted-foreground">
+              <span>Residents</span>
+              <span>Age</span>
             </div>
             {households.map((hh) => (
               <div key={`${hh.buildingId}:${hh.index}`} className="flex flex-col gap-0.5">
