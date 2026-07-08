@@ -989,6 +989,14 @@ function buildDirectoryImpl(
       list.push(biz);
       byKind.set(biz.kind, list);
     }
+    // One-of-a-kind roles (user 2026-07-08: "only need 1 principal of a
+    // school"): a business takes at most ONE hire with these titles; when
+    // every candidate already has one, the extra hire teaches instead.
+    const SINGLETON_TITLES = new Set(["School Principal"]);
+    const singletonFilled = new Set<string>(); // `${businessId}::${title}`
+    const teacherFallback = PROFESSIONS.find(
+      (x) => x.title === "High School Teacher" && x.workplaceType === "school",
+    );
     // Stable worker order: persona insertion order is already building-ascending.
     for (const p of personas.values()) {
       if (p.workStatus !== "employed" || !p.profession) continue;
@@ -997,17 +1005,34 @@ function buildDirectoryImpl(
         p.workStatus = "commutes out of the city";
         continue;
       }
+      if (
+        SINGLETON_TITLES.has(p.profession.title) &&
+        teacherFallback &&
+        candidates.every((c) => singletonFilled.has(`${c.id}::${p.profession!.title}`))
+      ) {
+        p.profession = teacherFallback;
+      }
       // Preference ladder: exact title match ("{F} Dental" wants dentists) >
       // category match (bellhops to the hotel, paralegals to the law firm) >
       // unmarked businesses > anything with the right workplace kind.
       const category = p.profession.category;
       const title = p.profession.title;
+      const singleton = SINGLETON_TITLES.has(title);
+      const slotOpen = (c: Business) => !singletonFilled.has(`${c.id}::${title}`);
       const byTitle = candidates.filter((c) => c.titleAffinity?.includes(title));
       const byCategory = candidates.filter((c) => c.affinity?.includes(category) && !c.titleAffinity);
       const open = candidates.filter((c) => !c.affinity && !c.titleAffinity);
-      const pool =
+      let pool =
         byTitle.length > 0 ? byTitle : byCategory.length > 0 ? byCategory : open.length > 0 ? open : candidates;
+      if (singleton) {
+        const freeInPool = pool.filter(slotOpen);
+        const freeAnywhere = candidates.filter(slotOpen);
+        // Every slot taken AND no teacher fallback — tolerate the duplicate
+        // rather than crash on an empty pool.
+        pool = freeInPool.length > 0 ? freeInPool : freeAnywhere.length > 0 ? freeAnywhere : pool;
+      }
       const biz = pool[Math.floor(rng() * pool.length)];
+      if (singleton) singletonFilled.add(`${biz.id}::${title}`);
       p.businessId = biz.id;
       biz.employeeIds.push(p.id);
     }
