@@ -125,9 +125,15 @@ export function BuildingColumn({ id, part }: { id: number; part: "pinned" | "res
             </div>
             {households.map((hh) => (
               <div key={`${hh.buildingId}:${hh.index}`} className="flex flex-col gap-0.5">
-                <div className="text-sm font-medium">
-                  {hh.label}
-                  {hh.unit && <span className="text-muted-foreground"> · Unit {hh.unit}</span>}
+                {/* Unit right-aligned in the row, like the ages column
+                    (user 2026-07-08). */}
+                <div className="flex items-baseline justify-between gap-2 text-sm font-medium">
+                  <span className="truncate">{hh.label}</span>
+                  {hh.unit && (
+                    <span className="text-muted-foreground shrink-0 text-xs font-normal">
+                      Unit {hh.unit}
+                    </span>
+                  )}
                 </div>
                 <div className="flex flex-col gap-0.5 pl-1">
                   {hh.memberIds.map((pid) => {

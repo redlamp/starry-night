@@ -491,22 +491,33 @@ export function FamilyTree({ personaId, indexes }: { personaId: string; indexes:
                   doesn't resize the panel — only genuinely big charts grow
                   (user 2026-07-08). */}
               <div className="relative flex max-h-[85vh] min-h-[26rem] w-fit min-w-[36rem] max-w-[calc(96vw-19.5rem)] flex-col overflow-auto rounded-xl border border-border bg-popover/95 p-4 text-popover-foreground shadow-lg backdrop-blur-md tabular-nums">
-                <DialogClose aria-label="Close family tree">
-                  <X className="size-4" />
-                </DialogClose>
-                <DialogTitle className="flex items-center justify-between gap-2 pr-8 text-sm font-medium text-foreground">
-                  <span>The {focus.familyName} Family</span>
-                  {origin && focus.id !== origin.id && (
-                    <button
-                      type="button"
-                      onClick={() => setFocusId(origin.id)}
-                      className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs font-normal"
-                    >
-                      Back to {origin.givenName}
-                      <Undo2 className="size-3.5" aria-hidden />
-                    </button>
-                  )}
-                </DialogTitle>
+                {/* One header row — title left; back control + X share the
+                    right cluster so they align on the same vertical center
+                    (user 2026-07-08: the absolute X sat off the title line). */}
+                <div className="flex items-center justify-between gap-3">
+                  <DialogTitle className="text-sm font-medium text-foreground">
+                    The {focus.familyName} Family
+                  </DialogTitle>
+                  <div className="flex items-center gap-2">
+                    {/* Always visible (user 2026-07-08) — the anchor reads
+                        even before re-rooting; disabled while the focus IS
+                        the entry person. */}
+                    {origin && (
+                      <button
+                        type="button"
+                        onClick={() => setFocusId(origin.id)}
+                        disabled={focus.id === origin.id}
+                        className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs font-normal disabled:cursor-default disabled:opacity-45 disabled:hover:text-muted-foreground"
+                      >
+                        Back to {origin.givenName}
+                        <Undo2 className="size-3.5" aria-hidden />
+                      </button>
+                    )}
+                    <DialogClose className="static" aria-label="Close family tree">
+                      <X className="size-4" />
+                    </DialogClose>
+                  </div>
+                </div>
                 <FamilyChart
                   chart={chart}
                   focusId={focus.id}
