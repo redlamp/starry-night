@@ -44,12 +44,16 @@ const ROLE_KIND = [0, 1, 1, 2]; // 0 beacon, 1 nav, 2 strobe
 const ROLE_SIDE = [0, -1, 1, 0];
 const VERTS_PER_LEG = ROLE_KIND.length;
 
-// Debug spawn pool (mirrors Flights.tsx): a fixed reserve of instances riding
-// ONE representative route — the seed's first helicopter's own leg sequence —
-// parked invisible until a Debug-panel click rewrites one's phase to "start
-// now". Smaller than Flights' 24-per-class pool: helicopters are a rarer,
-// closer-range detail, and each pool instance already costs a whole
-// multi-leg loop (2-4x the vertices of one Flights debug plane).
+// Debug spawn pool (mirrors Flights.tsx): a fixed reserve of instances, each
+// parked invisible until a Debug-panel click rewrites its phase to "start
+// now". #89 follow-up (user feedback, 2026-07-08): every slot used to ride a
+// copy of helicopter 0's own route, so every debug spawn looked identical —
+// now slot i rides data.helicopters[i % data.helicopters.length].legs, so
+// spawns cycle through DEBUG_POOL_SIZE different routes (wrapping once the
+// pool outgrows AMBIENT_HELI_POOL). Smaller than Flights' 24-per-class pool:
+// helicopters are a rarer, closer-range detail, and each pool instance
+// already costs a whole multi-leg loop (2-4x the vertices of one Flights
+// debug plane).
 const DEBUG_POOL_SIZE = 12;
 // Any phase that keeps uTime/cycleSec+phase (aClock.y/aClock.x) comfortably
 // above 1 from boot, so a not-yet-launched pool instance reads as "parked"
@@ -72,17 +76,24 @@ export function Helicopters({ masterSeed }: { masterSeed: string }) {
     geometry,
     material,
     debugBase,
-    debugLegCount,
+    debugLegCounts,
     ambientCount,
     ambientHeliBounds,
     ambientIntensityX,
   } = useMemo(() => {
     void citySize; // tier drives the module-level gen extent (#58) — a switch must rebuild
     const data = buildHelicopters(masterSeed, cityShape, cityShapeScale);
-    const rep = data.helicopters[0];
-    const repLegCount = rep.legs.length;
     const totalAmbientLegs = data.helicopters.reduce((sum, h) => sum + h.legs.length, 0);
-    const n = (totalAmbientLegs + DEBUG_POOL_SIZE * repLegCount) * VERTS_PER_LEG;
+    // Each debug pool slot rides its OWN route (#89 follow-up) — slot i takes
+    // data.helicopters[i % data.helicopters.length].legs — rather than every
+    // slot parking a copy of helicopter 0's route, so spawns actually vary.
+    const debugRoutes = Array.from(
+      { length: DEBUG_POOL_SIZE },
+      (_, i) => data.helicopters[i % data.helicopters.length],
+    );
+    const debugLegCounts = debugRoutes.map((h) => h.legs.length);
+    const totalDebugLegs = debugLegCounts.reduce((sum, cnt) => sum + cnt, 0);
+    const n = (totalAmbientLegs + totalDebugLegs) * VERTS_PER_LEG;
 
     const position = new Float32Array(n * 3);
     const aA = new Float32Array(n * 3);
@@ -169,14 +180,16 @@ export function Helicopters({ masterSeed }: { masterSeed: string }) {
 
     // Debug spawn reserve — a POOL of instances, all parked invisible
     // (DEBUG_PARKED_PHASE) until a Debug-panel trigger rewrites one's phase
-    // (see the effect below). Each pool instance rides the SAME representative
-    // route (data.helicopters[0]'s own legs) — debugBase[i] is the vertex
-    // offset of pool instance i's FIRST leg's FIRST vertex.
+    // (see the effect below). #89 follow-up: slot i rides its OWN route
+    // (debugRoutes[i] = data.helicopters[i % data.helicopters.length].legs),
+    // not a shared representative one, so spawns actually vary — debugBase[i]
+    // is the vertex offset of pool instance i's FIRST leg's FIRST vertex.
     const debugBase: number[] = [];
     for (let i = 0; i < DEBUG_POOL_SIZE; i++) {
       debugBase.push(c);
-      for (const leg of rep.legs) {
-        writeLeg(leg, DEBUG_PARKED_PHASE, rep.cycleSec, leg.winStart, leg.winEnd, 1);
+      const route = debugRoutes[i];
+      for (const leg of route.legs) {
+        writeLeg(leg, DEBUG_PARKED_PHASE, route.cycleSec, leg.winStart, leg.winEnd, 1);
       }
     }
 
@@ -213,7 +226,7 @@ export function Helicopters({ masterSeed }: { masterSeed: string }) {
       geometry: geo,
       material: mat,
       debugBase,
-      debugLegCount: repLegCount,
+      debugLegCounts,
       ambientCount: data.helicopters.length,
       ambientHeliBounds,
       ambientIntensityX,
@@ -258,7 +271,7 @@ export function Helicopters({ masterSeed }: { masterSeed: string }) {
     const slot = (heliSpawn - 1) % DEBUG_POOL_SIZE;
     const base = debugBase[slot];
     const phase = -sharedTime.value / aClock.getY(base);
-    const count = debugLegCount * VERTS_PER_LEG;
+    const count = debugLegCounts[slot] * VERTS_PER_LEG;
     for (let i = 0; i < count; i++) aClock.setX(base + i, phase);
     aClock.needsUpdate = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
