@@ -1,4 +1,5 @@
 import seedrandom from "seedrandom";
+import * as THREE from "three";
 import { generateCity, type Building } from "./cityGen";
 import { CITY_CENTER, maxHalfExtent } from "./topology";
 import type { CityShapeSetting } from "./cityShape";
@@ -46,8 +47,20 @@ import type { CityShapeSetting } from "./cityShape";
 // (2) most arrivals get a small ORBIT circling the pad — "examining the
 // area" — before the existing hover hold. Because the loop is closed, the
 // final hop's orbit is around stops[0] itself — the helicopter circles its
-// OWN base before settling, i.e. "landing back at base". See buildArcPoints /
+// OWN base before settling, i.e. "landing back at base". See
 // buildOrbitPoints / buildHelicopter below.
+//
+// #89 v3 (issue follow-up, 2026-07-08): the v2 per-hop quadratic bows were
+// sampled at only 4 chords and met each stop at a hard C0 corner, so up close
+// the tour still read as line segments. v3 threads ONE closed centripetal
+// Catmull-Rom spline through the whole tour — control points are the stops
+// plus the v2-style seeded bow midpoints — and samples each hop at
+// SPLINE_SAMPLES_PER_HOP sub-legs, so curvature is continuous through every
+// stop (no corners; a "straight" hop still eases in/out of its neighbours).
+// Altitude gets a seeded climb-out/descend bump per hop (helicopters climb
+// between rooftops, they don't ride a linear ramp). Still nothing but plain
+// transit legs: the leg schema, the shader, and the dir carry-forward are
+// all untouched — there are simply more, shorter sub-legs.
 //
 // Journey-window technique (mirrors Traffic's minor-tier journeys,
 // lib/seed/traffic.ts + lib/shaders/traffic.ts): the whole closed loop is
@@ -113,15 +126,23 @@ const HOVER_SKIP_PROB = 0.3;
 const HOVER_DURATION_MIN_SEC = 15;
 const HOVER_DURATION_MAX_SEC = 45;
 
-// #89 v2: curved hops instead of one straight shot per stop-to-stop leg — a
-// seeded quadratic-bezier bow, sampled at ARC_SEGMENTS straight sub-legs
-// (still plain "transit" legs, see the file header). A minority of hops
-// (ARC_STRAIGHT_PROB) stay a direct reposition — real patrol traffic isn't
-// ALWAYS sightseeing.
-const ARC_SEGMENTS = 4;
+// #89 v3: hops are sampled off one closed Catmull-Rom spline through the
+// whole tour (see the file-header v3 block). The bow knobs keep their v2
+// meaning — they now shape the spline's mid-hop CONTROL POINT instead of a
+// standalone bezier — and a minority of hops (ARC_STRAIGHT_PROB) contribute
+// no bow control at all (the spline still rounds them off at the stops).
+const SPLINE_SAMPLES_PER_HOP = 10;
 const ARC_STRAIGHT_PROB = 0.15;
 const ARC_BOW_MIN_FRAC = 0.12; // lateral bow, as a fraction of the hop's length
 const ARC_BOW_MAX_FRAC = 0.32;
+
+// #89 v3: per-hop climb-out/descend bump — the mid-hop altitude gain over a
+// straight roof-to-roof ramp. Short repositioning hops barely climb; a
+// cross-city leg gets real air under it (capped so nothing punches the fog).
+const CLIMB_MIN_M = 12;
+const CLIMB_MAX_M = 35;
+const CLIMB_LEN_FRAC = 0.045; // + this fraction of the hop's ground length…
+const CLIMB_LEN_CAP_M = 60; // …capped here
 
 // #89 v2: a small circle traced around a stop before the hover hold —
 // "examining the area" rather than beelining in and parking. Radius is
@@ -228,40 +249,83 @@ function headingXZ(a: Waypoint, b: Waypoint): [number, number, number] {
   return [dx / len, 0, dz / len];
 }
 
-// #89 v2 — ordered points from `a` to `b` (inclusive of both ends) tracing a
-// quadratic-bezier arc via a seeded lateral control point, sampled at
-// ARC_SEGMENTS straight sub-legs. The bezier endpoint property means pts[0]
-// === a and pts[last] === b exactly, so this composes cleanly with whatever
-// precedes/follows. Degenerates to the plain 2-point `[a, b]` hop — no curve
-// — for a zero-length hop (can't build a perpendicular) or the seeded
-// ARC_STRAIGHT_PROB roll.
-function buildArcPoints(rng: () => number, a: Waypoint, b: Waypoint): Waypoint[] {
-  const dx = b.x - a.x;
-  const dz = b.z - a.z;
-  const hopLen = Math.hypot(dx, dz);
-  if (hopLen < 1e-3 || rng() < ARC_STRAIGHT_PROB) return [a, b];
+// #89 v3 — the whole tour as one closed centripetal Catmull-Rom spline.
+// Control points are every stop (the curve interpolates its controls, so the
+// path passes EXACTLY through each stop) plus, per hop, the v2-style seeded
+// lateral bow midpoint (a minority of hops roll "straight" and contribute
+// none). Returns the curve plus each stop's control index, from which
+// buildHelicopter maps hop i to the parameter span [idx(i)/M, idx(i+1)/M].
+function buildTourSpline(
+  rng: () => number,
+  stops: Waypoint[],
+): { curve: THREE.CatmullRomCurve3; stopCtrl: number[]; controlCount: number } {
+  const controls: THREE.Vector3[] = [];
+  const stopCtrl: number[] = [];
+  for (let i = 0; i < stops.length; i++) {
+    const a = stops[i];
+    const b = stops[(i + 1) % stops.length];
+    stopCtrl.push(controls.length);
+    controls.push(new THREE.Vector3(a.x, a.y, a.z));
 
-  const nx = -dz / hopLen; // horizontal perpendicular, unit
-  const nz = dx / hopLen;
-  const side = rng() < 0.5 ? 1 : -1;
-  const bow = hopLen * (ARC_BOW_MIN_FRAC + rng() * (ARC_BOW_MAX_FRAC - ARC_BOW_MIN_FRAC)) * side;
-  const cx = (a.x + b.x) / 2 + nx * bow;
-  const cy = (a.y + b.y) / 2;
-  const cz = (a.z + b.z) / 2 + nz * bow;
+    const dx = b.x - a.x;
+    const dz = b.z - a.z;
+    const hopLen = Math.hypot(dx, dz);
+    if (hopLen < 1e-3 || rng() < ARC_STRAIGHT_PROB) continue;
+    const nx = -dz / hopLen; // horizontal perpendicular, unit
+    const nz = dx / hopLen;
+    const side = rng() < 0.5 ? 1 : -1;
+    const bow = hopLen * (ARC_BOW_MIN_FRAC + rng() * (ARC_BOW_MAX_FRAC - ARC_BOW_MIN_FRAC)) * side;
+    controls.push(
+      new THREE.Vector3(
+        (a.x + b.x) / 2 + nx * bow,
+        (a.y + b.y) / 2,
+        (a.z + b.z) / 2 + nz * bow,
+      ),
+    );
+  }
+  return {
+    curve: new THREE.CatmullRomCurve3(controls, true, "centripetal", 0.5),
+    stopCtrl,
+    controlCount: controls.length,
+  };
+}
+
+// Sample hop i off the tour spline into SPLINE_SAMPLES_PER_HOP sub-legs, with
+// a seeded climb-out/descend altitude bump replacing the spline's own (bow-
+// midpoint-averaged) Y. Endpoints are snapped to the exact stop coordinates
+// so the following orbit/hover legs' aA===aB equality stays exact.
+function sampleHopPoints(
+  rng: () => number,
+  tour: { curve: THREE.CatmullRomCurve3; stopCtrl: number[]; controlCount: number },
+  stops: Waypoint[],
+  hop: number,
+): Waypoint[] {
+  const a = stops[hop];
+  const b = stops[(hop + 1) % stops.length];
+  const c0 = tour.stopCtrl[hop];
+  const c1 = hop + 1 < stops.length ? tour.stopCtrl[hop + 1] : tour.controlCount;
+  const t0 = c0 / tour.controlCount;
+  const t1 = c1 / tour.controlCount;
+  const hopLen = Math.hypot(b.x - a.x, b.z - a.z);
+  const climb =
+    CLIMB_MIN_M +
+    rng() * (CLIMB_MAX_M - CLIMB_MIN_M) +
+    Math.min(CLIMB_LEN_CAP_M, hopLen * CLIMB_LEN_FRAC);
 
   const pts: Waypoint[] = [];
-  for (let s = 0; s <= ARC_SEGMENTS; s++) {
-    const t = s / ARC_SEGMENTS;
-    const it = 1 - t;
-    const w0 = it * it;
-    const w1 = 2 * it * t;
-    const w2 = t * t;
+  const v = new THREE.Vector3();
+  for (let s = 0; s <= SPLINE_SAMPLES_PER_HOP; s++) {
+    const f = s / SPLINE_SAMPLES_PER_HOP;
+    // Closed-curve param wraps at 1 (getPoint(1) === getPoint(0) === stop 0).
+    tour.curve.getPoint(t0 + (t1 - t0) * f, v);
     pts.push({
-      x: w0 * a.x + w1 * cx + w2 * b.x,
-      y: w0 * a.y + w1 * cy + w2 * b.y,
-      z: w0 * a.z + w1 * cz + w2 * b.z,
+      x: v.x,
+      y: a.y + (b.y - a.y) * f + climb * 4 * f * (1 - f),
+      z: v.z,
     });
   }
+  pts[0] = { ...a };
+  pts[pts.length - 1] = { ...b };
   return pts;
 }
 
@@ -306,12 +370,13 @@ function buildHelicopter(rng: () => number, pool: Waypoint[]): Helicopter {
   };
   // Always start with a transit leg (stop 0 -> stop 1, ..., wrapping stop
   // n-1 -> stop 0) so every hover leg already has a preceding transit to
-  // carry `dir` forward from — see the file header gotcha. #89 v2: each hop
-  // is now an ARC (buildArcPoints) rather than one straight shot, and most
-  // arrivals get an ORBIT (buildOrbitPoints) before the hover — see the v2
-  // block comment near the top of the file. Both are just more transit legs,
+  // carry `dir` forward from — see the file header gotcha. #89 v3: each hop
+  // is sampled off the ONE closed tour spline (buildTourSpline — curvature is
+  // continuous through every stop), and most arrivals still get an ORBIT
+  // (buildOrbitPoints) before the hover. All of it is just more transit legs,
   // so `dir` carries forward exactly as before (from whichever transit sub-
   // leg most recently ran).
+  const tour = buildTourSpline(rng, stops);
   const raw: RawLeg[] = [];
   let carriedDir: [number, number, number] = [0, 0, 1];
   const pushTransit = (a: Waypoint, b: Waypoint) => {
@@ -320,10 +385,9 @@ function buildHelicopter(rng: () => number, pool: Waypoint[]): Helicopter {
     raw.push({ aA: a, aB: b, dir, kind: "transit", durationSec: dist3(a, b) / speed });
   };
   for (let i = 0; i < stops.length; i++) {
-    const a = stops[i];
     const b = stops[(i + 1) % stops.length];
 
-    const arcPts = buildArcPoints(rng, a, b);
+    const arcPts = sampleHopPoints(rng, tour, stops, i);
     for (let s = 0; s < arcPts.length - 1; s++) pushTransit(arcPts[s], arcPts[s + 1]);
 
     const skipHover = rng() < HOVER_SKIP_PROB;
