@@ -1,7 +1,22 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Briefcase, Home } from "lucide-react";
+import {
+  Bike,
+  Briefcase,
+  Bus,
+  Car,
+  Flower2,
+  Footprints,
+  GraduationCap,
+  Heart,
+  HeartCrack,
+  HeartHandshake,
+  Home,
+  TrainFront,
+  User,
+  type LucideIcon,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { HoverCard, HoverCardTrigger, HoverCardContent } from "@/components/ui/hover-card";
@@ -15,7 +30,7 @@ import {
   CHINESE_ELEMENT_TRAITS,
   MBTI_DESCRIPTIONS,
 } from "@/lib/seed/personaData";
-import { personaFlavor, type CommuteMode } from "@/lib/seed/personas";
+import { personaFlavor, type CommuteMode, type RelationshipStatus } from "@/lib/seed/personas";
 import { ensureBuildingStories } from "@/lib/seed/personaStory";
 import { COMMUTE_COLORS } from "@/components/scene/CommuteArc";
 import { useEntityIndexes } from "./entityData";
@@ -36,6 +51,26 @@ const COMMUTE_LABELS: Record<CommuteMode, string> = {
   transit: "Rides transit",
   drive: "Drives",
   bus: "Rides the school bus",
+};
+
+// Mode icons tinted in the ARC colour (user 2026-07-10) — the icon replaces
+// the old colour dot, so the card and the skyline arc share one legend.
+const COMMUTE_ICONS: Record<CommuteMode, LucideIcon> = {
+  walk: Footprints,
+  cycle: Bike,
+  transit: TrainFront,
+  drive: Car,
+  bus: Bus,
+};
+
+// Relationship-status glyphs (user 2026-07-10) — heart family where it fits,
+// a memorial flower for widowed rather than a struck-out heart.
+const RELATIONSHIP_ICONS: Record<RelationshipStatus, LucideIcon> = {
+  single: User,
+  dating: Heart,
+  married: HeartHandshake,
+  widowed: Flower2,
+  divorced: HeartCrack,
 };
 
 const MONTHS = [
@@ -96,8 +131,9 @@ function SplitStat({
     <div className="flex flex-col gap-0.5 text-sm">
       <div className="flex items-center justify-between gap-4">
         <span className="flex shrink-0 items-center gap-1.5 text-muted-foreground">
-          {label}
+          {/* Icon leads the label (user 2026-07-10). */}
           {action}
+          {label}
         </span>
         <span className="min-w-0 truncate text-right font-medium">{top}</span>
       </div>
@@ -167,11 +203,41 @@ export function PersonaColumn({
     ? `${workAddress.number} ${workAddress.street}`
     : undefined;
 
-  const goTo = (buildingId: number) => {
+  // Camera-only (user 2026-07-10): the row buttons FLY to the building
+  // without selecting it — the address text beside them is the click target
+  // that pushes the building column.
+  const flyTo = (buildingId: number) => {
     const building = indexes.buildingById.get(buildingId);
     if (building) focusBuilding(building);
-    push({ kind: "building", id: buildingId });
   };
+
+  // Alma mater (user 2026-07-10): derived, never stored — an adult who was in
+  // the city through their teens "attended" the nearest high school by the
+  // SAME pure-distance rule the enrollment pass uses for current kids. No rng
+  // draws, so no re-roll; the nearest-to-current-home approximation is the
+  // fiction's price for retroactive alumni. Current students link their real
+  // school instead.
+  let almaMater = school;
+  if (
+    !almaMater &&
+    persona.age >= 18 &&
+    (persona.bornHere || persona.yearsInCity >= persona.age - 17)
+  ) {
+    const home = indexes.buildingById.get(persona.homeBuildingId);
+    if (home) {
+      let bestD = Infinity;
+      for (const biz of indexes.directory.businesses.values()) {
+        if (biz.schoolTier !== "high") continue;
+        const site = indexes.buildingById.get(biz.buildingId);
+        if (!site) continue;
+        const d = Math.hypot(site.x - home.x, site.z - home.z);
+        if (d < bestD) {
+          bestD = d;
+          almaMater = biz;
+        }
+      }
+    }
+  }
 
   // Rows whose text can outgrow a shared line stack to two lines instead
   // (label above, value below) — the threshold is roughly what fits beside a
@@ -331,39 +397,49 @@ export function PersonaColumn({
             )
           }
         />
-        {persona.commute && (
-          <ColumnStat
-            label="Commute"
-            stack={
-              (persona.commute.mode === "transit"
-                ? `Rides the ${indexes.names.city.transitLine}`
-                : COMMUTE_LABELS[persona.commute.mode]
-              ).length +
-                8 >
-              STACK_AT
-            }
-            value={
-              <span className="inline-flex items-center gap-1.5">
-                <span
-                  className="inline-block size-2 rounded-full"
-                  style={{ background: COMMUTE_COLORS[persona.commute.mode] }}
-                  aria-hidden
-                />
-                {persona.commute.mode === "transit"
-                  ? `Rides ${transitLineFor(persona.id, indexes)}`
-                  : COMMUTE_LABELS[persona.commute.mode]}{" "}
-                ·{" "}
-                {persona.commute.distance >= 1000
-                  ? `${(persona.commute.distance / 1000).toFixed(1)} km`
-                  : `${persona.commute.distance} m`}
-              </span>
-            }
-          />
-        )}
-        <ColumnStat
+        {persona.commute &&
+          (() => {
+            const CommuteIcon = COMMUTE_ICONS[persona.commute.mode];
+            return (
+              <SplitStat
+                label="Commute"
+                top={
+                  persona.commute.distance >= 1000
+                    ? `${(persona.commute.distance / 1000).toFixed(1)} km`
+                    : `${persona.commute.distance} m`
+                }
+                bottom={
+                  <span className="inline-flex items-center gap-1.5">
+                    {/* Mode icon in the ARC colour — replaces the colour dot
+                        (user 2026-07-10). */}
+                    <CommuteIcon
+                      className="size-3.5 shrink-0"
+                      style={{ color: COMMUTE_COLORS[persona.commute.mode] }}
+                      aria-hidden
+                    />
+                    {persona.commute.mode === "transit"
+                      ? `Rides ${transitLineFor(persona.id, indexes)}`
+                      : COMMUTE_LABELS[persona.commute.mode]}
+                  </span>
+                }
+              />
+            );
+          })()}
+        <SplitStat
           label="Education"
-          stack={(persona.educationDetail ?? persona.education).length > STACK_AT}
-          value={persona.educationDetail ?? persona.education}
+          action={<GraduationCap className="size-3.5 shrink-0" aria-hidden />}
+          top={persona.educationDetail ?? persona.education}
+          bottom={
+            almaMater && (
+              <button
+                type="button"
+                onClick={() => push({ kind: "company", id: almaMater.id })}
+                className="hover:underline"
+              >
+                {almaMater.name}
+              </button>
+            )
+          }
         />
         <SplitStat
           label="Home"
@@ -372,8 +448,8 @@ export function PersonaColumn({
               <Button
                 variant="ghost"
                 size="icon-xs"
-                onClick={() => goTo(persona.homeBuildingId)}
-                aria-label="Go to home building"
+                onClick={() => flyTo(persona.homeBuildingId)}
+                aria-label="Fly to home building"
                 className="text-muted-foreground"
               >
                 <Home />
@@ -411,8 +487,8 @@ export function PersonaColumn({
                 <Button
                   variant="ghost"
                   size="icon-xs"
-                  onClick={() => goTo(workBuildingId)}
-                  aria-label={school && !business ? "Go to school building" : "Go to workplace"}
+                  onClick={() => flyTo(workBuildingId)}
+                  aria-label={school && !business ? "Fly to school building" : "Fly to workplace"}
                   className="text-muted-foreground"
                 >
                   <Briefcase />
@@ -446,7 +522,15 @@ export function PersonaColumn({
         )}
         <SplitStat
           label="Relationship"
-          top={capitalize(persona.relationshipStatus)}
+          top={(() => {
+            const StatusIcon = RELATIONSHIP_ICONS[persona.relationshipStatus];
+            return (
+              <span className="inline-flex items-center gap-1.5">
+                <StatusIcon className="text-muted-foreground size-3.5 shrink-0" aria-hidden />
+                {capitalize(persona.relationshipStatus)}
+              </span>
+            );
+          })()}
           bottom={
             partner && (
               <button
