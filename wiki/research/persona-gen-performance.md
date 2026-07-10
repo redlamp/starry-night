@@ -68,7 +68,7 @@ The remaining 1376 ms cold build is the weave-free passes (households, businesse
 | 2246 ms cold synchronous build with no loading state | shadcn `Skeleton` placeholder behind the directory/columns open gate | This round |
 | Deep-tier fields (moon/rising sign, birth hour, MBTI, height/build) built eagerly for all 39.4k personas | Lazy per-persona `personaFlavor()` stream, materialized on card open | This round |
 | Story content (hooks/epithets/whyAwake/relations) woven eagerly for every building | Lazy per-building `ensureBuildingStories()`, materialized on selection | This round |
-| ARC4 seedrandom is an order of magnitude slower than modern seeded PRNGs; ~56k instantiations per cold build | Vendored sfc32 via xmur3/cyrb128 avalanche hash, swapped in batched with the next intentional re-roll (worldgen-breaking on its own) | Parked, priority 1 |
+| ARC4 seedrandom is an order of magnitude slower than modern seeded PRNGs; ~56k instantiations per cold build | Vendored sfc32 via xmur3 avalanche hash, batched with the 2026-07-10 multigen re-roll — story weave 739→395 ms | **Done 2026-07-10** |
 | No worker/offload path for the persona pipeline (unlike geometry) | Worker offload + typed-array transfer, revisit only if post-lazy cold build still hitches on re-measurement | Parked, priority 2 |
 | `dirCache`/`namesCache`/`popCache` clear wholesale on overflow | LRU eviction instead of full clear | Parked, priority 3 |
 | No guarantee of cross-version persona output stability | Generation-version tag + persona output-hash golden test | Parked, priority 4 |
