@@ -262,49 +262,92 @@ function FamilyChart({
         return dx ? { ...r, left: r.left + dx, right: r.right + dx, cx: r.cx + dx } : r;
       };
 
-      // Bottom-up placement: the DEEPEST row keeps its natural flex layout
-      // (already in data order); every row above packs its union blocks over
-      // the mean x of their children in the (already positioned) rows below.
-      // Row order is semantic (data-driven), so packRow runs in row order —
-      // blocks are NOT re-sorted by target. Childless unions target their
-      // natural spot so they stay by their siblings. Pure function of data +
-      // layout — no focus dependence (user 2026-07-10).
-      for (let r = web.rows.length - 2; r >= 0; r -= 1) {
-        const calc = web.rows[r].flatMap((u) => {
-          const el = blockEls.get(u.key);
-          if (!el) return [];
-          const rect = rel(el);
-          const kids = u.childIds.map(box).filter(Boolean) as Box[];
-          const target = kids.length
-            ? kids.reduce((s, k) => s + k.cx, 0) / kids.length
-            : rect.cx;
-          return [{ u, el, rect, target }];
+      // Current (accumulated-shift) box for a union BLOCK element.
+      const blockBox = (u: UnionNode): Box | null => {
+        const el = blockEls.get(u.key);
+        if (!el) return null;
+        const r = rel(el);
+        const dx = blockShifts.get(u.key) ?? 0;
+        return dx ? { ...r, left: r.left + dx, right: r.right + dx, cx: r.cx + dx } : r;
+      };
+      // person id → owning union, for the top-down pass's parent lookups.
+      const unionOf = new Map<string, UnionNode>();
+      for (const row of web.rows) for (const u of row) for (const m of u.members) unionOf.set(m.id, u);
+
+      // Pack one row toward per-block target centers (order preserved,
+      // 24px min gap), ACCUMULATING into shiftFor/blockShifts. Clamp into
+      // the host preferring left-edge anchoring (right overflow scrolls,
+      // left would not). Do NOT apply transforms here: box() reads live
+      // rects, so a transform landing mid-pass would be counted twice for
+      // that block in every later read (once in the DOM rect, once via the
+      // shift maps) — that double-shift was the v6 right-side connector
+      // misalignment. All transforms land in one batch after the connector
+      // math.
+      const packToward = (row: UnionNode[], targetFor: (u: UnionNode, cur: Box) => number) => {
+        const calc = row.flatMap((u) => {
+          const cur = blockBox(u);
+          return cur ? [{ u, cur, target: targetFor(u, cur) }] : [];
         });
-        if (calc.length === 0) continue;
-        const widths = calc.map((c) => c.rect.right - c.rect.left);
+        if (calc.length === 0) return;
+        const widths = calc.map((c) => c.cur.right - c.cur.left);
         const lefts = packRow(
           calc.map((c, i) => ({ desired: c.target - widths[i] / 2, width: widths[i] })),
           24,
         );
-        // Clamp the packed row into the host; if it cannot fit, prefer
-        // anchoring its left edge (right overflow scrolls, left would not).
         const minLeft = Math.min(...lefts);
         let shift = Math.max(0, -minLeft);
         const over = Math.max(...lefts.map((l, i) => l + widths[i])) + shift - hostRect.width;
         if (over > 0) shift = Math.max(shift - over, -minLeft);
         calc.forEach((c, i) => {
-          const dx = lefts[i] + shift - c.rect.left;
-          for (const m of c.u.members) shiftFor.set(m.id, dx);
-          // Do NOT apply the transform here: box() reads LIVE rects, so a
-          // transform landing mid-pass would be counted twice for this
-          // block in every later read (once in the DOM rect, once via
-          // shiftFor) — that double-shift was the v6 right-side connector
-          // misalignment (user 2026-07-10: drop points displaced by exactly
-          // the block's dx). All transforms land in one batch after the
-          // connector math, so every read sees natural rects + shiftFor.
+          const delta = lefts[i] + shift - c.cur.left;
+          if (Math.abs(delta) < 0.01) return;
+          const dx = (blockShifts.get(c.u.key) ?? 0) + delta;
           blockShifts.set(c.u.key, dx);
+          for (const m of c.u.members) shiftFor.set(m.id, dx);
         });
-      }
+      };
+
+      // Two-direction placement (user 2026-07-10: "keep children close to
+      // alignment with their parents — now each row is centered"): the
+      // bottom-up pass centers each union over the mean x of its CHILDREN;
+      // the top-down pass then pulls each union toward the mean anchor x of
+      // its members' PARENT unions (a join union splits the difference
+      // between its two families). Alternating twice converges visually —
+      // ending top-down so children sit under their parents, which is the
+      // read the user asked for; the bus jog absorbs the residual on the
+      // parent side. Deterministic, focus-independent, order-preserving.
+      const passUp = () => {
+        for (let r = web.rows.length - 2; r >= 0; r -= 1) {
+          packToward(web.rows[r], (u, cur) => {
+            const kids = u.childIds.map(box).filter(Boolean) as Box[];
+            return kids.length ? kids.reduce((s, k) => s + k.cx, 0) / kids.length : cur.cx;
+          });
+        }
+      };
+      const passDown = () => {
+        for (let r = 1; r < web.rows.length; r += 1) {
+          packToward(web.rows[r], (u, cur) => {
+            const anchors: number[] = [];
+            for (const m of u.members) {
+              // The member's parents live in some union above — its block's
+              // center is where this child's drop will hang from.
+              const parentIds = m.family
+                .filter((l) => l.role === "parent")
+                .map((l) => l.personaId);
+              const parentUnion = parentIds.map((pid) => unionOf.get(pid)).find(Boolean);
+              const pb = parentUnion ? blockBox(parentUnion) : null;
+              if (pb) anchors.push(pb.cx);
+            }
+            return anchors.length
+              ? anchors.reduce((s, a) => s + a, 0) / anchors.length
+              : cur.cx;
+          });
+        }
+      };
+      passUp();
+      passDown();
+      passUp();
+      passDown();
 
       const next: Seg[] = [];
       // Union line between adjacent partners; returns the anchor children
