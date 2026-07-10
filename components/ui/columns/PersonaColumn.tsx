@@ -310,6 +310,11 @@ export function PersonaColumn({
       <Separator />
 
       <div className="flex flex-col gap-1">
+        {/* Tenure leads the section (user 2026-07-10). */}
+        <ColumnStat
+          label="In City"
+          value={persona.bornHere ? "Born here" : `${persona.yearsInCity} years`}
+        />
         <ColumnStat
           label={school && !business ? "School" : "Profession"}
           stack={professionValue.length > STACK_AT}
@@ -414,10 +419,6 @@ export function PersonaColumn({
             }
           />
         )}
-        <ColumnStat
-          label="In City"
-          value={persona.bornHere ? "Born here" : `${persona.yearsInCity} years`}
-        />
         <SplitStat
           label="Relationship"
           top={capitalize(persona.relationshipStatus)}
