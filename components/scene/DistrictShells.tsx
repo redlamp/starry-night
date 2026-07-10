@@ -3,7 +3,7 @@
 import { useMemo, useEffect } from "react";
 import * as THREE from "three";
 import { useSceneStore } from "@/lib/state/sceneStore";
-import { tensorDistrictField } from "@/lib/seed/cityGen";
+import { tensorDistrictField, tensorWallRoads } from "@/lib/seed/cityGen";
 import { districtBoundaryLoops } from "@/lib/seed/districtOutline";
 import { loopsToSegments, loopsToFillGroup } from "@/lib/scene/districtOverlayGeometry";
 
@@ -36,10 +36,11 @@ export function DistrictShells({ masterSeed }: { masterSeed: string }) {
   const group = useMemo(() => {
     void citySize; // tier drives the module-level gen extent (#58) — a switch must rebuild
     const field = tensorDistrictField(masterSeed);
+    const walls = tensorWallRoads(masterSeed);
     const g = new THREE.Group();
     const seamPts: number[] = [];
     for (const d of field.districts) {
-      const loops = districtBoundaryLoops(field, d.index);
+      const loops = districtBoundaryLoops(field, d.index, walls);
       // Planning overlay: draws over the scene (depthTest off, high render
       // order) like a GIS layer so districts read regardless of building
       // occlusion or camera angle. Fog off so distant fills keep their colour.
@@ -85,7 +86,7 @@ export function DistrictShells({ masterSeed }: { masterSeed: string }) {
     const field = tensorDistrictField(masterSeed);
     const target = field.districts.find((d) => d.id === highlightId);
     if (!target) return null;
-    const loops = districtBoundaryLoops(field, target.index);
+    const loops = districtBoundaryLoops(field, target.index, tensorWallRoads(masterSeed));
     const color = new THREE.Color(target.color).lerp(new THREE.Color("#ffffff"), 0.25);
     const mat = new THREE.MeshBasicMaterial({
       color,

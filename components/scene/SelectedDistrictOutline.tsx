@@ -5,7 +5,7 @@ import * as THREE from "three";
 import { Html } from "@react-three/drei";
 import { MapPin } from "lucide-react";
 import { useSceneStore } from "@/lib/state/sceneStore";
-import { generateCity, tensorDistrictField } from "@/lib/seed/cityGen";
+import { generateCity, tensorDistrictField, tensorWallRoads } from "@/lib/seed/cityGen";
 import { districtBoundaryLoops } from "@/lib/seed/districtOutline";
 import { loopsToSegments, loopsToFillGroup } from "@/lib/scene/districtOverlayGeometry";
 
@@ -99,7 +99,8 @@ export function SelectedDistrictOutline({ masterSeed }: { masterSeed: string }) 
     const field = tensorDistrictField(masterSeed);
     const target = field.districts.find((d) => d.id === districtId);
     if (!target) return null;
-    const pts = loopsToSegments(districtBoundaryLoops(field, target.index), OUTLINE_Y);
+    const walls = tensorWallRoads(masterSeed);
+    const pts = loopsToSegments(districtBoundaryLoops(field, target.index, walls), OUTLINE_Y);
     if (pts.length === 0) return null;
     return segmentsObject(pts, outlineMaterial(owner.color, 0.95));
   }, [
@@ -120,9 +121,10 @@ export function SelectedDistrictOutline({ masterSeed }: { masterSeed: string }) 
     void citySketch;
     if (!showBoundaries) return null;
     const field = tensorDistrictField(masterSeed);
+    const walls = tensorWallRoads(masterSeed);
     const group = new THREE.Group();
     for (const d of field.districts) {
-      const pts = loopsToSegments(districtBoundaryLoops(field, d.index), OUTLINE_Y);
+      const pts = loopsToSegments(districtBoundaryLoops(field, d.index, walls), OUTLINE_Y);
       if (pts.length === 0) continue;
       group.add(segmentsObject(pts, outlineMaterial(d.color, 0.55)));
     }
@@ -137,7 +139,7 @@ export function SelectedDistrictOutline({ masterSeed }: { masterSeed: string }) 
     const field = tensorDistrictField(masterSeed);
     const target = field.districts.find((d) => d.id === hoverDistrictId);
     if (!target) return null;
-    const loops = districtBoundaryLoops(field, target.index);
+    const loops = districtBoundaryLoops(field, target.index, tensorWallRoads(masterSeed));
     const mat = new THREE.MeshBasicMaterial({
       color: new THREE.Color(target.color),
       transparent: true,

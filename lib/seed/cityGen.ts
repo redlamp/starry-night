@@ -19,6 +19,7 @@ import {
   type ShapeMask,
 } from "./cityShape";
 import { citySketchTensor, sketchKey } from "./citySketch";
+import type { WallRoad } from "./districtOutline";
 import { fieldDeviation } from "./tensorField";
 import {
   buildDensityField,
@@ -580,6 +581,16 @@ function buildTensorRoads(masterSeed: string, onLine?: StreetTraceHook) {
 // Shape-independent: the field is the full square; shapes clip the output.
 export function tensorDistrictField(rawSeed: string): DistrictField {
   return buildTensorRoads(rawSeed).field;
+}
+
+// The exact wall set the district flood-fill ran against (highways + arterials
+// UNION, see buildTensorRoadsImpl) — districtOutline snaps boundary loops onto
+// these centrelines. Deliberately the UNCLIPPED roads, not generateCity's:
+// shapes clip roads, but the field (and its cached loops) is shape-independent,
+// so the snap targets must be too. Same cached call → free after first gen.
+export function tensorWallRoads(rawSeed: string): WallRoad[] {
+  const { topology, arterials } = buildTensorRoads(rawSeed);
+  return [...topology.highways, ...arterials];
 }
 
 // --- #59 worker transfer: serialisable bundle + cache priming ----------------
