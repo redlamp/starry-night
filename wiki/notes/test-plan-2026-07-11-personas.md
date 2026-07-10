@@ -56,8 +56,8 @@ Reference residents: **Joseph Ortiz (9)** (rich three-generation tree), **Amanda
 ## 6. Regression Sweep
 
 1. [ ] `bun scripts/personaCheck.ts` 17/17 · `bun scripts/cityGolden.ts` GOLDEN PASS · `bun scripts/districtOutlineCheck.ts` PASS · `bun scripts/principalCheck.ts` PASS. *(All PASS 2026-07-11 pre-plan on fable.)*
-5. [ ] Same seed → same city + people across reloads.
-6. [ ] Directory search/marquee/columns, commute + employment arcs, writing lab — unchanged behaviors.
+2. [ ] Same seed → same city + people across reloads.
+3. [ ] Directory search/marquee/columns, commute + employment arcs, writing lab — unchanged behaviors.
 
 ## 7. Known / Parked (don't re-report)
 
