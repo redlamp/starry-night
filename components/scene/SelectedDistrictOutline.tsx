@@ -199,17 +199,25 @@ export function SelectedDistrictOutline({ masterSeed }: { masterSeed: string }) 
       {allLines && <primitive object={allLines} />}
       {fill && <primitive object={fill} />}
       {lines && <primitive object={lines} />}
+      {/* Same presentation as the focused-building pin (BuildingPin.tsx, user
+          2026-07-10): unfilled district-tinted MapPin, tip on the point, no
+          plate behind it. */}
       <Html
         position={pin ? [pin.x, PIN_Y, pin.z] : PIN_PARKED}
-        center
+        center={false}
         zIndexRange={[20, 0]}
-        style={{ pointerEvents: "none", display: pin ? undefined : "none" }}
+        style={{ pointerEvents: "none" }}
       >
         <div
-          className="flex items-center justify-center rounded-full bg-foreground/90 p-1 shadow"
-          style={{ color: pin?.color }}
+          style={{
+            transform: "translate(-50%, -100%)",
+            transformOrigin: "50% 100%", // tip (bottom centre) sits on the point
+            color: pin?.color,
+            filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.7))",
+            display: pin ? undefined : "none",
+          }}
         >
-          <MapPin size={20} strokeWidth={2.25} />
+          <MapPin size={28} strokeWidth={2.5} />
         </div>
       </Html>
     </>
