@@ -45,6 +45,14 @@ Solid vertical = biological, dashed = adopted, dotted = foster; step-parent link
 
 No major tool (Gramps, GenoPro, Ancestry, FamilySearch) guarantees stable layout across re-rooting; Gramps re-derives per active person, GenoPro's AutoArrange warns about complex trees. **Adopted principle**: derive couple order and sibling order deterministically from seed/ids so re-centering on the other partner renders the identical chart with only the highlight moved.
 
+## 7. Directions explored 2026-07-10 (user)
+
+- **Descendant Tree**: root at an ancestor, ALL descendants below with spouses — the complement of our hourglass, and the view that naturally shows aunts/uncles/cousins (they're the other branches under the grandparent root). Candidate second view mode.
+- **Fan Chart**: focus centered, ancestors in concentric wedge rings (each ring a generation, wedge per line). Compact, and the natural home for lineage color (hue per grandparent wedge, swept outward). Our ancestry depth mostly caps at grandparents, so parked until lineages deepen.
+- **Genogram line styles** (GenoPro): marriage = solid union, engagement = dashed, cohabitation = dotted, dating = light/dashed, separation = one slash across the union, divorce = two slashes. Directly usable for the parked "dating vs married unions render the same" item. Gender: square/circle shapes in strict genograms — we use icons + (optionally) background tints instead.
+- **Lineage color coding** (user proposal): RGB additive mixing (red line + green line → yellow child). Caps at 3 independent lineages before mixes converge to white, and R/G fails colorblind users — adaptation: assign hues per ROOT couple in the window from an evenly-spaced OKLCH wheel, children show a paternal→maternal hue GRADIENT stripe (hue-blend is the perceptual version of the additive idea). Layered display toggles: lineage colors / gender tint / relationship styles, so codings stack opt-in.
+- **Why the hourglass crops aunts/uncles**: design window (own siblings + direct ancestry + descendants), not a data or perf limit — collateral subtrees need a recursive tree-layout engine (subtree width packing) and explode row width; the Descendant Tree is the intended home for them.
+
 ## Sources
 
 - [Family tree chart types — Family Tree Magazine](https://familytreemagazine.com/resources/family-tree-chart-types/)
