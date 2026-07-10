@@ -1,6 +1,7 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState } from "react";
+import { ScrollArea as ScrollAreaPrimitive } from "@base-ui/react/scroll-area";
 import {
   Blend,
   Maximize2,
@@ -13,6 +14,7 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ScrollBar } from "@/components/ui/scroll-area";
 import {
   Dialog,
   DialogTrigger,
@@ -657,11 +659,12 @@ function FamilyChart({
       // rows (header/footer/controls) and vertical padding+border. Derived
       // from the caps, not the live shell size, so the result can't feed
       // back into itself through the ResizeObserver.
-      const panel = host.parentElement;
+      const panel = host.closest<HTMLElement>('[data-slot="family-tree-panel"]');
       let fixedH = 0;
       if (panel) {
         for (const child of panel.children) {
-          if (child !== host) fixedH += (child as HTMLElement).offsetHeight;
+          // Skip the branch containing the chart (the ScrollArea root).
+          if (!child.contains(host)) fixedH += (child as HTMLElement).offsetHeight;
         }
       }
       const panelCap = Math.max(480, window.innerHeight * 0.85); // min-h-[30rem] / max-h-[85vh]
@@ -724,17 +727,22 @@ function FamilyChart({
 
   return (
     // Shell: the chart's OWN scroll viewport (user 2026-07-10: header and
-    // footer rows stay fixed; only the tree scrolls) — min-h-0 caps it at
-    // the flex slot, overflow-auto scrolls internally when even the
-    // 0.65-scale floor cannot fit. The sized wrapper is the ONLY element
-    // contributing layout size (exactly the normalized+scaled content box —
-    // no phantom scroll from stale w-max extents or transform overflow);
-    // m-auto (not items-center) centers it when smaller AND keeps all edges
+    // footer rows stay fixed; only the tree scrolls) — a shadcn/base-ui
+    // ScrollArea (user 2026-07-11: shadcn scrollbars, not native chrome),
+    // composed from primitives so BOTH orientations get the styled bar.
+    // min-h-0 caps the root at the flex slot; the viewport scrolls when even
+    // the 0.65-scale floor cannot fit. Inside, the host div (min-h/w-full,
+    // measurement origin + ResizeObserver target) holds the sized wrapper —
+    // the ONLY element contributing layout size (exactly the
+    // normalized+scaled content box, so no phantom scroll); m-auto (not
+    // items-center) centers it when smaller AND keeps all edges
     // scroll-reachable when larger — centered flex content clips its
     // overflowing top. The content root inside is absolute, laid out at
     // natural size, then translated/scaled by the measure pass.
-    <div ref={hostRef} className="flex min-h-0 flex-1 overflow-auto">
-      <div className="relative m-auto shrink-0" style={{ width: view.w, height: view.h }}>
+    <ScrollAreaPrimitive.Root className="relative min-h-0 flex-1">
+      <ScrollAreaPrimitive.Viewport data-slot="scroll-area-viewport" className="size-full">
+        <div ref={hostRef} className="flex min-h-full min-w-full">
+          <div className="relative m-auto shrink-0" style={{ width: view.w, height: view.h }}>
         <div
           ref={contentRef}
           className={cn(
@@ -779,7 +787,12 @@ function FamilyChart({
           ))}
         </div>
       </div>
-    </div>
+        </div>
+      </ScrollAreaPrimitive.Viewport>
+      <ScrollBar />
+      <ScrollBar orientation="horizontal" />
+      <ScrollAreaPrimitive.Corner />
+    </ScrollAreaPrimitive.Root>
   );
 }
 
@@ -912,7 +925,10 @@ export function FamilyTree({ personaId, indexes }: { personaId: string; indexes:
               {/* overflow-hidden on the PANEL, overflow-auto on the chart
                   viewport below (user 2026-07-10): the header and both footer
                   rows stay fixed in place — only the tree scrolls. */}
-              <div className="relative flex max-h-[85vh] min-h-[30rem] w-fit min-w-[44rem] max-w-[calc(96vw-19.5rem)] flex-col overflow-hidden rounded-xl border border-border bg-popover/95 p-4 text-popover-foreground shadow-lg backdrop-blur-md tabular-nums">
+              <div
+                data-slot="family-tree-panel"
+                className="relative flex max-h-[85vh] min-h-[30rem] w-fit min-w-[44rem] max-w-[calc(96vw-19.5rem)] flex-col overflow-hidden rounded-xl border border-border bg-popover/95 p-4 text-popover-foreground shadow-lg backdrop-blur-md tabular-nums"
+              >
                 {/* One header row — title left; back control + X share the
                     right cluster so they align on the same vertical center
                     (user 2026-07-08: the absolute X sat off the title line).
