@@ -71,6 +71,10 @@ export type FamilyWeb = {
   // yellow", done perceptually in OKLCH — user 2026-07-10). Married-ins
   // with no in-window parents have no entry.
   stripes: Map<string, string>;
+  // person id → effective lineage HUE (the number behind the stripe; a
+  // blend midpoint where two lines merged). The fan chart colors its
+  // wedges from this so both views tell the same lineage story.
+  hues: Map<string, number>;
   bloodIds: Set<string>; // blood-of-focus (solid borders)
   trimmed: number; // persons cut by the box cap ("+N more in this line…")
 };
@@ -86,7 +90,25 @@ function hueMid(a: number, b: number): number {
   return (a + d / 2 + 360) % 360;
 }
 
-const hueCss = (h: number) => `oklch(0.72 0.14 ${Math.round(h * 10) / 10})`;
+// Lineage color token (single source for stripes, connectors, fan wedges);
+// optional alpha for translucent fills like the fan's wedge interiors.
+export const hueCss = (h: number, alpha?: number) =>
+  `oklch(0.72 0.14 ${Math.round(h * 10) / 10}${alpha !== undefined ? ` / ${alpha}` : ""})`;
+
+// Gender Tint layer: oklch backgrounds by identity — GREEN men / ORANGE
+// women / PURPLE other (user 2026-07-10, second strengthening pass: ~11%
+// then ~24% both read too faint; now unmistakable at a glance while borders
+// and lineage stripes still dominate). The gender icon remains the primary
+// signal. Shared by the box view and the fan's wedge fills.
+export function genderTintCss(identity: Persona["genderIdentity"]): string {
+  const hue =
+    identity === "cis man" || identity === "trans man"
+      ? 150
+      : identity === "cis woman" || identity === "trans woman"
+        ? 55
+        : 305;
+  return `oklch(0.72 0.13 ${hue} / 0.35)`;
+}
 
 type Role = Persona["family"][number]["role"];
 
@@ -388,5 +410,76 @@ export function buildFamilyWeb(indexes: EntityIndexes, focus: Persona): FamilyWe
     }
   }
 
-  return { rows, stripes, bloodIds, trimmed };
+  return { rows, stripes, hues: effHue, bloodIds, trimmed };
+}
+
+// ---- Fan chart data (user 2026-07-10: "can help with larger families"). ---
+// A bow-tie double fan is a BLOOD-LINEAGE device: top semicircle = parents
+// (2 wedges) + grandparents (4), bottom = the focus's children, each
+// subdivided by their own children. Partners/married-ins do not appear (the
+// web views keep the full social picture; the dialog notes the partner
+// under the fan). Pure function of (focus, family links) — a fan is
+// inherently focus-centered, so re-rooting redraws around the new center.
+
+export type FanSlot = { persona: Persona; hue?: number };
+
+export type FamilyFanData = {
+  focus: FanSlot;
+  // Exactly 2: [older-left, younger-right] by the couple age rule; null =
+  // missing ancestor (renders as a dimmed empty wedge, geometry stable).
+  parents: Array<FanSlot | null>;
+  // Exactly 4, two per parent wedge, each pair age-ordered (older left).
+  grandparents: Array<FanSlot | null>;
+  children: FanSlot[]; // age-ordered, oldest left
+  grandchildren: FanSlot[][]; // grandchildren[i] = children[i]'s kids
+  partnerName?: string;
+};
+
+export function buildFamilyFan(
+  indexes: EntityIndexes,
+  focus: Persona,
+  web: FamilyWeb,
+): FamilyFanData {
+  const get = (id: string) => indexes.directory.personas.get(id);
+  const byRole = (p: Persona, role: Role) =>
+    p.family
+      .filter((l) => l.role === role)
+      .map((l) => get(l.personaId))
+      .filter(Boolean) as Persona[];
+  // Hues come from the SAME web build (stripes/effHue) so fan wedges and
+  // box stripes never disagree about a person's lineage color.
+  const slot = (p?: Persona): FanSlot | null =>
+    p ? { persona: p, hue: web.hues.get(p.id) } : null;
+
+  const parentsRaw = byRole(focus, "parent").slice(0, 2);
+  const parents =
+    parentsRaw.length === 2 ? [...orderByAge(parentsRaw[0], parentsRaw[1])] : parentsRaw;
+  const grandparents: Array<FanSlot | null> = [];
+  for (let i = 0; i < 2; i += 1) {
+    const parent = parents[i];
+    if (!parent) {
+      grandparents.push(null, null);
+      continue;
+    }
+    const gRaw = byRole(parent, "parent").slice(0, 2);
+    const g = gRaw.length === 2 ? [...orderByAge(gRaw[0], gRaw[1])] : gRaw;
+    grandparents.push(slot(g[0]), slot(g[1]));
+  }
+  const children = byAge(byRole(focus, "child")).map(
+    (c): FanSlot => ({ persona: c, hue: web.hues.get(c.id) }),
+  );
+  const grandchildren = children.map((c) =>
+    byAge(byRole(c.persona, "child")).map(
+      (k): FanSlot => ({ persona: k, hue: web.hues.get(k.id) }),
+    ),
+  );
+  const partner = focus.partnerId ? get(focus.partnerId) : undefined;
+  return {
+    focus: { persona: focus, hue: web.hues.get(focus.id) },
+    parents: [slot(parents[0]), slot(parents[1])],
+    grandparents,
+    children,
+    grandchildren,
+    partnerName: partner ? `${partner.givenName} ${partner.familyName}` : undefined,
+  };
 }

@@ -3,12 +3,15 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import {
   Blend,
+  Columns3,
+  Fan,
   Maximize2,
   Network,
   Palette,
   PanelRightClose,
   PanelRightOpen,
   Pin,
+  Rows3,
   Undo2,
   X,
 } from "lucide-react";
@@ -29,7 +32,14 @@ import type { Persona } from "@/lib/seed/personas";
 import type { EntityIndexes } from "./entityData";
 import { IconTip, StandaloneEntityCard } from "./EntityColumns";
 import { GenderIcon } from "./genderIcon";
-import { buildFamilyWeb, type FamilyWeb, type UnionNode } from "./familyWeb";
+import {
+  buildFamilyFan,
+  buildFamilyWeb,
+  genderTintCss,
+  type FamilyWeb,
+  type UnionNode,
+} from "./familyWeb";
+import { FanChart } from "./FamilyFan";
 
 // Family tree explorer v4 (user 2026-07-10): a descendant-breadth chart —
 // ROOTS are the topmost unions reached by climbing ≤2 blood generations from
@@ -51,11 +61,14 @@ import { buildFamilyWeb, type FamilyWeb, type UnionNode } from "./familyWeb";
 // union's connector set takes its effective lineage color (midpoint blend
 // where lines merge; stripes carry the full gradient story). Union lines
 // follow genogram semantics (genopro.com/genogram/family-relationships):
-// married = solid, dating = dashed. Display layers (Lineage Colors, Gender
-// Tint) sit bottom-left of the panel, the resident-card show/hide bottom-
-// right — a fixed-height controls row, colors only, never layout. The right
-// pane is the SAME persona card the inspector columns use (PersonaColumn),
-// not a bespoke summary.
+// married = solid, dating = dashed. THREE display modes (user 2026-07-10):
+// Rows (the web chart), Columns (the same chart transposed — the measure
+// pass runs in (pack, gen) axis coordinates so one algorithm serves both),
+// and Fan (FamilyFan.tsx, a bow-tie blood-lineage fan for fast traversal).
+// The mode cluster, display layers (Lineage Colors, Gender Tint), and the
+// resident-card show/hide live in a fixed-height bottom controls row;
+// layers are colors only, never layout. The right pane is the SAME persona
+// card the inspector columns use (PersonaColumn), not a bespoke summary.
 
 // Least-squares row packing (pool-adjacent-violators). Input: blocks in
 // their final left-to-right order with desired left edges; output: left
@@ -105,20 +118,8 @@ type Seg = {
   color?: string;
 };
 
-// Gender Tint layer: oklch backgrounds by identity — GREEN men / ORANGE
-// women / PURPLE other (user 2026-07-10, second strengthening pass: ~11%
-// then ~24% both read too faint; now unmistakable at a glance while borders
-// and lineage stripes still dominate). The gender icon remains the primary
-// signal.
-function genderTintCss(identity: Persona["genderIdentity"]): string {
-  const hue =
-    identity === "cis man" || identity === "trans man"
-      ? 150
-      : identity === "cis woman" || identity === "trans woman"
-        ? 55
-        : 305;
-  return `oklch(0.72 0.13 ${hue} / 0.35)`;
-}
+// genderTintCss (GREEN men / ORANGE women / PURPLE other) moved to
+// familyWeb.ts so the fan view shares the exact palette.
 
 function PersonBox({
   persona,
@@ -202,6 +203,7 @@ function FamilyChart({
   originId,
   lineage,
   tint,
+  vertical,
   onSelect,
 }: {
   web: FamilyWeb;
@@ -209,6 +211,12 @@ function FamilyChart({
   originId?: string;
   lineage: boolean;
   tint: boolean;
+  // Column view (user 2026-07-10: "generations-as-columns may fit the
+  // panel's space better"): SAME data/semantics transposed — generations
+  // advance left→right instead of top→down, blocks pack on Y instead of X.
+  // The measure pass below is written in (pack, gen) axis coordinates, so
+  // one algorithm serves both orientations.
+  vertical: boolean;
   onSelect: (id: string) => void;
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -237,7 +245,14 @@ function FamilyChart({
       for (const el of blockEls.values()) el.style.transform = "";
 
       const hostRect = host.getBoundingClientRect();
-      type Box = { left: number; right: number; top: number; bottom: number; cx: number };
+      type Box = {
+        left: number;
+        right: number;
+        top: number;
+        bottom: number;
+        cx: number;
+        cy: number;
+      };
       const rel = (el: HTMLElement): Box => {
         const r = el.getBoundingClientRect();
         return {
@@ -246,29 +261,55 @@ function FamilyChart({
           top: r.top - hostRect.top,
           bottom: r.bottom - hostRect.top,
           cx: r.left - hostRect.left + r.width / 2,
+          cy: r.top - hostRect.top + r.height / 2,
         };
       };
-      // Pending translateX per repositioned person. box() folds it in, so
-      // connector math and the applied transforms always agree.
+
+      // ---- Axis mapping (user 2026-07-10: column view). The PACK axis is
+      // where packToward slides blocks (x in row view, y in column view);
+      // the GEN axis is where generations advance (y in rows, x in
+      // columns). Everything below is written in (pack, gen) coordinates
+      // and converted only at the Seg boundary — one shared algorithm, two
+      // orientations, no Y-variant fork.
+      const packS = (b: Box) => (vertical ? b.top : b.left); // pack-axis start
+      const packE = (b: Box) => (vertical ? b.bottom : b.right); // pack-axis end
+      const packC = (b: Box) => (vertical ? b.cy : b.cx); // pack-axis center
+      const genS = (b: Box) => (vertical ? b.left : b.top); // gen-axis start
+      const genE = (b: Box) => (vertical ? b.right : b.bottom); // gen-axis end
+      const packExtent = vertical ? hostRect.height : hostRect.width;
+      const toSeg = (
+        p1: number,
+        g1: number,
+        p2: number,
+        g2: number,
+        dashed?: boolean,
+        color?: string,
+      ): Seg =>
+        vertical
+          ? { x1: g1, y1: p1, x2: g2, y2: p2, dashed, color }
+          : { x1: p1, y1: g1, x2: p2, y2: g2, dashed, color };
+
+      // Pending pack-axis translate per repositioned person. box() folds it
+      // in, so connector math and the applied transforms always agree.
       const shiftFor = new Map<string, number>();
-      // Pending translateX per union BLOCK — applied in one batch after the
+      // Pending translate per union BLOCK — applied in one batch after the
       // connector math (see the double-shift note below).
       const blockShifts = new Map<string, number>();
+      const shifted = (r: Box, dx: number): Box =>
+        !dx
+          ? r
+          : vertical
+            ? { ...r, top: r.top + dx, bottom: r.bottom + dx, cy: r.cy + dx }
+            : { ...r, left: r.left + dx, right: r.right + dx, cx: r.cx + dx };
       const box = (id: string): Box | null => {
         const el = boxRefs.current.get(id);
-        if (!el) return null;
-        const r = rel(el);
-        const dx = shiftFor.get(id) ?? 0;
-        return dx ? { ...r, left: r.left + dx, right: r.right + dx, cx: r.cx + dx } : r;
+        return el ? shifted(rel(el), shiftFor.get(id) ?? 0) : null;
       };
 
       // Current (accumulated-shift) box for a union BLOCK element.
       const blockBox = (u: UnionNode): Box | null => {
         const el = blockEls.get(u.key);
-        if (!el) return null;
-        const r = rel(el);
-        const dx = blockShifts.get(u.key) ?? 0;
-        return dx ? { ...r, left: r.left + dx, right: r.right + dx, cx: r.cx + dx } : r;
+        return el ? shifted(rel(el), blockShifts.get(u.key) ?? 0) : null;
       };
       // person id → owning union, for the top-down pass's parent lookups.
       const unionOf = new Map<string, UnionNode>();
@@ -289,17 +330,17 @@ function FamilyChart({
           return cur ? [{ u, cur, target: targetFor(u, cur) }] : [];
         });
         if (calc.length === 0) return;
-        const widths = calc.map((c) => c.cur.right - c.cur.left);
+        const widths = calc.map((c) => packE(c.cur) - packS(c.cur));
         const lefts = packRow(
           calc.map((c, i) => ({ desired: c.target - widths[i] / 2, width: widths[i] })),
           24,
         );
         const minLeft = Math.min(...lefts);
         let shift = Math.max(0, -minLeft);
-        const over = Math.max(...lefts.map((l, i) => l + widths[i])) + shift - hostRect.width;
+        const over = Math.max(...lefts.map((l, i) => l + widths[i])) + shift - packExtent;
         if (over > 0) shift = Math.max(shift - over, -minLeft);
         calc.forEach((c, i) => {
-          const delta = lefts[i] + shift - c.cur.left;
+          const delta = lefts[i] + shift - packS(c.cur);
           if (Math.abs(delta) < 0.01) return;
           const dx = (blockShifts.get(c.u.key) ?? 0) + delta;
           blockShifts.set(c.u.key, dx);
@@ -320,7 +361,9 @@ function FamilyChart({
         for (let r = web.rows.length - 2; r >= 0; r -= 1) {
           packToward(web.rows[r], (u, cur) => {
             const kids = u.childIds.map(box).filter(Boolean) as Box[];
-            return kids.length ? kids.reduce((s, k) => s + k.cx, 0) / kids.length : cur.cx;
+            return kids.length
+              ? kids.reduce((s, k) => s + packC(k), 0) / kids.length
+              : packC(cur);
           });
         }
       };
@@ -336,11 +379,11 @@ function FamilyChart({
                 .map((l) => l.personaId);
               const parentUnion = parentIds.map((pid) => unionOf.get(pid)).find(Boolean);
               const pb = parentUnion ? blockBox(parentUnion) : null;
-              if (pb) anchors.push(pb.cx);
+              if (pb) anchors.push(packC(pb));
             }
             return anchors.length
               ? anchors.reduce((s, a) => s + a, 0) / anchors.length
-              : cur.cx;
+              : packC(cur);
           });
         }
       };
@@ -351,33 +394,34 @@ function FamilyChart({
 
       const next: Seg[] = [];
       // Union line between adjacent partners; returns the anchor children
-      // hang from (line midpoint for a couple, box bottom for a single).
-      // Genogram semantics: married = solid, dating = dashed. The whole
-      // connector set of a union (partner line, drop, bus, stubs) takes the
-      // union's effective lineage color — a midpoint blend where two lines
-      // merge (user 2026-07-10: colorized connectors, "have both").
+      // hang from (line midpoint for a couple, gen-axis end of the box for
+      // a single: bottom edge in rows, right edge in columns). Genogram
+      // semantics: married = solid, dating = dashed. The whole connector
+      // set of a union (partner line, drop, bus, stubs) takes the union's
+      // effective lineage color — a midpoint blend where two lines merge
+      // (user 2026-07-10: colorized connectors, "have both").
       const coupleAnchor = (
         aId: string,
         bId?: string,
         dashed?: boolean,
         color?: string,
-      ): { x: number; y: number } | null => {
+      ): { p: number; g: number } | null => {
         const a = box(aId);
         if (!a) return null;
         const b = bId ? box(bId) : null;
-        if (!b) return { x: a.cx, y: a.bottom };
-        const [l, r] = a.cx <= b.cx ? [a, b] : [b, a];
-        const y = (Math.max(l.top, r.top) + Math.min(l.bottom, r.bottom)) / 2;
-        next.push({ x1: l.right + 1, y1: y, x2: r.left - 1, y2: y, dashed, color });
-        return { x: (l.right + r.left) / 2, y };
+        if (!b) return { p: packC(a), g: genE(a) };
+        const [l, r] = packC(a) <= packC(b) ? [a, b] : [b, a];
+        const g = (Math.max(genS(l), genS(r)) + Math.min(genE(l), genE(r))) / 2;
+        next.push(toSeg(packE(l) + 1, g, packS(r) - 1, g, dashed, color));
+        return { p: (packE(l) + packS(r)) / 2, g };
       };
       // Parent→children connections are gathered first and emitted per
-      // child-row below, so buses that would overlap on the same y can take
-      // separate lanes.
-      type Conn = { anchor: { x: number; y: number }; kids: Box[]; color?: string };
+      // child-row below, so buses that would overlap at the same gen-axis
+      // offset can take separate lanes.
+      type Conn = { anchor: { p: number; g: number }; kids: Box[]; color?: string };
       const pending: Conn[] = [];
       const connect = (
-        anchor: { x: number; y: number } | null,
+        anchor: { p: number; g: number } | null,
         kidIds: string[],
         color?: string,
       ) => {
@@ -395,8 +439,8 @@ function FamilyChart({
           for (const solo of u.soloChildIds) {
             const m = box(solo.memberId);
             if (!m) continue;
-            const isLeftMember = u.members.length === 2 && solo.memberId === u.members[0].id;
-            connect({ x: m.cx + (isLeftMember ? -14 : 14), y: m.bottom }, solo.kids, u.lineColor);
+            const isFirst = u.members.length === 2 && solo.memberId === u.members[0].id;
+            connect({ p: packC(m) + (isFirst ? -14 : 14), g: genE(m) }, solo.kids, u.lineColor);
           }
         }
       }
@@ -412,41 +456,50 @@ function FamilyChart({
       // span must not read as that couple's parentage).
       const busRows = new Map<number, Conn[]>();
       for (const c of pending) {
-        const key = Math.round(Math.min(...c.kids.map((k) => k.top)));
+        const key = Math.round(Math.min(...c.kids.map(genS)));
         busRows.set(key, [...(busRows.get(key) ?? []), c]);
       }
-      for (const rowTop of [...busRows.keys()].sort((a, b) => a - b)) {
-        const conns = (busRows.get(rowTop) as Conn[])
+      for (const rowG of [...busRows.keys()].sort((a, b) => a - b)) {
+        const conns = (busRows.get(rowG) as Conn[])
           .map((c) => {
-            const xs = c.kids.map((k) => k.cx);
+            const ps = c.kids.map(packC);
             return {
               ...c,
-              x1: Math.min(...xs, c.anchor.x),
-              x2: Math.max(...xs, c.anchor.x),
+              p1: Math.min(...ps, c.anchor.p),
+              p2: Math.max(...ps, c.anchor.p),
             };
           })
           .sort(
-            (p, q) => p.x2 - p.x1 - (q.x2 - q.x1) || p.x1 - q.x1 || p.anchor.x - q.anchor.x,
+            (p, q) => p.p2 - p.p1 - (q.p2 - q.p1) || p.p1 - q.p1 || p.anchor.p - q.anchor.p,
           );
-        const lanes: Array<Array<{ x1: number; x2: number }>> = [];
+        const lanes: Array<Array<{ p1: number; p2: number }>> = [];
         for (const c of conns) {
           let lane = 0;
-          while ((lanes[lane] ?? []).some((s) => c.x1 <= s.x2 + 10 && s.x1 - 10 <= c.x2)) lane += 1;
-          (lanes[lane] ??= []).push({ x1: c.x1, x2: c.x2 });
-          const busY = rowTop - 8 - lane * 7;
+          while ((lanes[lane] ?? []).some((s) => c.p1 <= s.p2 + 10 && s.p1 - 10 <= c.p2)) lane += 1;
+          (lanes[lane] ??= []).push({ p1: c.p1, p2: c.p2 });
+          const busG = rowG - 8 - lane * 7;
           const color = c.color;
-          next.push({ x1: c.anchor.x, y1: c.anchor.y, x2: c.anchor.x, y2: busY, color });
-          if (c.x2 - c.x1 > 0.5) next.push({ x1: c.x1, y1: busY, x2: c.x2, y2: busY, color });
-          for (const k of c.kids) next.push({ x1: k.cx, y1: busY, x2: k.cx, y2: k.top, color });
+          next.push(toSeg(c.anchor.p, c.anchor.g, c.anchor.p, busG, undefined, color));
+          if (c.p2 - c.p1 > 0.5) next.push(toSeg(c.p1, busG, c.p2, busG, undefined, color));
+          for (const k of c.kids) {
+            next.push(toSeg(packC(k), busG, packC(k), genS(k), undefined, color));
+          }
         }
       }
 
       // NOW land the transforms, in one batch — no box() read happens after
       // this point, so nothing can see a rect that already moved (the
       // double-shift). Transforms never affect layout → no observer loop.
+      // The translate runs along the pack axis: X in rows, Y in columns.
       for (const [key, dx] of blockShifts) {
         const el = blockEls.get(key);
-        if (el) el.style.transform = dx ? `translateX(${dx}px)` : "";
+        if (el) {
+          el.style.transform = dx
+            ? vertical
+              ? `translateY(${dx}px)`
+              : `translateX(${dx}px)`
+            : "";
+        }
       }
 
       setSegs(next);
@@ -457,7 +510,7 @@ function FamilyChart({
     const ro = new ResizeObserver(measure);
     ro.observe(host);
     return () => ro.disconnect();
-  }, [web, focusId]);
+  }, [web, focusId, vertical]);
 
   const renderBox = (p: Persona) => (
     <PersonBox
@@ -474,9 +527,14 @@ function FamilyChart({
   );
   // One union = one glued block (couple or single), the unit the measure
   // pass repositions. Flex only provides the initial layout; the packing
-  // above centers each block over its own children (user 2026-07-10).
+  // above centers each block over its own children (user 2026-07-10). In
+  // column view the couple stacks vertically and the whole chart transposes.
   const renderUnion = (u: UnionNode) => (
-    <div key={u.key} data-block-key={u.key} className="flex items-start gap-2.5">
+    <div
+      key={u.key}
+      data-block-key={u.key}
+      className={cn("flex gap-2.5", vertical ? "flex-col items-start" : "items-start")}
+    >
       {u.members.map(renderBox)}
     </div>
   );
@@ -484,7 +542,10 @@ function FamilyChart({
   return (
     <div
       ref={hostRef}
-      className="relative flex w-max min-w-full flex-1 flex-col items-center justify-center gap-9 p-3"
+      className={cn(
+        "relative flex w-max min-w-full flex-1 items-center justify-center gap-9 p-3",
+        vertical ? "flex-row" : "flex-col",
+      )}
     >
       <svg
         className="text-muted-foreground/80 pointer-events-none absolute top-0 left-0"
@@ -509,7 +570,13 @@ function FamilyChart({
         ))}
       </svg>
       {web.rows.map((row, i) => (
-        <div key={row[0]?.key ?? i} className="flex items-start justify-center gap-4">
+        <div
+          key={row[0]?.key ?? i}
+          className={cn(
+            "flex justify-center gap-4",
+            vertical ? "flex-col items-start" : "items-start",
+          )}
+        >
           {row.map(renderUnion)}
         </div>
       ))}
@@ -559,6 +626,10 @@ export function FamilyTree({ personaId, indexes }: { personaId: string; indexes:
   const [lineage, setLineage] = useState(true);
   const [tintOn, setTintOn] = useState(false);
   const [cardMin, setCardMin] = useState(false);
+  // Display mode (user 2026-07-10): Rows = the web chart, Columns = the
+  // same chart transposed (generations as columns — often a better fit for
+  // the panel with 3-4 generations), Fan = the bow-tie blood-lineage fan.
+  const [mode, setMode] = useState<"rows" | "columns" | "fan">("rows");
   // Re-root on the sheet's persona whenever the dialog is opened for a new one.
   const [prevPersonaId, setPrevPersonaId] = useState(personaId);
   if (personaId !== prevPersonaId) {
@@ -569,6 +640,7 @@ export function FamilyTree({ personaId, indexes }: { personaId: string; indexes:
   const focus = indexes.directory.personas.get(focusId) ?? indexes.directory.personas.get(personaId);
   if (!focus) return null;
   const web = buildFamilyWeb(indexes, focus);
+  const fan = mode === "fan" ? buildFamilyFan(indexes, focus, web) : null;
   const origin = indexes.directory.personas.get(personaId);
 
   // Fixed-height footer content: the box-cap trim notice first, then the
@@ -648,14 +720,19 @@ export function FamilyTree({ personaId, indexes }: { personaId: string; indexes:
                     </DialogClose>
                   </div>
                 </div>
-                <FamilyChart
-                  web={web}
-                  focusId={focus.id}
-                  originId={origin?.id}
-                  lineage={lineage}
-                  tint={tintOn}
-                  onSelect={setFocusId}
-                />
+                {mode === "fan" && fan ? (
+                  <FanChart fan={fan} lineage={lineage} tint={tintOn} onSelect={setFocusId} />
+                ) : (
+                  <FamilyChart
+                    web={web}
+                    focusId={focus.id}
+                    originId={origin?.id}
+                    lineage={lineage}
+                    tint={tintOn}
+                    vertical={mode === "columns"}
+                    onSelect={setFocusId}
+                  />
+                )}
                 {/* Fixed-height slot, rendered whether or not there's
                     content: FamilyChart above is flex-1 and centers its own
                     rows within whatever space is left, so any change in this
@@ -672,6 +749,30 @@ export function FamilyTree({ personaId, indexes }: { personaId: string; indexes:
                     show/hide bottom-right (user 2026-07-10). */}
                 <div className="flex h-8 shrink-0 items-center justify-between">
                   <div className="flex items-center gap-1">
+                    {/* 3-way display-mode cluster — exactly one active
+                        (user 2026-07-10: rows / columns / fan). */}
+                    <LayerToggle
+                      label="Row View"
+                      pressed={mode === "rows"}
+                      onToggle={() => setMode("rows")}
+                    >
+                      <Rows3 />
+                    </LayerToggle>
+                    <LayerToggle
+                      label="Column View"
+                      pressed={mode === "columns"}
+                      onToggle={() => setMode("columns")}
+                    >
+                      <Columns3 />
+                    </LayerToggle>
+                    <LayerToggle
+                      label="Fan View"
+                      pressed={mode === "fan"}
+                      onToggle={() => setMode("fan")}
+                    >
+                      <Fan />
+                    </LayerToggle>
+                    <div className="bg-border mx-1 h-4 w-px" aria-hidden />
                     <LayerToggle
                       label="Lineage Colors"
                       pressed={lineage}
