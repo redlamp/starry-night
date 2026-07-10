@@ -665,7 +665,11 @@ function FamilyChart({
         }
       }
       const panelCap = Math.max(480, window.innerHeight * 0.85); // min-h-[30rem] / max-h-[85vh]
-      const avail = Math.max(160, panelCap - fixedH - 34);
+      // 44px = panel p-4 (32) + border (2) + a 10px honesty margin:
+      // offsetHeight sums miss margins and fractional px, and a 1-2px
+      // overshoot summons a scrollbar that then eats width too (user
+      // 2026-07-11: "seeing a scroll bar but I shouldn't").
+      const avail = Math.floor(Math.max(160, panelCap - fixedH - 44));
       const scale = h0 > avail ? Math.max(0.65, avail / h0) : 1;
       // Right-to-left application: translate in natural coords, then scale
       // about the top-left origin.
@@ -673,8 +677,11 @@ function FamilyChart({
 
       setSegs(next);
       setView({
-        w: w0 * scale,
-        h: h0 * scale,
+        w: Math.ceil(w0 * scale),
+        // Above the 0.65 floor the chart FITS by construction — clamp the
+        // wrapper to the budget so estimate error can't leave a scrollable
+        // sliver. At the floor, overflow is real and scrolling is intended.
+        h: scale > 0.65 ? Math.min(Math.ceil(h0 * scale), avail) : Math.ceil(h0 * scale),
         svgW: Math.max(0, maxX),
         svgH: Math.max(0, maxY),
       });
