@@ -168,8 +168,10 @@ function PersonBox({
         // pixel (user 2026-07-10: "borders inside the rect"). The focused
         // box reads THICKER via an inset ring (box-shadow — zero layout)
         // and keeps the same background as everyone else (user 2026-07-10:
-        // gender tint stays visible on the selection).
-        "flex w-max flex-col items-center rounded-md border px-2.5 py-1 text-xs transition-colors",
+        // gender tint stays visible on the selection). Width is UNIFORM
+        // (w-44, names truncate) so layouts stay consistent and three
+        // generation-columns always fit the panel (user 2026-07-10).
+        "flex w-44 flex-col items-center rounded-md border px-2.5 py-1 text-xs transition-colors",
         blood ? "border-solid" : "border-dashed",
         "bg-background hover:bg-muted",
         focused ? "border-primary ring-2 ring-primary ring-inset" : "border-muted-foreground/80",
@@ -184,8 +186,10 @@ function PersonBox({
           content-sized box, row, and w-fit panel) wider on every selection
           (user 2026-07-10: "divs changing size"). Focus reads from the
           primary border + tint alone. */}
-      <span className="flex items-center gap-1 font-medium whitespace-nowrap">
-        {persona.givenName} {persona.familyName}
+      <span className="flex w-full items-center justify-center gap-1 font-medium">
+        <span className="truncate">
+          {persona.givenName} {persona.familyName}
+        </span>
         {pinned && <Pin className="text-muted-foreground size-3 shrink-0" aria-hidden />}
       </span>
       {/* Same row: gender icon left, age right (user 2026-07-10). */}
@@ -448,23 +452,31 @@ function FamilyChart({
         bId?: string,
         dashed?: boolean,
         color?: string,
-      ): { p: number; g: number } | null => {
+      ): { p: number; g: number; gEdge: number } | null => {
         const a = box(aId);
         if (!a) return null;
         const b = bId ? box(bId) : null;
-        if (!b) return { p: packC(a), g: genE(a) };
+        if (!b) return { p: packC(a), g: genE(a), gEdge: genE(a) };
         const [l, r] = packC(a) <= packC(b) ? [a, b] : [b, a];
         const g = (Math.max(genS(l), genS(r)) + Math.min(genE(l), genE(r))) / 2;
         next.push(toSeg(packE(l) + 1, g, packS(r) - 1, g, dashed, color));
-        return { p: (packE(l) + packS(r)) / 2, g };
+        // gEdge: the union's TRAILING edge on the gen axis — where its cells
+        // end and the connector channel really begins (the drop from g to
+        // gEdge threads the couple's own alley; everything past gEdge must
+        // stay clear of cells — user 2026-07-10).
+        return { p: (packE(l) + packS(r)) / 2, g, gEdge: Math.max(genE(l), genE(r)) };
       };
       // Parent→children connections are gathered first and emitted per
       // child-row below, so buses that would overlap at the same gen-axis
       // offset can take separate lanes.
-      type Conn = { anchor: { p: number; g: number }; kids: Box[]; color?: string };
+      type Conn = {
+        anchor: { p: number; g: number; gEdge: number };
+        kids: Box[];
+        color?: string;
+      };
       const pending: Conn[] = [];
       const connect = (
-        anchor: { p: number; g: number } | null,
+        anchor: { p: number; g: number; gEdge: number } | null,
         kidIds: string[],
         color?: string,
       ) => {
@@ -483,7 +495,11 @@ function FamilyChart({
             const m = box(solo.memberId);
             if (!m) continue;
             const isFirst = u.members.length === 2 && solo.memberId === u.members[0].id;
-            connect({ p: packC(m) + (isFirst ? -14 : 14), g: genE(m) }, solo.kids, u.lineColor);
+            connect(
+              { p: packC(m) + (isFirst ? -14 : 14), g: genE(m), gEdge: genE(m) },
+              solo.kids,
+              u.lineColor,
+            );
           }
         }
       }
@@ -515,16 +531,24 @@ function FamilyChart({
           .sort(
             (p, q) => p.p2 - p.p1 - (q.p2 - q.p1) || p.p1 - q.p1 || p.anchor.p - q.anchor.p,
           );
+        // The TRUE inter-column channel for this group: from the widest
+        // parent union's trailing edge to the child row's leading edge —
+        // buses live strictly inside it, so lines never overlap cells
+        // (user 2026-07-10).
+        const parentEdge = Math.max(...conns.map((c) => c.anchor.gEdge));
         const lanes: Array<Array<{ p1: number; p2: number }>> = [];
         for (const c of conns) {
           let lane = 0;
           while ((lanes[lane] ?? []).some((s) => c.p1 <= s.p2 + 10 && s.p1 - 10 <= c.p2)) lane += 1;
           (lanes[lane] ??= []).push({ p1: c.p1, p2: c.p2 });
-          // Fork sits at the CENTER of the parent→child channel; parallel
-          // buses fan alternately around it (only when lanes are actually
-          // needed — user 2026-07-10).
+          // Fork sits at the CENTER of the channel; parallel buses fan
+          // alternately around it (only when lanes are actually needed),
+          // clamped inside the channel with a 6px margin off the cells.
           const laneOff = lane === 0 ? 0 : lane % 2 === 1 ? -7 * Math.ceil(lane / 2) : 7 * (lane / 2);
-          const busG = (c.anchor.g + rowG) / 2 + laneOff;
+          const busG = Math.min(
+            Math.max((parentEdge + rowG) / 2 + laneOff, parentEdge + 6),
+            rowG - 6,
+          );
           const color = c.color;
           next.push(toSeg(c.anchor.p, c.anchor.g, c.anchor.p, busG, undefined, color));
           if (c.p2 - c.p1 > 0.5) next.push(toSeg(c.p1, busG, c.p2, busG, undefined, color));
