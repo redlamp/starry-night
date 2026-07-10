@@ -1259,12 +1259,20 @@ function* buildDirectorySteps(
       // 0.22 → 0.32 (user 2026-07-10): more cross-town parents = more trees
       // with a visible third generation.
       if (rng() > 0.32) continue;
-      const candidates = (eldersBySurname.get(p.familyName) ?? []).filter(
+      // Match on the BIRTH surname (user 2026-07-10, no-incest fix): a
+      // married name-taker searching under her HUSBAND'S name matched HIS
+      // parents — making her a sibling of her own spouse. maidenName is the
+      // birth family's name; it also finally reconnects married daughters to
+      // their real cross-town parents.
+      const partner = p.partnerId ? personas.get(p.partnerId) : undefined;
+      const candidates = (eldersBySurname.get(p.maidenName ?? p.familyName) ?? []).filter(
         (e) =>
           e.homeBuildingId !== p.homeBuildingId &&
           e.age - p.age >= 22 &&
           e.age - p.age <= 38 &&
-          (extraChildren.get(e.id) ?? 0) < 2,
+          (extraChildren.get(e.id) ?? 0) < 2 &&
+          // Never an elder who already parents p's partner (spouse-siblings).
+          !partner?.family.some((l) => l.role === "parent" && l.personaId === e.id),
       );
       if (candidates.length === 0) continue;
       const parent = candidates[Math.floor(rng() * candidates.length)];
@@ -1299,9 +1307,26 @@ function* buildDirectorySteps(
     const seeksSame = new Map<PersonaId, boolean>();
     for (const p of seekers) seeksSame.set(p.id, rng() < 0.12);
     const woman = (p: Persona) => p.genderIdentity === "cis woman" || p.genderIdentity === "trans woman";
+    // Kinship guard (user 2026-07-10: "no incest") — the family weave runs
+    // BEFORE dating, so two cross-town siblings (shared woven parent) were
+    // pairable. Blocked: any direct family link, or any common parent.
+    const parentsOf = new Map<PersonaId, string[]>();
+    for (const p of seekers) {
+      parentsOf.set(
+        p.id,
+        p.family.filter((l) => l.role === "parent").map((l) => l.personaId),
+      );
+    }
+    const related = (a: Persona, b: Persona) => {
+      if (a.family.some((l) => l.personaId === b.id)) return true;
+      const pa = parentsOf.get(a.id) ?? [];
+      const pb = parentsOf.get(b.id) ?? [];
+      return pa.some((id) => pb.includes(id));
+    };
     const compatible = (a: Persona, b: Persona) => {
       if (a.homeBuildingId === b.homeBuildingId && a.householdIndex === b.householdIndex) return false;
       if (Math.abs(a.age - b.age) > 12) return false;
+      if (related(a, b)) return false;
       const same = woman(a) === woman(b);
       return (seeksSame.get(a.id) ?? false) === same && (seeksSame.get(b.id) ?? false) === same;
     };

@@ -138,6 +138,25 @@ check("no unfilled template slots leak", slotsOk);
 check("relation targets resolve", relTargetsOk);
 check("city lore generated", dir.lore.length >= 12, String(dir.lore.length));
 
+// No incest (user 2026-07-10): no couple may share a direct family link or a
+// common parent — guards the family-weave (birth-surname matching) and the
+// dating pass's kinship filter.
+let kinshipOk = true;
+for (const p of dir.personas.values()) {
+  if (!p.partnerId || p.id > p.partnerId) continue;
+  const q = dir.personas.get(p.partnerId);
+  if (!q) continue;
+  const parents = (x: typeof p) =>
+    x.family.filter((l) => l.role === "parent").map((l) => l.personaId);
+  const direct = p.family.some((l) => l.personaId === q.id && l.role !== "partner");
+  const shared = parents(p).some((id) => parents(q).includes(id));
+  if (direct || shared) {
+    if (kinshipOk) console.error(`  related couple: ${p.fullName} + ${q.fullName}`);
+    kinshipOk = false;
+  }
+}
+check("no related couples (kinship guard)", kinshipOk);
+
 // (4) human-judgeable sample
 console.log("\n--- totals ---");
 console.log(dir.totals, "city:", dir.names.city.name);

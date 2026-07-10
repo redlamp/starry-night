@@ -522,7 +522,11 @@ function FamilyChart({
           let lane = 0;
           while ((lanes[lane] ?? []).some((s) => c.p1 <= s.p2 + 10 && s.p1 - 10 <= c.p2)) lane += 1;
           (lanes[lane] ??= []).push({ p1: c.p1, p2: c.p2 });
-          const busG = rowG - 8 - lane * 7;
+          // Fork sits at the CENTER of the parent→child channel; parallel
+          // buses fan alternately around it (only when lanes are actually
+          // needed — user 2026-07-10).
+          const laneOff = lane === 0 ? 0 : lane % 2 === 1 ? -7 * Math.ceil(lane / 2) : 7 * (lane / 2);
+          const busG = (c.anchor.g + rowG) / 2 + laneOff;
           const color = c.color;
           next.push(toSeg(c.anchor.p, c.anchor.g, c.anchor.p, busG, undefined, color));
           if (c.p2 - c.p1 > 0.5) next.push(toSeg(c.p1, busG, c.p2, busG, undefined, color));
@@ -664,7 +668,9 @@ function FamilyChart({
           ref={contentRef}
           className={cn(
             "absolute top-0 left-0 flex w-max origin-top-left items-center justify-center",
-            vertical ? "flex-row gap-7" : "flex-col gap-9",
+            // gap-10 columns (user 2026-07-10: room for the centered forks);
+            // gap-9 rows.
+            vertical ? "flex-row gap-10" : "flex-col gap-9",
           )}
         >
           <svg
