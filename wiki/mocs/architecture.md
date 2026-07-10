@@ -48,3 +48,4 @@ reference notes that describe how the running system behaves.
 ## Maintenance
 
 - [[deferred-followups]] — watchlist of upstream-gated / parked fixes (R3F 10 Clock, KTX2, bloom tier gating, CI gate, stars tier mismatch); add to it when closing an issue as "gated on X"
+- [[light-sprite-sizing-survey]] — the five light-point systems (streetlights/traffic/flights/helis/beacons): sizing mechanisms, ortho-blend interaction, and the shared-attenuation fix shape
