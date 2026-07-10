@@ -281,12 +281,11 @@ function PersonBox({
           : "border-muted-foreground/80 bg-background hover:bg-muted",
       )}
     >
-      <span
-        className={cn(
-          "flex items-center gap-1 whitespace-nowrap",
-          focused ? "font-semibold" : "font-medium",
-        )}
-      >
+      {/* Weight is CONSTANT — semibold-on-focus made the name (and so the
+          content-sized box, row, and w-fit panel) wider on every selection
+          (user 2026-07-10: "divs changing size"). Focus reads from the
+          primary border + tint alone. */}
+      <span className="flex items-center gap-1 font-medium whitespace-nowrap">
         {persona.givenName} {persona.familyName}
         {pinned && <Pin className="text-muted-foreground size-3 shrink-0" aria-hidden />}
       </span>
@@ -601,8 +600,12 @@ export function FamilyTree({ personaId, indexes }: { personaId: string; indexes:
                 {/* One header row — title left; back control + X share the
                     right cluster so they align on the same vertical center
                     (user 2026-07-08: the absolute X sat off the title line). */}
-                <div className="flex items-center justify-between gap-3">
-                  <DialogTitle className="text-sm font-medium text-foreground">
+                {/* w-0 min-w-full: the header sizes to the panel (whose width
+                    the CHART drives) and truncates internally — a long title
+                    ("The {surname} Family" changes with the focus) can never
+                    widen the panel on selection (user 2026-07-10). */}
+                <div className="flex w-0 min-w-full items-center justify-between gap-3">
+                  <DialogTitle className="truncate text-sm font-medium text-foreground">
                     The {focus.familyName} Family
                   </DialogTitle>
                   <div className="flex items-center gap-2">
