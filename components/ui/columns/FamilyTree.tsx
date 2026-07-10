@@ -7,6 +7,7 @@ import {
   Network,
   Palette,
   PanelRightClose,
+  PanelRightOpen,
   Pin,
   Undo2,
   X,
@@ -46,12 +47,15 @@ import { buildFamilyWeb, type FamilyWeb, type UnionNode } from "./familyWeb";
 // lanes when spans intersect. Lineage color coding: each root union gets an
 // evenly spaced OKLCH hue; blood descendants carry a constant-height 2px
 // stripe — solid for one line, a left→right gradient where two lines merged
-// (user 2026-07-10: "red + green = yellow", done perceptually). Union lines
+// (user 2026-07-10: "red + green = yellow", done perceptually) — AND each
+// union's connector set takes its effective lineage color (midpoint blend
+// where lines merge; stripes carry the full gradient story). Union lines
 // follow genogram semantics (genopro.com/genogram/family-relationships):
 // married = solid, dating = dashed. Display layers (Lineage Colors, Gender
-// Tint) and Minimize Card are dialog-local toggles — colors only, never
-// layout. The right pane is the SAME persona card the inspector columns use
-// (PersonaColumn), not a bespoke summary.
+// Tint) sit bottom-left of the panel, the resident-card show/hide bottom-
+// right — a fixed-height controls row, colors only, never layout. The right
+// pane is the SAME persona card the inspector columns use (PersonaColumn),
+// not a bespoke summary.
 
 // Least-squares row packing (pool-adjacent-violators). Input: blocks in
 // their final left-to-right order with desired left edges; output: left
@@ -89,11 +93,22 @@ function packRow(items: Array<{ desired: number; width: number }>, gap: number):
   return out;
 }
 
-type Seg = { x1: number; y1: number; x2: number; y2: number; dashed?: boolean };
+// Segments always CARRY their union's lineage color; whether it is USED is
+// decided at render time by the Lineage Colors toggle — so toggling swaps
+// strokes without re-measuring (colors only, never layout).
+type Seg = {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  dashed?: boolean;
+  color?: string;
+};
 
-// Gender Tint layer: subtle desaturated oklch backgrounds by identity —
-// alpha kept low (~11%) so borders and lineage stripes still dominate; the
-// gender icon remains the primary signal (user 2026-07-10).
+// Gender Tint layer: desaturated oklch backgrounds by identity — clearly
+// visible at a glance (alpha ~0.24, user 2026-07-10: the first pass at ~11%
+// was too faint) while borders and lineage stripes still dominate; the
+// gender icon remains the primary signal.
 function genderTintCss(identity: Persona["genderIdentity"]): string {
   const hue =
     identity === "cis man" || identity === "trans man"
@@ -101,7 +116,7 @@ function genderTintCss(identity: Persona["genderIdentity"]): string {
       : identity === "cis woman" || identity === "trans woman"
         ? 40
         : 150;
-  return `oklch(0.7 0.07 ${hue} / 0.11)`;
+  return `oklch(0.7 0.1 ${hue} / 0.24)`;
 }
 
 function PersonBox({
@@ -280,11 +295,15 @@ function FamilyChart({
       const next: Seg[] = [];
       // Union line between adjacent partners; returns the anchor children
       // hang from (line midpoint for a couple, box bottom for a single).
-      // Genogram semantics: married = solid, dating = dashed.
+      // Genogram semantics: married = solid, dating = dashed. The whole
+      // connector set of a union (partner line, drop, bus, stubs) takes the
+      // union's effective lineage color — a midpoint blend where two lines
+      // merge (user 2026-07-10: colorized connectors, "have both").
       const coupleAnchor = (
         aId: string,
         bId?: string,
         dashed?: boolean,
+        color?: string,
       ): { x: number; y: number } | null => {
         const a = box(aId);
         if (!a) return null;
@@ -292,31 +311,35 @@ function FamilyChart({
         if (!b) return { x: a.cx, y: a.bottom };
         const [l, r] = a.cx <= b.cx ? [a, b] : [b, a];
         const y = (Math.max(l.top, r.top) + Math.min(l.bottom, r.bottom)) / 2;
-        next.push({ x1: l.right + 1, y1: y, x2: r.left - 1, y2: y, dashed });
+        next.push({ x1: l.right + 1, y1: y, x2: r.left - 1, y2: y, dashed, color });
         return { x: (l.right + r.left) / 2, y };
       };
       // Parent→children connections are gathered first and emitted per
       // child-row below, so buses that would overlap on the same y can take
       // separate lanes.
-      type Conn = { anchor: { x: number; y: number }; kids: Box[] };
+      type Conn = { anchor: { x: number; y: number }; kids: Box[]; color?: string };
       const pending: Conn[] = [];
-      const connect = (anchor: { x: number; y: number } | null, kidIds: string[]) => {
+      const connect = (
+        anchor: { x: number; y: number } | null,
+        kidIds: string[],
+        color?: string,
+      ) => {
         if (!anchor) return;
         const kids = kidIds.map(box).filter(Boolean) as Box[];
-        if (kids.length > 0) pending.push({ anchor, kids });
+        if (kids.length > 0) pending.push({ anchor, kids, color });
       };
 
       for (const row of web.rows) {
         for (const u of row) {
-          const anchor = coupleAnchor(u.members[0].id, u.members[1]?.id, u.dashed);
-          if (u.sharedChildIds.length > 0) connect(anchor, u.sharedChildIds);
+          const anchor = coupleAnchor(u.members[0].id, u.members[1]?.id, u.dashed, u.lineColor);
+          if (u.sharedChildIds.length > 0) connect(anchor, u.sharedChildIds, u.lineColor);
           // Prior-relationship children hang from their own parent's box,
           // not the union line (remarriage split — user 2026-07-08).
           for (const solo of u.soloChildIds) {
             const m = box(solo.memberId);
             if (!m) continue;
             const isLeftMember = u.members.length === 2 && solo.memberId === u.members[0].id;
-            connect({ x: m.cx + (isLeftMember ? -14 : 14), y: m.bottom }, solo.kids);
+            connect({ x: m.cx + (isLeftMember ? -14 : 14), y: m.bottom }, solo.kids, u.lineColor);
           }
         }
       }
@@ -354,9 +377,10 @@ function FamilyChart({
           while ((lanes[lane] ?? []).some((s) => c.x1 <= s.x2 + 10 && s.x1 - 10 <= c.x2)) lane += 1;
           (lanes[lane] ??= []).push({ x1: c.x1, x2: c.x2 });
           const busY = rowTop - 8 - lane * 7;
-          next.push({ x1: c.anchor.x, y1: c.anchor.y, x2: c.anchor.x, y2: busY });
-          if (c.x2 - c.x1 > 0.5) next.push({ x1: c.x1, y1: busY, x2: c.x2, y2: busY });
-          for (const k of c.kids) next.push({ x1: k.cx, y1: busY, x2: k.cx, y2: k.top });
+          const color = c.color;
+          next.push({ x1: c.anchor.x, y1: c.anchor.y, x2: c.anchor.x, y2: busY, color });
+          if (c.x2 - c.x1 > 0.5) next.push({ x1: c.x1, y1: busY, x2: c.x2, y2: busY, color });
+          for (const k of c.kids) next.push({ x1: k.cx, y1: busY, x2: k.cx, y2: k.top, color });
         }
       }
 
@@ -410,7 +434,9 @@ function FamilyChart({
             y1={s.y1}
             x2={s.x2}
             y2={s.y2}
-            stroke="currentColor"
+            // Lineage Colors on → the union's line hue/blend; off (or no
+            // colored member) → the muted connector color via currentColor.
+            stroke={lineage && s.color ? s.color : "currentColor"}
             strokeWidth={1.5}
             strokeLinecap="round"
             strokeDasharray={s.dashed ? "2 5" : undefined}
@@ -426,7 +452,7 @@ function FamilyChart({
   );
 }
 
-// Header layer toggle — icon button following the app's icon-toggle
+// Chart control toggle — icon button following the app's icon-toggle
 // convention (aria-pressed + bg-primary/30 active state); the tooltip is
 // the action name only, Title Case.
 function LayerToggle({
@@ -524,10 +550,11 @@ export function FamilyTree({ personaId, indexes }: { personaId: string; indexes:
                   charts are common (user 2026-07-10); the max caps keep
                   small screens working. */}
               <div className="relative flex max-h-[85vh] min-h-[30rem] w-fit min-w-[44rem] max-w-[calc(96vw-19.5rem)] flex-col overflow-auto rounded-xl border border-border bg-popover/95 p-4 text-popover-foreground shadow-lg backdrop-blur-md tabular-nums">
-                {/* One header row — title left; layer toggles + back control
-                    + X share the right cluster so they align on the same
-                    vertical center (user 2026-07-08: the absolute X sat off
-                    the title line). */}
+                {/* One header row — title left; back control + X share the
+                    right cluster so they align on the same vertical center
+                    (user 2026-07-08: the absolute X sat off the title line).
+                    Layer toggles live in the bottom controls row (user
+                    2026-07-10). */}
                 {/* w-0 min-w-full: the header sizes to the panel (whose width
                     the CHART drives) and truncates internally — a long title
                     ("The {surname} Family" changes with the focus) can never
@@ -537,29 +564,6 @@ export function FamilyTree({ personaId, indexes }: { personaId: string; indexes:
                     The {focus.familyName} Family
                   </DialogTitle>
                   <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-1">
-                      <LayerToggle
-                        label="Lineage Colors"
-                        pressed={lineage}
-                        onToggle={() => setLineage((v) => !v)}
-                      >
-                        <Palette />
-                      </LayerToggle>
-                      <LayerToggle
-                        label="Gender Tint"
-                        pressed={tintOn}
-                        onToggle={() => setTintOn((v) => !v)}
-                      >
-                        <Blend />
-                      </LayerToggle>
-                      <LayerToggle
-                        label="Minimize Card"
-                        pressed={cardMin}
-                        onToggle={() => setCardMin((v) => !v)}
-                      >
-                        <PanelRightClose />
-                      </LayerToggle>
-                    </div>
                     {/* Always visible (user 2026-07-08) — the anchor reads
                         even before re-rooting; disabled while the focus IS
                         the entry person. */}
@@ -596,6 +600,37 @@ export function FamilyTree({ personaId, indexes }: { personaId: string; indexes:
                     never wraps (user 2026-07-10). */}
                 <div className="h-5 shrink-0 truncate px-3 text-xs text-muted-foreground">
                   {footerBits.join(" · ")}
+                </div>
+                {/* Fixed-height controls row (always rendered, constant
+                    height like the footer slot above, so the chart never
+                    shifts): layer toggles bottom-left, the resident-card
+                    show/hide bottom-right (user 2026-07-10). */}
+                <div className="flex h-8 shrink-0 items-center justify-between">
+                  <div className="flex items-center gap-1">
+                    <LayerToggle
+                      label="Lineage Colors"
+                      pressed={lineage}
+                      onToggle={() => setLineage((v) => !v)}
+                    >
+                      <Palette />
+                    </LayerToggle>
+                    <LayerToggle
+                      label="Gender Tint"
+                      pressed={tintOn}
+                      onToggle={() => setTintOn((v) => !v)}
+                    >
+                      <Blend />
+                    </LayerToggle>
+                  </div>
+                  {/* Icon pair reads as panel show/hide and swaps with
+                      state; the tooltip is the pending ACTION's name. */}
+                  <LayerToggle
+                    label={cardMin ? "Show Card" : "Minimize Card"}
+                    pressed={cardMin}
+                    onToggle={() => setCardMin((v) => !v)}
+                  >
+                    {cardMin ? <PanelRightOpen /> : <PanelRightClose />}
+                  </LayerToggle>
                 </div>
               </div>
               {/* The member's details: the SAME card the columns dock shows,

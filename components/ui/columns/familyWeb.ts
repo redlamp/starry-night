@@ -53,6 +53,15 @@ export type UnionNode = {
   // order = path order, so each root's subtree stays contiguous and the
   // whole layout is focus-independent.
   path: number[];
+  // Effective lineage color for this union's CONNECTOR set (partner line,
+  // drop, bus, stubs) when Lineage Colors is on: the members' shared line
+  // hue, or a solid circular-midpoint blend where the union merges two
+  // lines — SVG lines can't gradient along arbitrary paths, so the box
+  // stripes carry the full gradient story and connectors take the blend
+  // (user 2026-07-10: "the lines connecting people would be colorized …
+  // maybe we could have both"). Undefined (no colored member) falls back to
+  // the muted connector color.
+  lineColor?: string;
 };
 
 export type FamilyWeb = {
@@ -350,6 +359,17 @@ export function buildFamilyWeb(indexes: EntityIndexes, focus: Persona): FamilyWe
           effHue.set(m.id, h);
           stripes.set(m.id, hueCss(h));
         }
+      }
+      // Connector color for the whole union: both members share a hue →
+      // that hue; two different lines meet → their circular midpoint; only
+      // one member colored (married-in partner) → the blood member's hue.
+      const hues = u.members
+        .map((m) => effHue.get(m.id))
+        .filter((h): h is number => h !== undefined);
+      if (hues.length === 2 && Math.abs(hues[0] - hues[1]) > 0.5) {
+        u.lineColor = hueCss(hueMid(hues[0], hues[1]));
+      } else if (hues.length > 0) {
+        u.lineColor = hueCss(hues[0]);
       }
     }
   }
