@@ -337,7 +337,10 @@ function FamilyChart({
       // apply transforms mid-pass: box() reads live rects, so a transform
       // landing early would be counted twice in every later read (the v6
       // double-shift bug) — they land in one batch later.
-      const packGap = vertical ? 14 : 24;
+      // Inter-UNION gap deliberately larger than the intra-couple gap
+      // (gap-1.5 in renderUnion) so partner pairs read as units and the
+      // seams between couples are unmistakable (user 2026-07-10).
+      const packGap = vertical ? 20 : 28;
       const packToward = (row: UnionNode[], targetFor: (u: UnionNode, cur: Box) => number) => {
         const calc = row.flatMap((u) => {
           const cur = blockBox(u);
@@ -626,7 +629,7 @@ function FamilyChart({
     <div
       key={u.key}
       data-block-key={u.key}
-      className={cn("flex gap-2.5", vertical ? "flex-col items-start" : "items-start")}
+      className={cn("flex gap-1.5", vertical ? "flex-col items-start" : "items-start")}
     >
       {u.members.map(renderBox)}
     </div>
@@ -730,13 +733,16 @@ export function FamilyTree({ personaId, indexes }: { personaId: string; indexes:
   const [focusId, setFocusId] = useState(personaId);
   // Display layers (dialog-local): colors only — toggling never changes
   // layout (user 2026-07-10).
+  // Both display layers default ON (user 2026-07-10).
   const [lineage, setLineage] = useState(true);
-  const [tintOn, setTintOn] = useState(false);
+  const [tintOn, setTintOn] = useState(true);
   const [cardMin, setCardMin] = useState(false);
   // Display mode (user 2026-07-10): Rows = the web chart, Columns = the
   // same chart transposed (generations as columns — often a better fit for
   // the panel with 3-4 generations), Fan = the bow-tie blood-lineage fan.
-  const [mode, setMode] = useState<"rows" | "columns" | "fan">("rows");
+  // Columns is the default (user 2026-07-10) — generations across the wide
+  // panel fit 3-4-generation webs best.
+  const [mode, setMode] = useState<"rows" | "columns" | "fan">("columns");
   // Re-root on the sheet's persona whenever the dialog is opened for a new one.
   const [prevPersonaId, setPrevPersonaId] = useState(personaId);
   if (personaId !== prevPersonaId) {
