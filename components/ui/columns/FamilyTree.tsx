@@ -668,11 +668,18 @@ function FamilyChart({
         }
       }
       const panelCap = Math.max(480, window.innerHeight * 0.85); // min-h-[30rem] / max-h-[85vh]
-      // 44px = panel p-4 (32) + border (2) + a 10px honesty margin:
-      // offsetHeight sums miss margins and fractional px, and a 1-2px
-      // overshoot summons a scrollbar that then eats width too (user
-      // 2026-07-11: "seeing a scroll bar but I shouldn't").
-      const avail = Math.floor(Math.max(160, panelCap - fixedH - 44));
+      // Fit budget = the LIVE viewport box, minus 2px safety — estimating it
+      // from the caps left px-level gaps that still summoned a scrollbar
+      // (user 2026-07-11: "FIX IT"). Measuring is feedback-safe: the
+      // ScrollArea root is flex-1 basis-0, so the viewport's height never
+      // depends on the wrapper we size below. The cap-derived estimate
+      // remains only as a fallback for the first frame.
+      const viewportEl = host.parentElement;
+      const availEstimate = Math.floor(Math.max(160, panelCap - fixedH - 44));
+      const avail =
+        viewportEl && viewportEl.clientHeight > 0
+          ? Math.max(160, viewportEl.clientHeight - 2)
+          : availEstimate;
       const scale = h0 > avail ? Math.max(0.65, avail / h0) : 1;
       // Right-to-left application: translate in natural coords, then scale
       // about the top-left origin.
