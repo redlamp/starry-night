@@ -29,7 +29,12 @@ import { GenderIcon } from "./genderIcon";
 // left → right, ties broken by persona id. A partner renders immediately
 // beside their blood-side person, on whichever side their age implies (older
 // left, younger right) — this replaces the old man-left/woman-right genogram
-// convention. Children split remarriage-style: shared children hang from the
+// convention. Ancestry union blocks (grandparent + parent rows) are
+// positioned by measurement, not by a fixed left-ancestry/right-ancestry
+// split: each union centers above the mean x of its own children in the row
+// below, blocks order by that target x, and collisions resolve by
+// least-squares packing with a minimum gap (see placeRow/packRow; user
+// 2026-07-10). Children split remarriage-style: shared children hang from the
 // union line's midpoint; a partner's children from a previous relationship
 // hang from that partner's own box. Connectors are drawn in a measured SVG
 // overlay. The right pane is the SAME persona card the inspector columns use
@@ -76,6 +81,42 @@ function orderByAge(x: Persona, y: Persona): [Persona, Persona] {
 // triggered the render (user 2026-07-10).
 function byAge(list: Persona[]): Persona[] {
   return [...list].sort((a, b) => (b.age !== a.age ? b.age - a.age : a.id <= b.id ? -1 : 1));
+}
+
+// Least-squares row packing (pool-adjacent-violators). Input: blocks in
+// their final left-to-right order with desired left edges; output: left
+// edges that preserve that order with at least `gap` between blocks while
+// staying collectively as close to the desired positions as possible —
+// "keeping each as close to its target as the packing allows" (user
+// 2026-07-10). In prefix-space (subtract the cumulative width+gap ahead of
+// each block) the min-gap constraint becomes plain "non-decreasing", so the
+// closest fit is isotonic regression: pool adjacent blocks while they
+// violate, place each pool at its mean.
+function packRow(items: Array<{ desired: number; width: number }>, gap: number): number[] {
+  const prefix: number[] = [];
+  let acc = 0;
+  for (const it of items) {
+    prefix.push(acc);
+    acc += it.width + gap;
+  }
+  const pools: Array<{ sum: number; n: number }> = [];
+  items.forEach((it, i) => {
+    let pool = { sum: it.desired - prefix[i], n: 1 };
+    while (pools.length > 0) {
+      const prev = pools[pools.length - 1];
+      if (prev.sum / prev.n <= pool.sum / pool.n) break;
+      pools.pop();
+      pool = { sum: prev.sum + pool.sum, n: prev.n + pool.n };
+    }
+    pools.push(pool);
+  });
+  const out: number[] = [];
+  let i = 0;
+  for (const pool of pools) {
+    const base = pool.sum / pool.n;
+    for (let k = 0; k < pool.n; k += 1, i += 1) out.push(base + prefix[i]);
+  }
+  return out;
 }
 
 // A descendant's pairing with their partner, left-to-right by the SAME age
@@ -323,7 +364,42 @@ function FamilyChart({
     const host = hostRef.current;
     if (!host) return;
 
+    // Ancestry union blocks: one per couple in the grandparent/parent rows,
+    // each tied to its actual children in the row below. The old fixed
+    // left-ancestry/right-ancestry split could park a couple far from their
+    // only child (e.g. the right partner's parents top-right while that
+    // partner sits left of center), making their drop-line read as someone
+    // else's parentage (user 2026-07-10).
+    type AncestryBlock = { key: string; people: Persona[]; childIds: string[] };
+    const parentBlocks: AncestryBlock[] = [];
+    if (chart.leftSide.parents.length > 0)
+      parentBlocks.push({
+        key: `pb:${chart.leftSide.parents[0].id}`,
+        people: chart.leftSide.parents,
+        childIds: [chart.left.id, ...chart.leftSide.siblings.map((s) => s.id)],
+      });
+    if (chart.right && chart.rightSide && chart.rightSide.parents.length > 0)
+      parentBlocks.push({
+        key: `pb:${chart.rightSide.parents[0].id}`,
+        people: chart.rightSide.parents,
+        childIds: [chart.right.id, ...chart.rightSide.siblings.map((s) => s.id)],
+      });
+    const grandBlocks: AncestryBlock[] = [
+      ...chart.leftSide.grandCouples,
+      ...(chart.rightSide?.grandCouples ?? []),
+    ].map((gc) => ({ key: `gb:${gc.childId}`, people: gc.people, childIds: [gc.childId] }));
+
     const measure = () => {
+      // Ancestry block wrappers are found by data attribute (not a ref map —
+      // ref access during render trips react-hooks/refs).
+      const blockEls = new Map<string, HTMLElement>();
+      for (const el of host.querySelectorAll<HTMLElement>("[data-block-key]")) {
+        blockEls.set(el.dataset.blockKey as string, el);
+      }
+      // Natural-layout read: clear transforms from a previous pass first.
+      // Transforms never affect layout, so this cannot loop the observer.
+      for (const el of blockEls.values()) el.style.transform = "";
+
       const hostRect = host.getBoundingClientRect();
       type Box = { left: number; right: number; top: number; bottom: number; cx: number };
       const rel = (el: HTMLElement): Box => {
@@ -336,10 +412,59 @@ function FamilyChart({
           cx: r.left - hostRect.left + r.width / 2,
         };
       };
+      // Pending translateX per repositioned ancestry person. box() folds it
+      // in, so connector math and the applied transforms always agree.
+      const shiftFor = new Map<string, number>();
       const box = (id: string): Box | null => {
         const el = boxRefs.current.get(id);
-        return el ? rel(el) : null;
+        if (!el) return null;
+        const r = rel(el);
+        const dx = shiftFor.get(id) ?? 0;
+        return dx ? { ...r, left: r.left + dx, right: r.right + dx, cx: r.cx + dx } : r;
       };
+
+      // Position one ancestry row: each union block targets the mean center
+      // of its children in the (already positioned) row below; blocks order
+      // by target x (tie: age rule on the block's eldest, then id) and pack
+      // via packRow with a minimum gap, clamped into the host. Pure function
+      // of data + static row layout — no focus dependence (user 2026-07-10).
+      const placeRow = (blocks: AncestryBlock[]) => {
+        const calc = blocks.flatMap((b) => {
+          const el = blockEls.get(b.key);
+          if (!el) return [];
+          const kids = b.childIds.map(box).filter(Boolean) as Box[];
+          if (kids.length === 0) return [];
+          const rect = rel(el);
+          const target = kids.reduce((s, k) => s + k.cx, 0) / kids.length;
+          return [{ block: b, el, rect, target }];
+        });
+        if (calc.length === 0) return;
+        calc.sort((p, q) => {
+          if (Math.abs(p.target - q.target) > 0.5) return p.target - q.target;
+          const [pe] = byAge(p.block.people);
+          const [qe] = byAge(q.block.people);
+          if (pe.age !== qe.age) return qe.age - pe.age;
+          return pe.id <= qe.id ? -1 : 1;
+        });
+        const widths = calc.map((c) => c.rect.right - c.rect.left);
+        const lefts = packRow(
+          calc.map((c, i) => ({ desired: c.target - widths[i] / 2, width: widths[i] })),
+          24,
+        );
+        // Clamp the packed row into the host; if it cannot fit, prefer
+        // anchoring its left edge (right overflow scrolls, left would not).
+        const minLeft = Math.min(...lefts);
+        let shift = Math.max(0, -minLeft);
+        const over = Math.max(...lefts.map((l, i) => l + widths[i])) + shift - hostRect.width;
+        if (over > 0) shift = Math.max(shift - over, -minLeft);
+        calc.forEach((c, i) => {
+          const dx = lefts[i] + shift - c.rect.left;
+          for (const p of c.block.people) shiftFor.set(p.id, dx);
+          c.el.style.transform = dx ? `translateX(${dx}px)` : "";
+        });
+      };
+      placeRow(parentBlocks); // parents above the (static) sibling row
+      placeRow(grandBlocks); // grandparents above the parents just placed
 
       const next: Seg[] = [];
       // Union line between adjacent partners; returns the anchor children
@@ -360,16 +485,15 @@ function FamilyChart({
         next.push({ x1: l.right + 1, y1: y, x2: r.left - 1, y2: y, dotted });
         return { x: (l.right + r.left) / 2, y };
       };
-      // Drop + horizontal bus + a stub into each child's top edge.
+      // Parent→children connections are gathered first and emitted per
+      // child-row below, so buses that would overlap on the same y can take
+      // separate lanes.
+      type Conn = { anchor: { x: number; y: number }; kids: Box[] };
+      const pending: Conn[] = [];
       const connect = (anchor: { x: number; y: number } | null, kidIds: string[]) => {
         if (!anchor) return;
-        const kids = kidIds.map(box).filter(Boolean) as Array<NonNullable<ReturnType<typeof box>>>;
-        if (kids.length === 0) return;
-        const busY = Math.min(...kids.map((k) => k.top)) - 8;
-        next.push({ x1: anchor.x, y1: anchor.y, x2: anchor.x, y2: busY });
-        const xs = [...kids.map((k) => k.cx), anchor.x];
-        next.push({ x1: Math.min(...xs), y1: busY, x2: Math.max(...xs), y2: busY });
-        for (const k of kids) next.push({ x1: k.cx, y1: busY, x2: k.cx, y2: k.top });
+        const kids = kidIds.map(box).filter(Boolean) as Box[];
+        if (kids.length > 0) pending.push({ anchor, kids });
       };
 
       const sideEdges = (side: Side, self: Persona) => {
@@ -429,6 +553,46 @@ function FamilyChart({
         );
         for (const k of g.kids) {
           if (k.partner) coupleAnchor(k.person.id, k.partner.id, true);
+        }
+      }
+
+      // Emit drops, buses, and stubs. A bus spans only its own children's
+      // stubs (plus a jog out to the drop when packing displaced the parent
+      // block past that span); it may still pass over an unrelated box when
+      // the children straddle one — acceptable now that the parent sits
+      // centered above its children. Buses over the same row whose spans
+      // intersect take stacked y-lanes, NARROW spans low and wide straddling
+      // spans higher, so a stub rarely crosses a foreign bus (user
+      // 2026-07-10: a single-child drop landing inside another couple's bus
+      // span must not read as that couple's parentage).
+      const rows = new Map<number, Conn[]>();
+      for (const c of pending) {
+        const key = Math.round(Math.min(...c.kids.map((k) => k.top)));
+        rows.set(key, [...(rows.get(key) ?? []), c]);
+      }
+      for (const rowTop of [...rows.keys()].sort((a, b) => a - b)) {
+        const conns = rows
+          .get(rowTop)!
+          .map((c) => {
+            const xs = c.kids.map((k) => k.cx);
+            return {
+              ...c,
+              x1: Math.min(...xs, c.anchor.x),
+              x2: Math.max(...xs, c.anchor.x),
+            };
+          })
+          .sort(
+            (p, q) => p.x2 - p.x1 - (q.x2 - q.x1) || p.x1 - q.x1 || p.anchor.x - q.anchor.x,
+          );
+        const lanes: Array<Array<{ x1: number; x2: number }>> = [];
+        for (const c of conns) {
+          let lane = 0;
+          while ((lanes[lane] ?? []).some((s) => c.x1 <= s.x2 + 10 && s.x1 - 10 <= c.x2)) lane += 1;
+          (lanes[lane] ??= []).push({ x1: c.x1, x2: c.x2 });
+          const busY = rowTop - 8 - lane * 7;
+          next.push({ x1: c.anchor.x, y1: c.anchor.y, x2: c.anchor.x, y2: busY });
+          if (c.x2 - c.x1 > 0.5) next.push({ x1: c.x1, y1: busY, x2: c.x2, y2: busY });
+          for (const k of c.kids) next.push({ x1: k.cx, y1: busY, x2: k.cx, y2: k.top });
         }
       }
 
@@ -513,17 +677,30 @@ function FamilyChart({
           />
         ))}
       </svg>
+      {/* Ancestry rows: flex only provides the initial layout; the measure
+          pass repositions each union block (translateX) to center above its
+          own children in the row below — see placeRow (user 2026-07-10). */}
       {grandCouples.length > 0 && (
         <div className="flex items-start justify-center gap-10">
           {grandCouples.map((gc) => (
-            <div key={gc.childId + gc.people[0].id}>{coupleRow(gc.people)}</div>
+            <div key={gc.childId} data-block-key={`gb:${gc.childId}`}>
+              {coupleRow(gc.people)}
+            </div>
           ))}
         </div>
       )}
       {(chart.leftSide.parents.length > 0 || (chart.rightSide?.parents.length ?? 0) > 0) && (
         <div className="flex items-start justify-center gap-16">
-          {chart.leftSide.parents.length > 0 && coupleRow(chart.leftSide.parents)}
-          {chart.rightSide && chart.rightSide.parents.length > 0 && coupleRow(chart.rightSide.parents)}
+          {chart.leftSide.parents.length > 0 && (
+            <div data-block-key={`pb:${chart.leftSide.parents[0].id}`}>
+              {coupleRow(chart.leftSide.parents)}
+            </div>
+          )}
+          {chart.rightSide && chart.rightSide.parents.length > 0 && (
+            <div data-block-key={`pb:${chart.rightSide.parents[0].id}`}>
+              {coupleRow(chart.rightSide.parents)}
+            </div>
+          )}
         </div>
       )}
       <div className="flex items-start justify-center gap-2.5">
@@ -595,8 +772,11 @@ export function FamilyTree({ personaId, indexes }: { personaId: string; indexes:
                   viewport caps. Clicking a box re-roots the chart. */}
               {/* Generous minimum so re-rooting between typical families
                   doesn't resize the panel — only genuinely big charts grow
-                  (user 2026-07-08). */}
-              <div className="relative flex max-h-[85vh] min-h-[26rem] w-fit min-w-[36rem] max-w-[calc(96vw-19.5rem)] flex-col overflow-auto rounded-xl border border-border bg-popover/95 p-4 text-popover-foreground shadow-lg backdrop-blur-md tabular-nums">
+                  (user 2026-07-08). Floor raised 26→30rem / 36→44rem for the
+                  re-rolled multi-household city, where three-generation
+                  charts are common (user 2026-07-10); the max caps keep
+                  small screens working. */}
+              <div className="relative flex max-h-[85vh] min-h-[30rem] w-fit min-w-[44rem] max-w-[calc(96vw-19.5rem)] flex-col overflow-auto rounded-xl border border-border bg-popover/95 p-4 text-popover-foreground shadow-lg backdrop-blur-md tabular-nums">
                 {/* One header row — title left; back control + X share the
                     right cluster so they align on the same vertical center
                     (user 2026-07-08: the absolute X sat off the title line). */}
