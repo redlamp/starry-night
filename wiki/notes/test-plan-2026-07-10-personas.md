@@ -7,7 +7,13 @@ tags:
 
 # Test Plan — 2026-07-10 Session
 
-Covers everything shipped after the 07-08 morning merge (rounds 5-9: directory rework, family tree v3-v5, schools fixes, helicopter v4). Dev server: the feat/personas worktree (`:7911`). Prior plan's parts 1-5 responses are folded in; parts 6+8 responses landed 07-08 evening. Numbered so responses can reference `section.item`; check boxes track what's been tested (info-only sections 8-9 have none).
+Covers everything shipped after the 07-08 morning merge (rounds 5-9: directory rework, family tree v3-v5, schools fixes, helicopter v4; round 10's multi-household fill rode along). Prior plan's parts 1-5 responses are folded in; parts 6+8 responses landed 07-08 evening. Reference results as `section.item` ("7.4"); check boxes track what's been tested.
+
+| Sections | Server | Branch / what's there |
+|---|---|---|
+| 1-7 | http://localhost:7911 | `feat/personas` worktree — the shipped batch this plan tests (same content as `dev`) |
+| 8 | — | known/parked list, don't re-report |
+| 9 | http://localhost:7827 | `feat/persona-perf` (main tree) — NEXT batch's heads-up; optional poking only, population has re-rolled there |
 
 ## 1. City Directory
 
