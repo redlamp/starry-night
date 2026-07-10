@@ -672,6 +672,13 @@ function FamilyChart({
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(host);
+    // ALSO observe the natural-size content root: late box growth (web-font
+    // swap, icon load) doesn't resize the host — its size is pinned by the
+    // wrapper WE sized — so without this the chart outgrows a stale wrapper
+    // by a sliver and scrolls (the 33px Amanda case, user 2026-07-11).
+    // No feedback: measure only sets a translate transform on this element,
+    // which never changes its observed box.
+    if (contentRef.current) ro.observe(contentRef.current);
     return () => ro.disconnect();
   }, [web, focusId, vertical]);
 
@@ -726,7 +733,16 @@ function FamilyChart({
     >
       <ScrollAreaPrimitive.Viewport data-slot="scroll-area-viewport" className="size-full">
         <div ref={hostRef} className="flex min-h-full min-w-full">
-          <div className="relative m-auto shrink-0" style={{ width: view.w, height: view.h }}>
+          {/* overflow-hidden: the normalize contract puts ALL visible content
+              inside this box — but the content root's own natural-layout box
+              (translated, not resized) can hang past it and feed phantom
+              scrollHeight to the viewport (the 33px Amanda sliver, user
+              2026-07-11). Clipping here removes that contribution and can
+              never hide anything real. */}
+          <div
+            className="relative m-auto shrink-0 overflow-hidden"
+            style={{ width: view.w, height: view.h }}
+          >
         <div
           ref={contentRef}
           className={cn(
