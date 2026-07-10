@@ -3,7 +3,6 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import {
   Blend,
-  Fan,
   Maximize2,
   Network,
   Palette,
@@ -340,15 +339,14 @@ function FamilyChart({
       // apply transforms mid-pass: box() reads live rects, so a transform
       // landing early would be counted twice in every later read (the v6
       // double-shift bug) — they land in one batch later.
-      // Generation-aware inter-union air (user 2026-07-10): couples and
-      // unions with descendants need room for their drop lines to read —
-      // leaf SINGLES (unmarried grandchildren) pack tight. The gap between
-      // two adjacent blocks is wide when either side is a couple or a
-      // parent; narrow only between two childless singles. Intra-couple gap
-      // stays gap-1.5 so pairs read as units.
-      const wideGap = vertical ? 28 : 36;
-      const tightGap = vertical ? 12 : 16;
-      const wantsAir = (u: UnionNode) => u.members.length > 1 || u.childIds.length > 0;
+      // Spacing grammar (user 2026-07-10 pass): SIBLING singles sit at the
+      // SAME gap as partners inside a couple (gap-2 = 8px — one visual
+      // rhythm for "these people belong together"), while COUPLE blocks get
+      // 3× that on either side, so groups of partners read as separate
+      // units and their drop lines have air.
+      const wideGap = vertical ? 24 : 28;
+      const tightGap = vertical ? 8 : 10;
+      const wantsAir = (u: UnionNode) => u.members.length > 1;
       const packToward = (row: UnionNode[], targetFor: (u: UnionNode, cur: Box) => number) => {
         const calc = row.flatMap((u) => {
           const cur = blockBox(u);
@@ -645,7 +643,7 @@ function FamilyChart({
     <div
       key={u.key}
       data-block-key={u.key}
-      className={cn("flex gap-1.5", vertical ? "flex-col items-start" : "items-start")}
+      className={cn("flex gap-2", vertical ? "flex-col items-start" : "items-start")}
     >
       {u.members.map(renderBox)}
     </div>
@@ -668,9 +666,9 @@ function FamilyChart({
           ref={contentRef}
           className={cn(
             "absolute top-0 left-0 flex w-max origin-top-left items-center justify-center",
-            // gap-10 columns (user 2026-07-10: room for the centered forks);
-            // gap-9 rows.
-            vertical ? "flex-row gap-10" : "flex-col gap-9",
+            // Channel width back to gap-7 — the centered forks made the
+            // extra column distance unnecessary (user 2026-07-10).
+            vertical ? "flex-row gap-7" : "flex-col gap-9",
           )}
         >
           <svg
@@ -758,9 +756,10 @@ export function FamilyTree({ personaId, indexes }: { personaId: string; indexes:
   // Display mode (user 2026-07-10): Rows = the web chart, Columns = the
   // same chart transposed (generations as columns — often a better fit for
   // the panel with 3-4 generations), Fan = the bow-tie blood-lineage fan.
-  // Columns is the default (user 2026-07-10) — generations across the wide
-  // panel fit 3-4-generation webs best.
-  const [mode, setMode] = useState<"rows" | "columns" | "fan">("columns");
+  // Columns only for now (user 2026-07-10: modes hidden from the UI while
+  // the column layout gets dialed in) — the rows/fan render paths stay
+  // intact behind this constant for when the cluster returns.
+  const mode = "columns" as "rows" | "columns" | "fan";
   // Re-root on the sheet's persona whenever the dialog is opened for a new one.
   const [prevPersonaId, setPrevPersonaId] = useState(personaId);
   if (personaId !== prevPersonaId) {
@@ -885,31 +884,9 @@ export function FamilyTree({ personaId, indexes }: { personaId: string; indexes:
                   <div className="flex items-center gap-1">
                     {/* 3-way display-mode cluster — exactly one active
                         (user 2026-07-10: rows / columns / fan). */}
-                    {/* Network glyph reads as the tree itself: upright for
-                        rows, rotated 90° CCW for columns so the flow arrow
-                        matches each mode's direction (user 2026-07-10). */}
-                    <LayerToggle
-                      label="Row View"
-                      pressed={mode === "rows"}
-                      onToggle={() => setMode("rows")}
-                    >
-                      <Network />
-                    </LayerToggle>
-                    <LayerToggle
-                      label="Column View"
-                      pressed={mode === "columns"}
-                      onToggle={() => setMode("columns")}
-                    >
-                      <Network className="-rotate-90" />
-                    </LayerToggle>
-                    <LayerToggle
-                      label="Fan View"
-                      pressed={mode === "fan"}
-                      onToggle={() => setMode("fan")}
-                    >
-                      <Fan />
-                    </LayerToggle>
-                    <div className="bg-border mx-1 h-4 w-px" aria-hidden />
+                    {/* Mode cluster (Rows/Columns/Fan) hidden for now (user
+                        2026-07-10) — columns only while the layout gets
+                        dialed in; the render paths remain behind `mode`. */}
                     <LayerToggle
                       label="Lineage Colors"
                       pressed={lineage}
