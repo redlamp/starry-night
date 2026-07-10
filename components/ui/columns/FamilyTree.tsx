@@ -727,8 +727,12 @@ function FamilyChart({
     // edges scroll-reachable when shrunk. The content root inside is
     // absolute, laid out at natural size, then translated by the measure
     // pass.
+    // my-auto: with the root explicitly sized, a SHORT chart no longer fills
+    // the panel's 30rem floor — auto margins soak the leftover space so the
+    // chart centers and the footer/controls rows stay pinned to the card's
+    // BOTTOM, not to the tree content (user 2026-07-11).
     <ScrollAreaPrimitive.Root
-      className="relative min-h-0 max-w-full"
+      className="relative my-auto min-h-0 max-w-full"
       style={{ width: view.w || undefined, height: view.h || undefined }}
     >
       <ScrollAreaPrimitive.Viewport data-slot="scroll-area-viewport" className="size-full">
