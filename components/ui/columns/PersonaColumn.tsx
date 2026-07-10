@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { Briefcase, Home } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -73,6 +74,21 @@ function capitalize(s: string): string {
   return s.length > 0 ? s[0].toUpperCase() + s.slice(1) : s;
 }
 
+// Two-line stat (user 2026-07-10): label + primary value share the first
+// line; the second line carries a related-but-separate click target (street
+// address under the district, partner name under the status).
+function SplitStat({ label, top, bottom }: { label: string; top: ReactNode; bottom?: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-0.5 text-sm">
+      <div className="flex items-start justify-between gap-4">
+        <span className="shrink-0 text-muted-foreground">{label}</span>
+        <span className="min-w-0 truncate text-right font-medium">{top}</span>
+      </div>
+      {bottom && <span className="min-w-0 truncate text-right font-medium">{bottom}</span>}
+    </div>
+  );
+}
+
 export function PersonaColumn({
   id,
   part,
@@ -110,32 +126,29 @@ export function PersonaColumn({
     ? indexes.directory.personas.get(persona.partnerId)
     : undefined;
 
-  // District names take internal non-breaking spaces so a wrapping address
-  // never splits "Grove Glen" mid-name — the district drops to its own line
-  // as a unit instead (user 2026-07-08).
-  const homeText = [
+  // Home/Work rows are two lines (user 2026-07-10): district beside the
+  // label (its own click target → district column), street address on the
+  // line below (→ building column).
+  const homeAddressLine = [
     homeAddress ? `${homeAddress.number} ${homeAddress.street}` : null,
     persona.unit ? `Unit ${persona.unit}` : null,
-    homeDistrictName?.replace(/ /g, " "),
   ]
     .filter(Boolean)
     .join(" · ");
 
-  // Work/school address, shown right below Home (user 2026-07-10) — the
-  // commute target already resolves to the right building for either.
   const workBuildingId = persona.commuteTargetBuildingId;
   const workAddress =
     workBuildingId !== undefined ? indexes.names.addresses.get(workBuildingId) : undefined;
-  const workDistrictName =
+  const workDistrictId =
     workBuildingId !== undefined
-      ? indexes.names.districtNames.get(indexes.buildingById.get(workBuildingId)?.districtId ?? "")
+      ? indexes.buildingById.get(workBuildingId)?.districtId
       : undefined;
-  const workText = [
-    workAddress ? `${workAddress.number} ${workAddress.street}` : null,
-    workDistrictName?.replace(/ /g, " "),
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  const workDistrictName = workDistrictId
+    ? indexes.names.districtNames.get(workDistrictId)
+    : undefined;
+  const workAddressLine = workAddress
+    ? `${workAddress.number} ${workAddress.street}`
+    : undefined;
 
   const goTo = (buildingId: number) => {
     const building = indexes.buildingById.get(buildingId);
@@ -348,31 +361,56 @@ export function PersonaColumn({
           stack={(persona.educationDetail ?? persona.education).length > STACK_AT}
           value={persona.educationDetail ?? persona.education}
         />
-        <ColumnStat
+        <SplitStat
           label="Home"
-          stack={homeText.length > STACK_AT}
-          value={
-            <button
-              type="button"
-              onClick={() => push({ kind: "building", id: persona.homeBuildingId })}
-              className="text-right hover:underline"
-            >
-              {homeText}
-            </button>
-          }
-        />
-        {workBuildingId !== undefined && workText && (
-          <ColumnStat
-            label={school && !business ? "School" : "Work"}
-            stack={workText.length > STACK_AT}
-            value={
+          top={
+            homeDistrictName && (
               <button
                 type="button"
-                onClick={() => push({ kind: "building", id: workBuildingId })}
-                className="text-right hover:underline"
+                onClick={() => push({ kind: "district", id: persona.homeDistrictId })}
+                className="hover:underline"
               >
-                {workText}
+                {homeDistrictName}
               </button>
+            )
+          }
+          bottom={
+            homeAddressLine && (
+              <button
+                type="button"
+                onClick={() => push({ kind: "building", id: persona.homeBuildingId })}
+                className="hover:underline"
+              >
+                {homeAddressLine}
+              </button>
+            )
+          }
+        />
+        {workBuildingId !== undefined && (
+          <SplitStat
+            label={school && !business ? "School" : "Work"}
+            top={
+              workDistrictName &&
+              workDistrictId && (
+                <button
+                  type="button"
+                  onClick={() => push({ kind: "district", id: workDistrictId })}
+                  className="hover:underline"
+                >
+                  {workDistrictName}
+                </button>
+              )
+            }
+            bottom={
+              workAddressLine && (
+                <button
+                  type="button"
+                  onClick={() => push({ kind: "building", id: workBuildingId })}
+                  className="hover:underline"
+                >
+                  {workAddressLine}
+                </button>
+              )
             }
           />
         )}
@@ -380,28 +418,19 @@ export function PersonaColumn({
           label="In City"
           value={persona.bornHere ? "Born here" : `${persona.yearsInCity} years`}
         />
-        <ColumnStat
-          label="Status"
-          stack={
-            persona.relationshipStatus.length + (partner ? partner.fullName.length + 3 : 0) >
-            STACK_AT
-          }
-          value={
-            <>
-              {capitalize(persona.relationshipStatus)}
-              {partner && (
-                <>
-                  {" · "}
-                  <button
-                    type="button"
-                    onClick={() => push({ kind: "persona", id: partner.id })}
-                    className="hover:underline"
-                  >
-                    {partner.fullName}
-                  </button>
-                </>
-              )}
-            </>
+        <SplitStat
+          label="Relationship"
+          top={capitalize(persona.relationshipStatus)}
+          bottom={
+            partner && (
+              <button
+                type="button"
+                onClick={() => push({ kind: "persona", id: partner.id })}
+                className="hover:underline"
+              >
+                {partner.fullName}
+              </button>
+            )
           }
         />
       </div>
