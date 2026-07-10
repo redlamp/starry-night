@@ -29,7 +29,10 @@ export const COMMUTE_COLORS: Record<CommuteMode, string> = {
 };
 
 const ARC_SAMPLES = 48;
-const CONNECTION_COLOR = "#9b6bc9";
+// Exported: the resident/company cards colour their Family/Employees
+// headers with the same violet the connection/employment arcs use
+// (user 2026-07-10) — card and skyline share one legend.
+export const CONNECTION_COLOR = "#9b6bc9";
 
 export function CommuteArc({ masterSeed }: { masterSeed: string }) {
   const selectedPersonaId = useSceneStore((s) => s.selectedPersonaId);

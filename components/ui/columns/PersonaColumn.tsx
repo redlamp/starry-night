@@ -2,19 +2,41 @@
 
 import type { ReactNode } from "react";
 import {
+  Armchair,
+  BadgeDollarSign,
   Bike,
+  BookOpen,
   Briefcase,
+  BriefcaseBusiness,
   Bus,
+  CalendarDays,
   Car,
+  ChefHat,
+  ClipboardList,
+  ConciergeBell,
+  Factory,
+  FlaskConical,
   Flower2,
   Footprints,
   GraduationCap,
+  Hammer,
   Heart,
   HeartCrack,
   HeartHandshake,
   Home,
+  Landmark,
+  Laptop,
+  Palette,
+  Scale,
+  Scissors,
+  Shield,
+  ShoppingBag,
+  Stethoscope,
   TrainFront,
+  Truck,
   User,
+  UserCog,
+  Wheat,
   type LucideIcon,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -30,9 +52,15 @@ import {
   CHINESE_ELEMENT_TRAITS,
   MBTI_DESCRIPTIONS,
 } from "@/lib/seed/personaData";
-import { personaFlavor, type CommuteMode, type RelationshipStatus } from "@/lib/seed/personas";
+import type { ProfessionCategory } from "@/lib/seed/personaData";
+import {
+  personaFlavor,
+  type CommuteMode,
+  type Persona,
+  type RelationshipStatus,
+} from "@/lib/seed/personas";
 import { ensureBuildingStories } from "@/lib/seed/personaStory";
-import { COMMUTE_COLORS } from "@/components/scene/CommuteArc";
+import { COMMUTE_COLORS, CONNECTION_COLOR } from "@/components/scene/CommuteArc";
 import { useEntityIndexes } from "./entityData";
 import { FamilyTree } from "./FamilyTree";
 import { GenderIcon } from "./genderIcon";
@@ -72,6 +100,44 @@ const RELATIONSHIP_ICONS: Record<RelationshipStatus, LucideIcon> = {
   widowed: Flower2,
   divorced: HeartCrack,
 };
+
+// Profession-row glyph by industry (user 2026-07-10); statuses cover the
+// professionless. Anything unmapped falls back to the generic briefcase.
+const PROFESSION_ICONS: Partial<Record<ProfessionCategory, LucideIcon>> = {
+  Healthcare: Stethoscope,
+  "Food Service": ChefHat,
+  Technology: Laptop,
+  Finance: Landmark,
+  Legal: Scale,
+  "Office & Admin": ClipboardList,
+  Management: UserCog,
+  Sales: BadgeDollarSign,
+  Science: FlaskConical,
+  "Construction & Trades": Hammer,
+  Manufacturing: Factory,
+  Agriculture: Wheat,
+  Transportation: Truck,
+  "Arts & Media": Palette,
+  Retail: ShoppingBag,
+  "Personal Care": Scissors,
+  Hospitality: ConciergeBell,
+  Education: BookOpen,
+  "Public Safety": Shield,
+};
+
+function professionIconFor(p: Persona): LucideIcon {
+  if (p.profession) return PROFESSION_ICONS[p.profession.category] ?? BriefcaseBusiness;
+  if (p.workStatus === "student") return BookOpen;
+  if (p.workStatus === "retired") return Armchair;
+  return BriefcaseBusiness;
+}
+
+// Row-icon colour coding (user 2026-07-10): home rides the residential
+// district green, work the downtown gold, education the transit blue —
+// colours the map legend already taught.
+const HOME_ICON_COLOR = "#3fa87e";
+const WORK_ICON_COLOR = "#f2b134";
+const EDUCATION_ICON_COLOR = "#6fa8ff";
 
 const MONTHS = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -140,7 +206,7 @@ function StatRow({
   );
   return (
     <div className="flex flex-col gap-0.5 text-base">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex items-start justify-between gap-3">
         <span className="flex min-w-0 shrink-0 items-center gap-2 text-muted-foreground">
           <span className="flex w-5 shrink-0 items-center justify-center">
             {glyph &&
@@ -162,9 +228,9 @@ function StatRow({
           </span>
           {label}
         </span>
-        <span className="min-w-0 truncate text-right font-medium">{top}</span>
+        <span className="min-w-0 break-words text-right font-medium">{top}</span>
       </div>
-      {bottom && <span className="min-w-0 truncate pl-7 text-right font-medium">{bottom}</span>}
+      {bottom && <span className="min-w-0 break-words pl-7 text-right font-medium">{bottom}</span>}
     </div>
   );
 }
@@ -400,10 +466,12 @@ export function PersonaColumn({
       <div className="flex flex-col gap-1.5">
         {/* Tenure leads the section (user 2026-07-10). */}
         <StatRow
+          icon={CalendarDays}
           label="In City"
           top={persona.bornHere ? "Born here" : `${persona.yearsInCity} years`}
         />
         <StatRow
+          icon={professionIconFor(persona)}
           label={school && !business ? "School" : "Profession"}
           top={
             workPlace ? (
@@ -446,6 +514,7 @@ export function PersonaColumn({
         )}
         <StatRow
           icon={GraduationCap}
+          iconTint={EDUCATION_ICON_COLOR}
           iconAction={
             almaMater
               ? () => {
@@ -471,6 +540,7 @@ export function PersonaColumn({
         />
         <StatRow
           icon={Home}
+          iconTint={HOME_ICON_COLOR}
           iconAction={() => flyTo(persona.homeBuildingId)}
           iconLabel="Fly Home"
           label="Home"
@@ -500,6 +570,7 @@ export function PersonaColumn({
         {workBuildingId !== undefined && (
           <StatRow
             icon={Briefcase}
+            iconTint={WORK_ICON_COLOR}
             iconAction={() => flyTo(workBuildingId)}
             iconLabel={school && !business ? "Fly to School" : "Fly to Work"}
             label={school && !business ? "School" : "Work"}
@@ -568,7 +639,9 @@ export function PersonaColumn({
           <Separator />
           <div className="flex flex-col gap-0.5">
             <div className="flex items-center justify-between">
-              <div className="text-base font-medium">Family</div>
+              <div className="text-base font-medium" style={{ color: CONNECTION_COLOR }}>
+                Family
+              </div>
               {!hideFamilyTree && <FamilyTree personaId={persona.id} indexes={indexes} />}
             </div>
             {persona.family.map((link) => {
