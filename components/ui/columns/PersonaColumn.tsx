@@ -19,6 +19,7 @@ import { ensureBuildingStories } from "@/lib/seed/personaStory";
 import { COMMUTE_COLORS } from "@/components/scene/CommuteArc";
 import { useEntityIndexes } from "./entityData";
 import { FamilyTree } from "./FamilyTree";
+import { GenderIcon } from "./genderIcon";
 import { ColumnStat, IconTip } from "./EntityColumns";
 
 // Column port of the old PersonaPanel. Ordering is a hard design rule: badges
@@ -148,7 +149,8 @@ export function PersonaColumn({
           {story.epithet && (
             <span className="truncate text-sm italic text-muted-foreground">{story.epithet}</span>
           )}
-          <span className="text-xs text-muted-foreground">
+          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+            <GenderIcon identity={persona.genderIdentity} className="size-3.5 shrink-0" />
             {[
               persona.pronouns,
               String(persona.age),
