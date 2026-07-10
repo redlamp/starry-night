@@ -648,50 +648,22 @@ function FamilyChart({
       // extends the scrollable bounds without shrinking the stale w-max
       // extents (phantom scroll + dead margins). Fix: translate the whole
       // content root so the actual bounding box starts at the padding, and
-      // size an explicit wrapper to exactly that box. Then, if the content
-      // is taller than the panel's available chart region, scale the root
-      // down to fit — boxes and SVG scale together — with a 0.65 floor so
-      // text stays legible (below the floor, scrolling returns).
+      // size an explicit wrapper to exactly that box. The chart NEVER
+      // scales (user 2026-07-11: "do not scale the content down, expand
+      // the card to fit the content") — the panel grows around the wrapper
+      // (the ScrollArea root is flex-auto, so the wrapper's intrinsic size
+      // drives the panel up to its 85vh/96vw caps); the view-aware trim in
+      // familyWeb keeps generations within the screen's ceiling, so the
+      // scrollbar only exists when a protected line genuinely exceeds it.
       const pad = 12;
       const w0 = maxX - minX + pad * 2;
       const h0 = maxY - minY + pad * 2;
-      // Available chart height = the panel's height cap minus its fixed
-      // rows (header/footer/controls) and vertical padding+border. Derived
-      // from the caps, not the live shell size, so the result can't feed
-      // back into itself through the ResizeObserver.
-      const panel = host.closest<HTMLElement>('[data-slot="family-tree-panel"]');
-      let fixedH = 0;
-      if (panel) {
-        for (const child of panel.children) {
-          // Skip the branch containing the chart (the ScrollArea root).
-          if (!child.contains(host)) fixedH += (child as HTMLElement).offsetHeight;
-        }
-      }
-      const panelCap = Math.max(480, window.innerHeight * 0.85); // min-h-[30rem] / max-h-[85vh]
-      // Fit budget = the LIVE viewport box, minus 2px safety — estimating it
-      // from the caps left px-level gaps that still summoned a scrollbar
-      // (user 2026-07-11: "FIX IT"). Measuring is feedback-safe: the
-      // ScrollArea root is flex-1 basis-0, so the viewport's height never
-      // depends on the wrapper we size below. The cap-derived estimate
-      // remains only as a fallback for the first frame.
-      const viewportEl = host.parentElement;
-      const availEstimate = Math.floor(Math.max(160, panelCap - fixedH - 44));
-      const avail =
-        viewportEl && viewportEl.clientHeight > 0
-          ? Math.max(160, viewportEl.clientHeight - 2)
-          : availEstimate;
-      const scale = h0 > avail ? Math.max(0.65, avail / h0) : 1;
-      // Right-to-left application: translate in natural coords, then scale
-      // about the top-left origin.
-      contentEl.style.transform = `scale(${scale}) translate(${pad - minX}px, ${pad - minY}px)`;
+      contentEl.style.transform = `translate(${pad - minX}px, ${pad - minY}px)`;
 
       setSegs(next);
       setView({
-        w: Math.ceil(w0 * scale),
-        // Above the 0.65 floor the chart FITS by construction — clamp the
-        // wrapper to the budget so estimate error can't leave a scrollable
-        // sliver. At the floor, overflow is real and scrolling is intended.
-        h: scale > 0.65 ? Math.min(Math.ceil(h0 * scale), avail) : Math.ceil(h0 * scale),
+        w: Math.ceil(w0),
+        h: Math.ceil(h0),
         svgW: Math.max(0, maxX),
         svgH: Math.max(0, maxY),
       });
@@ -734,19 +706,20 @@ function FamilyChart({
 
   return (
     // Shell: the chart's OWN scroll viewport (user 2026-07-10: header and
-    // footer rows stay fixed; only the tree scrolls) — a shadcn/base-ui
-    // ScrollArea (user 2026-07-11: shadcn scrollbars, not native chrome),
-    // composed from primitives so BOTH orientations get the styled bar.
-    // min-h-0 caps the root at the flex slot; the viewport scrolls when even
-    // the 0.65-scale floor cannot fit. Inside, the host div (min-h/w-full,
-    // measurement origin + ResizeObserver target) holds the sized wrapper —
-    // the ONLY element contributing layout size (exactly the
-    // normalized+scaled content box, so no phantom scroll); m-auto (not
-    // items-center) centers it when smaller AND keeps all edges
-    // scroll-reachable when larger — centered flex content clips its
-    // overflowing top. The content root inside is absolute, laid out at
-    // natural size, then translated/scaled by the measure pass.
-    <ScrollAreaPrimitive.Root className="relative min-h-0 flex-1">
+    // footer rows stay fixed) — a shadcn/base-ui ScrollArea (user
+    // 2026-07-11), composed from primitives so BOTH orientations get the
+    // styled bar. flex-auto (basis AUTO, not 0): the wrapper's intrinsic
+    // size flows up viewport → root → panel, so the CARD GROWS to fit the
+    // full-size chart (user 2026-07-11: never scale the content); min-h-0
+    // lets the root shrink when the panel hits its 85vh cap — the only case
+    // the viewport scrolls, and the view-aware trim makes it rare. The host
+    // div (min-h/w-full, measurement origin + ResizeObserver target) holds
+    // the sized wrapper — the ONLY element contributing layout size
+    // (exactly the normalized content box, so no phantom scroll); m-auto
+    // (not items-center) centers it when smaller AND keeps all edges
+    // scroll-reachable when larger. The content root inside is absolute,
+    // laid out at natural size, then translated by the measure pass.
+    <ScrollAreaPrimitive.Root className="relative min-h-0 flex-auto">
       <ScrollAreaPrimitive.Viewport data-slot="scroll-area-viewport" className="size-full">
         <div ref={hostRef} className="flex min-h-full min-w-full">
           <div className="relative m-auto shrink-0" style={{ width: view.w, height: view.h }}>
@@ -862,13 +835,13 @@ export function FamilyTree({ personaId, indexes }: { personaId: string; indexes:
 
   const focus = indexes.directory.personas.get(focusId) ?? indexes.directory.personas.get(personaId);
   if (!focus) return null;
-  // View-aware trim budget (user 2026-07-11: Amanda's web hit the 0.65
-  // scale floor and scrolled while smaller trees rendered large): a
-  // generation taller than the chart region at the floor scale trims into
-  // "+N more" instead of scrolling. ~52px cell + ~10px average gap, floor
-  // scale 0.65; 190px ≈ the panel's fixed rows + padding.
+  // View-aware trim budget (user 2026-07-11): the chart never scales — the
+  // panel grows to fit it — so a generation must fit the panel's 85vh
+  // ceiling at FULL size; anything past that trims into "+N more" instead
+  // of scrolling. ~52px cell + ~10px average gap; 190px ≈ the panel's
+  // fixed rows + padding.
   const chartCap = Math.max(480, (typeof window === "undefined" ? 900 : window.innerHeight) * 0.85);
-  const maxPerGeneration = Math.max(8, Math.floor((chartCap - 190) / (62 * 0.65)));
+  const maxPerGeneration = Math.max(6, Math.floor((chartCap - 190) / 62));
   const web = buildFamilyWeb(indexes, focus, { maxPerGeneration });
   const fan = mode === "fan" ? buildFamilyFan(indexes, focus, web) : null;
   const origin = indexes.directory.personas.get(personaId);
