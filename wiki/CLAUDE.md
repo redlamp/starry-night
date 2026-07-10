@@ -26,6 +26,7 @@ If you (Claude) are unsure where info belongs, prefer `wiki/` for: project state
 - Note titles inside the file: H1 in Title Case. Example: `# Chess Narrative Engine`.
 - Daily notes: `YYYY-MM-DD.md` (no title needed, date is the title).
 - Session test plans: `test-plan-[date]-[topic].md` in `notes/` — date before topic, e.g. `test-plan-2026-07-10-personas.md` (user 2026-07-10).
+- Test-plan body: numbered `## N.` sections; testable items as numbered check boxes (`1. [ ]` — Obsidian renders numbered task lists) so the user can tick what's tested AND reference results as `section.item` ("7.4"). Info-only sections (known/parked, next-batch heads-ups) get plain bullets or plain numbers, no boxes (user 2026-07-10).
 
 ## Linking
 
