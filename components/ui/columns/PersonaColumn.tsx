@@ -341,13 +341,6 @@ export function PersonaColumn({
   }
 
   const workPlace = business ?? school;
-  const professionValue = persona.profession
-    ? workPlace
-      ? `${persona.profession.title} · ${workPlace.name}`
-      : persona.profession.title
-    : school
-      ? `Student · ${school.name}`
-      : capitalize(persona.workStatus);
 
 
   if (part === "pinned") {
@@ -479,20 +472,27 @@ export function PersonaColumn({
           label="In City"
           top={persona.bornHere ? "Born here" : `${persona.yearsInCity} years`}
         />
+        {/* Title on its own line, employer on the next (user 2026-07-11) —
+            the composed "title · employer" wrapped mid-phrase. */}
         <StatRow
           icon={professionIconFor(persona)}
           label={school && !business ? "School" : "Profession"}
           top={
-            workPlace ? (
+            persona.profession
+              ? persona.profession.title
+              : school
+                ? "Student"
+                : capitalize(persona.workStatus)
+          }
+          bottom={
+            workPlace && (
               <button
                 type="button"
                 onClick={() => push({ kind: "company", id: workPlace.id })}
                 className="hover:underline"
               >
-                {professionValue}
+                {workPlace.name}
               </button>
-            ) : (
-              professionValue
             )
           }
         />
