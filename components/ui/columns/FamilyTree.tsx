@@ -708,18 +708,22 @@ function FamilyChart({
     // Shell: the chart's OWN scroll viewport (user 2026-07-10: header and
     // footer rows stay fixed) — a shadcn/base-ui ScrollArea (user
     // 2026-07-11), composed from primitives so BOTH orientations get the
-    // styled bar. flex-auto (basis AUTO, not 0): the wrapper's intrinsic
-    // size flows up viewport → root → panel, so the CARD GROWS to fit the
-    // full-size chart (user 2026-07-11: never scale the content); min-h-0
-    // lets the root shrink when the panel hits its 85vh cap — the only case
-    // the viewport scrolls, and the view-aware trim makes it rare. The host
-    // div (min-h/w-full, measurement origin + ResizeObserver target) holds
-    // the sized wrapper — the ONLY element contributing layout size
-    // (exactly the normalized content box, so no phantom scroll); m-auto
-    // (not items-center) centers it when smaller AND keeps all edges
-    // scroll-reachable when larger. The content root inside is absolute,
-    // laid out at natural size, then translated by the measure pass.
-    <ScrollAreaPrimitive.Root className="relative min-h-0 flex-auto">
+    // styled bar. The root is sized EXPLICITLY to the measured chart box
+    // (no intrinsic-size percolation through viewport percentages — that
+    // chain silently failed and left scrollbars): the panel is w-fit /
+    // max-h-capped, so an explicitly-sized root GROWS the card to fit the
+    // full-size chart (user 2026-07-11: never scale the content), and
+    // min-h-0/max-w-full let flex shrink the root only when the panel hits
+    // its caps — the sole case the viewport scrolls, made rare by the
+    // view-aware trim. The host div (min-h/w-full, measurement origin +
+    // ResizeObserver target) holds the sized wrapper; m-auto keeps all
+    // edges scroll-reachable when shrunk. The content root inside is
+    // absolute, laid out at natural size, then translated by the measure
+    // pass.
+    <ScrollAreaPrimitive.Root
+      className="relative min-h-0 max-w-full"
+      style={{ width: view.w || undefined, height: view.h || undefined }}
+    >
       <ScrollAreaPrimitive.Viewport data-slot="scroll-area-viewport" className="size-full">
         <div ref={hostRef} className="flex min-h-full min-w-full">
           <div className="relative m-auto shrink-0" style={{ width: view.w, height: view.h }}>

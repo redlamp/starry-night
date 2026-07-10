@@ -629,7 +629,7 @@ export function StarryNightV2Model() {
         return;
       }
       if (
-        e.key.toLowerCase() === "r" &&
+        e.key?.toLowerCase() === "r" &&
         !e.ctrlKey &&
         !e.metaKey &&
         !e.altKey &&
