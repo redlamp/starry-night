@@ -1,4 +1,4 @@
-import seedrandom from "seedrandom";
+import { seededRng } from "./rng";
 import type { Persona, PersonaId, PersonaDirectory } from "./personas";
 import type { CityNames } from "./naming";
 import type { ProfessionCategory } from "./personaData";
@@ -48,7 +48,7 @@ function pick<T>(rng: () => number, arr: readonly T[]): T {
 }
 
 export function buildCityLore(masterSeed: string, names: CityNames): CityLoreEntry[] {
-  const rng = seedrandom(`${masterSeed}::personas::lore`);
+  const rng = seededRng(`${masterSeed}::personas::lore`);
   const streets = [...names.streetNames.values()];
   const streetBase = () => {
     const s = streets.length > 0 ? pick(rng, streets) : "Harbor Street";
@@ -560,7 +560,7 @@ function weaveStateFor(masterSeed: string, dir: PersonaDirectory): WeaveState {
   // Deterministic legend pick: chosen by a dedicated stream over the full
   // adult walk so it doesn't shift with pool edits — and doesn't depend on
   // which building happens to be woven first.
-  const legendRng = seedrandom(`${masterSeed}::personas::legend`);
+  const legendRng = seededRng(`${masterSeed}::personas::legend`);
   const adults = [...dir.personas.values()].filter((p) => p.age >= 25 && p.age <= 75);
   const legendId = adults.length > 0 ? adults[Math.floor(legendRng() * adults.length)].id : null;
 
@@ -626,7 +626,7 @@ function weavePersonaStory(
   p: Persona,
 ): void {
   {
-    const rng = seedrandom(`${masterSeed}::personas::story::${p.id}`);
+    const rng = seededRng(`${masterSeed}::personas::story::${p.id}`);
     p.schedule = { shift: shiftFor(p, rng) };
 
     // Domain word — deduped within the building (two crow-keepers on one
@@ -757,7 +757,7 @@ function weavePersonaRelation(
   p: Persona,
 ): void {
   if (p.age < 16) return;
-  const rng = seedrandom(`${masterSeed}::personas::relations::${p.id}`);
+  const rng = seededRng(`${masterSeed}::personas::relations::${p.id}`);
   if (rng() < 0.7) return; // ~30% of adults get an edge
   // Candidate pools by context.
   const neighbors = (dir.byHomeBuilding.get(p.homeBuildingId) ?? [])

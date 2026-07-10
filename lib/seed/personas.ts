@@ -1,4 +1,4 @@
-import seedrandom from "seedrandom";
+import { seededRng } from "./rng";
 import { generateCity, type Building, type Archetype } from "./cityGen";
 import type { DistrictCharacter } from "./district";
 import { buildingPopulation } from "./population";
@@ -414,7 +414,7 @@ export type PersonaFlavor = {
 };
 
 export function personaFlavor(masterSeed: string, p: Persona): PersonaFlavor {
-  const rng = seedrandom(`${masterSeed}::personas::flavor::${p.id}`);
+  const rng = seededRng(`${masterSeed}::personas::flavor::${p.id}`);
   const mbti = drawMbti(rng);
   const birthHour = Math.floor(rng() * 24);
   const moonSign = WESTERN_ZODIAC[Math.floor(rng() * 12)].name;
@@ -485,13 +485,15 @@ type HouseholdKind =
   | "multigen"
   | "widowed-elder";
 
+// Multigen 5 → 8 (user 2026-07-10: "more multi-generational families") —
+// taken from single/roommates so the sum stays 100.
 const HOUSEHOLD_MIX: Array<{ value: HouseholdKind; weight: number }> = [
-  { value: "single", weight: 26 },
+  { value: "single", weight: 24 },
   { value: "couple", weight: 22 },
   { value: "family", weight: 26 },
   { value: "single-parent", weight: 8 },
-  { value: "roommates", weight: 9 },
-  { value: "multigen", weight: 5 },
+  { value: "roommates", weight: 8 },
+  { value: "multigen", weight: 8 },
   { value: "widowed-elder", weight: 4 },
 ];
 
@@ -563,7 +565,7 @@ function* buildDirectorySteps(
     const homeList: Household[] = [];
 
     for (let h = 0; h < count; h++) {
-      const rng = seedrandom(`${masterSeed}::personas::hh::${b.id}::${h}`);
+      const rng = seededRng(`${masterSeed}::personas::hh::${b.id}::${h}`);
       const kind = weightedPick(rng, HOUSEHOLD_MIX);
 
       // Shared household facts.
@@ -655,10 +657,22 @@ function* buildDirectorySteps(
             familyName,
             ethnicity: baseEthnicity === partnerEthnicity ? baseEthnicity : ("Multiracial" as Ethnicity),
           });
+          const grandAge = parentAge + midInt(rng, 24, 32);
+          const g1 = pres();
           specs.push({
-            slot: 3, presentation: pres(), age: parentAge + midInt(rng, 24, 32),
+            slot: 3, presentation: g1, age: grandAge,
             familyName, ethnicity: baseEthnicity,
           });
+          // ~45% of multigen households keep BOTH grandparents (user
+          // 2026-07-10: more three-generation presence) — the trees then show
+          // a grandparent COUPLE instead of a lone widowed elder.
+          if (rng() < 0.45) {
+            specs.push({
+              slot: 4, presentation: g1 === "m" ? "f" : "m",
+              age: Math.max(parentAge + 20, grandAge + midInt(rng, -4, 4)),
+              familyName, ethnicity: baseEthnicity,
+            });
+          }
           break;
         }
         case "widowed-elder": {
@@ -809,10 +823,21 @@ function* buildDirectorySteps(
           setStatus(ids[0], rng() < 0.6 ? "divorced" : "single");
         }
         if (kind === "multigen") {
-          // Grandparent (slot 3) is parent of the slot-0 adult.
+          // Grandparent (slot 3) is parent of the slot-0 adult; when slot 4
+          // exists, the grandparents are a married couple and BOTH parent the
+          // slot-0 adult (user 2026-07-10: more three-generation presence).
           link(ids[3], "child", ids[0]);
           link(ids[0], "parent", ids[3]);
-          setStatus(ids[3], rng() < 0.7 ? "widowed" : "divorced");
+          if (ids.length > 4) {
+            link(ids[4], "child", ids[0]);
+            link(ids[0], "parent", ids[4]);
+            setStatus(ids[3], "married", ids[4]);
+            setStatus(ids[4], "married", ids[3]);
+            link(ids[3], "partner", ids[4]);
+            link(ids[4], "partner", ids[3]);
+          } else {
+            setStatus(ids[3], rng() < 0.7 ? "widowed" : "divorced");
+          }
         }
       }
       if (kind === "widowed-elder") setStatus(ids[0], "widowed");
@@ -847,7 +872,7 @@ function* buildDirectorySteps(
     // Residential archetypes only host ground-floor shops in street-life
     // districts; dedicated work archetypes host everywhere.
     if (isShopHost && !SHOP_DISTRICTS.has(character)) continue;
-    const rng = seedrandom(`${masterSeed}::personas::biz::${b.id}`);
+    const rng = seededRng(`${masterSeed}::personas::biz::${b.id}`);
     if (isShopHost && rng() > 0.45) continue; // not every block has a storefront
     const count = BUSINESS_COUNT[b.archetype] ?? 1;
     const list: Business[] = [];
@@ -905,7 +930,7 @@ function* buildDirectorySteps(
   // highs ~5 (min one citywide). Kids are then assigned to the NEAREST school
   // of their age tier — no rng, pure distance — and get a walk/bus commute.
   {
-    const rng = seedrandom(`${masterSeed}::personas::schools`);
+    const rng = seededRng(`${masterSeed}::personas::schools`);
     const CARDINAL_WORD: Record<string, string> = {
       n: "North", s: "South", e: "East", w: "West",
       ne: "Northeast", nw: "Northwest", se: "Southeast", sw: "Southwest",
@@ -1034,7 +1059,7 @@ function* buildDirectorySteps(
 
   // ---- Pass 3: employment weave ----
   {
-    const rng = seedrandom(`${masterSeed}::personas::employment`);
+    const rng = seededRng(`${masterSeed}::personas::employment`);
     const byKind = new Map<WorkplaceType, Business[]>();
     for (const biz of businesses.values()) {
       const list = byKind.get(biz.kind) ?? [];
@@ -1106,7 +1131,7 @@ function* buildDirectorySteps(
   // scale inside it. Downtown/subcentre/mixed homes sit on the transit spine,
   // so their mid-range commuters ride; everyone else defaults to the car.
   {
-    const rng = seedrandom(`${masterSeed}::personas::commute`);
+    const rng = seededRng(`${masterSeed}::personas::commute`);
     const buildingById = new Map(buildings.map((b) => [b.id, b]));
     sinceYield = 0;
     for (const p of personas.values()) {
@@ -1146,7 +1171,7 @@ function* buildDirectorySteps(
   // discovered genealogy rather than assignment: "Diaz, 34, Little Harbor"
   // clicks through to "Diaz, 63, Chestnut Hollow".
   {
-    const rng = seedrandom(`${masterSeed}::personas::family`);
+    const rng = seededRng(`${masterSeed}::personas::family`);
     // Elders indexed by surname; only heads-of-household adults qualify (a
     // 60-year-old already living with their kids shouldn't gain extras).
     const eldersBySurname = new Map<string, Persona[]>();
@@ -1166,7 +1191,9 @@ function* buildDirectorySteps(
       if (p.age < 25 || p.age > 45) continue;
       // Skip anyone who already has an in-city parent (multigen households).
       if (p.family.some((l) => l.role === "parent")) continue;
-      if (rng() > 0.22) continue;
+      // 0.22 → 0.32 (user 2026-07-10): more cross-town parents = more trees
+      // with a visible third generation.
+      if (rng() > 0.32) continue;
       const candidates = (eldersBySurname.get(p.familyName) ?? []).filter(
         (e) =>
           e.homeBuildingId !== p.homeBuildingId &&
@@ -1192,7 +1219,7 @@ function* buildDirectorySteps(
 
   // ---- Pass 4: dating weave (cross-building) ----
   {
-    const rng = seedrandom(`${masterSeed}::personas::dating`);
+    const rng = seededRng(`${masterSeed}::personas::dating`);
     // Eligible: single adults (not widowed elders), some fraction looking.
     const seekers: Persona[] = [];
     for (const p of personas.values()) {
