@@ -228,9 +228,17 @@ function StatRow({
           </span>
           {label}
         </span>
-        <span className="min-w-0 break-words text-right font-medium">{top}</span>
+        {/* [&_button]:text-right — button UA style centers wrapped text,
+            which read as centre-aligned values (user 2026-07-10). */}
+        <span className="min-w-0 break-words text-right font-medium [&_button]:text-right">
+          {top}
+        </span>
       </div>
-      {bottom && <span className="min-w-0 break-words pl-7 text-right font-medium">{bottom}</span>}
+      {bottom && (
+        <span className="min-w-0 break-words pl-7 text-right font-medium [&_button]:text-right">
+          {bottom}
+        </span>
+      )}
     </div>
   );
 }
