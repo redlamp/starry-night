@@ -1,7 +1,15 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Briefcase, Building2, MapPin, Route, Users, type LucideIcon } from "lucide-react";
+import {
+  Briefcase,
+  Building2,
+  MapPin,
+  Route,
+  Signature,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
 import { useSceneStore } from "@/lib/state/sceneStore";
 import { usePersonaDirectoryDeferred } from "@/lib/hooks/usePersonaDirectory";
 import { Badge } from "@/components/ui/badge";
@@ -35,14 +43,6 @@ import { focusBuilding } from "@/lib/scene/focusBuilding";
 // recomputes from the seed; only query/filter/spotlight-step are UI state.
 
 const MAX_SEARCH_RESULTS = 50;
-
-// Pinned pins sit on a near-black or near-white plate — whichever contrasts
-// with the district colour (user 2026-07-08). Plain Rec.709 luma threshold.
-function pinPlateFor(hex: string): string {
-  const n = parseInt(hex.replace("#", ""), 16);
-  const luma = 0.2126 * ((n >> 16) & 255) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255);
-  return luma > 140 ? "rgba(10, 12, 16, 0.9)" : "rgba(245, 247, 250, 0.95)";
-}
 
 // Address numbers render as a right-aligned column sized by the city's widest
 // address (tabular-nums is inherited panel-wide), so "1203 Martin Parkway"
@@ -421,8 +421,13 @@ export function DirectorySection() {
           viewport makes it the real scroll container and keeps the panel
           content-sized when the list is short. */}
       {trimmedQuery ? (
-        <ScrollArea className="**:data-[slot=scroll-area-viewport]:max-h-[calc(100vh-21rem)]">
-          <div className="flex flex-col gap-0.5 pr-2">
+        // -mr-3 bleeds through ControlDock's own p-3 pr-3 wrapper so the
+        // scrollbar sits flush at the card's inner edge, same as the columns'
+        // ScrollArea (which has no such outer padding to fight); pr-4 on the
+        // content below is the columns' text-to-scrollbar gap (user
+        // 2026-07-08: "scrollbar too close to text, and far from edge").
+        <ScrollArea className="-mr-3 **:data-[slot=scroll-area-viewport]:max-h-[calc(100vh-21rem)]">
+          <div className="flex flex-col gap-0.5 pr-4">
             {allMatches.length > MAX_SEARCH_RESULTS && (
               <div className="text-muted-foreground px-1 text-sm">{allMatches.length} matches</div>
             )}
@@ -488,95 +493,134 @@ export function DirectorySection() {
             </Select>
           </div>
 
-          <ScrollArea className="**:data-[slot=scroll-area-viewport]:max-h-[calc(100vh-24rem)]">
-            <div className="flex flex-col gap-1 pr-2">
-          {[...districtList]
-            .sort((a, b) =>
-              districtSort === "name"
-                ? a.properName.localeCompare(b.properName)
-                : districtSort === "roads"
-                  ? b.roadCount - a.roadCount
-                  : districtSort === "businesses"
-                    ? b.businessCount - a.businessCount
-                    : b.residentCount - a.residentCount,
-            )
-            .map((d) => (
-            <Collapsible key={d.id}>
-              {/* The WHOLE header expands (user 2026-07-08): district name in
-                  its legend color on one line, counts below. Hovering traces
-                  the district border on the map; the pin makes it stick and
-                  flies the camera to the district. */}
-              <div
-                className={cn(
-                  "flex items-center",
-                  topRef?.kind === "district" && topRef.id === d.id && "rounded-md bg-primary/15",
-                )}
-                onMouseEnter={() => setHoverDistrictId(d.id)}
-                onMouseLeave={() => setHoverDistrictId(null)}
-              >
-                <IconTip label="Pin District">
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={`Pin ${d.properName}`}
-                    aria-pressed={pinnedDistrictId === d.id}
-                    onClick={() => pinDistrict(d)}
-                    className="size-6 shrink-0 [&_svg]:size-3.5"
-                    style={{
-                      color: d.color,
-                      ...(pinnedDistrictId === d.id
-                        ? { backgroundColor: pinPlateFor(d.color) }
-                        : {}),
-                    }}
+          {/* -mr-3/pr-4: same edge-and-gap fix as the search list above. */}
+          <ScrollArea className="-mr-3 **:data-[slot=scroll-area-viewport]:max-h-[calc(100vh-24rem)]">
+            <div className="flex flex-col pr-4">
+              {[...districtList]
+                .sort((a, b) =>
+                  districtSort === "name"
+                    ? a.properName.localeCompare(b.properName)
+                    : districtSort === "roads"
+                      ? b.roadCount - a.roadCount
+                      : districtSort === "businesses"
+                        ? b.businessCount - a.businessCount
+                        : b.residentCount - a.residentCount,
+                )
+                .map((d) => (
+                  // Hover lives on the Collapsible ROOT, not just the header (user
+                  // 2026-07-08): that way the expanded building list — which sits
+                  // between this header and the next one — keeps the district
+                  // highlighted instead of dropping through to the pinned fallback.
+                  // The list above dropped its row gap-1 in favor of py-0.5 HERE so
+                  // every row's hover hitbox is vertically contiguous with its
+                  // neighbors — no dead gap that snaps the highlight back to the
+                  // pinned district while the cursor is between headers.
+                  <Collapsible
+                    key={d.id}
+                    className="py-0.5"
+                    onMouseEnter={() => setHoverDistrictId(d.id)}
+                    onMouseLeave={() => setHoverDistrictId(null)}
                   >
-                    <MapPin />
-                  </Button>
-                </IconTip>
-                <CollapsibleTrigger className="min-w-0 flex-1 rounded-md px-1.5 py-1.5 hover:bg-muted/60">
-                <span className="flex min-w-0 flex-1 flex-col gap-0.5 text-left">
-                  <span className="truncate text-sm">
-                    <span className="font-medium" style={{ color: d.color }}>
-                      {d.properName}
-                    </span>
-                    <span className="text-muted-foreground text-xs"> · {d.displayName}</span>
-                  </span>
-                  <span className="text-muted-foreground truncate text-xs">
-                    {d.roadCount} roads · {d.businessCount} businesses ·{" "}
-                    {d.residentCount.toLocaleString()} residents
-                  </span>
-                </span>
-                </CollapsibleTrigger>
-              </div>
-              <CollapsiblePanel>
-                <div className="flex flex-col gap-0.5 py-1 pl-2">
-                  {/* Building rows (user 2026-07-08): italic building name OR
-                      plain street name on the left; the address number right-
-                      aligned, then a gap, then the household count. */}
-                  {d.buildings.map((b) => (
-                    <button
-                      key={b.buildingId}
-                      type="button"
-                      onClick={() => goToBuilding(b.buildingId)}
+                    {/* The WHOLE header expands (user 2026-07-08): district name in
+                        its legend color on one line, counts below. Hovering traces
+                        the district border on the map; the pin makes it stick and
+                        flies the camera to the district. Pin sits inside the
+                        trigger, immediately left of its auto-appended chevron
+                        (user 2026-07-08), rendered as a span (not a button) so it
+                        doesn't nest inside the trigger's own button element. */}
+                    <CollapsibleTrigger
                       className={cn(
-                        "hover:bg-foreground/10 -mx-1 flex items-baseline justify-between gap-2 rounded px-1 text-left text-sm",
-                        isSelected("building", String(b.buildingId)) && "bg-primary/15",
+                        "hover:bg-muted/60 min-w-0 items-center rounded-md px-1.5 py-1.5",
+                        topRef?.kind === "district" && topRef.id === d.id && "bg-primary/15",
                       )}
                     >
-                      <span className={cn("min-w-0 truncate", b.name && "italic")}>
-                        {b.name ?? b.address?.street ?? `Building #${b.buildingId}`}
+                      <span className="flex min-w-0 flex-1 flex-col gap-0.5 text-left">
+                        <span className="truncate text-sm">
+                          <span className="font-medium" style={{ color: d.color }}>
+                            {d.properName}
+                          </span>
+                          <span className="text-muted-foreground text-xs"> · {d.displayName}</span>
+                        </span>
+                        <span className="text-muted-foreground truncate text-xs">
+                          {d.roadCount} roads · {d.businessCount} businesses ·{" "}
+                          {d.residentCount.toLocaleString()} residents
+                        </span>
                       </span>
-                      <span className="text-muted-foreground flex shrink-0 items-baseline gap-3 text-xs">
-                        {b.address && (
-                          <AddrNum n={b.address.number} width={directory.names.maxAddressDigits} />
-                        )}
-                        <span className="inline-block w-9 text-right">{b.householdCount} hh</span>
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </CollapsiblePanel>
-            </Collapsible>
-          ))}
+                      <IconTip label="Pin District">
+                        <Button
+                          render={<span />}
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={`Pin ${d.properName}`}
+                          aria-pressed={pinnedDistrictId === d.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            pinDistrict(d);
+                          }}
+                          className={cn(
+                            "size-6 shrink-0 [&_svg]:size-3.5",
+                            // Theme-contrast plate, not per-district luma (user
+                            // 2026-07-08): `foreground` itself flips light/dark, so
+                            // the enabled state reads correctly in either theme
+                            // without a per-district luma calculation. The pin icon
+                            // keeps its district color in both states.
+                            pinnedDistrictId === d.id && "bg-foreground/90",
+                          )}
+                          style={{ color: d.color }}
+                        >
+                          <MapPin />
+                        </Button>
+                      </IconTip>
+                    </CollapsibleTrigger>
+                    <CollapsiblePanel>
+                      <div className="flex flex-col gap-0.5 py-1 pl-2">
+                        {/* Building rows (user 2026-07-08): address leads — number
+                            right-aligned in a fixed 4-char column, then the street.
+                            Named buildings get a Signature icon right-aligned just
+                            left of the "N hh" column; hovering it reveals the name
+                            (the row itself no longer carries the name inline). The
+                            icon's slot width is reserved even when empty so the hh
+                            column stays aligned across named and unnamed rows. */}
+                        {d.buildings.map((b) => (
+                          <button
+                            key={b.buildingId}
+                            type="button"
+                            onClick={() => goToBuilding(b.buildingId)}
+                            className={cn(
+                              "hover:bg-foreground/10 -mx-1 flex items-baseline justify-between gap-2 rounded px-1 text-left text-sm",
+                              isSelected("building", String(b.buildingId)) && "bg-primary/15",
+                            )}
+                          >
+                            <span className="flex min-w-0 items-baseline gap-1.5">
+                              {b.address ? (
+                                <>
+                                  <AddrNum n={b.address.number} width={4} />
+                                  <span className="truncate">{b.address.street}</span>
+                                </>
+                              ) : (
+                                <span className="truncate">Building #{b.buildingId}</span>
+                              )}
+                            </span>
+                            <span className="text-muted-foreground flex shrink-0 items-baseline gap-3 text-xs">
+                              <span className="inline-flex w-3.5 shrink-0 justify-end">
+                                {b.name && (
+                                  <IconTip label={b.name}>
+                                    <span className="inline-flex">
+                                      <Signature className="size-3.5" aria-hidden />
+                                    </span>
+                                  </IconTip>
+                                )}
+                              </span>
+                              <span className="inline-block w-9 text-right">
+                                {b.householdCount} hh
+                              </span>
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </CollapsiblePanel>
+                  </Collapsible>
+                ))}
             </div>
           </ScrollArea>
         </>
