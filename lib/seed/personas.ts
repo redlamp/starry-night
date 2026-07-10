@@ -411,6 +411,10 @@ export type PersonaFlavor = {
   // Adults only; undefined for kids.
   heightCm?: number;
   build?: string;
+  // Records-office identifier in a deliberately FICTIONAL format — two
+  // letters + six digits, unlike SSN (3-2-4, digits only) or any real state
+  // ID, so nothing pairs with real-life documents (user 2026-07-10).
+  civicId: string;
 };
 
 export function personaFlavor(masterSeed: string, p: Persona): PersonaFlavor {
@@ -430,6 +434,9 @@ export function personaFlavor(masterSeed: string, p: Persona): PersonaFlavor {
         : 164;
   const heightCm = isAdult ? Math.round(base + (rng() + rng() + rng() - 1.5) * 9) : undefined;
   const build = isAdult ? pick(rng, BUILDS) : undefined;
+  // ~676M combinations keeps 42k residents collision-free in practice.
+  const letter = () => String.fromCharCode(65 + Math.floor(rng() * 26));
+  const civicId = `${letter()}${letter()}-${String(Math.floor(rng() * 1_000_000)).padStart(6, "0")}`;
   return {
     birthHour,
     moonSign,
@@ -438,6 +445,7 @@ export function personaFlavor(masterSeed: string, p: Persona): PersonaFlavor {
     mbtiNickname: MBTI_NICKNAMES[mbti] ?? "",
     heightCm,
     build,
+    civicId,
   };
 }
 

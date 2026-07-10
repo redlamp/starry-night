@@ -193,6 +193,9 @@ export function PersonaColumn({
             b. {MONTHS[persona.birthday.month - 1]} {persona.birthday.day},{" "}
             {persona.birthday.year} · ~{formatHour(flavor.birthHour)}
           </span>
+          {/* Fictional-format civic ID (user 2026-07-10) — records-office
+              flavour, deliberately unlike any real document's grouping. */}
+          <span className="font-mono text-xs text-muted-foreground">ID {flavor.civicId}</span>
         </div>
         <div className="flex shrink-0 items-center gap-1">
           <IconTip label="Go Home">
