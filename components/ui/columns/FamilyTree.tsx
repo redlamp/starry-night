@@ -855,7 +855,14 @@ export function FamilyTree({ personaId, indexes }: { personaId: string; indexes:
 
   const focus = indexes.directory.personas.get(focusId) ?? indexes.directory.personas.get(personaId);
   if (!focus) return null;
-  const web = buildFamilyWeb(indexes, focus);
+  // View-aware trim budget (user 2026-07-11: Amanda's web hit the 0.65
+  // scale floor and scrolled while smaller trees rendered large): a
+  // generation taller than the chart region at the floor scale trims into
+  // "+N more" instead of scrolling. ~52px cell + ~10px average gap, floor
+  // scale 0.65; 190px ≈ the panel's fixed rows + padding.
+  const chartCap = Math.max(480, (typeof window === "undefined" ? 900 : window.innerHeight) * 0.85);
+  const maxPerGeneration = Math.max(8, Math.floor((chartCap - 190) / (62 * 0.65)));
+  const web = buildFamilyWeb(indexes, focus, { maxPerGeneration });
   const fan = mode === "fan" ? buildFamilyFan(indexes, focus, web) : null;
   const origin = indexes.directory.personas.get(personaId);
 

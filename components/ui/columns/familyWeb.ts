@@ -112,7 +112,18 @@ export function genderTintCss(identity: Persona["genderIdentity"]): string {
 
 type Role = Persona["family"][number]["role"];
 
-export function buildFamilyWeb(indexes: EntityIndexes, focus: Persona): FamilyWeb {
+export function buildFamilyWeb(
+  indexes: EntityIndexes,
+  focus: Persona,
+  opts?: {
+    // View-aware trim (user 2026-07-11): a generation with more people than
+    // this would overflow the chart region even at the scale floor and force
+    // a scrollbar — trim it into the "+N more" note instead. The focus's
+    // protected line is never trimmed, so a huge protected core can still
+    // legitimately overflow (and scroll).
+    maxPerGeneration?: number;
+  },
+): FamilyWeb {
   const get = (id: string) => indexes.directory.personas.get(id);
   const byRole = (p: Persona, role: Role) =>
     p.family
@@ -275,11 +286,12 @@ export function buildFamilyWeb(indexes: EntityIndexes, focus: Persona): FamilyWe
       for (const c of byRole(p, "child")) protectedIds.add(c.id);
   }
   let trimmed = 0;
-  while (placed.size > BOX_CAP) {
-    // Deepest generation first; within it the youngest line (eldest-member
-    // age ascending, key tie); only leaf unions (no on-screen children).
+  // Deepest generation first; within it the youngest line (eldest-member
+  // age ascending, key tie); only leaf unions (no on-screen children).
+  const pickTrimmable = (gen?: number): UnionNode | undefined => {
     let pick: UnionNode | undefined;
     for (const u of unions.values()) {
+      if (gen !== undefined && u.gen !== gen) continue;
       if (u.childIds.length > 0) continue;
       if (u.members.some((m) => protectedIds.has(m.id))) continue;
       if (
@@ -291,7 +303,9 @@ export function buildFamilyWeb(indexes: EntityIndexes, focus: Persona): FamilyWe
       )
         pick = u;
     }
-    if (!pick) break;
+    return pick;
+  };
+  const removeUnion = (pick: UnionNode) => {
     unions.delete(pick.key);
     for (const m of pick.members) {
       placed.delete(m.id);
@@ -304,6 +318,37 @@ export function buildFamilyWeb(indexes: EntityIndexes, focus: Persona): FamilyWe
         for (const s of parent.soloChildIds) s.kids = s.kids.filter((id) => id !== m.id);
         parent.soloChildIds = parent.soloChildIds.filter((s) => s.kids.length > 0);
       }
+    }
+  };
+  while (placed.size > BOX_CAP) {
+    const pick = pickTrimmable();
+    if (!pick) break;
+    removeUnion(pick);
+  }
+  // Per-generation height budget (see opts.maxPerGeneration).
+  if (opts?.maxPerGeneration) {
+    const unfixable = new Set<number>();
+    for (;;) {
+      const counts = new Map<number, number>();
+      for (const u of unions.values()) {
+        counts.set(u.gen, (counts.get(u.gen) ?? 0) + u.members.length);
+      }
+      let target: number | undefined;
+      for (const [g, n] of counts) {
+        if (n > opts.maxPerGeneration && !unfixable.has(g)) {
+          if (target === undefined || g > target) target = g;
+        }
+      }
+      if (target === undefined) break;
+      const pick = pickTrimmable(target);
+      if (!pick) {
+        // Everything left in this generation is protected or load-bearing —
+        // accept the overflow (the chart scrolls) rather than cut the
+        // focus's own line.
+        unfixable.add(target);
+        continue;
+      }
+      removeUnion(pick);
     }
   }
 
