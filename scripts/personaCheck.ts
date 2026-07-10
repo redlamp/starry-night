@@ -7,7 +7,8 @@
 // addresses cover residential buildings), then prints a small sample so a
 // human can judge the flavour.
 
-import { buildPersonaDirectory, type PersonaDirectory } from "../lib/seed/personas";
+import { buildPersonaDirectory, personaFlavor, type PersonaDirectory } from "../lib/seed/personas";
+import { ensureAllStories } from "../lib/seed/personaStory";
 import {
   MASCULINE_FIRST_NAMES,
   FEMININE_FIRST_NAMES,
@@ -55,11 +56,16 @@ function fingerprint(dir: PersonaDirectory): string {
 // the cache is keyed, so call twice and compare against a re-derivation with
 // the same key (cache hit) AND a structural rebuild via JSON round-trip.
 const dir1 = buildPersonaDirectory(seed);
+// Stories are lazy (per building) since 2026-07-10 — materialize everything
+// so the fingerprint and the story-layer invariants below cover the weave.
+ensureAllStories(seed, dir1);
 const fp1 = fingerprint(dir1);
 const dir2 = buildPersonaDirectory(seed);
+ensureAllStories(seed, dir2);
 check("same seed → same directory (cache path)", fingerprint(dir2) === fp1);
 
 const dirOther = buildPersonaDirectory(seed + "-b");
+ensureAllStories(seed + "-b", dirOther);
 check("different seed → different directory", fingerprint(dirOther) !== fp1);
 
 // (3) invariants
@@ -155,7 +161,7 @@ if (hh) {
     console.log(
       `  ${p.fullName} (${p.age}, ${p.pronouns}) — ${p.workStatus}` +
         (p.profession ? `, ${p.profession.title}` : "") +
-        ` | ${p.westernSign.name} ${p.westernSign.symbol}, ${p.chineseSign.element} ${p.chineseSign.animal}, ${p.mbti}` +
+        ` | ${p.westernSign.name} ${p.westernSign.symbol}, ${p.chineseSign.element} ${p.chineseSign.animal}, ${personaFlavor(seed, p).mbti}` +
         ` | ${p.relationshipStatus}` +
         (p.bornHere ? " | born here" : ` | ${p.yearsInCity}y in city`),
     );
@@ -193,7 +199,7 @@ for (const p of dir.personas.values()) {
   shown++;
   const addr = dir.names.addresses.get(p.homeBuildingId);
   console.log(`\n  ${p.fullName}${p.story.epithet ? ` — ${p.story.epithet}` : ""}`);
-  console.log(`    ${p.pronouns}, ${p.age} · ${p.westernSign.symbol} ${p.westernSign.name} · ${p.chineseSign.element} ${p.chineseSign.animal} · ${p.mbti}`);
+  console.log(`    ${p.pronouns}, ${p.age} · ${p.westernSign.symbol} ${p.westernSign.name} · ${p.chineseSign.element} ${p.chineseSign.animal} · ${personaFlavor(seed, p).mbti}`);
   console.log(`    ${p.profession ? p.profession.title : p.workStatus}${p.businessId ? ` @ ${dir.businesses.get(p.businessId)?.name}` : ""} · ${p.education}`);
   console.log(`    ${addr ? `${addr.number} ${addr.street}` : "?"}${p.unit ? ` · Unit ${p.unit}` : ""} · ${p.bornHere ? "born here" : `${p.yearsInCity}y in city`} · ${p.relationshipStatus}`);
   if (p.story.wasIs) console.log(`    was/is: ${p.story.wasIs}`);
@@ -209,7 +215,7 @@ console.log("\n--- building sift lines ---");
 import("../lib/seed/personaStory").then(({ siftBuilding }) => {
   let n = 0;
   for (const bid of dir.byHomeBuilding.keys()) {
-    const line = siftBuilding(dir, bid);
+    const line = siftBuilding(seed, dir, bid);
     if (line && n++ < 5) console.log(`  bldg ${bid}: ${line}`);
     if (n >= 5) break;
   }

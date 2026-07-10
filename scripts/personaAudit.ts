@@ -4,9 +4,12 @@
 // edit: bun scripts/personaAudit.ts [seed]
 
 import { buildPersonaDirectory } from "../lib/seed/personas";
+import { ensureAllStories } from "../lib/seed/personaStory";
 
 const seed = process.argv[2] ?? "starry-night";
 const dir = buildPersonaDirectory(seed);
+// Stories are lazy per building since 2026-07-10 — the audit reads them all.
+ensureAllStories(seed, dir);
 
 type Tally = Map<string, number>;
 const bump = (t: Tally, k: string | undefined) => {

@@ -17,6 +17,7 @@ import { ColumnStat, IconTip } from "./EntityColumns";
 export function BuildingColumn({ id, part }: { id: number; part: "pinned" | "rest" }) {
   const push = useSceneStore((s) => s.pushColumn);
   const focusedBuildingId = useSceneStore((s) => s.focusedBuildingId);
+  const masterSeed = useSceneStore((s) => s.masterSeed);
   const indexes = useEntityIndexes();
   const building = indexes.buildingById.get(id);
   if (!building) {
@@ -29,7 +30,8 @@ export function BuildingColumn({ id, part }: { id: number; part: "pinned" | "res
   const address = indexes.names.addresses.get(id);
   const companies = indexes.companiesInBuilding(id);
   const households = indexes.householdsInBuilding(id);
-  const siftLine = siftBuilding(indexes.directory, id);
+  // Self-materializes this building's stories (lazy since 2026-07-10).
+  const siftLine = siftBuilding(masterSeed, indexes.directory, id);
   const population = Math.round(buildingPopulation(building));
   const isFocused = focusedBuildingId === id;
 

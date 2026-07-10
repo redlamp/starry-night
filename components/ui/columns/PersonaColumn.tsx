@@ -14,7 +14,8 @@ import {
   CHINESE_ELEMENT_TRAITS,
   MBTI_DESCRIPTIONS,
 } from "@/lib/seed/personaData";
-import type { CommuteMode } from "@/lib/seed/personas";
+import { personaFlavor, type CommuteMode } from "@/lib/seed/personas";
+import { ensureBuildingStories } from "@/lib/seed/personaStory";
 import { COMMUTE_COLORS } from "@/components/scene/CommuteArc";
 import { useEntityIndexes } from "./entityData";
 import { FamilyTree } from "./FamilyTree";
@@ -83,6 +84,7 @@ export function PersonaColumn({
   hideFamilyTree?: boolean;
 }) {
   const push = useSceneStore((s) => s.pushColumn);
+  const masterSeed = useSceneStore((s) => s.masterSeed);
   const indexes = useEntityIndexes();
   const persona = indexes.directory.personas.get(id);
   if (!persona) {
@@ -91,6 +93,11 @@ export function PersonaColumn({
     );
   }
 
+  // Deep tier materializes here, on card open: the building's stories (idempotent,
+  // sub-ms for one building) and this persona's flavour draws. Both are pure
+  // functions of the seed, so render-phase calls are safe.
+  ensureBuildingStories(masterSeed, indexes.directory, persona.homeBuildingId);
+  const flavor = personaFlavor(masterSeed, persona);
   const story = persona.story;
   const business = persona.businessId
     ? indexes.directory.businesses.get(persona.businessId)
@@ -145,15 +152,15 @@ export function PersonaColumn({
             {[
               persona.pronouns,
               String(persona.age),
-              persona.heightCm ? formatHeight(persona.heightCm) : null,
-              persona.build,
+              flavor.heightCm ? formatHeight(flavor.heightCm) : null,
+              flavor.build,
             ]
               .filter(Boolean)
               .join(" · ")}
           </span>
           <span className="text-xs text-muted-foreground">
             b. {MONTHS[persona.birthday.month - 1]} {persona.birthday.day},{" "}
-            {persona.birthday.year} · ~{formatHour(persona.birthHour)}
+            {persona.birthday.year} · ~{formatHour(flavor.birthHour)}
           </span>
         </div>
         <div className="flex shrink-0 items-center gap-1">
@@ -205,11 +212,11 @@ export function PersonaColumn({
             <p className="mt-1.5">{WESTERN_SIGN_TRAITS[persona.westernSign.name]}</p>
             <div className="mt-2 border-t border-border pt-2 text-xs text-muted-foreground">
               <div>
-                <span className="font-medium text-foreground">{persona.moonSign} Moon</span> · the
+                <span className="font-medium text-foreground">{flavor.moonSign} Moon</span> · the
                 inner weather
               </div>
               <div className="mt-0.5">
-                <span className="font-medium text-foreground">{persona.risingSign} Rising</span> ·
+                <span className="font-medium text-foreground">{flavor.risingSign} Rising</span> ·
                 the first impression
               </div>
             </div>
@@ -247,15 +254,15 @@ export function PersonaColumn({
           <HoverCardTrigger
             render={
               <Badge variant="outline" className="cursor-help">
-                {persona.mbtiNickname.replace(/^The /, "")}
+                {flavor.mbtiNickname.replace(/^The /, "")}
               </Badge>
             }
           />
           <HoverCardContent>
             <div className="font-medium">
-              {persona.mbti} · {persona.mbtiNickname}
+              {flavor.mbti} · {flavor.mbtiNickname}
             </div>
-            <p className="mt-1.5">{MBTI_DESCRIPTIONS[persona.mbti]}</p>
+            <p className="mt-1.5">{MBTI_DESCRIPTIONS[flavor.mbti]}</p>
           </HoverCardContent>
         </HoverCard>
       </div>

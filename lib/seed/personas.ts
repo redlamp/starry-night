@@ -32,7 +32,7 @@ import {
   type ChineseSign,
   type EducationTier,
 } from "./personaData";
-import { weaveStories, type PersonaStory, type ShiftKind, type CityLoreEntry } from "./personaStory";
+import type { PersonaStory, ShiftKind, CityLoreEntry } from "./personaStory";
 
 // Story layer types ride along for consumers (panel, scripts).
 export type { PersonaStory, StoryRelation, CityLoreEntry, ShiftKind } from "./personaStory";
@@ -83,18 +83,12 @@ export type Persona = {
   fullName: string;
   age: number;
   birthday: { year: number; month: number; day: number };
-  westernSign: WesternSign; // the sun sign
-  // The rest of the "big three" — fake ephemeris, seeded per persona (real
-  // moon/ascendant need birth-time astronomy; these are character flavour).
-  moonSign: string;
-  risingSign: string;
-  birthHour: number; // 0-23, the "birth time" the rising sign hangs off
-  chineseSign: ChineseSign;
-  // Physical descriptors (adults only; undefined for kids).
-  heightCm?: number;
-  build?: string;
-  mbti: string;
-  mbtiNickname: string;
+  westernSign: WesternSign; // the sun sign — free, derived from the birthday
+  chineseSign: ChineseSign; // likewise, derived from the birth year
+  // Moon/rising signs, MBTI, and physical descriptors are deep-tier flavour:
+  // drawn on demand by personaFlavor() from a per-persona stream, never
+  // stored here. Keeps the 39k-record eager build lean, and pins the fields
+  // to the persona's own seed so pass edits can't re-roll them.
   ethnicity: Ethnicity;
   genderIdentity: GenderIdentity;
   pronouns: string;
@@ -122,7 +116,8 @@ export type Persona = {
   partnerId?: PersonaId;
   family: FamilyLink[];
   offstage: OffstageRelative[];
-  // Story layer — filled by weaveStories() as the directory's final pass.
+  // Story layer — placeholders until ensureBuildingStories() materializes
+  // this persona's building (lazy since 2026-07-10).
   schedule: { shift: ShiftKind };
   story: PersonaStory;
   // The Grinblat "domain word": one concrete noun-world this persona's lines
@@ -401,6 +396,51 @@ function drawMbti(rng: () => number): string {
   );
 }
 
+// Deep-tier flavour: the character-sheet extras a card shows on open —
+// fake-ephemeris moon/rising (real ones need birth-time astronomy; these are
+// flavour), MBTI, and adult physical descriptors. Drawn from the persona's
+// OWN stream the moment a card asks, never during the directory build: the
+// 39k-record eager pass stays lean, and because the stream is keyed by
+// persona id, editing any build pass can't re-roll anyone's flavour.
+export type PersonaFlavor = {
+  birthHour: number; // 0-23, the "birth time" the rising sign hangs off
+  moonSign: string;
+  risingSign: string;
+  mbti: string;
+  mbtiNickname: string;
+  // Adults only; undefined for kids.
+  heightCm?: number;
+  build?: string;
+};
+
+export function personaFlavor(masterSeed: string, p: Persona): PersonaFlavor {
+  const rng = seedrandom(`${masterSeed}::personas::flavor::${p.id}`);
+  const mbti = drawMbti(rng);
+  const birthHour = Math.floor(rng() * 24);
+  const moonSign = WESTERN_ZODIAC[Math.floor(rng() * 12)].name;
+  const risingSign = WESTERN_ZODIAC[Math.floor(rng() * 12)].name;
+  const isAdult = p.age >= 18;
+  // Height keys off gender identity (the old pass keyed off the name-pool
+  // presentation, which isn't stored); nonbinary folks draw around the midline.
+  const base =
+    p.genderIdentity === "cis man" || p.genderIdentity === "trans man"
+      ? 178
+      : p.genderIdentity === "nonbinary"
+        ? 171
+        : 164;
+  const heightCm = isAdult ? Math.round(base + (rng() + rng() + rng() - 1.5) * 9) : undefined;
+  const build = isAdult ? pick(rng, BUILDS) : undefined;
+  return {
+    birthHour,
+    moonSign,
+    risingSign,
+    mbti,
+    mbtiNickname: MBTI_NICKNAMES[mbti] ?? "",
+    heightCm,
+    build,
+  };
+}
+
 function drawProfession(rng: () => number, character: DistrictCharacter): Profession {
   const weights = DISTRICT_CATEGORY_WEIGHT[character] ?? {};
   return weightedPick(
@@ -667,22 +707,12 @@ function buildDirectoryImpl(
           }
         }
 
-        const mbti = drawMbti(rng);
         const edu = drawEducation(rng, profession, age, names);
 
         const pronouns = drawPronouns(rng, genderIdentity);
-        // Fake-ephemeris big three: moon + rising drawn per persona; the
-        // rising sign notionally hangs off a generated birth hour.
-        const birthHour = Math.floor(rng() * 24);
-        const moonSign = WESTERN_ZODIAC[Math.floor(rng() * 12)].name;
-        const risingSign = WESTERN_ZODIAC[Math.floor(rng() * 12)].name;
-        // Physical descriptors, adults only.
-        const heightCm = isAdult
-          ? Math.round(
-              (spec.presentation === "m" ? 178 : 164) + (rng() + rng() + rng() - 1.5) * 9,
-            )
-          : undefined;
-        const build = isAdult ? pick(rng, BUILDS) : undefined;
+        // MBTI, fake-ephemeris moon/rising, and physical descriptors moved to
+        // personaFlavor() (deep tier, per-persona stream) — 2026-07-10. This
+        // shortened the household stream: one-time population re-roll.
 
         // Sparse offstage relatives — negative space, not a full tree.
         const offstage: OffstageRelative[] = [];
@@ -704,16 +734,9 @@ function buildDirectoryImpl(
           birthday,
           westernSign: westernSignFor(birthday.month, birthday.day),
           chineseSign: chineseSignFor(birthday.year),
-          mbti,
-          mbtiNickname: MBTI_NICKNAMES[mbti] ?? "",
           ethnicity: spec.ethnicity,
           genderIdentity,
           pronouns,
-          moonSign,
-          risingSign,
-          birthHour,
-          heightCm,
-          build,
           homeBuildingId: b.id,
           homeDistrictId: b.districtId,
           householdIndex: h,
@@ -727,8 +750,9 @@ function buildDirectoryImpl(
           relationshipStatus: "single",
           family: [],
           offstage,
-          // Placeholders — weaveStories() overwrites these before the
-          // directory is returned.
+          // Placeholders — ensureBuildingStories() fills these lazily, the
+          // first time any card/panel for this building asks. Readers go
+          // through that gate, never straight to these fields cold.
           schedule: { shift: "day" },
           story: { hook: "", loreRefs: [] },
           domain: "",
@@ -1183,8 +1207,14 @@ function buildDirectoryImpl(
     },
   };
 
-  // ---- Pass 5: story weave (schedules, epithets, hooks, one-sided relations) ----
-  weaveStories(masterSeed, directory);
+  // Pass 5 (story weave: schedules, epithets, hooks, one-sided relations) is
+  // NO LONGER eager — it was ~39k template fills and seedrandom constructions
+  // per cold build. Stories materialize per building via
+  // ensureBuildingStories() the first time a card, sift, or hover asks.
+  // Byte-identical to the old eager weave: every de-dupe set was already
+  // household/building-scoped, and each persona draws from its own
+  // `::story::<id>` stream. (Relations were re-keyed per persona — one-time
+  // relations re-roll, 2026-07-10.)
 
   return directory;
 }
@@ -1192,12 +1222,27 @@ function buildDirectoryImpl(
 // Memoised with the shared cache-key recipe (see population.ts).
 const dirCache = new Map<string, PersonaDirectory>();
 
+function dirCacheKey(masterSeed: string, shape: CityShapeSetting, shapeScale: number): string {
+  return `${masterSeed}::${shape}::${shapeScale}::${maxHalfExtent()}::${sketchKey()}::${fieldDeviation()}::${densityProfileKey()}`;
+}
+
+// Cache probe for the deferred UI hooks: reports whether the cold build has
+// been paid without paying it on the render thread. Null means a consumer
+// should schedule buildPersonaDirectory() off the current frame.
+export function peekPersonaDirectory(
+  masterSeed: string,
+  shape: CityShapeSetting = "square",
+  shapeScale = 1,
+): PersonaDirectory | null {
+  return dirCache.get(dirCacheKey(masterSeed, shape, shapeScale)) ?? null;
+}
+
 export function buildPersonaDirectory(
   masterSeed: string,
   shape: CityShapeSetting = "square",
   shapeScale = 1,
 ): PersonaDirectory {
-  const key = `${masterSeed}::${shape}::${shapeScale}::${maxHalfExtent()}::${sketchKey()}::${fieldDeviation()}::${densityProfileKey()}`;
+  const key = dirCacheKey(masterSeed, shape, shapeScale);
   const hit = dirCache.get(key);
   if (hit) return hit;
   const result = buildDirectoryImpl(masterSeed, shape, shapeScale);
