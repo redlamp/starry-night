@@ -146,8 +146,9 @@ function PersonBox({
   // transparent — the slot always exists, so toggling the layer never
   // changes layout (user 2026-07-10).
   stripe?: string;
-  // Gender Tint background; undefined when the layer is off or the box is
-  // focused (the primary tint wins there). Colors only — never layout.
+  // Gender Tint background; undefined when the layer is off. Applies to the
+  // focused box too — its emphasis is the inset ring, not a bg swap (user
+  // 2026-07-10). Colors only — never layout.
   tint?: string;
   onSelect: () => void;
   boxRef: (el: HTMLButtonElement | null) => void;
@@ -163,12 +164,14 @@ function PersonBox({
         // Border WIDTH is constant across every state (focused / blood /
         // non-blood / hover) — only color and style (solid vs dashed)
         // change — so selecting or re-rooting never reflows a box by even a
-        // pixel (user 2026-07-10: "borders inside the rect").
+        // pixel (user 2026-07-10: "borders inside the rect"). The focused
+        // box reads THICKER via an inset ring (box-shadow — zero layout)
+        // and keeps the same background as everyone else (user 2026-07-10:
+        // gender tint stays visible on the selection).
         "flex w-max flex-col items-center rounded-md border px-2.5 py-1 text-xs transition-colors",
         blood ? "border-solid" : "border-dashed",
-        focused
-          ? "border-primary bg-primary/10"
-          : "border-muted-foreground/80 bg-background hover:bg-muted",
+        "bg-background hover:bg-muted",
+        focused ? "border-primary ring-2 ring-primary ring-inset" : "border-muted-foreground/80",
       )}
     >
       <span
@@ -421,7 +424,7 @@ function FamilyChart({
       blood={web.bloodIds.has(p.id)}
       pinned={p.id === originId}
       stripe={lineage ? web.stripes.get(p.id) : undefined}
-      tint={tint && p.id !== focusId ? genderTintCss(p.genderIdentity) : undefined}
+      tint={tint ? genderTintCss(p.genderIdentity) : undefined}
       onSelect={() => onSelect(p.id)}
       boxRef={refFor(p.id)}
     />
