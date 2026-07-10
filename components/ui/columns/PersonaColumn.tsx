@@ -23,10 +23,12 @@ import { FamilyTree } from "./FamilyTree";
 import { GenderIcon } from "./genderIcon";
 import { ColumnStat, IconTip } from "./EntityColumns";
 
-// Column port of the old PersonaPanel. Ordering is a hard design rule: badges
-// → wasIs → whyAwake → stats → family → detail/refusal/relation → hook, and
-// the sheet always ENDS on the hook, unresolved. Trait badges explain
-// themselves on hover (user 2026-07-08): western sign, Chinese sign, MBTI.
+// Column port of the old PersonaPanel. Ordering is a hard design rule
+// (re-cut 2026-07-10): badges → whyAwake → stats → family →
+// wasIs/detail/refusal/relation → hook, and the sheet always ENDS on the
+// hook, unresolved. Facts lead; the flavour prose gathers below Family.
+// Trait badges explain themselves on hover (user 2026-07-08): western sign,
+// Chinese sign, MBTI.
 
 const COMMUTE_LABELS: Record<CommuteMode, string> = {
   walk: "Walks",
@@ -76,12 +78,27 @@ function capitalize(s: string): string {
 
 // Two-line stat (user 2026-07-10): label + primary value share the first
 // line; the second line carries a related-but-separate click target (street
-// address under the district, partner name under the status).
-function SplitStat({ label, top, bottom }: { label: string; top: ReactNode; bottom?: ReactNode }) {
+// address under the district, partner name under the status). `action` is a
+// small icon button riding beside the label (the Go Home / Go to Work
+// buttons live here now, not in the card header).
+function SplitStat({
+  label,
+  action,
+  top,
+  bottom,
+}: {
+  label: string;
+  action?: ReactNode;
+  top: ReactNode;
+  bottom?: ReactNode;
+}) {
   return (
     <div className="flex flex-col gap-0.5 text-sm">
-      <div className="flex items-start justify-between gap-4">
-        <span className="shrink-0 text-muted-foreground">{label}</span>
+      <div className="flex items-center justify-between gap-4">
+        <span className="flex shrink-0 items-center gap-1.5 text-muted-foreground">
+          {label}
+          {action}
+        </span>
         <span className="min-w-0 truncate text-right font-medium">{top}</span>
       </div>
       {bottom && <span className="min-w-0 truncate text-right font-medium">{bottom}</span>}
@@ -173,54 +190,31 @@ export function PersonaColumn({
   if (part === "pinned") {
     return (
     <>
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex min-w-0 flex-col">
-          {story.epithet && (
-            <span className="truncate text-sm italic text-muted-foreground">{story.epithet}</span>
-          )}
-          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-            <GenderIcon identity={persona.genderIdentity} className="size-3.5 shrink-0" />
-            {[
-              persona.pronouns,
-              String(persona.age),
-              flavor.heightCm ? formatHeight(flavor.heightCm) : null,
-              flavor.build,
-            ]
-              .filter(Boolean)
-              .join(" · ")}
-          </span>
-          <span className="text-xs text-muted-foreground">
-            b. {MONTHS[persona.birthday.month - 1]} {persona.birthday.day},{" "}
-            {persona.birthday.year} · ~{formatHour(flavor.birthHour)}
-          </span>
-          {/* Fictional-format civic ID (user 2026-07-10) — records-office
-              flavour, deliberately unlike any real document's grouping. */}
-          <span className="font-mono text-xs text-muted-foreground">ID {flavor.civicId}</span>
-        </div>
-        <div className="flex shrink-0 items-center gap-1">
-          <IconTip label="Go Home">
-            <Button
-              variant="secondary"
-              size="icon-sm"
-              onClick={() => goTo(persona.homeBuildingId)}
-              aria-label="Go to home building"
-            >
-              <Home />
-            </Button>
-          </IconTip>
-          {persona.commuteTargetBuildingId !== undefined && (
-            <IconTip label={school && !business ? "Go to School" : "Go to Work"}>
-              <Button
-                variant="secondary"
-                size="icon-sm"
-                onClick={() => goTo(persona.commuteTargetBuildingId!)}
-                aria-label={school && !business ? "Go to school building" : "Go to workplace"}
-              >
-                <Briefcase />
-              </Button>
-            </IconTip>
-          )}
-        </div>
+      {/* Header is text-only (user 2026-07-10): the Go Home / Go to Work
+          buttons live on the Home/Work rows below, and the meta lines sit at
+          text-sm — the header earns its space with information, not chrome. */}
+      <div className="flex min-w-0 flex-col">
+        {story.epithet && (
+          <span className="truncate text-sm italic text-muted-foreground">{story.epithet}</span>
+        )}
+        <span className="inline-flex items-center gap-1 text-sm text-muted-foreground">
+          <GenderIcon identity={persona.genderIdentity} className="size-3.5 shrink-0" />
+          {[
+            persona.pronouns,
+            String(persona.age),
+            flavor.heightCm ? formatHeight(flavor.heightCm) : null,
+            flavor.build,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+        </span>
+        <span className="text-sm text-muted-foreground">
+          b. {MONTHS[persona.birthday.month - 1]} {persona.birthday.day},{" "}
+          {persona.birthday.year} · ~{formatHour(flavor.birthHour)}
+        </span>
+        {/* Fictional-format civic ID (user 2026-07-10) — records-office
+            flavour, deliberately unlike any real document's grouping. */}
+        <span className="font-mono text-sm text-muted-foreground">ID {flavor.civicId}</span>
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5">
@@ -307,7 +301,9 @@ export function PersonaColumn({
 
   return (
     <>
-      {story.wasIs && <p className="text-sm">{story.wasIs}</p>}
+      {/* whyAwake stays up top — it's the line that explains the lit window.
+          The rest of the flavour (wasIs, detail, refusal, relation) reads
+          below the Family section (user 2026-07-10: facts first). */}
       {story.whyAwake && <p className="text-sm">{story.whyAwake}</p>}
 
       <Separator />
@@ -371,6 +367,19 @@ export function PersonaColumn({
         />
         <SplitStat
           label="Home"
+          action={
+            <IconTip label="Go Home">
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={() => goTo(persona.homeBuildingId)}
+                aria-label="Go to home building"
+                className="text-muted-foreground"
+              >
+                <Home />
+              </Button>
+            </IconTip>
+          }
           top={
             homeDistrictName && (
               <button
@@ -397,6 +406,19 @@ export function PersonaColumn({
         {workBuildingId !== undefined && (
           <SplitStat
             label={school && !business ? "School" : "Work"}
+            action={
+              <IconTip label={school && !business ? "Go to School" : "Go to Work"}>
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  onClick={() => goTo(workBuildingId)}
+                  aria-label={school && !business ? "Go to school building" : "Go to workplace"}
+                  className="text-muted-foreground"
+                >
+                  <Briefcase />
+                </Button>
+              </IconTip>
+            }
             top={
               workDistrictName &&
               workDistrictId && (
@@ -475,8 +497,9 @@ export function PersonaColumn({
         </>
       )}
 
-      {(story.detail || story.refusal || story.relation) && (
+      {(story.wasIs || story.detail || story.refusal || story.relation) && (
         <div className="flex flex-col gap-1">
+          {story.wasIs && <p className="text-sm">{story.wasIs}</p>}
           {story.detail && <p className="text-sm">{story.detail}</p>}
           {story.refusal && <p className="text-sm">{story.refusal}</p>}
           {story.relation && (
