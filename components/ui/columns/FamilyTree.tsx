@@ -345,10 +345,33 @@ function FamilyChart({
       // SAME gap as partners inside a couple (gap-2 = 8px — one visual
       // rhythm for "these people belong together"), while COUPLE blocks get
       // 3× that on either side, so groups of partners read as separate
-      // units and their drop lines have air.
+      // units and their drop lines have air. The tight gap requires ACTUAL
+      // siblinghood — same parent union — so cousin-group boundaries (e.g.
+      // Joseph Ortiz under the Gonzales kids) get the wide gap too (user
+      // 2026-07-11).
       const wideGap = vertical ? 24 : 28;
       const tightGap = vertical ? 8 : 10;
       const wantsAir = (u: UnionNode) => u.members.length > 1;
+      const parentKeyOf = new Map<string, string | undefined>();
+      for (const row of web.rows) {
+        for (const u of row) {
+          let pk: string | undefined;
+          for (const m of u.members) {
+            const pid = m.family.find(
+              (l) => l.role === "parent" && unionOf.has(l.personaId),
+            )?.personaId;
+            if (pid) {
+              pk = unionOf.get(pid)?.key;
+              break;
+            }
+          }
+          parentKeyOf.set(u.key, pk);
+        }
+      }
+      const siblings = (a: UnionNode, b: UnionNode) => {
+        const pa = parentKeyOf.get(a.key);
+        return pa !== undefined && pa === parentKeyOf.get(b.key);
+      };
       const packToward = (row: UnionNode[], targetFor: (u: UnionNode, cur: Box) => number) => {
         const calc = row.flatMap((u) => {
           const cur = blockBox(u);
@@ -361,7 +384,12 @@ function FamilyChart({
             desired: c.target - widths[i] / 2,
             width: widths[i],
             gapBefore:
-              i > 0 && !wantsAir(calc[i - 1].u) && !wantsAir(c.u) ? tightGap : wideGap,
+              i > 0 &&
+              !wantsAir(calc[i - 1].u) &&
+              !wantsAir(c.u) &&
+              siblings(calc[i - 1].u, c.u)
+                ? tightGap
+                : wideGap,
           })),
         );
         calc.forEach((c, i) => {
