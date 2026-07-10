@@ -22,7 +22,7 @@ import { Button } from "@/components/ui/button";
 import { HoverCard, HoverCardTrigger, HoverCardContent } from "@/components/ui/hover-card";
 import { Separator } from "@/components/ui/separator";
 import { useSceneStore } from "@/lib/state/sceneStore";
-import { focusBuilding } from "@/lib/scene/focusBuilding";
+import { flyToBuilding, flyToSpan } from "@/lib/scene/focusBuilding";
 import {
   CHINESE_ANIMAL_GLYPHS,
   WESTERN_SIGN_TRAITS,
@@ -36,7 +36,7 @@ import { COMMUTE_COLORS } from "@/components/scene/CommuteArc";
 import { useEntityIndexes } from "./entityData";
 import { FamilyTree } from "./FamilyTree";
 import { GenderIcon } from "./genderIcon";
-import { ColumnStat, IconTip } from "./EntityColumns";
+import { IconTip } from "./EntityColumns";
 
 // Column port of the old PersonaPanel. Ordering is a hard design rule
 // (re-cut 2026-07-10): badges → whyAwake → stats → family →
@@ -111,33 +111,60 @@ function capitalize(s: string): string {
   return s.length > 0 ? s[0].toUpperCase() + s.slice(1) : s;
 }
 
-// Two-line stat (user 2026-07-10): label + primary value share the first
-// line; the second line carries a related-but-separate click target (street
-// address under the district, partner name under the status). `action` is a
-// small icon button riding beside the label (the Go Home / Go to Work
-// buttons live here now, not in the card header).
-function SplitStat({
+// One stat-row anatomy for the whole card (user 2026-07-10: "alignment for
+// icons/buttons/headers are all messed up"): a FIXED w-5 icon slot leads
+// every row — empty when a row has no icon — so labels share one left edge,
+// icon buttons occupy exactly the slot (size-5 hit target, size-4 glyph, no
+// padding inflation), and values right-align. Body text rides at the app's
+// default scale (text-base), not a shrunken variant.
+function StatRow({
+  icon,
+  iconTint,
+  iconAction,
+  iconLabel,
   label,
-  action,
   top,
   bottom,
 }: {
+  icon?: LucideIcon;
+  iconTint?: string; // CSS color — commute arc colour, relationship pink
+  iconAction?: () => void; // present = the icon is a camera fly-to button
+  iconLabel?: string; // tooltip/aria for the button form
   label: string;
-  action?: ReactNode;
   top: ReactNode;
   bottom?: ReactNode;
 }) {
+  const Icon = icon;
+  const glyph = Icon && (
+    <Icon className="size-4 shrink-0" style={iconTint ? { color: iconTint } : undefined} aria-hidden />
+  );
   return (
-    <div className="flex flex-col gap-0.5 text-sm">
-      <div className="flex items-center justify-between gap-4">
-        <span className="flex shrink-0 items-center gap-1.5 text-muted-foreground">
-          {/* Icon leads the label (user 2026-07-10). */}
-          {action}
+    <div className="flex flex-col gap-0.5 text-base">
+      <div className="flex items-center justify-between gap-3">
+        <span className="flex min-w-0 shrink-0 items-center gap-2 text-muted-foreground">
+          <span className="flex w-5 shrink-0 items-center justify-center">
+            {glyph &&
+              (iconAction ? (
+                <IconTip label={iconLabel ?? label}>
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    className="size-5 text-muted-foreground hover:text-foreground [&_svg]:size-4"
+                    onClick={iconAction}
+                    aria-label={iconLabel ?? label}
+                  >
+                    {glyph}
+                  </Button>
+                </IconTip>
+              ) : (
+                glyph
+              ))}
+          </span>
           {label}
         </span>
         <span className="min-w-0 truncate text-right font-medium">{top}</span>
       </div>
-      {bottom && <span className="min-w-0 truncate text-right font-medium">{bottom}</span>}
+      {bottom && <span className="min-w-0 truncate pl-7 text-right font-medium">{bottom}</span>}
     </div>
   );
 }
@@ -208,7 +235,7 @@ export function PersonaColumn({
   // that pushes the building column.
   const flyTo = (buildingId: number) => {
     const building = indexes.buildingById.get(buildingId);
-    if (building) focusBuilding(building);
+    if (building) flyToBuilding(building);
   };
 
   // Alma mater (user 2026-07-10): derived, never stored — an adult who was in
@@ -239,10 +266,6 @@ export function PersonaColumn({
     }
   }
 
-  // Rows whose text can outgrow a shared line stack to two lines instead
-  // (label above, value below) — the threshold is roughly what fits beside a
-  // label at the card's width.
-  const STACK_AT = 26;
   const workPlace = business ?? school;
   const professionValue = persona.profession
     ? workPlace
@@ -261,10 +284,10 @@ export function PersonaColumn({
           text-sm — the header earns its space with information, not chrome. */}
       <div className="flex min-w-0 flex-col">
         {story.epithet && (
-          <span className="truncate text-sm italic text-muted-foreground">{story.epithet}</span>
+          <span className="truncate text-base italic text-muted-foreground">{story.epithet}</span>
         )}
-        <span className="inline-flex items-center gap-1 text-sm text-muted-foreground">
-          <GenderIcon identity={persona.genderIdentity} className="size-3.5 shrink-0" />
+        <span className="inline-flex items-center gap-1.5 text-base text-muted-foreground">
+          <GenderIcon identity={persona.genderIdentity} className="size-4 shrink-0" />
           {[
             persona.pronouns,
             String(persona.age),
@@ -274,13 +297,13 @@ export function PersonaColumn({
             .filter(Boolean)
             .join(" · ")}
         </span>
-        <span className="text-sm text-muted-foreground">
+        <span className="text-base text-muted-foreground">
           b. {MONTHS[persona.birthday.month - 1]} {persona.birthday.day},{" "}
           {persona.birthday.year} · ~{formatHour(flavor.birthHour)}
         </span>
         {/* Fictional-format civic ID (user 2026-07-10) — records-office
             flavour, deliberately unlike any real document's grouping. */}
-        <span className="font-mono text-sm text-muted-foreground">ID {flavor.civicId}</span>
+        <span className="font-mono text-base text-muted-foreground">ID {flavor.civicId}</span>
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5">
@@ -370,25 +393,24 @@ export function PersonaColumn({
       {/* whyAwake stays up top — it's the line that explains the lit window.
           The rest of the flavour (wasIs, detail, refusal, relation) reads
           below the Family section (user 2026-07-10: facts first). */}
-      {story.whyAwake && <p className="text-sm">{story.whyAwake}</p>}
+      {story.whyAwake && <p className="text-base">{story.whyAwake}</p>}
 
       <Separator />
 
-      <div className="flex flex-col gap-1">
+      <div className="flex flex-col gap-1.5">
         {/* Tenure leads the section (user 2026-07-10). */}
-        <ColumnStat
+        <StatRow
           label="In City"
-          value={persona.bornHere ? "Born here" : `${persona.yearsInCity} years`}
+          top={persona.bornHere ? "Born here" : `${persona.yearsInCity} years`}
         />
-        <ColumnStat
+        <StatRow
           label={school && !business ? "School" : "Profession"}
-          stack={professionValue.length > STACK_AT}
-          value={
+          top={
             workPlace ? (
               <button
                 type="button"
                 onClick={() => push({ kind: "company", id: workPlace.id })}
-                className="text-right hover:underline"
+                className="hover:underline"
               >
                 {professionValue}
               </button>
@@ -397,37 +419,43 @@ export function PersonaColumn({
             )
           }
         />
-        {persona.commute &&
-          (() => {
-            const CommuteIcon = COMMUTE_ICONS[persona.commute.mode];
-            return (
-              <SplitStat
-                label="Commute"
-                top={
-                  persona.commute.distance >= 1000
-                    ? `${(persona.commute.distance / 1000).toFixed(1)} km`
-                    : `${persona.commute.distance} m`
+        {persona.commute && workBuildingId !== undefined && (
+          <StatRow
+            icon={COMMUTE_ICONS[persona.commute.mode]}
+            iconTint={COMMUTE_COLORS[persona.commute.mode]}
+            iconAction={() => {
+              // Frame the whole commute (home + destination) so the arc fits —
+              // camera only, no selection change (user 2026-07-10).
+              const home = indexes.buildingById.get(persona.homeBuildingId);
+              const work = indexes.buildingById.get(workBuildingId);
+              if (home && work) flyToSpan(home, work);
+            }}
+            iconLabel="Show Commute"
+            label="Commute"
+            top={
+              persona.commute.distance >= 1000
+                ? `${(persona.commute.distance / 1000).toFixed(1)} km`
+                : `${persona.commute.distance} m`
+            }
+            bottom={
+              persona.commute.mode === "transit"
+                ? `Rides ${transitLineFor(persona.id, indexes)}`
+                : COMMUTE_LABELS[persona.commute.mode]
+            }
+          />
+        )}
+        <StatRow
+          icon={GraduationCap}
+          iconAction={
+            almaMater
+              ? () => {
+                  const site = indexes.buildingById.get(almaMater.buildingId);
+                  if (site) flyToBuilding(site);
                 }
-                bottom={
-                  <span className="inline-flex items-center gap-1.5">
-                    {/* Mode icon in the ARC colour — replaces the colour dot
-                        (user 2026-07-10). */}
-                    <CommuteIcon
-                      className="size-3.5 shrink-0"
-                      style={{ color: COMMUTE_COLORS[persona.commute.mode] }}
-                      aria-hidden
-                    />
-                    {persona.commute.mode === "transit"
-                      ? `Rides ${transitLineFor(persona.id, indexes)}`
-                      : COMMUTE_LABELS[persona.commute.mode]}
-                  </span>
-                }
-              />
-            );
-          })()}
-        <SplitStat
+              : undefined
+          }
+          iconLabel="Fly to School"
           label="Education"
-          action={<GraduationCap className="size-3.5 shrink-0" aria-hidden />}
           top={persona.educationDetail ?? persona.education}
           bottom={
             almaMater && (
@@ -441,21 +469,11 @@ export function PersonaColumn({
             )
           }
         />
-        <SplitStat
+        <StatRow
+          icon={Home}
+          iconAction={() => flyTo(persona.homeBuildingId)}
+          iconLabel="Fly Home"
           label="Home"
-          action={
-            <IconTip label="Go Home">
-              <Button
-                variant="ghost"
-                size="icon-xs"
-                onClick={() => flyTo(persona.homeBuildingId)}
-                aria-label="Fly to home building"
-                className="text-muted-foreground"
-              >
-                <Home />
-              </Button>
-            </IconTip>
-          }
           top={
             homeDistrictName && (
               <button
@@ -480,21 +498,11 @@ export function PersonaColumn({
           }
         />
         {workBuildingId !== undefined && (
-          <SplitStat
+          <StatRow
+            icon={Briefcase}
+            iconAction={() => flyTo(workBuildingId)}
+            iconLabel={school && !business ? "Fly to School" : "Fly to Work"}
             label={school && !business ? "School" : "Work"}
-            action={
-              <IconTip label={school && !business ? "Go to School" : "Go to Work"}>
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  onClick={() => flyTo(workBuildingId)}
-                  aria-label={school && !business ? "Fly to school building" : "Fly to workplace"}
-                  className="text-muted-foreground"
-                >
-                  <Briefcase />
-                </Button>
-              </IconTip>
-            }
             top={
               workDistrictName &&
               workDistrictId && (
@@ -520,17 +528,27 @@ export function PersonaColumn({
             }
           />
         )}
-        <SplitStat
+        <StatRow
+          icon={RELATIONSHIP_ICONS[persona.relationshipStatus]}
+          // Hearts read pink (user 2026-07-10 🩷); single/widowed stay muted.
+          iconTint={
+            persona.relationshipStatus === "married" ||
+            persona.relationshipStatus === "dating" ||
+            persona.relationshipStatus === "divorced"
+              ? "#f472b6"
+              : undefined
+          }
+          iconAction={
+            partner
+              ? () => {
+                  const home = indexes.buildingById.get(partner.homeBuildingId);
+                  if (home) flyToBuilding(home);
+                }
+              : undefined
+          }
+          iconLabel="Fly to Partner"
           label="Relationship"
-          top={(() => {
-            const StatusIcon = RELATIONSHIP_ICONS[persona.relationshipStatus];
-            return (
-              <span className="inline-flex items-center gap-1.5">
-                <StatusIcon className="text-muted-foreground size-3.5 shrink-0" aria-hidden />
-                {capitalize(persona.relationshipStatus)}
-              </span>
-            );
-          })()}
+          top={capitalize(persona.relationshipStatus)}
           bottom={
             partner && (
               <button
@@ -550,7 +568,7 @@ export function PersonaColumn({
           <Separator />
           <div className="flex flex-col gap-0.5">
             <div className="flex items-center justify-between">
-              <div className="text-sm font-medium">Family</div>
+              <div className="text-base font-medium">Family</div>
               {!hideFamilyTree && <FamilyTree personaId={persona.id} indexes={indexes} />}
             </div>
             {persona.family.map((link) => {
@@ -561,7 +579,7 @@ export function PersonaColumn({
                   key={link.personaId}
                   type="button"
                   onClick={() => push({ kind: "persona", id: link.personaId })}
-                  className="-mx-1 flex items-baseline justify-between gap-4 rounded px-1 text-left text-sm hover:bg-foreground/10"
+                  className="-mx-1 flex items-baseline justify-between gap-4 rounded px-1 text-left text-base hover:bg-foreground/10"
                 >
                   <span className="capitalize text-muted-foreground">{link.role}</span>
                   <span>{relative.fullName}</span>
@@ -571,7 +589,7 @@ export function PersonaColumn({
             {persona.offstage.map((rel, i) => (
               <div
                 key={`${rel.role}:${rel.name}:${i}`}
-                className="flex items-baseline justify-between gap-4 text-sm text-muted-foreground"
+                className="flex items-baseline justify-between gap-4 text-base text-muted-foreground"
               >
                 <span className="capitalize">{rel.role}</span>
                 <span>{rel.name}, lives elsewhere</span>
@@ -583,14 +601,14 @@ export function PersonaColumn({
 
       {(story.wasIs || story.detail || story.refusal || story.relation) && (
         <div className="flex flex-col gap-1">
-          {story.wasIs && <p className="text-sm">{story.wasIs}</p>}
-          {story.detail && <p className="text-sm">{story.detail}</p>}
-          {story.refusal && <p className="text-sm">{story.refusal}</p>}
+          {story.wasIs && <p className="text-base">{story.wasIs}</p>}
+          {story.detail && <p className="text-base">{story.detail}</p>}
+          {story.refusal && <p className="text-base">{story.refusal}</p>}
           {story.relation && (
             <button
               type="button"
               onClick={() => push({ kind: "persona", id: story.relation!.targetId })}
-              className="text-left text-sm hover:underline"
+              className="text-left text-base hover:underline"
             >
               {story.relation.line}
             </button>
@@ -600,7 +618,7 @@ export function PersonaColumn({
 
       <Separator />
 
-      <div className="border-l-2 pl-2 text-sm italic">{story.hook}</div>
+      <div className="border-l-2 pl-2 text-base italic">{story.hook}</div>
     </>
   );
 }

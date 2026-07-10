@@ -23,6 +23,32 @@ export function focusBuilding(b: Building): void {
   st.setFocusRequest({ x: center[0], y: center[1], z: center[2], radius });
 }
 
+// Camera-only variant (user 2026-07-10): glide to the building and drop the
+// roof pin WITHOUT selecting — the resident card's row buttons show a place
+// on the map without replacing the open card/columns.
+export function flyToBuilding(b: Building): void {
+  const center: [number, number, number] = [b.x, b.height / 2, b.z];
+  const radius = 0.5 * Math.hypot(b.width, b.depth, b.height);
+  const st = useSceneStore.getState();
+  st.setFocusedBuildingId(b.id);
+  st.setFocusPivot(center);
+  st.setFocusRequest({ x: center[0], y: center[1], z: center[2], radius });
+}
+
+// Frame two buildings together (commute endpoints — user 2026-07-10: "focus
+// the transit arc"): midpoint pivot, radius covering both ends plus margin so
+// the whole arc fits. Camera-only, no selection.
+export function flyToSpan(a: Building, b: Building): void {
+  const cx = (a.x + b.x) / 2;
+  const cz = (a.z + b.z) / 2;
+  const cy = Math.max(a.height, b.height) / 2;
+  const half = Math.hypot(b.x - a.x, b.z - a.z) / 2;
+  const radius = Math.max(150, half * 1.2 + 60);
+  const st = useSceneStore.getState();
+  st.setFocusPivot([cx, cy, cz]);
+  st.setFocusRequest({ x: cx, y: cy, z: cz, radius, fit: "fill" });
+}
+
 // Toggle focus OFF: drop the roof pin, the orbit-lock pivot, and the Focus
 // button's active state, but keep the building SELECTED (info panel, selection
 // outline, and highlight stay). The camera holds its current pose — un-focusing
