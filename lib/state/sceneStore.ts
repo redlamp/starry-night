@@ -532,6 +532,11 @@ type SceneState = {
   setHoverDistrictId: (id: string | null) => void;
   pinnedDistrictId: string | null;
   setPinnedDistrictId: (id: string | null) => void;
+  // Directory "Districts" header toggle (user 2026-07-10): outline EVERY
+  // district in its colour on the map; hovering a district header adds a
+  // 20%-alpha fill of that colour. Runtime tier.
+  showDistrictBoundaries: boolean;
+  setShowDistrictBoundaries: (on: boolean) => void;
   setColumnsView: (v: "side" | "deck" | "collapsed") => void;
   // Inspect mode (user-facing, toggled by the Info button). When on, buildings
   // highlight on hover and a click selects one (info panel + outline + pin);
@@ -1210,13 +1215,21 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     set(
       directoryOpen
         ? { directoryOpen }
-        : // Closing the directory drops both district highlights with it.
-          { directoryOpen, hoverDistrictId: null, pinnedDistrictId: null },
+        : // Closing the directory drops the district highlights AND the
+          // boundaries overlay with it — its only control lives in the panel.
+          {
+            directoryOpen,
+            hoverDistrictId: null,
+            pinnedDistrictId: null,
+            showDistrictBoundaries: false,
+          },
     ),
   hoverDistrictId: null,
   setHoverDistrictId: (hoverDistrictId) => set({ hoverDistrictId }),
   pinnedDistrictId: null,
   setPinnedDistrictId: (pinnedDistrictId) => set({ pinnedDistrictId }),
+  showDistrictBoundaries: false,
+  setShowDistrictBoundaries: (showDistrictBoundaries) => set({ showDistrictBoundaries }),
   resumeColumns: () => {
     const last = get().lastColumnPath;
     if (last.length > 0) get().resetColumns(last);

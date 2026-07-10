@@ -7,6 +7,7 @@ import {
   MapPin,
   Route,
   Signature,
+  SquareDashed,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -153,6 +154,8 @@ export function DirectorySection() {
   const setHoverDistrictId = useSceneStore((s) => s.setHoverDistrictId);
   const pinnedDistrictId = useSceneStore((s) => s.pinnedDistrictId);
   const setPinnedDistrictId = useSceneStore((s) => s.setPinnedDistrictId);
+  const showDistrictBoundaries = useSceneStore((s) => s.showDistrictBoundaries);
+  const setShowDistrictBoundaries = useSceneStore((s) => s.setShowDistrictBoundaries);
 
   const [query, setQuery] = useState("");
   const [kindFilter, setKindFilter] = useState<KindFilter>("all");
@@ -477,20 +480,40 @@ export function DirectorySection() {
 
           <div className="flex shrink-0 items-center justify-between gap-2">
             <span className="text-sm font-medium">Districts</span>
-            <Select value={districtSort} onValueChange={(v) => setDistrictSort(v as DistrictSort)}>
-              <SelectTrigger size="sm" className="w-32">
-                <SelectValue>
-                  {(v: DistrictSort) => DISTRICT_SORTS.find((o) => o.value === v)?.label ?? "Sort"}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {DISTRICT_SORTS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex items-center gap-1">
+              {/* Boundaries toggle (user 2026-07-10): outline every district
+                  in its colour on the map; hovering a header then fills its
+                  district at 20% alpha (SelectedDistrictOutline). */}
+              <IconTip label="Show Boundaries">
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Show Boundaries"
+                  aria-pressed={showDistrictBoundaries}
+                  onClick={() => setShowDistrictBoundaries(!showDistrictBoundaries)}
+                  className={cn(
+                    "text-muted-foreground size-7",
+                    showDistrictBoundaries && "bg-primary/15 text-foreground",
+                  )}
+                >
+                  <SquareDashed className="size-3.5" />
+                </Button>
+              </IconTip>
+              <Select value={districtSort} onValueChange={(v) => setDistrictSort(v as DistrictSort)}>
+                <SelectTrigger size="sm" className="w-32">
+                  <SelectValue>
+                    {(v: DistrictSort) => DISTRICT_SORTS.find((o) => o.value === v)?.label ?? "Sort"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {DISTRICT_SORTS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           {/* -mr-3/pr-4: same edge-and-gap fix as the search list above. */}
