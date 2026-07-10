@@ -220,9 +220,15 @@ function FamilyChart({
   onSelect: (id: string) => void;
 }) {
   const hostRef = useRef<HTMLDivElement | null>(null);
+  // The un-transformed layout root: flex lays rows out here, blocks shift
+  // within it, and the normalize step translates/scales it as one unit so
+  // boxes and connectors always move together.
+  const contentRef = useRef<HTMLDivElement | null>(null);
   const boxRefs = useRef(new Map<string, HTMLButtonElement>());
   const [segs, setSegs] = useState<Seg[]>([]);
-  const [size, setSize] = useState({ w: 0, h: 0 });
+  // Fitted content-box size (w/h drive the sized wrapper; svgW/svgH the
+  // overlay's nominal size — it draws outside via overflow-visible).
+  const [view, setView] = useState({ w: 0, h: 0, svgW: 0, svgH: 0 });
 
   const refFor = (id: string) => (el: HTMLButtonElement | null) => {
     if (el) boxRefs.current.set(id, el);
@@ -234,17 +240,23 @@ function FamilyChart({
     if (!host) return;
 
     const measure = () => {
+      const contentEl = contentRef.current;
+      if (!contentEl) return;
       // Union block wrappers are found by data attribute (not a ref map —
       // ref access during render trips react-hooks/refs).
       const blockEls = new Map<string, HTMLElement>();
       for (const el of host.querySelectorAll<HTMLElement>("[data-block-key]")) {
         blockEls.set(el.dataset.blockKey as string, el);
       }
-      // Natural-layout read: clear transforms from a previous pass first.
+      // Natural-layout read: clear transforms from a previous pass first
+      // (blocks AND the normalize/fit transform on the content root).
       // Transforms never affect layout, so this cannot loop the observer.
       for (const el of blockEls.values()) el.style.transform = "";
+      contentEl.style.transform = "";
 
-      const hostRect = host.getBoundingClientRect();
+      // All coordinates below are relative to the content root's natural
+      // (un-transformed) box — the same space the SVG overlay draws in.
+      const hostRect = contentEl.getBoundingClientRect();
       type Box = {
         left: number;
         right: number;
@@ -276,7 +288,6 @@ function FamilyChart({
       const packC = (b: Box) => (vertical ? b.cy : b.cx); // pack-axis center
       const genS = (b: Box) => (vertical ? b.left : b.top); // gen-axis start
       const genE = (b: Box) => (vertical ? b.right : b.bottom); // gen-axis end
-      const packExtent = vertical ? hostRect.height : hostRect.width;
       const toSeg = (
         p1: number,
         g1: number,
@@ -316,14 +327,19 @@ function FamilyChart({
       for (const row of web.rows) for (const u of row) for (const m of u.members) unionOf.set(m.id, u);
 
       // Pack one row toward per-block target centers (order preserved,
-      // 24px min gap), ACCUMULATING into shiftFor/blockShifts. Clamp into
-      // the host preferring left-edge anchoring (right overflow scrolls,
-      // left would not). Do NOT apply transforms here: box() reads live
-      // rects, so a transform landing mid-pass would be counted twice for
-      // that block in every later read (once in the DOM rect, once via the
-      // shift maps) — that double-shift was the v6 right-side connector
-      // misalignment. All transforms land in one batch after the connector
-      // math.
+      // tighter min gap in column mode where vertical space is the scarce
+      // axis), ACCUMULATING into shiftFor/blockShifts. NO viewport clamp:
+      // rows place purely by their targets — the old clamp bounded each row
+      // into the VISIBLE region, so a row taller/wider than it (e.g. a
+      // grandchildren column) was displaced wholesale relative to its
+      // parents' row, landing children off their union anchors (user
+      // 2026-07-10: Joshua ~25px below Adam+Jennifer's midpoint). The
+      // normalize step after the connector math re-origins the global
+      // bounding box instead, so negative coordinates are fine here. Do NOT
+      // apply transforms mid-pass: box() reads live rects, so a transform
+      // landing early would be counted twice in every later read (the v6
+      // double-shift bug) — they land in one batch later.
+      const packGap = vertical ? 14 : 24;
       const packToward = (row: UnionNode[], targetFor: (u: UnionNode, cur: Box) => number) => {
         const calc = row.flatMap((u) => {
           const cur = blockBox(u);
@@ -333,14 +349,10 @@ function FamilyChart({
         const widths = calc.map((c) => packE(c.cur) - packS(c.cur));
         const lefts = packRow(
           calc.map((c, i) => ({ desired: c.target - widths[i] / 2, width: widths[i] })),
-          24,
+          packGap,
         );
-        const minLeft = Math.min(...lefts);
-        let shift = Math.max(0, -minLeft);
-        const over = Math.max(...lefts.map((l, i) => l + widths[i])) + shift - packExtent;
-        if (over > 0) shift = Math.max(shift - over, -minLeft);
         calc.forEach((c, i) => {
-          const delta = lefts[i] + shift - packS(c.cur);
+          const delta = lefts[i] - packS(c.cur);
           if (Math.abs(delta) < 0.01) return;
           const dx = (blockShifts.get(c.u.key) ?? 0) + delta;
           blockShifts.set(c.u.key, dx);
@@ -367,19 +379,39 @@ function FamilyChart({
           });
         }
       };
+      // The exact pack-axis point a child HANGS from: the union-line
+      // midpoint between the parent couple's boxes (same formula as
+      // coupleAnchor), the member's own box center for a single parent, or
+      // the ±14 member-box offset for remarriage-split solo children. The
+      // children group must center on this point — the block's geometric
+      // center is only equal to it when both member boxes are the same size
+      // and nothing else skews the block (user 2026-07-10 rule).
+      const hangPointFor = (pu: UnionNode, childId: string): number | null => {
+        const solo = pu.soloChildIds.find((s) => s.kids.includes(childId));
+        if (solo) {
+          const m = box(solo.memberId);
+          if (!m) return null;
+          const isFirst = pu.members.length === 2 && solo.memberId === pu.members[0].id;
+          return packC(m) + (isFirst ? -14 : 14);
+        }
+        const a = box(pu.members[0].id);
+        if (!a) return null;
+        const b = pu.members[1] ? box(pu.members[1].id) : null;
+        if (!b) return packC(a);
+        const [l, r] = packC(a) <= packC(b) ? [a, b] : [b, a];
+        return (packE(l) + packS(r)) / 2;
+      };
       const passDown = () => {
         for (let r = 1; r < web.rows.length; r += 1) {
           packToward(web.rows[r], (u, cur) => {
             const anchors: number[] = [];
             for (const m of u.members) {
-              // The member's parents live in some union above — its block's
-              // center is where this child's drop will hang from.
               const parentIds = m.family
                 .filter((l) => l.role === "parent")
                 .map((l) => l.personaId);
               const parentUnion = parentIds.map((pid) => unionOf.get(pid)).find(Boolean);
-              const pb = parentUnion ? blockBox(parentUnion) : null;
-              if (pb) anchors.push(packC(pb));
+              const p = parentUnion ? hangPointFor(parentUnion, m.id) : null;
+              if (p !== null) anchors.push(p);
             }
             return anchors.length
               ? anchors.reduce((s, a) => s + a, 0) / anchors.length
@@ -487,8 +519,35 @@ function FamilyChart({
         }
       }
 
-      // NOW land the transforms, in one batch — no box() read happens after
-      // this point, so nothing can see a rect that already moved (the
+      // Content bounding box across shifted blocks AND connector segments,
+      // read BEFORE transforms land (blockBox double-counts afterwards).
+      let minX = Infinity;
+      let minY = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      for (const row of web.rows) {
+        for (const u of row) {
+          const b = blockBox(u);
+          if (!b) continue;
+          minX = Math.min(minX, b.left);
+          minY = Math.min(minY, b.top);
+          maxX = Math.max(maxX, b.right);
+          maxY = Math.max(maxY, b.bottom);
+        }
+      }
+      for (const s of next) {
+        minX = Math.min(minX, s.x1, s.x2);
+        minY = Math.min(minY, s.y1, s.y2);
+        maxX = Math.max(maxX, s.x1, s.x2);
+        maxY = Math.max(maxY, s.y1, s.y2);
+      }
+      if (!Number.isFinite(minX)) {
+        minX = minY = 0;
+        maxX = maxY = 0;
+      }
+
+      // NOW land the block transforms, in one batch — no box() read happens
+      // after this point, so nothing can see a rect that already moved (the
       // double-shift). Transforms never affect layout → no observer loop.
       // The translate runs along the pack axis: X in rows, Y in columns.
       for (const [key, dx] of blockShifts) {
@@ -502,8 +561,44 @@ function FamilyChart({
         }
       }
 
+      // NORMALIZE + FIT (user 2026-07-10: "no horizontal scroll despite
+      // fitting", "adjust to fit the vertical size"). The flex layout
+      // centers content naturally, then the pack shifts move blocks — which
+      // extends the scrollable bounds without shrinking the stale w-max
+      // extents (phantom scroll + dead margins). Fix: translate the whole
+      // content root so the actual bounding box starts at the padding, and
+      // size an explicit wrapper to exactly that box. Then, if the content
+      // is taller than the panel's available chart region, scale the root
+      // down to fit — boxes and SVG scale together — with a 0.65 floor so
+      // text stays legible (below the floor, scrolling returns).
+      const pad = 12;
+      const w0 = maxX - minX + pad * 2;
+      const h0 = maxY - minY + pad * 2;
+      // Available chart height = the panel's height cap minus its fixed
+      // rows (header/footer/controls) and vertical padding+border. Derived
+      // from the caps, not the live shell size, so the result can't feed
+      // back into itself through the ResizeObserver.
+      const panel = host.parentElement;
+      let fixedH = 0;
+      if (panel) {
+        for (const child of panel.children) {
+          if (child !== host) fixedH += (child as HTMLElement).offsetHeight;
+        }
+      }
+      const panelCap = Math.max(480, window.innerHeight * 0.85); // min-h-[30rem] / max-h-[85vh]
+      const avail = Math.max(160, panelCap - fixedH - 34);
+      const scale = h0 > avail ? Math.max(0.65, avail / h0) : 1;
+      // Right-to-left application: translate in natural coords, then scale
+      // about the top-left origin.
+      contentEl.style.transform = `scale(${scale}) translate(${pad - minX}px, ${pad - minY}px)`;
+
       setSegs(next);
-      setSize({ w: host.scrollWidth, h: host.scrollHeight });
+      setView({
+        w: w0 * scale,
+        h: h0 * scale,
+        svgW: Math.max(0, maxX),
+        svgH: Math.max(0, maxY),
+      });
     };
 
     measure();
@@ -540,46 +635,58 @@ function FamilyChart({
   );
 
   return (
-    <div
-      ref={hostRef}
-      className={cn(
-        "relative flex w-max min-w-full flex-1 items-center justify-center gap-9 p-3",
-        vertical ? "flex-row" : "flex-col",
-      )}
-    >
-      <svg
-        className="text-muted-foreground/80 pointer-events-none absolute top-0 left-0"
-        width={size.w}
-        height={size.h}
-        aria-hidden
-      >
-        {segs.map((s, i) => (
-          <line
-            key={i}
-            x1={s.x1}
-            y1={s.y1}
-            x2={s.x2}
-            y2={s.y2}
-            // Lineage Colors on → the union's line hue/blend; off (or no
-            // colored member) → the muted connector color via currentColor.
-            stroke={lineage && s.color ? s.color : "currentColor"}
-            strokeWidth={1.5}
-            strokeLinecap="round"
-            strokeDasharray={s.dashed ? "2 5" : undefined}
-          />
-        ))}
-      </svg>
-      {web.rows.map((row, i) => (
+    // Shell: centers the fitted chart in the flex-1 region. The sized
+    // wrapper is the ONLY element contributing layout size (exactly the
+    // normalized+scaled content box — no phantom scroll from stale w-max
+    // extents or transform overflow); the content root inside is absolute,
+    // laid out at natural size, then translated/scaled by the measure pass.
+    // No min-h-0: when even the 0.65-scale floor cannot fit, the shell must
+    // GROW past the flex-1 slot so the panel's overflow-auto scrolls, rather
+    // than letting the chart bleed over the footer/controls rows.
+    <div ref={hostRef} className="flex flex-1 items-center justify-center">
+      <div className="relative shrink-0" style={{ width: view.w, height: view.h }}>
         <div
-          key={row[0]?.key ?? i}
+          ref={contentRef}
           className={cn(
-            "flex justify-center gap-4",
-            vertical ? "flex-col items-start" : "items-start",
+            "absolute top-0 left-0 flex w-max origin-top-left items-center justify-center",
+            vertical ? "flex-row gap-7" : "flex-col gap-9",
           )}
         >
-          {row.map(renderUnion)}
+          <svg
+            className="text-muted-foreground/80 pointer-events-none absolute top-0 left-0 overflow-visible"
+            width={view.svgW}
+            height={view.svgH}
+            aria-hidden
+          >
+            {segs.map((s, i) => (
+              <line
+                key={i}
+                x1={s.x1}
+                y1={s.y1}
+                x2={s.x2}
+                y2={s.y2}
+                // Lineage Colors on → the union's line hue/blend; off (or no
+                // colored member) → the muted connector color via currentColor.
+                stroke={lineage && s.color ? s.color : "currentColor"}
+                strokeWidth={1.5}
+                strokeLinecap="round"
+                strokeDasharray={s.dashed ? "2 5" : undefined}
+              />
+            ))}
+          </svg>
+          {web.rows.map((row, i) => (
+            <div
+              key={row[0]?.key ?? i}
+              className={cn(
+                "flex justify-center gap-4",
+                vertical ? "flex-col items-start" : "items-start",
+              )}
+            >
+              {row.map(renderUnion)}
+            </div>
+          ))}
         </div>
-      ))}
+      </div>
     </div>
   );
 }
