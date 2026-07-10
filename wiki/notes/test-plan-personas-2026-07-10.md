@@ -69,3 +69,10 @@ Covers everything shipped after the 07-08 morning merge (rounds 5-9: directory r
 - Family tree: adoption/step dashed lines await generator support (#93 territory); dating vs married unions render the same solid line.
 - Marquee names are tab-stops in both copies (minor a11y duplication).
 - School staff home-proximity not enforced; naming fallback "Apartments 2".
+
+## 9. Next Batch (feat/persona-perf) — heads-up, not for this session
+
+1. The directory now builds on first open: a skeleton shows for ~1.4 s once, then it's cached for the session. Page load no longer pays the (previously 2.2 s) persona build at all.
+2. Expect ONE more one-time population re-roll when that branch lands — trait draws moved to per-persona streams, and story relations got re-keyed. Same shape as the #93 re-roll above: same geometry, people re-drawn once.
+3. Astrology (moon/rising sign, birth hour), MBTI, and height/build now materialize when a persona card opens, not at directory-build time.
+4. Story lines (hooks, epithets, whyAwake, relations) now materialize per building when it's selected, not for the whole city up front.
