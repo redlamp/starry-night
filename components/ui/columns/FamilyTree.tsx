@@ -69,21 +69,24 @@ import { FanChart } from "./FamilyFan";
 // card the inspector columns use (PersonaColumn), not a bespoke summary.
 
 // Least-squares row packing (pool-adjacent-violators). Input: blocks in
-// their final left-to-right order with desired left edges; output: left
-// edges that preserve that order with at least `gap` between blocks while
-// staying collectively as close to the desired positions as possible —
-// "keeping each as close to its target as the packing allows" (user
-// 2026-07-10). In prefix-space (subtract the cumulative width+gap ahead of
-// each block) the min-gap constraint becomes plain "non-decreasing", so the
-// closest fit is isotonic regression: pool adjacent blocks while they
-// violate, place each pool at its mean.
-function packRow(items: Array<{ desired: number; width: number }>, gap: number): number[] {
+// their final left-to-right order with desired left edges and a PER-PAIR
+// minimum gap (gapBefore = required air between a block and its
+// predecessor — couples and child-bearing unions demand more than leaf
+// singles); output: left edges that preserve that order while staying
+// collectively as close to the desired positions as possible — "keeping
+// each as close to its target as the packing allows" (user 2026-07-10). In
+// prefix-space (subtract the cumulative width+gap ahead of each block) the
+// min-gap constraint becomes plain "non-decreasing", so the closest fit is
+// isotonic regression: pool adjacent blocks while they violate, place each
+// pool at its mean.
+function packRow(items: Array<{ desired: number; width: number; gapBefore: number }>): number[] {
   const prefix: number[] = [];
   let acc = 0;
-  for (const it of items) {
+  items.forEach((it, i) => {
+    if (i > 0) acc += it.gapBefore;
     prefix.push(acc);
-    acc += it.width + gap;
-  }
+    acc += it.width;
+  });
   const pools: Array<{ sum: number; n: number }> = [];
   items.forEach((it, i) => {
     let pool = { sum: it.desired - prefix[i], n: 1 };
@@ -337,11 +340,15 @@ function FamilyChart({
       // apply transforms mid-pass: box() reads live rects, so a transform
       // landing early would be counted twice in every later read (the v6
       // double-shift bug) — they land in one batch later.
-      // Inter-UNION gap deliberately larger than the intra-couple gap
-      // (gap-1.5 in renderUnion) so partner pairs read as units, the seams
-      // between couples are unmistakable, and the descendant drop lines have
-      // clear air to run through (user 2026-07-10, widened twice).
-      const packGap = vertical ? 28 : 36;
+      // Generation-aware inter-union air (user 2026-07-10): couples and
+      // unions with descendants need room for their drop lines to read —
+      // leaf SINGLES (unmarried grandchildren) pack tight. The gap between
+      // two adjacent blocks is wide when either side is a couple or a
+      // parent; narrow only between two childless singles. Intra-couple gap
+      // stays gap-1.5 so pairs read as units.
+      const wideGap = vertical ? 28 : 36;
+      const tightGap = vertical ? 12 : 16;
+      const wantsAir = (u: UnionNode) => u.members.length > 1 || u.childIds.length > 0;
       const packToward = (row: UnionNode[], targetFor: (u: UnionNode, cur: Box) => number) => {
         const calc = row.flatMap((u) => {
           const cur = blockBox(u);
@@ -350,8 +357,12 @@ function FamilyChart({
         if (calc.length === 0) return;
         const widths = calc.map((c) => packE(c.cur) - packS(c.cur));
         const lefts = packRow(
-          calc.map((c, i) => ({ desired: c.target - widths[i] / 2, width: widths[i] })),
-          packGap,
+          calc.map((c, i) => ({
+            desired: c.target - widths[i] / 2,
+            width: widths[i],
+            gapBefore:
+              i > 0 && !wantsAir(calc[i - 1].u) && !wantsAir(c.u) ? tightGap : wideGap,
+          })),
         );
         calc.forEach((c, i) => {
           const delta = lefts[i] - packS(c.cur);
