@@ -47,6 +47,10 @@ export function PopulationHeatAction() {
 export function DistrictsSection() {
   const masterSeed = useSceneStore((s) => s.masterSeed);
   const setHighlight = useSceneStore((s) => s.setHighlightDistrictId);
+  // Same flag the directory's Districts-header toggle drives (user
+  // 2026-07-10) — two homes, one overlay.
+  const showBoundaries = useSceneStore((s) => s.showDistrictBoundaries);
+  const setShowBoundaries = useSceneStore((s) => s.setShowDistrictBoundaries);
 
   const citySize = useSceneStore((s) => s.citySize);
   const citySketch = useSceneStore((s) => s.citySketch);
@@ -64,6 +68,15 @@ export function DistrictsSection() {
 
   return (
     <div className="flex flex-col gap-1 pt-1">
+      <div className="flex items-center justify-between gap-2 text-xs">
+        <span className="text-foreground/70">boundaries</span>
+        <Switch
+          checked={showBoundaries}
+          onCheckedChange={setShowBoundaries}
+          title="Toggle district boundary outlines"
+          aria-label="Toggle district boundaries"
+        />
+      </div>
       {districts.map((d) => (
         <div
           key={d.id}

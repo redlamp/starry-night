@@ -6,7 +6,8 @@ import { Html } from "@react-three/drei";
 import { MapPin } from "lucide-react";
 import { useSceneStore } from "@/lib/state/sceneStore";
 import { generateCity, tensorDistrictField } from "@/lib/seed/cityGen";
-import { districtBoundaryLoops, loopSignedArea, type BoundaryLoop } from "@/lib/seed/districtOutline";
+import { districtBoundaryLoops } from "@/lib/seed/districtOutline";
+import { loopsToSegments, loopsToFillGroup } from "@/lib/scene/districtOverlayGeometry";
 
 // #87 follow-up: trace an outline around a district's true, irregular
 // perimeter. Since 2026-07-10 the outline comes from districtBoundaryLoops —
@@ -32,18 +33,6 @@ const PIN_PARKED: [number, number, number] = [0, -100000, 0];
 // Sampling resolution for the pin's centroid pass only (cheap and plenty for
 // a marker position).
 const CENTROID_STEPS = 80;
-
-function loopsToSegments(loops: BoundaryLoop[], y: number): number[] {
-  const pts: number[] = [];
-  for (const loop of loops) {
-    for (let i = 0; i < loop.length; i++) {
-      const a = loop[i];
-      const b = loop[(i + 1) % loop.length];
-      pts.push(a.x, y, a.z, b.x, y, b.z);
-    }
-  }
-  return pts;
-}
 
 function outlineMaterial(color: string, opacity: number): THREE.LineBasicMaterial {
   const mat = new THREE.LineBasicMaterial({
@@ -74,19 +63,6 @@ function disposeObject(obj: THREE.Object3D | null): void {
     if (c.geometry) c.geometry.dispose();
     if (c.material) (c.material as THREE.Material).dispose();
   });
-}
-
-// Ray-cast point-in-polygon, used to assign hole loops to their outer loop.
-function pointInLoop(p: { x: number; z: number }, loop: BoundaryLoop): boolean {
-  let ins = false;
-  for (let i = 0, j = loop.length - 1; i < loop.length; j = i++) {
-    const a = loop[i];
-    const b = loop[j];
-    if (a.z > p.z !== b.z > p.z && p.x < ((b.x - a.x) * (p.z - a.z)) / (b.z - a.z) + a.x) {
-      ins = !ins;
-    }
-  }
-  return ins;
 }
 
 export function SelectedDistrictOutline({ masterSeed }: { masterSeed: string }) {
@@ -162,11 +138,6 @@ export function SelectedDistrictOutline({ masterSeed }: { masterSeed: string }) 
     const target = field.districts.find((d) => d.id === hoverDistrictId);
     if (!target) return null;
     const loops = districtBoundaryLoops(field, target.index);
-    // CCW loops are outers, CW are holes (districtOutline contract); holes
-    // attach to whichever outer contains them.
-    const outers = loops.filter((l) => loopSignedArea(l) > 0);
-    const holes = loops.filter((l) => loopSignedArea(l) < 0);
-    if (outers.length === 0) return null;
     const mat = new THREE.MeshBasicMaterial({
       color: new THREE.Color(target.color),
       transparent: true,
@@ -177,24 +148,9 @@ export function SelectedDistrictOutline({ masterSeed }: { masterSeed: string }) 
       toneMapped: false,
       side: THREE.DoubleSide,
     });
-    const group = new THREE.Group();
-    for (const outer of outers) {
-      // ShapeGeometry lives in the XY plane; mapping z → -y then rotating
-      // -90° about X lands it back on XZ with the original z sign.
-      const shape = new THREE.Shape(outer.map((p) => new THREE.Vector2(p.x, -p.z)));
-      for (const hole of holes) {
-        if (pointInLoop(hole[0], outer)) {
-          shape.holes.push(new THREE.Path(hole.map((p) => new THREE.Vector2(p.x, -p.z))));
-        }
-      }
-      const mesh = new THREE.Mesh(new THREE.ShapeGeometry(shape), mat);
-      mesh.rotation.x = -Math.PI / 2;
-      mesh.position.y = FILL_Y;
-      mesh.frustumCulled = false;
-      mesh.renderOrder = 1000; // above the shells' fill, below the outlines
-      group.add(mesh);
-    }
-    return group;
+    // renderOrder 1000: above the shells' fill, below the outlines.
+    const group = loopsToFillGroup(loops, mat, FILL_Y, 1000);
+    return group.children.length > 0 ? group : null;
   }, [showBoundaries, hoverDistrictId, masterSeed, citySize, citySketch]);
 
   useEffect(() => () => disposeObject(lines), [lines]);

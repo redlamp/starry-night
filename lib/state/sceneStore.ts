@@ -1215,14 +1215,10 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     set(
       directoryOpen
         ? { directoryOpen }
-        : // Closing the directory drops the district highlights AND the
-          // boundaries overlay with it — its only control lives in the panel.
-          {
-            directoryOpen,
-            hoverDistrictId: null,
-            pinnedDistrictId: null,
-            showDistrictBoundaries: false,
-          },
+        : // Closing the directory drops both district highlights with it.
+          // showDistrictBoundaries survives — it also has a home in
+          // Settings > Districts (user 2026-07-10), so it isn't orphaned.
+          { directoryOpen, hoverDistrictId: null, pinnedDistrictId: null },
     ),
   hoverDistrictId: null,
   setHoverDistrictId: (hoverDistrictId) => set({ hoverDistrictId }),

@@ -493,7 +493,9 @@ export function DirectorySection() {
                   onClick={() => setShowDistrictBoundaries(!showDistrictBoundaries)}
                   className={cn(
                     "text-muted-foreground size-7",
-                    showDistrictBoundaries && "bg-primary/15 text-foreground",
+                    // /30, not the usual /15 selection tint — an icon-only
+                    // active state needs the extra contrast (user 2026-07-10).
+                    showDistrictBoundaries && "bg-primary/30 text-foreground",
                   )}
                 >
                   <SquareDashed className="size-3.5" />
@@ -587,12 +589,11 @@ export function DirectorySection() {
                           }}
                           className={cn(
                             "size-6 shrink-0 [&_svg]:size-3.5",
-                            // Theme-contrast plate, not per-district luma (user
-                            // 2026-07-08): `foreground` itself flips light/dark, so
-                            // the enabled state reads correctly in either theme
-                            // without a per-district luma calculation. The pin icon
-                            // keeps its district color in both states.
-                            pinnedDistrictId === d.id && "bg-foreground/90",
+                            // Pinned state matches the Show Boundaries toggle's
+                            // primary tint, at /30 for contrast (user 2026-07-10 —
+                            // replaced the foreground plate). The pin icon keeps
+                            // its district color in both states.
+                            pinnedDistrictId === d.id && "bg-primary/30",
                           )}
                           style={{ color: d.color }}
                         >
