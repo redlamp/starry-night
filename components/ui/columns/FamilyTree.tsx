@@ -20,16 +20,19 @@ import type { EntityIndexes } from "./entityData";
 import { IconTip, StandaloneEntityCard } from "./EntityColumns";
 import { GenderIcon } from "./genderIcon";
 
-// Family tree explorer v3 (user 2026-07-08): a traditional hourglass chart
-// centered on a UNION, not a person — both partners' ancestries render side by
-// side, so re-rooting on the partner produces the SAME chart with the
-// highlight moved (the consistency rule). Couple ordering follows genogram
-// convention: man left / woman right for different-gender couples, stable
-// persona-id order otherwise (same-gender, nonbinary) — never click order.
-// Children split remarriage-style: shared children hang from the union line's
-// midpoint; a partner's children from a previous relationship hang from that
-// partner's own box. Connectors are drawn in a measured SVG overlay. The
-// right pane is the SAME persona card the inspector columns use
+// Family tree explorer v3 (user 2026-07-08; re-ordered 2026-07-10): a
+// traditional hourglass chart centered on a UNION, not a person — both
+// partners' ancestries render side by side, so re-rooting on the partner
+// produces the SAME chart with the highlight moved (the consistency rule).
+// Every row's left-to-right order is derived from the DATA, never from which
+// person is focused: sibling groups and couples order oldest → youngest,
+// left → right, ties broken by persona id. A partner renders immediately
+// beside their blood-side person, on whichever side their age implies (older
+// left, younger right) — this replaces the old man-left/woman-right genogram
+// convention. Children split remarriage-style: shared children hang from the
+// union line's midpoint; a partner's children from a previous relationship
+// hang from that partner's own box. Connectors are drawn in a measured SVG
+// overlay. The right pane is the SAME persona card the inspector columns use
 // (PersonaColumn), not a bespoke summary. See wiki research note
 // research/family-tree-chart-conventions.
 
@@ -57,19 +60,56 @@ type Chart = {
   grandchildGroups: Array<{ parentId: string; kids: Descendant[] }>;
 };
 
-function isMan(p: Persona): boolean {
-  return p.genderIdentity === "cis man" || p.genderIdentity === "trans man";
-}
-function isWoman(p: Persona): boolean {
-  return p.genderIdentity === "cis woman" || p.genderIdentity === "trans woman";
+// Deterministic couple ordering: OLDER on the left, younger on the right —
+// replaces the old man-left/woman-right genogram convention. Ties (equal
+// age) break by persona id. Depends only on the two people's own data, so it
+// returns the SAME pair order whichever of the two is passed as focus — the
+// basis of the "clicking your partner doesn't restructure" invariant (user
+// 2026-07-10).
+function orderByAge(x: Persona, y: Persona): [Persona, Persona] {
+  if (x.age !== y.age) return x.age > y.age ? [x, y] : [y, x];
+  return x.id <= y.id ? [x, y] : [y, x];
 }
 
-// Genogram convention where it applies; otherwise a stable seed-derived order
-// (persona id), so the layout never depends on which partner was clicked.
-function orderCouple(x: Persona, y: Persona): [Persona, Persona] {
-  if (isMan(x) && isWoman(y)) return [x, y];
-  if (isMan(y) && isWoman(x)) return [y, x];
-  return x.id <= y.id ? [x, y] : [y, x];
+// Chart convention: siblings/children render oldest → youngest, left → right;
+// ties break by persona id so ordering never depends on which person
+// triggered the render (user 2026-07-10).
+function byAge(list: Persona[]): Persona[] {
+  return [...list].sort((a, b) => (b.age !== a.age ? b.age - a.age : a.id <= b.id ? -1 : 1));
+}
+
+// A descendant's pairing with their partner, left-to-right by the SAME age
+// rule as every other couple in the chart (older left, younger right; tie →
+// id). Replaces the old "partner always faces outward from the row's
+// center" convention, which positioned a partner by where their pair sat in
+// the row rather than by anything about the two people themselves (user
+// 2026-07-10).
+function pairOrder(person: Persona, partner?: Persona): [Persona, Persona | undefined] {
+  if (!partner) return [person, undefined];
+  const [older] = orderByAge(person, partner);
+  return older.id === person.id ? [person, partner] : [partner, person];
+}
+
+// One row entry is either a lone relative or a glued couple (rendered as one
+// adjacent unit so the union connector never has to skip over other boxes).
+type RowEntry = { kind: "single"; person: Persona } | { kind: "couple"; a: Persona; b: Persona };
+
+// The sibling-generation row for one side of the union: the blood anchor
+// (chart.left or chart.right) merged into their OWN sibling set and sorted
+// by the same age rule as everywhere else, so the anchor's on-screen position
+// reflects their birth order — never "always adjacent to the union," which
+// is what made re-rooting onto a sibling visually jump the whole row (the
+// anchor used to be pinned to the row's center regardless of age; user
+// 2026-07-10). The anchor's own partner, if any, rides along as a glued
+// "couple" entry at the anchor's rank — appended on the age-implied side via
+// pairOrder-equivalent logic (the anchor is already the older/younger half
+// of chart.left/chart.right, so it renders first).
+function siblingRow(anchor: Persona, partner: Persona | undefined, siblings: Persona[]): RowEntry[] {
+  return byAge([anchor, ...siblings]).map((p) =>
+    p.id === anchor.id && partner
+      ? { kind: "couple", a: anchor, b: partner }
+      : { kind: "single", person: p },
+  );
 }
 
 function buildChart(indexes: EntityIndexes, focus: Persona): Chart {
@@ -81,9 +121,7 @@ function buildChart(indexes: EntityIndexes, focus: Persona): Chart {
       .filter(Boolean) as Persona[];
 
   const partner = focus.partnerId ? get(focus.partnerId) : undefined;
-  const [left, right] = partner ? orderCouple(focus, partner) : [focus, undefined];
-  // Chart convention: siblings/children render oldest → youngest, left → right.
-  const byAge = (list: Persona[]) => [...list].sort((a, b) => b.age - a.age);
+  const [left, right] = partner ? orderByAge(focus, partner) : [focus, undefined];
 
   // One person renders exactly once — later collections skip already-placed ids.
   const seen = new Set<string>([left.id, ...(right ? [right.id] : [])]);
@@ -119,11 +157,11 @@ function buildChart(indexes: EntityIndexes, focus: Persona): Chart {
   const sideFor = (person: Persona): Side => {
     const parentsRaw = byRole(person, "parent");
     const parents =
-      parentsRaw.length === 2 ? orderCouple(parentsRaw[0], parentsRaw[1]) : parentsRaw;
+      parentsRaw.length === 2 ? orderByAge(parentsRaw[0], parentsRaw[1]) : parentsRaw;
     const grandCouples: GrandCouple[] = [];
     for (const parent of parents) {
       const gpsRaw = byRole(parent, "parent");
-      const gps = gpsRaw.length === 2 ? orderCouple(gpsRaw[0], gpsRaw[1]) : gpsRaw;
+      const gps = gpsRaw.length === 2 ? orderByAge(gpsRaw[0], gpsRaw[1]) : gpsRaw;
       const claimed = claim([...gps]);
       if (claimed.length) grandCouples.push({ people: claimed, childId: parent.id });
     }
@@ -182,9 +220,9 @@ type Seg = { x1: number; y1: number; x2: number; y2: number; dotted?: boolean };
 // parents, grandparents, siblings, children, grandchildren); everyone else —
 // the partner, the partner's whole ancestry, a descendant's married-in
 // spouse — is not. The chart is centered on the UNION (left/right ordering
-// follows genogram convention, not who's focused), so "blood" always means
-// blood of the FOCUS specifically, computed off focusId, never off "left"
-// (user 2026-07-10).
+// follows the age rule, not who's focused), so "blood" always means blood of
+// the FOCUS specifically, computed off focusId, never off "left" (user
+// 2026-07-10).
 function bloodIdsFor(chart: Chart, focusId: string): Set<string> {
   const blood = new Set<string>([focusId]);
   const focusIsLeft = chart.left.id === focusId;
@@ -420,16 +458,26 @@ function FamilyChart({
   const coupleRow = (people: Persona[]) => (
     <div className="flex items-start gap-2.5">{people.map(renderBox)}</div>
   );
-  // Married-in partners sit on the OUTSIDE of the tree (user 2026-07-08): in
-  // the left half of a row the partner renders before the blood member, in
-  // the right half after — the blood line stays contiguous in the middle.
-  const descPair = (d: Descendant, outboardLeft: boolean) => (
-    <div key={d.person.id} className="flex items-start gap-2.5">
-      {outboardLeft && d.partner && renderBox(d.partner)}
-      {renderBox(d.person)}
-      {!outboardLeft && d.partner && renderBox(d.partner)}
-    </div>
-  );
+  // Partner renders beside their blood-side person on the age-implied side
+  // (older left, younger right) — see pairOrder (user 2026-07-10).
+  const descPair = (d: Descendant) => {
+    const [l, r] = pairOrder(d.person, d.partner);
+    return (
+      <div key={d.person.id} className="flex items-start gap-2.5">
+        {renderBox(l)}
+        {r && renderBox(r)}
+      </div>
+    );
+  };
+  const renderEntry = (e: RowEntry) =>
+    e.kind === "single" ? (
+      renderBox(e.person)
+    ) : (
+      <div key={e.a.id} className="flex items-start gap-2.5">
+        {renderBox(e.a)}
+        {renderBox(e.b)}
+      </div>
+    );
 
   const grandCouples = [
     ...chart.leftSide.grandCouples,
@@ -480,23 +528,17 @@ function FamilyChart({
         </div>
       )}
       <div className="flex items-start justify-center gap-2.5">
-        {[...chart.leftSide.siblings].reverse().map(renderBox)}
-        {renderBox(chart.left)}
-        {chart.right && renderBox(chart.right)}
+        {siblingRow(chart.left, chart.right, chart.leftSide.siblings).map(renderEntry)}
         {chart.rightSide?.siblings.map(renderBox)}
       </div>
       {childrenRow.length > 0 && (
-        <div className="flex items-start justify-center gap-4">
-          {childrenRow.map((d, i) => descPair(d, i < (childrenRow.length - 1) / 2))}
-        </div>
+        <div className="flex items-start justify-center gap-4">{childrenRow.map(descPair)}</div>
       )}
       {chart.grandchildGroups.length > 0 && (
         <div className="flex items-start justify-center gap-8">
-          {chart.grandchildGroups.map((g, gi) => (
+          {chart.grandchildGroups.map((g) => (
             <div key={g.parentId} className="flex items-start gap-4">
-              {g.kids.map((d) =>
-                descPair(d, gi < (chart.grandchildGroups.length - 1) / 2),
-              )}
+              {g.kids.map(descPair)}
             </div>
           ))}
         </div>
@@ -589,11 +631,17 @@ export function FamilyTree({ personaId, indexes }: { personaId: string; indexes:
                   originId={origin?.id}
                   onSelect={setFocusId}
                 />
-                {focus.offstage.length > 0 && (
-                  <div className="px-3 pb-1 text-xs text-muted-foreground">
-                    Elsewhere: {focus.offstage.map((rel) => `${rel.name} (${rel.role})`).join(" · ")}
-                  </div>
-                )}
+                {/* Fixed-height slot, rendered whether or not there's
+                    content: FamilyChart above is flex-1 and centers its own
+                    rows within whatever space is left, so any change in this
+                    footer's height (wrapping, or appearing/disappearing
+                    between empty and non-empty) would re-center — and
+                    visibly shift — the whole chart. Single line, truncated,
+                    never wraps (user 2026-07-10). */}
+                <div className="h-5 shrink-0 truncate px-3 text-xs text-muted-foreground">
+                  {focus.offstage.length > 0 &&
+                    `Elsewhere: ${focus.offstage.map((rel) => `${rel.name} (${rel.role})`).join(" · ")}`}
+                </div>
               </div>
               {/* The member's details: the SAME card the columns dock shows,
                   standing beside the tree — not nested in its container. */}
