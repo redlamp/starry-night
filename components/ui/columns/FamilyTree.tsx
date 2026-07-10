@@ -863,10 +863,30 @@ export function FamilyTree({ personaId, indexes }: { personaId: string; indexes:
         <DialogBackdrop />
         {/* Top-anchored (not centered): the panels keep the SAME Y as the
             tree grows/shrinks between re-roots, so the resident card never
-            bounces (user 2026-07-08). */}
-        <DialogPopup className="items-start pt-[6vh]">
-          <DialogContent className="w-fit max-w-[96vw] border-0 bg-transparent p-0 shadow-none">
-            <div className="flex items-start gap-3">
+            bounces (user 2026-07-08). Scrim clicks close (user 2026-07-11):
+            the popup is a fullscreen flex, so the visible scrim is INSIDE it
+            and Base UI's outside-click dismiss never fires — self-target
+            checks on the popup and the transparent content wrapper catch
+            clicks that land on empty scrim area (including the gap between
+            the two panels) without touching clicks inside them. */}
+        <DialogPopup
+          className="items-start pt-[6vh]"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setOpen(false);
+          }}
+        >
+          <DialogContent
+            className="w-fit max-w-[96vw] border-0 bg-transparent p-0 shadow-none"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) setOpen(false);
+            }}
+          >
+            <div
+              className="flex items-start gap-3"
+              onClick={(e) => {
+                if (e.target === e.currentTarget) setOpen(false);
+              }}
+            >
               {/* Tree panel: its own surface, width FITS the chart (user
                   2026-07-08 — mitigate scrollbars); it only scrolls past the
                   viewport caps. Clicking a box re-roots the chart. */}
