@@ -80,6 +80,10 @@ export type Persona = {
   givenName: string;
   middleInitial?: string;
   familyName: string;
+  // Married name-takers (most married women in this world's fiction — user
+  // 2026-07-10) keep their birth surname on record. Dating partners never
+  // share a name.
+  maidenName?: string;
   fullName: string;
   age: number;
   birthday: { year: number; month: number; day: number };
@@ -849,6 +853,59 @@ function* buildDirectorySteps(
         }
       }
       if (kind === "widowed-elder") setStatus(ids[0], "widowed");
+
+      // Surname fiction (user 2026-07-10): married women take their
+      // husband's name — the taken partner keeps a MAIDEN name on record.
+      // Dating couples do NOT share a name — the non-anchor partner redraws
+      // their own surname. Both draws come from per-persona derived streams,
+      // never the household stream, so adding this re-rolled nothing else.
+      for (const pid of ids) {
+        const p = personas.get(pid)!;
+        if (!p.partnerId || pid > p.partnerId) continue; // once per pair
+        const q = personas.get(p.partnerId)!;
+        if (q.householdIndex !== p.householdIndex || q.homeBuildingId !== p.homeBuildingId)
+          continue;
+        const woman = (x: Persona) =>
+          x.genderIdentity === "cis woman" || x.genderIdentity === "trans woman";
+        const man = (x: Persona) =>
+          x.genderIdentity === "cis man" || x.genderIdentity === "trans man";
+        if (p.relationshipStatus === "married") {
+          // The name-taker: the woman in a hetero pair; the younger partner
+          // (id tie-break) otherwise.
+          const taker =
+            woman(p) && man(q)
+              ? p
+              : woman(q) && man(p)
+                ? q
+                : p.age !== q.age
+                  ? p.age < q.age
+                    ? p
+                    : q
+                  : p.id < q.id
+                    ? p
+                    : q;
+          const mrng = seededRng(`${masterSeed}::personas::maiden::${taker.id}`);
+          let maiden = drawFamilyName(mrng, taker.ethnicity);
+          for (let tries = 0; tries < 5 && maiden === taker.familyName; tries++) {
+            maiden = drawFamilyName(mrng, taker.ethnicity);
+          }
+          if (maiden !== taker.familyName) taker.maidenName = maiden;
+        } else if (p.relationshipStatus === "dating" && p.familyName === q.familyName) {
+          // Cohabiting-but-dating pairs shared the household draw — give the
+          // second partner their own name back (kids keep the household's).
+          const orng = seededRng(`${masterSeed}::personas::ownname::${q.id}`);
+          let own = drawFamilyName(orng, q.ethnicity);
+          for (let tries = 0; tries < 5 && own === q.familyName; tries++) {
+            own = drawFamilyName(orng, q.ethnicity);
+          }
+          if (own !== q.familyName) {
+            q.familyName = own;
+            q.fullName = q.middleInitial
+              ? `${q.givenName} ${q.middleInitial}. ${own}`
+              : `${q.givenName} ${own}`;
+          }
+        }
+      }
 
       const surnames = [...new Set(ids.map((pid) => personas.get(pid)!.familyName))];
       const label =

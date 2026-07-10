@@ -367,6 +367,7 @@ export function PersonaColumn({
             String(persona.age),
             flavor.heightCm ? formatHeight(flavor.heightCm) : null,
             flavor.build,
+            persona.maidenName ? `née ${persona.maidenName}` : null,
           ]
             .filter(Boolean)
             .join(" · ")}
