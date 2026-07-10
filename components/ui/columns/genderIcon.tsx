@@ -1,17 +1,16 @@
-import { Mars, NonBinary, Transgender, Venus } from "lucide-react";
+import { Mars, NonBinary, Venus } from "lucide-react";
 import type { GenderIdentity } from "@/lib/seed/personaData";
 
-// Lucide ships a "gender" icon set (Mars/Venus/Transgender/NonBinary/
-// VenusAndMars) — map each identity to the icon that reads clearest at a
-// glance rather than a literal per-identity glyph: trans man/woman both use
-// the transgender symbol (there's no separate binary-trans icon in the set),
-// nonbinary gets its own NonBinary glyph (present in the installed
-// lucide-react, so no VenusAndMars fallback needed).
+// Display rule (user 2026-07-11): men read as Mars and women as Venus
+// regardless of cis/trans — the identity DATA is unchanged, but the glyph
+// follows lived gender, so the chart doesn't over-signal transness (the
+// distinct Transgender symbol made 0.8% read as "a lot"). Nonbinary keeps
+// its own glyph.
 const ICONS: Record<GenderIdentity, typeof Mars> = {
   "cis man": Mars,
   "cis woman": Venus,
-  "trans man": Transgender,
-  "trans woman": Transgender,
+  "trans man": Mars,
+  "trans woman": Venus,
   nonbinary: NonBinary,
 };
 

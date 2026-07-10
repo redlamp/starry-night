@@ -492,13 +492,19 @@ function FamilyChart({
         const b = bId ? box(bId) : null;
         if (!b) return { p: packC(a), g: genE(a), gEdge: genE(a) };
         const [l, r] = packC(a) <= packC(b) ? [a, b] : [b, a];
-        const g = (Math.max(genS(l), genS(r)) + Math.min(genE(l), genE(r))) / 2;
-        next.push(toSeg(packE(l) + 1, g, packS(r) - 1, g, dashed, color));
-        // gEdge: the union's TRAILING edge on the gen axis — where its cells
-        // end and the connector channel really begins (the drop from g to
-        // gEdge threads the couple's own alley; everything past gEdge must
-        // stay clear of cells — user 2026-07-10).
-        return { p: (packE(l) + packS(r)) / 2, g, gEdge: Math.max(genE(l), genE(r)) };
+        // Couple BRACKET (user 2026-07-11: "hard to see Ashley and Jacob's
+        // connection"): the old union line lived in the 8px alley between
+        // partners — a ~6px sliver, invisible when dashed (dating).
+        // Genogram-style instead: a solid stub exits each partner's trailing
+        // edge, joined by the marriage bar just outside the boxes — long
+        // enough for dashes to actually read — and children hang from the
+        // bar's midpoint. gEdge = the bar, so the connector channel begins
+        // past it and nothing downstream overlaps cells.
+        const bracketG = Math.max(genE(l), genE(r)) + 8;
+        next.push(toSeg(packC(l), genE(l), packC(l), bracketG, undefined, color));
+        next.push(toSeg(packC(r), genE(r), packC(r), bracketG, undefined, color));
+        next.push(toSeg(packC(l), bracketG, packC(r), bracketG, dashed, color));
+        return { p: (packC(l) + packC(r)) / 2, g: bracketG, gEdge: bracketG };
       };
       // Parent→children connections are gathered first and emitted per
       // child-row below, so buses that would overlap at the same gen-axis
