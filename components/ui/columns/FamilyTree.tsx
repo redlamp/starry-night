@@ -105,18 +105,19 @@ type Seg = {
   color?: string;
 };
 
-// Gender Tint layer: desaturated oklch backgrounds by identity — clearly
-// visible at a glance (alpha ~0.24, user 2026-07-10: the first pass at ~11%
-// was too faint) while borders and lineage stripes still dominate; the
-// gender icon remains the primary signal.
+// Gender Tint layer: oklch backgrounds by identity — GREEN men / ORANGE
+// women / PURPLE other (user 2026-07-10, second strengthening pass: ~11%
+// then ~24% both read too faint; now unmistakable at a glance while borders
+// and lineage stripes still dominate). The gender icon remains the primary
+// signal.
 function genderTintCss(identity: Persona["genderIdentity"]): string {
   const hue =
     identity === "cis man" || identity === "trans man"
-      ? 240
+      ? 150
       : identity === "cis woman" || identity === "trans woman"
-        ? 40
-        : 150;
-  return `oklch(0.7 0.1 ${hue} / 0.24)`;
+        ? 55
+        : 305;
+  return `oklch(0.72 0.13 ${hue} / 0.35)`;
 }
 
 function PersonBox({
@@ -247,6 +248,9 @@ function FamilyChart({
       // Pending translateX per repositioned person. box() folds it in, so
       // connector math and the applied transforms always agree.
       const shiftFor = new Map<string, number>();
+      // Pending translateX per union BLOCK — applied in one batch after the
+      // connector math (see the double-shift note below).
+      const blockShifts = new Map<string, number>();
       const box = (id: string): Box | null => {
         const el = boxRefs.current.get(id);
         if (!el) return null;
@@ -288,7 +292,14 @@ function FamilyChart({
         calc.forEach((c, i) => {
           const dx = lefts[i] + shift - c.rect.left;
           for (const m of c.u.members) shiftFor.set(m.id, dx);
-          c.el.style.transform = dx ? `translateX(${dx}px)` : "";
+          // Do NOT apply the transform here: box() reads LIVE rects, so a
+          // transform landing mid-pass would be counted twice for this
+          // block in every later read (once in the DOM rect, once via
+          // shiftFor) — that double-shift was the v6 right-side connector
+          // misalignment (user 2026-07-10: drop points displaced by exactly
+          // the block's dx). All transforms land in one batch after the
+          // connector math, so every read sees natural rects + shiftFor.
+          blockShifts.set(c.u.key, dx);
         });
       }
 
@@ -382,6 +393,14 @@ function FamilyChart({
           if (c.x2 - c.x1 > 0.5) next.push({ x1: c.x1, y1: busY, x2: c.x2, y2: busY, color });
           for (const k of c.kids) next.push({ x1: k.cx, y1: busY, x2: k.cx, y2: k.top, color });
         }
+      }
+
+      // NOW land the transforms, in one batch — no box() read happens after
+      // this point, so nothing can see a rect that already moved (the
+      // double-shift). Transforms never affect layout → no observer loop.
+      for (const [key, dx] of blockShifts) {
+        const el = blockEls.get(key);
+        if (el) el.style.transform = dx ? `translateX(${dx}px)` : "";
       }
 
       setSegs(next);
