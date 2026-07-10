@@ -121,6 +121,22 @@ export function PersonaColumn({
     .filter(Boolean)
     .join(" · ");
 
+  // Work/school address, shown right below Home (user 2026-07-10) — the
+  // commute target already resolves to the right building for either.
+  const workBuildingId = persona.commuteTargetBuildingId;
+  const workAddress =
+    workBuildingId !== undefined ? indexes.names.addresses.get(workBuildingId) : undefined;
+  const workDistrictName =
+    workBuildingId !== undefined
+      ? indexes.names.districtNames.get(indexes.buildingById.get(workBuildingId)?.districtId ?? "")
+      : undefined;
+  const workText = [
+    workAddress ? `${workAddress.number} ${workAddress.street}` : null,
+    workDistrictName?.replace(/ /g, " "),
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
   const goTo = (buildingId: number) => {
     const building = indexes.buildingById.get(buildingId);
     if (building) focusBuilding(building);
@@ -345,6 +361,21 @@ export function PersonaColumn({
             </button>
           }
         />
+        {workBuildingId !== undefined && workText && (
+          <ColumnStat
+            label={school && !business ? "School" : "Work"}
+            stack={workText.length > STACK_AT}
+            value={
+              <button
+                type="button"
+                onClick={() => push({ kind: "building", id: workBuildingId })}
+                className="text-right hover:underline"
+              >
+                {workText}
+              </button>
+            }
+          />
+        )}
         <ColumnStat
           label="In City"
           value={persona.bornHere ? "Born here" : `${persona.yearsInCity} years`}
