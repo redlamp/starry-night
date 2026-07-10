@@ -549,6 +549,11 @@ export function DirectorySection() {
                       <IconTip label="Pin District">
                         <Button
                           render={<span />}
+                          // Renders as a span ON PURPOSE (a real <button> can't
+                          // nest inside the CollapsibleTrigger's button) — this
+                          // tells Base UI so it wires role/keyboard semantics
+                          // instead of warning about the missing native element.
+                          nativeButton={false}
                           variant="ghost"
                           size="icon-sm"
                           aria-label={`Pin ${d.properName}`}
