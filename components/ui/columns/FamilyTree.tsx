@@ -460,10 +460,18 @@ function FamilyChart({
           });
         }
       };
-      passUp();
-      passDown();
-      passUp();
-      passDown();
+      // Alternate until the layout settles (user 2026-07-11: group spacing
+      // vs child alignment). The fixed point is the tidy-tree layout —
+      // parents spread to sit over their subtree widths, children exactly
+      // on their forks; two rounds left visible residual when cousin groups
+      // outgrew their parents' spacing. Four rounds converge in practice
+      // (≤60 blocks, each pass is trivial); ending on passDown keeps the
+      // child-under-parent read exact, with any last residual on the parent
+      // side where the bus jog absorbs it.
+      for (let i = 0; i < 4; i++) {
+        passUp();
+        passDown();
+      }
 
       const next: Seg[] = [];
       // Union line between adjacent partners; returns the anchor children
