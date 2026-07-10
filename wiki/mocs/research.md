@@ -36,6 +36,7 @@ Map of Content for external references that shape direction.
 - [[procgen-character-design-games]] — how shipped games make procgen characters players care about: Heat Signature (sparse personal missions), Nemesis (recognition + continuity + authored voice), RimWorld (two-beat backstories, incapabilities), Watch Dogs Legion (the rich-data/generic-voice failure), DF/Wildermyth/CK3; 15 distilled principles for the persona system
 - [[apophenia-engine]] — the story layer's design thesis: generate evidence with deliberate gaps, not stories; Sylvester/Kuleshov grounding + the five enforcement mechanisms + the Owen Taylor example
 - [[procgen-character-theory-literature]] — the academic/theory beat: Talk of the Town & Bad News (belief facets, knowledge implantation, story sifting), Prom Week/CiF, Oz Project, Grinblat's domain word + generate-then-rationalize, Compton's oatmeal/fanfic test, Emily Short's storylets, SSA cohort-dated names + the stereotype traps; top-10 ranked actions
+- [[persona-gen-performance]] — #93 growth (23.5k→39.4k) blew the directory build to 2246 ms cold, exposed a mount-time hook-gating bug; internal pipeline profile (56k seedrandom instantiations, eager story weave) + external best practice survey (tiered/lazy population records, sfc32 vs ARC4, derived-stream determinism, scheduling/worker/memory patterns); grounds the feat/persona-perf deferred-build + lazy-deep-tier round
 
 ## Interaction / camera references
 

@@ -25,6 +25,7 @@ If you (Claude) are unsure where info belongs, prefer `wiki/` for: project state
 - All filenames: lowercase, kebab-case, `.md` extension. Example: `chess-narrative-engine.md`.
 - Note titles inside the file: H1 in Title Case. Example: `# Chess Narrative Engine`.
 - Daily notes: `YYYY-MM-DD.md` (no title needed, date is the title).
+- Test plans: see the dedicated section below.
 
 ## Linking
 
@@ -94,6 +95,12 @@ Inline `#tag` in body also works — Obsidian indexes both. Always use the names
 - Significant decisions go in `notes/` as atomic notes prefixed with `decision-`. Example: `notes/decision-supabase-vs-firebase.md`.
 - Each decision note: context, options considered, what was chosen, why, date.
 - Linked from `mocs/decisions.md`.
+
+## Test plans
+
+- `notes/test-plan-[date]-[topic].md` (user 2026-07-10): date = the session the plan targets, topic = the feature stream. Example: `notes/test-plan-2026-07-10-personas.md`.
+- Numbered `## N.` sections; testable items as numbered check boxes (`1. [ ]` — Obsidian renders numbered task lists) so the user ticks what's tested AND references results as `section.item` ("7.4").
+- Info-only sections get plain bullets/numbers, no boxes. End with a "Known / Parked" section so resolved items don't get re-reported; when more than one dev server is live, open with a section→server table.
 
 ## When you (Claude) should write to the wiki
 

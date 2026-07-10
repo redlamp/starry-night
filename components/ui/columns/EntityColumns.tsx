@@ -18,6 +18,7 @@ import {
 import { ScrollArea as ScrollAreaPrimitive } from "@base-ui/react/scroll-area";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Tooltip,
   TooltipTrigger,
@@ -25,8 +26,9 @@ import {
   TooltipProvider,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { ensureBuildingStories } from "@/lib/seed/personaStory";
 import { useSceneStore, type EntityRef } from "@/lib/state/sceneStore";
-import { useEntityIndexes, type EntityIndexes } from "./entityData";
+import { useEntityIndexes, useEntityIndexesDeferred, type EntityIndexes } from "./entityData";
 import { DistrictColumn } from "./DistrictColumn";
 import { StreetColumn } from "./StreetColumn";
 import { BuildingColumn } from "./BuildingColumn";
@@ -110,6 +112,9 @@ function showLocations(ref: EntityRef, indexes: EntityIndexes): void {
     };
     connect(p.partnerId);
     for (const link of p.family) connect(link.personaId);
+    // The relation edge is lazy-tier: materialize this persona's building
+    // before reading it (event-path helper, so getState() is the idiom).
+    ensureBuildingStories(useSceneStore.getState().masterSeed, indexes.directory, p.homeBuildingId);
     connect(p.story.relation?.targetId);
   };
   switch (ref.kind) {
@@ -194,24 +199,19 @@ function ColumnBody({
   }
 }
 
+// Outer shell: subscribes only what's needed to decide open/close and to run
+// the two store-bridge effects that must keep working while the panel is
+// closed (a scene click opening a path; a reroll closing one). Everything
+// that only matters once a path is open — including the persona-directory
+// build — lives in EntityColumnsBody, so those subscriptions/effects/hooks
+// never mount (and never pay the directory's cold build) while closed.
 export function EntityColumns() {
   const columnPath = useSceneStore((s) => s.columnPath);
   const columnCursor = useSceneStore((s) => s.columnCursor);
-  const columnsView = useSceneStore((s) => s.columnsView);
-  const setColumnsView = useSceneStore((s) => s.setColumnsView);
-  const columnBack = useSceneStore((s) => s.columnBack);
-  const columnForward = useSceneStore((s) => s.columnForward);
-  const jumpToColumn = useSceneStore((s) => s.jumpToColumn);
-  const closeColumns = useSceneStore((s) => s.closeColumns);
-  const resetColumns = useSceneStore((s) => s.resetColumns);
   const selectedBuildingId = useSceneStore((s) => s.selectedBuildingId);
   const masterSeed = useSceneStore((s) => s.masterSeed);
-  const panelHidden = useSceneStore((s) => s.panelHidden);
-  const settingsPanelWidth = useSceneStore((s) => s.settingsPanelWidth);
-  const directoryOpen = useSceneStore((s) => s.directoryOpen);
-  const coneFollow = useSceneStore((s) => s.coneFollow);
-  const setConeFollow = useSceneStore((s) => s.setConeFollow);
-  const indexes = useEntityIndexes();
+  const closeColumns = useSceneStore((s) => s.closeColumns);
+  const resetColumns = useSceneStore((s) => s.resetColumns);
 
   const visible = columnPath.slice(0, columnCursor + 1);
   const open = visible.length > 0;
@@ -241,6 +241,37 @@ export function EntityColumns() {
     closeColumns();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [masterSeed]);
+
+  if (!open) return null;
+  return <EntityColumnsBody />;
+}
+
+// Everything that only runs while a path is open: the rest of the store
+// subscriptions, the (deferred — Stage A perf fix) persona-directory-backed
+// indexes, and the keyboard/wheel/cone-follow effects. Recomputes its own
+// visible/open (cheap — slice + length check) rather than threading them
+// down as props.
+function EntityColumnsBody() {
+  const columnPath = useSceneStore((s) => s.columnPath);
+  const columnCursor = useSceneStore((s) => s.columnCursor);
+  const columnsView = useSceneStore((s) => s.columnsView);
+  const setColumnsView = useSceneStore((s) => s.setColumnsView);
+  const columnBack = useSceneStore((s) => s.columnBack);
+  const columnForward = useSceneStore((s) => s.columnForward);
+  const jumpToColumn = useSceneStore((s) => s.jumpToColumn);
+  const closeColumns = useSceneStore((s) => s.closeColumns);
+  const panelHidden = useSceneStore((s) => s.panelHidden);
+  const settingsPanelWidth = useSceneStore((s) => s.settingsPanelWidth);
+  const directoryOpen = useSceneStore((s) => s.directoryOpen);
+  const coneFollow = useSceneStore((s) => s.coneFollow);
+  const setConeFollow = useSceneStore((s) => s.setConeFollow);
+  // Stage A perf fix: null until the ~2.2s persona-directory cold build has
+  // landed (deferred off the mount-critical path) — render a skeleton card
+  // below until then instead of blocking on the sync build.
+  const indexes = useEntityIndexesDeferred();
+
+  const visible = columnPath.slice(0, columnCursor + 1);
+  const open = visible.length > 0;
 
   // Escape closes the whole stack (same idiom the old panels used).
   useEffect(() => {
@@ -320,11 +351,12 @@ export function EntityColumns() {
   }, [open]);
 
   // Cone-follow: re-frame to the top card's location set whenever the drill
-  // moves (or the mode is switched on).
+  // moves (or the mode is switched on). Needs indexes — while the directory
+  // build hasn't landed there's nothing to frame yet.
   const topRef = visible.length > 0 ? visible[visible.length - 1] : undefined;
   const topKey = topRef ? `${topRef.kind}:${topRef.id}` : null;
   useEffect(() => {
-    if (!coneFollow || !topRef) return;
+    if (!coneFollow || !topRef || !indexes) return;
     showLocations(topRef, indexes);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [coneFollow, topKey, indexes]);
@@ -341,6 +373,37 @@ export function EntityColumns() {
   // With the City Directory overlay open (w-[21rem] at left-3), the column
   // row slides to its right instead of stacking underneath (user 2026-07-08).
   const leftOffset = directoryOpen ? 12 + 336 + 12 : 12;
+
+  if (!indexes) {
+    // Same positioned container the real row uses (left/maxWidth math),
+    // holding one skeleton card in place of the row — the real card swaps in
+    // at the same origin so nothing jumps once the directory build lands.
+    return (
+      <div
+        ref={rootRef}
+        className="pointer-events-auto fixed top-16 z-30 tabular-nums"
+        style={{
+          left: leftOffset,
+          maxWidth: `calc(100vw - ${leftOffset + rightReserve}px)`,
+        }}
+      >
+        <div className="flex w-72 shrink-0 flex-col gap-2.5 rounded-xl border border-border bg-popover/95 p-3 text-popover-foreground shadow-lg backdrop-blur-md">
+          <div className="flex flex-col gap-1.5">
+            <Skeleton className="h-5 w-2/3" />
+            <Skeleton className="h-3.5 w-1/3" />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Skeleton className="h-3.5 w-full" />
+            <Skeleton className="h-3.5 w-5/6" />
+            <Skeleton className="h-3.5 w-4/6" />
+            <Skeleton className="h-3.5 w-full" />
+            <Skeleton className="h-3.5 w-3/4" />
+            <Skeleton className="h-3.5 w-1/2" />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div

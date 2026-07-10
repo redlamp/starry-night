@@ -32,7 +32,7 @@ import {
   type ChineseSign,
   type EducationTier,
 } from "./personaData";
-import { weaveStories, type PersonaStory, type ShiftKind, type CityLoreEntry } from "./personaStory";
+import type { PersonaStory, ShiftKind, CityLoreEntry } from "./personaStory";
 
 // Story layer types ride along for consumers (panel, scripts).
 export type { PersonaStory, StoryRelation, CityLoreEntry, ShiftKind } from "./personaStory";
@@ -83,18 +83,12 @@ export type Persona = {
   fullName: string;
   age: number;
   birthday: { year: number; month: number; day: number };
-  westernSign: WesternSign; // the sun sign
-  // The rest of the "big three" — fake ephemeris, seeded per persona (real
-  // moon/ascendant need birth-time astronomy; these are character flavour).
-  moonSign: string;
-  risingSign: string;
-  birthHour: number; // 0-23, the "birth time" the rising sign hangs off
-  chineseSign: ChineseSign;
-  // Physical descriptors (adults only; undefined for kids).
-  heightCm?: number;
-  build?: string;
-  mbti: string;
-  mbtiNickname: string;
+  westernSign: WesternSign; // the sun sign — free, derived from the birthday
+  chineseSign: ChineseSign; // likewise, derived from the birth year
+  // Moon/rising signs, MBTI, and physical descriptors are deep-tier flavour:
+  // drawn on demand by personaFlavor() from a per-persona stream, never
+  // stored here. Keeps the 39k-record eager build lean, and pins the fields
+  // to the persona's own seed so pass edits can't re-roll them.
   ethnicity: Ethnicity;
   genderIdentity: GenderIdentity;
   pronouns: string;
@@ -122,7 +116,8 @@ export type Persona = {
   partnerId?: PersonaId;
   family: FamilyLink[];
   offstage: OffstageRelative[];
-  // Story layer — filled by weaveStories() as the directory's final pass.
+  // Story layer — placeholders until ensureBuildingStories() materializes
+  // this persona's building (lazy since 2026-07-10).
   schedule: { shift: ShiftKind };
   story: PersonaStory;
   // The Grinblat "domain word": one concrete noun-world this persona's lines
@@ -401,6 +396,51 @@ function drawMbti(rng: () => number): string {
   );
 }
 
+// Deep-tier flavour: the character-sheet extras a card shows on open —
+// fake-ephemeris moon/rising (real ones need birth-time astronomy; these are
+// flavour), MBTI, and adult physical descriptors. Drawn from the persona's
+// OWN stream the moment a card asks, never during the directory build: the
+// 39k-record eager pass stays lean, and because the stream is keyed by
+// persona id, editing any build pass can't re-roll anyone's flavour.
+export type PersonaFlavor = {
+  birthHour: number; // 0-23, the "birth time" the rising sign hangs off
+  moonSign: string;
+  risingSign: string;
+  mbti: string;
+  mbtiNickname: string;
+  // Adults only; undefined for kids.
+  heightCm?: number;
+  build?: string;
+};
+
+export function personaFlavor(masterSeed: string, p: Persona): PersonaFlavor {
+  const rng = seedrandom(`${masterSeed}::personas::flavor::${p.id}`);
+  const mbti = drawMbti(rng);
+  const birthHour = Math.floor(rng() * 24);
+  const moonSign = WESTERN_ZODIAC[Math.floor(rng() * 12)].name;
+  const risingSign = WESTERN_ZODIAC[Math.floor(rng() * 12)].name;
+  const isAdult = p.age >= 18;
+  // Height keys off gender identity (the old pass keyed off the name-pool
+  // presentation, which isn't stored); nonbinary folks draw around the midline.
+  const base =
+    p.genderIdentity === "cis man" || p.genderIdentity === "trans man"
+      ? 178
+      : p.genderIdentity === "nonbinary"
+        ? 171
+        : 164;
+  const heightCm = isAdult ? Math.round(base + (rng() + rng() + rng() - 1.5) * 9) : undefined;
+  const build = isAdult ? pick(rng, BUILDS) : undefined;
+  return {
+    birthHour,
+    moonSign,
+    risingSign,
+    mbti,
+    mbtiNickname: MBTI_NICKNAMES[mbti] ?? "",
+    heightCm,
+    build,
+  };
+}
+
 function drawProfession(rng: () => number, character: DistrictCharacter): Profession {
   const weights = DISTRICT_CATEGORY_WEIGHT[character] ?? {};
   return weightedPick(
@@ -466,13 +506,22 @@ function unitFor(building: Building, householdIndex: number, count: number): str
 
 // --- The build --------------------------------------------------------------------------
 
-function buildDirectoryImpl(
+// Resumable build (test plan 07-10 §7.5): the exact pass sequence as before,
+// restructured as a generator that yields at chunk boundaries so the idle
+// prewarmer can run it in ~5ms frame slices instead of one ~1.4s hit. Draw
+// order is UNCHANGED — a drained generator is byte-identical to the old
+// synchronous build; `yield` only marks where it's safe to pause.
+function* buildDirectorySteps(
   masterSeed: string,
   shape: CityShapeSetting,
   shapeScale: number,
-): PersonaDirectory {
+): Generator<void, PersonaDirectory> {
   const city = generateCity(masterSeed, shape, shapeScale);
+  // Names are one ~250ms monolith (addresses ride a spatial hash) — give it
+  // its own slice at least. Chunking naming itself is a parked follow-up.
+  yield;
   const names = buildCityNames(masterSeed, shape, shapeScale);
+  yield;
   const districtById = new Map(city.districts.map((d) => [d.id, d]));
 
   const personas = new Map<PersonaId, Persona>();
@@ -500,7 +549,12 @@ function buildDirectoryImpl(
   const hhScale = estimated > TARGET_MAX_PERSONAS ? TARGET_MAX_PERSONAS / estimated : 1;
 
   // ---- Pass 1: households + people ----
+  let sinceYield = 0;
   for (const b of buildings) {
+    if (++sinceYield >= 60) {
+      sinceYield = 0;
+      yield;
+    }
     const raw = rawHouseholds.get(b.id);
     if (!raw) continue;
     const count = Math.max(1, Math.floor(raw * hhScale));
@@ -667,22 +721,12 @@ function buildDirectoryImpl(
           }
         }
 
-        const mbti = drawMbti(rng);
         const edu = drawEducation(rng, profession, age, names);
 
         const pronouns = drawPronouns(rng, genderIdentity);
-        // Fake-ephemeris big three: moon + rising drawn per persona; the
-        // rising sign notionally hangs off a generated birth hour.
-        const birthHour = Math.floor(rng() * 24);
-        const moonSign = WESTERN_ZODIAC[Math.floor(rng() * 12)].name;
-        const risingSign = WESTERN_ZODIAC[Math.floor(rng() * 12)].name;
-        // Physical descriptors, adults only.
-        const heightCm = isAdult
-          ? Math.round(
-              (spec.presentation === "m" ? 178 : 164) + (rng() + rng() + rng() - 1.5) * 9,
-            )
-          : undefined;
-        const build = isAdult ? pick(rng, BUILDS) : undefined;
+        // MBTI, fake-ephemeris moon/rising, and physical descriptors moved to
+        // personaFlavor() (deep tier, per-persona stream) — 2026-07-10. This
+        // shortened the household stream: one-time population re-roll.
 
         // Sparse offstage relatives — negative space, not a full tree.
         const offstage: OffstageRelative[] = [];
@@ -704,16 +748,9 @@ function buildDirectoryImpl(
           birthday,
           westernSign: westernSignFor(birthday.month, birthday.day),
           chineseSign: chineseSignFor(birthday.year),
-          mbti,
-          mbtiNickname: MBTI_NICKNAMES[mbti] ?? "",
           ethnicity: spec.ethnicity,
           genderIdentity,
           pronouns,
-          moonSign,
-          risingSign,
-          birthHour,
-          heightCm,
-          build,
           homeBuildingId: b.id,
           homeDistrictId: b.districtId,
           householdIndex: h,
@@ -727,8 +764,9 @@ function buildDirectoryImpl(
           relationshipStatus: "single",
           family: [],
           offstage,
-          // Placeholders — weaveStories() overwrites these before the
-          // directory is returned.
+          // Placeholders — ensureBuildingStories() fills these lazily, the
+          // first time any card/panel for this building asks. Readers go
+          // through that gate, never straight to these fields cold.
           schedule: { shift: "day" },
           story: { hook: "", loreRefs: [] },
           domain: "",
@@ -795,7 +833,12 @@ function buildDirectoryImpl(
   }
 
   // ---- Pass 2: businesses ----
+  sinceYield = 0;
   for (const b of buildings) {
+    if (++sinceYield >= 300) {
+      sinceYield = 0;
+      yield;
+    }
     const kinds = BUSINESS_KINDS[b.archetype];
     if (!kinds) continue;
     const district = districtById.get(b.districtId);
@@ -960,7 +1003,12 @@ function buildDirectoryImpl(
       list.push({ school: biz, site });
       byTier.set(biz.schoolTier, list);
     }
+    sinceYield = 0;
     for (const p of personas.values()) {
+      if (++sinceYield >= 1000) {
+        sinceYield = 0;
+        yield;
+      }
       if (p.age < 5 || p.age >= 18) continue;
       const tier = p.age < 11 ? "elementary" : p.age < 14 ? "middle" : "high";
       const options = byTier.get(tier);
@@ -1002,7 +1050,12 @@ function buildDirectoryImpl(
       (x) => x.title === "High School Teacher" && x.workplaceType === "school",
     );
     // Stable worker order: persona insertion order is already building-ascending.
+    sinceYield = 0;
     for (const p of personas.values()) {
+      if (++sinceYield >= 250) {
+        sinceYield = 0;
+        yield;
+      }
       if (p.workStatus !== "employed" || !p.profession) continue;
       const candidates = byKind.get(p.profession.workplaceType);
       if (!candidates || candidates.length === 0) {
@@ -1055,7 +1108,12 @@ function buildDirectoryImpl(
   {
     const rng = seedrandom(`${masterSeed}::personas::commute`);
     const buildingById = new Map(buildings.map((b) => [b.id, b]));
+    sinceYield = 0;
     for (const p of personas.values()) {
+      if (++sinceYield >= 2000) {
+        sinceYield = 0;
+        yield;
+      }
       if (!p.businessId) continue;
       const biz = businesses.get(p.businessId);
       const home = buildingById.get(p.homeBuildingId);
@@ -1099,7 +1157,12 @@ function buildDirectoryImpl(
       eldersBySurname.set(p.familyName, list);
     }
     const extraChildren = new Map<PersonaId, number>();
+    sinceYield = 0;
     for (const p of personas.values()) {
+      if (++sinceYield >= 2000) {
+        sinceYield = 0;
+        yield;
+      }
       if (p.age < 25 || p.age > 45) continue;
       // Skip anyone who already has an in-city parent (multigen households).
       if (p.family.some((l) => l.role === "parent")) continue;
@@ -1151,7 +1214,13 @@ function buildDirectoryImpl(
       return (seeksSame.get(a.id) ?? false) === same && (seeksSame.get(b.id) ?? false) === same;
     };
     const paired = new Set<PersonaId>();
+    sinceYield = 0;
     for (let i = 0; i < seekers.length; i++) {
+      // The unmatched tail scans the remaining seekers each — chunk small.
+      if (++sinceYield >= 200) {
+        sinceYield = 0;
+        yield;
+      }
       const a = seekers[i];
       if (paired.has(a.id)) continue;
       for (let j = i + 1; j < seekers.length; j++) {
@@ -1183,8 +1252,14 @@ function buildDirectoryImpl(
     },
   };
 
-  // ---- Pass 5: story weave (schedules, epithets, hooks, one-sided relations) ----
-  weaveStories(masterSeed, directory);
+  // Pass 5 (story weave: schedules, epithets, hooks, one-sided relations) is
+  // NO LONGER eager — it was ~39k template fills and seedrandom constructions
+  // per cold build. Stories materialize per building via
+  // ensureBuildingStories() the first time a card, sift, or hover asks.
+  // Byte-identical to the old eager weave: every de-dupe set was already
+  // household/building-scoped, and each persona draws from its own
+  // `::story::<id>` stream. (Relations were re-keyed per persona — one-time
+  // relations re-roll, 2026-07-10.)
 
   return directory;
 }
@@ -1192,16 +1267,73 @@ function buildDirectoryImpl(
 // Memoised with the shared cache-key recipe (see population.ts).
 const dirCache = new Map<string, PersonaDirectory>();
 
+function dirCacheKey(masterSeed: string, shape: CityShapeSetting, shapeScale: number): string {
+  return `${masterSeed}::${shape}::${shapeScale}::${maxHalfExtent()}::${sketchKey()}::${fieldDeviation()}::${densityProfileKey()}`;
+}
+
+// Cache probe for the deferred UI hooks: reports whether the cold build has
+// been paid without paying it on the render thread. Null means a consumer
+// should schedule buildPersonaDirectory() off the current frame.
+export function peekPersonaDirectory(
+  masterSeed: string,
+  shape: CityShapeSetting = "square",
+  shapeScale = 1,
+): PersonaDirectory | null {
+  return dirCache.get(dirCacheKey(masterSeed, shape, shapeScale)) ?? null;
+}
+
+// One in-progress resumable build at a time, shared between the synchronous
+// path and the idle prewarmer (§7.5): if the prewarmer is halfway through
+// when a panel demands the directory NOW, the sync path resumes the same
+// generator and finishes it — partial work is never discarded or duplicated.
+let activeBuild: { key: string; gen: Generator<void, PersonaDirectory> } | null = null;
+
+function resumeBuild(masterSeed: string, shape: CityShapeSetting, shapeScale: number) {
+  const key = dirCacheKey(masterSeed, shape, shapeScale);
+  if (activeBuild?.key !== key) {
+    activeBuild = { key, gen: buildDirectorySteps(masterSeed, shape, shapeScale) };
+  }
+  return { key, gen: activeBuild.gen };
+}
+
+function finishBuild(key: string, result: PersonaDirectory): PersonaDirectory {
+  if (dirCache.size > 8) dirCache.clear();
+  dirCache.set(key, result);
+  activeBuild = null;
+  return result;
+}
+
 export function buildPersonaDirectory(
   masterSeed: string,
   shape: CityShapeSetting = "square",
   shapeScale = 1,
 ): PersonaDirectory {
-  const key = `${masterSeed}::${shape}::${shapeScale}::${maxHalfExtent()}::${sketchKey()}::${fieldDeviation()}::${densityProfileKey()}`;
-  const hit = dirCache.get(key);
+  const hit = dirCache.get(dirCacheKey(masterSeed, shape, shapeScale));
   if (hit) return hit;
-  const result = buildDirectoryImpl(masterSeed, shape, shapeScale);
-  if (dirCache.size > 8) dirCache.clear();
-  dirCache.set(key, result);
-  return result;
+  const { key, gen } = resumeBuild(masterSeed, shape, shapeScale);
+  for (;;) {
+    const r = gen.next();
+    if (r.done) return finishBuild(key, r.value);
+  }
+}
+
+// Budgeted slice for the idle prewarmer: runs the resumable build for up to
+// ~budgetMs, returns the directory once complete, else null. The clock only
+// decides when to PAUSE between chunks — the generated output is identical
+// whatever the timing, so the determinism contract holds.
+export function stepPersonaDirectoryBuild(
+  masterSeed: string,
+  shape: CityShapeSetting = "square",
+  shapeScale = 1,
+  budgetMs = 5,
+): PersonaDirectory | null {
+  const hit = dirCache.get(dirCacheKey(masterSeed, shape, shapeScale));
+  if (hit) return hit;
+  const { key, gen } = resumeBuild(masterSeed, shape, shapeScale);
+  const deadline = performance.now() + budgetMs;
+  do {
+    const r = gen.next();
+    if (r.done) return finishBuild(key, r.value);
+  } while (performance.now() < deadline);
+  return null;
 }

@@ -18,6 +18,7 @@ import { useSceneStore } from "@/lib/state/sceneStore";
 import type { Persona } from "@/lib/seed/personas";
 import type { EntityIndexes } from "./entityData";
 import { IconTip, StandaloneEntityCard } from "./EntityColumns";
+import { GenderIcon } from "./genderIcon";
 
 // Family tree explorer v3 (user 2026-07-08): a traditional hourglass chart
 // centered on a UNION, not a person — both partners' ancestries render side by
@@ -96,6 +97,25 @@ function buildChart(indexes: EntityIndexes, focus: Persona): Chart {
     return out;
   };
 
+  // Siblings = explicit "sibling" family links UNION anyone who shares a
+  // parent with this person. Some cross-building family links (Pass 3.5 in
+  // personas.ts, matching an adult to an elder parent across town) attach a
+  // "parent" edge without back-filling a reciprocal "sibling" edge between
+  // that parent's other children — deriving via shared parents catches those
+  // so the tree still shows them (user 2026-07-10).
+  const siblingsOf = (person: Persona): Persona[] => {
+    const bySibLink = byRole(person, "sibling");
+    const viaSharedParents = byRole(person, "parent").flatMap((parent) => byRole(parent, "child"));
+    const dedupe = new Set([person.id]);
+    const out: Persona[] = [];
+    for (const s of [...bySibLink, ...viaSharedParents]) {
+      if (dedupe.has(s.id)) continue;
+      dedupe.add(s.id);
+      out.push(s);
+    }
+    return out;
+  };
+
   const sideFor = (person: Persona): Side => {
     const parentsRaw = byRole(person, "parent");
     const parents =
@@ -110,7 +130,7 @@ function buildChart(indexes: EntityIndexes, focus: Persona): Chart {
     return {
       parents: claim([...parents]),
       grandCouples,
-      siblings: claim(byAge(byRole(person, "sibling"))),
+      siblings: claim(byAge(siblingsOf(person))),
     };
   };
 
@@ -158,15 +178,47 @@ function buildChart(indexes: EntityIndexes, focus: Persona): Chart {
 
 type Seg = { x1: number; y1: number; x2: number; y2: number; dotted?: boolean };
 
+// Blood-of-focus vs married-in. Blood = the focus's own descent line (self,
+// parents, grandparents, siblings, children, grandchildren); everyone else —
+// the partner, the partner's whole ancestry, a descendant's married-in
+// spouse — is not. The chart is centered on the UNION (left/right ordering
+// follows genogram convention, not who's focused), so "blood" always means
+// blood of the FOCUS specifically, computed off focusId, never off "left"
+// (user 2026-07-10).
+function bloodIdsFor(chart: Chart, focusId: string): Set<string> {
+  const blood = new Set<string>([focusId]);
+  const focusIsLeft = chart.left.id === focusId;
+  const focusSide = focusIsLeft ? chart.leftSide : chart.rightSide;
+  if (focusSide) {
+    for (const p of focusSide.parents) blood.add(p.id);
+    for (const s of focusSide.siblings) blood.add(s.id);
+    for (const gc of focusSide.grandCouples) for (const p of gc.people) blood.add(p.id);
+  }
+  const ownChildren = focusIsLeft ? chart.leftOnlyChildren : chart.rightOnlyChildren;
+  for (const d of [...chart.sharedChildren, ...ownChildren]) blood.add(d.person.id);
+  // Grandchildren inherit blood status from their parent's row above —
+  // there's no deeper generation tracked, so one pass is enough.
+  for (const g of chart.grandchildGroups) {
+    if (blood.has(g.parentId)) for (const k of g.kids) blood.add(k.person.id);
+  }
+  return blood;
+}
+
 function PersonBox({
   persona,
   focused,
+  blood,
   pinned,
   onSelect,
   boxRef,
 }: {
   persona: Persona;
   focused: boolean;
+  // Blood relative of the focus → solid border; married-in/non-blood →
+  // dotted, echoing the dotted union-line language. Both read the SAME
+  // muted-foreground color as the connector lines so box and line feel like
+  // one system (user 2026-07-10).
+  blood: boolean;
   // The tree's entry point (the sheet that opened it) — marked with a pin,
   // reinforcing the right-aligned "Back to {name}" control (user 2026-07-08).
   pinned?: boolean;
@@ -180,8 +232,15 @@ function PersonBox({
       onClick={onSelect}
       aria-pressed={focused}
       className={cn(
+        // Border WIDTH is constant across every state (focused / blood /
+        // non-blood / hover) — only color and style (solid vs dashed)
+        // change — so selecting or re-rooting never reflows a box by even a
+        // pixel (user 2026-07-10: "borders inside the rect").
         "flex w-max flex-col items-center rounded-md border px-2.5 py-1 text-xs transition-colors",
-        focused ? "border-primary bg-primary/10" : "border-border bg-background hover:bg-muted",
+        blood ? "border-solid" : "border-dashed",
+        focused
+          ? "border-primary bg-primary/10"
+          : "border-muted-foreground/80 bg-background hover:bg-muted",
       )}
     >
       <span
@@ -193,7 +252,11 @@ function PersonBox({
         {persona.givenName} {persona.familyName}
         {pinned && <Pin className="text-muted-foreground size-3 shrink-0" aria-hidden />}
       </span>
-      <span className="text-muted-foreground">{persona.age}</span>
+      {/* Same row: gender icon left, age right (user 2026-07-10). */}
+      <span className="flex w-full items-center justify-between gap-2">
+        <GenderIcon identity={persona.genderIdentity} className="text-muted-foreground size-3" />
+        <span className="text-muted-foreground">{persona.age}</span>
+      </span>
     </button>
   );
 }
@@ -342,11 +405,13 @@ function FamilyChart({
     return () => ro.disconnect();
   }, [chart, focusId]);
 
+  const bloodIds = bloodIdsFor(chart, focusId);
   const renderBox = (p: Persona) => (
     <PersonBox
       key={p.id}
       persona={p}
       focused={p.id === focusId}
+      blood={bloodIds.has(p.id)}
       pinned={p.id === originId}
       onSelect={() => onSelect(p.id)}
       boxRef={refFor(p.id)}

@@ -59,7 +59,7 @@ Standing goal (2026-07-08): character generation at indie-game production qualit
 4. ~~Cross-building family~~ — shipped round 2.
 5. **Gossip/knowledge implantation** (Talk of the Town) — who knows whom, one deterministic pass; enables "ask the neighbor about X" surfaces.
 6. **Expression-tier audit** (oatmeal gate): expressive-range analysis over a few hundred sheets; grow thin pools (day-shift whyAwake, generic hooks) where repetition shows.
-7. Worker offload of the directory build if first-open hitch shows on low-tier devices.
+7. ~~Worker offload of the directory build if first-open hitch shows on low-tier devices~~ — deferred-build + lazy-deep-tier landed first instead (`feat/persona-perf`, 2026-07-10): mount-gate fix + Skeleton behind the directory/columns open gate, plus lazy per-persona `personaFlavor()` and per-building `ensureBuildingStories()`. See [[persona-gen-performance]]. Worker offload remains parked behind re-measurement of the post-lazy cold build.
 8. Persona → traffic/flights tie-ins (the 4 a.m. ferry could *exist*).
 
 ## Open questions

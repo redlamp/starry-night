@@ -3,6 +3,7 @@
 import { MapPin } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 import { useSceneStore } from "@/lib/state/sceneStore";
 import { focusBuilding, unfocusBuilding } from "@/lib/scene/focusBuilding";
 import { buildingPopulation } from "@/lib/seed/population";
@@ -17,6 +18,7 @@ import { ColumnStat, IconTip } from "./EntityColumns";
 export function BuildingColumn({ id, part }: { id: number; part: "pinned" | "rest" }) {
   const push = useSceneStore((s) => s.pushColumn);
   const focusedBuildingId = useSceneStore((s) => s.focusedBuildingId);
+  const masterSeed = useSceneStore((s) => s.masterSeed);
   const indexes = useEntityIndexes();
   const building = indexes.buildingById.get(id);
   if (!building) {
@@ -29,7 +31,8 @@ export function BuildingColumn({ id, part }: { id: number; part: "pinned" | "res
   const address = indexes.names.addresses.get(id);
   const companies = indexes.companiesInBuilding(id);
   const households = indexes.householdsInBuilding(id);
-  const siftLine = siftBuilding(indexes.directory, id);
+  // Self-materializes this building's stories (lazy since 2026-07-10).
+  const siftLine = siftBuilding(masterSeed, indexes.directory, id);
   const population = Math.round(buildingPopulation(building));
   const isFocused = focusedBuildingId === id;
 
@@ -117,6 +120,8 @@ export function BuildingColumn({ id, part }: { id: number; part: "pinned" | "res
           </div>
         )}
 
+        {companies.length > 0 && households.length > 0 && <Separator className="my-0.5" />}
+
         {households.length > 0 && (
           <div className="flex flex-col gap-1.5">
             <div className="flex items-baseline justify-between text-[11px] uppercase tracking-wide text-muted-foreground">
@@ -126,13 +131,14 @@ export function BuildingColumn({ id, part }: { id: number; part: "pinned" | "res
             {households.map((hh) => (
               <div key={`${hh.buildingId}:${hh.index}`} className="flex flex-col gap-0.5">
                 {/* Unit right-aligned in the row, like the ages column
-                    (user 2026-07-08). */}
+                    (user 2026-07-08). Pilled so it reads as metadata, distinct
+                    from the plain-text ages below (user 2026-07-10). */}
                 <div className="flex items-baseline justify-between gap-2 text-sm font-medium">
                   <span className="truncate">{hh.label}</span>
                   {hh.unit && (
-                    <span className="text-muted-foreground shrink-0 text-xs font-normal">
+                    <Badge variant="outline" className="shrink-0 px-1.5 py-0 text-[10px] font-normal">
                       Unit {hh.unit}
-                    </span>
+                    </Badge>
                   )}
                 </div>
                 <div className="flex flex-col gap-0.5 pl-1">
