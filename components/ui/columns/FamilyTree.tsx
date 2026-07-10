@@ -33,6 +33,7 @@ import {
   buildFamilyFan,
   buildFamilyWeb,
   genderTintCss,
+  hueCss,
   type FamilyWeb,
   type UnionNode,
 } from "./familyWeb";
@@ -126,7 +127,7 @@ function PersonBox({
   focused,
   blood,
   pinned,
-  stripe,
+  lineHue,
   tint,
   onSelect,
   boxRef,
@@ -141,12 +142,11 @@ function PersonBox({
   // The tree's entry point (the sheet that opened it) — marked with a pin,
   // reinforcing the right-aligned "Back to {name}" control (user 2026-07-08).
   pinned?: boolean;
-  // Lineage stripe: CSS background (solid root hue, or a left→right
-  // gradient where two lines merged) for the constant-height 2px bar atop
-  // the box. Undefined (married-in, or Lineage Colors off) renders the bar
-  // transparent — the slot always exists, so toggling the layer never
-  // changes layout (user 2026-07-10).
-  stripe?: string;
+  // Lineage colour applied to the BORDER (user 2026-07-10: replaced the 2px
+  // stripe over the name) — the person's effective hue; a midpoint blend
+  // where two lines merged, matching their connector colour. Undefined
+  // (married-in, or Lineage Colors off) falls back to the muted border.
+  lineHue?: string;
   // Gender Tint background; undefined when the layer is off. Applies to the
   // focused box too — its emphasis is the inset ring, not a bg swap (user
   // 2026-07-10). Colors only — never layout.
@@ -160,7 +160,7 @@ function PersonBox({
       type="button"
       onClick={onSelect}
       aria-pressed={focused}
-      style={tint ? { backgroundColor: tint } : undefined}
+      style={{ backgroundColor: tint, borderColor: lineHue }}
       className={cn(
         // Border WIDTH is constant across every state (focused / blood /
         // non-blood / hover) — only color and style (solid vs dashed)
@@ -170,18 +170,16 @@ function PersonBox({
         // and keeps the same background as everyone else (user 2026-07-10:
         // gender tint stays visible on the selection). Width is UNIFORM
         // (w-44, names truncate) so layouts stay consistent and three
-        // generation-columns always fit the panel (user 2026-07-10).
+        // generation-columns always fit the panel (user 2026-07-10). Focus =
+        // a WHITE ring OUTSIDE the cell (box-shadow — zero layout, no
+        // position shift), leaving the border free to carry the lineage
+        // colour (inline borderColor overrides the muted fallback).
         "flex w-44 flex-col items-center rounded-md border px-2.5 py-1 text-xs transition-colors",
         blood ? "border-solid" : "border-dashed",
-        "bg-background hover:bg-muted",
-        focused ? "border-primary ring-2 ring-primary ring-inset" : "border-muted-foreground/80",
+        "border-muted-foreground/80 bg-background hover:bg-muted",
+        focused && "ring-2 ring-white/90",
       )}
     >
-      <span
-        aria-hidden
-        className="mb-0.5 h-0.5 w-full rounded-full"
-        style={{ background: stripe ?? "transparent" }}
-      />
       {/* Weight is CONSTANT — semibold-on-focus made the name (and so the
           content-sized box, row, and w-fit panel) wider on every selection
           (user 2026-07-10: "divs changing size"). Focus reads from the
@@ -653,7 +651,9 @@ function FamilyChart({
       focused={p.id === focusId}
       blood={web.bloodIds.has(p.id)}
       pinned={p.id === originId}
-      stripe={lineage ? web.stripes.get(p.id) : undefined}
+      lineHue={
+        lineage && web.hues.has(p.id) ? hueCss(web.hues.get(p.id) as number) : undefined
+      }
       tint={tint ? genderTintCss(p.genderIdentity) : undefined}
       onSelect={() => onSelect(p.id)}
       boxRef={refFor(p.id)}
