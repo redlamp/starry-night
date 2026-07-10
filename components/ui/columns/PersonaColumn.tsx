@@ -342,6 +342,19 @@ export function PersonaColumn({
 
   const workPlace = business ?? school;
 
+  // educationDetail is authored as "{subject}, {institution}" (one comma) —
+  // split it so each concept gets its own display line.
+  const eduComma = persona.educationDetail?.indexOf(", ") ?? -1;
+  const eduSubject = persona.educationDetail
+    ? eduComma >= 0
+      ? persona.educationDetail.slice(0, eduComma)
+      : persona.educationDetail
+    : undefined;
+  const eduInstitution =
+    persona.educationDetail && eduComma >= 0
+      ? persona.educationDetail.slice(eduComma + 2)
+      : undefined;
+
 
   if (part === "pinned") {
     return (
@@ -534,16 +547,25 @@ export function PersonaColumn({
           }
           iconLabel="Fly to School"
           label="Education"
-          top={persona.educationDetail ?? persona.education}
+          // Conceptual line breaks (user 2026-07-11, same as Profession):
+          // level on the header row, then subject, institution, and the
+          // linked school each on their own line — never a mid-phrase wrap.
+          top={persona.education}
           bottom={
-            almaMater && (
-              <button
-                type="button"
-                onClick={() => push({ kind: "company", id: almaMater.id })}
-                className="hover:underline"
-              >
-                {almaMater.name}
-              </button>
+            (eduSubject || eduInstitution || almaMater) && (
+              <span className="flex flex-col items-end gap-0.5">
+                {eduSubject && <span className="max-w-full truncate">{eduSubject}</span>}
+                {eduInstitution && <span className="max-w-full truncate">{eduInstitution}</span>}
+                {almaMater && (
+                  <button
+                    type="button"
+                    onClick={() => push({ kind: "company", id: almaMater.id })}
+                    className="hover:underline"
+                  >
+                    {almaMater.name}
+                  </button>
+                )}
+              </span>
             )
           }
         />
