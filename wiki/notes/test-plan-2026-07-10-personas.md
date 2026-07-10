@@ -22,7 +22,7 @@ Covers everything shipped after the 07-08 morning merge (rounds 5-9: directory r
 3. [x] Search: type 2+ letters — results replace the district browse, scroll within their own area (up to 50), search field + filter tabs stay pinned. Building results show aligned address numbers.
 4. [x] Filter tabs: "All" is a word, the four kinds are icons with tooltips. Filtering narrows results by kind.
 5. [x] Districts: sort select (By Residents / Roads / Businesses / Name); every row shows all three counts un-truncated; single chevron; whole header expands.
-6. [ ] Address alignment: in district building lists, search results, and a street column's building walk — "9" and "1203" should right-align so street names line up (same typeface, tabular digits). *(Reworked round 11 per feedback: rows lead with the address — number in a fixed 4ch right-aligned column — and named buildings show a right-aligned Signature icon (hover = name) beside the hh count. District headers: pin moved right of the name, next to the chevron; pinned plate contrasts the theme. Re-test.)*
+6. [x] Address alignment: in district building lists, search results, and a street column's building walk — "9" and "1203" should right-align so street names line up (same typeface, tabular digits). *(Reworked round 11 per feedback: rows lead with the address — number in a fixed 4ch right-aligned column — and named buildings show a right-aligned Signature icon (hover = name) beside the hh count. District headers: pin moved right of the name, next to the chevron; pinned plate contrasts the theme. Re-test.)*
 
 ## 2. District Pins & Borders
 
