@@ -361,7 +361,7 @@ export function PersonaColumn({
           <span className="truncate text-base italic text-muted-foreground">{story.epithet}</span>
         )}
         <span className="inline-flex items-center gap-1.5 text-base text-muted-foreground">
-          <GenderIcon identity={persona.genderIdentity} className="size-4 shrink-0" />
+          <GenderIcon identity={persona.genderIdentity} className="size-5 shrink-0" />
           {[
             persona.pronouns,
             String(persona.age),

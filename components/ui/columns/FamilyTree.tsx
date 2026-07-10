@@ -194,7 +194,7 @@ function PersonBox({
       </span>
       {/* Same row: gender icon left, age right (user 2026-07-10). */}
       <span className="flex w-full items-center justify-between gap-2">
-        <GenderIcon identity={persona.genderIdentity} className="text-muted-foreground size-3" />
+        <GenderIcon identity={persona.genderIdentity} className="size-4" />
         <span className="text-muted-foreground">{persona.age}</span>
       </span>
     </button>

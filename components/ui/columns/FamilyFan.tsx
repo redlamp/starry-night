@@ -231,7 +231,7 @@ export function FanChart({
           <span className="max-w-[6rem] truncate font-medium">{focusP.givenName}</span>
           <span className="max-w-[6rem] truncate font-medium">{focusP.familyName}</span>
           <span className="text-muted-foreground flex items-center gap-1">
-            <GenderIcon identity={focusP.genderIdentity} className="size-3" />
+            <GenderIcon identity={focusP.genderIdentity} className="size-4" />
             {focusP.age}
           </span>
         </button>
