@@ -2,6 +2,8 @@
 
 import { useMemo, useEffect } from "react";
 import * as THREE from "three";
+import { Html } from "@react-three/drei";
+import { MapPin } from "lucide-react";
 import { useSceneStore } from "@/lib/state/sceneStore";
 import { generateCity, tensorDistrictField } from "@/lib/seed/cityGen";
 
@@ -16,6 +18,11 @@ import { generateCity, tensorDistrictField } from "@/lib/seed/cityGen";
 // 2026-07-08), else the SELECTED building's district (inspect mode).
 const STEPS = 80; // match DistrictShells' sampling resolution
 const OUTLINE_Y = 0.35; // just above DistrictShells' border line (0.3)
+const PIN_Y = 10; // marker height above ground, clear of buildings' bases
+// Keep the marker's <Html> permanently mounted and park it far off-screen
+// when nothing is pinned — mounting/unmounting drei <Html> flashes at the
+// origin for a frame (same gotcha BuildingPin.tsx works around).
+const PIN_PARKED: [number, number, number] = [0, -100000, 0];
 
 export function SelectedDistrictOutline({ masterSeed }: { masterSeed: string }) {
   const selectedBuildingId = useSceneStore((s) => s.selectedBuildingId);
@@ -122,6 +129,60 @@ export function SelectedDistrictOutline({ masterSeed }: { masterSeed: string }) 
     };
   }, [lines]);
 
-  if (!lines) return null;
-  return <primitive object={lines} />;
+  // #2.2: a MapPin marker at the PINNED district's centre only (not hover, not
+  // selection). Centroid of the district's membership grid, reusing the same
+  // tensor field sampled above — a fine approximation of "centre" for the
+  // irregular tensor-field district shapes.
+  const pin = useMemo(() => {
+    void citySize;
+    void citySketch;
+    if (pinnedDistrictId === null) return null;
+    const { districts } = generateCity(masterSeed, cityShape, cityShapeScale);
+    const owner = districts.find((d) => d.id === pinnedDistrictId);
+    if (!owner) return null;
+
+    const field = tensorDistrictField(masterSeed);
+    const target = field.districts.find((d) => d.id === pinnedDistrictId);
+    if (!target) return null;
+    const targetIdx = target.index;
+
+    const { minX, maxX, minZ, maxZ } = field.bounds;
+    const stepX = (maxX - minX) / STEPS;
+    const stepZ = (maxZ - minZ) / STEPS;
+    let sumX = 0;
+    let sumZ = 0;
+    let count = 0;
+    for (let gx = 0; gx < STEPS; gx++) {
+      for (let gz = 0; gz < STEPS; gz++) {
+        const x = minX + (gx + 0.5) * stepX;
+        const z = minZ + (gz + 0.5) * stepZ;
+        if (field.classify(x, z) === targetIdx) {
+          sumX += x;
+          sumZ += z;
+          count++;
+        }
+      }
+    }
+    if (count === 0) return null;
+    return { x: sumX / count, z: sumZ / count, color: owner.color };
+  }, [pinnedDistrictId, masterSeed, cityShape, cityShapeScale, citySize, citySketch]);
+
+  return (
+    <>
+      {lines && <primitive object={lines} />}
+      <Html
+        position={pin ? [pin.x, PIN_Y, pin.z] : PIN_PARKED}
+        center
+        zIndexRange={[20, 0]}
+        style={{ pointerEvents: "none", display: pin ? undefined : "none" }}
+      >
+        <div
+          className="flex items-center justify-center rounded-full bg-foreground/90 p-1 shadow"
+          style={{ color: pin?.color }}
+        >
+          <MapPin size={20} strokeWidth={2.25} />
+        </div>
+      </Html>
+    </>
+  );
 }

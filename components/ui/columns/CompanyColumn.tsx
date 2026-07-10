@@ -71,7 +71,7 @@ export function CompanyColumn({ id, part }: { id: string; part: "pinned" | "rest
                     className="-mx-1 flex flex-col rounded px-1 text-left text-sm hover:bg-foreground/10"
                   >
                     <span className="truncate">{persona.fullName}</span>
-                    <span className="text-muted-foreground truncate text-xs">{title}</span>
+                    <span className="text-muted-foreground truncate text-right text-xs">{title}</span>
                   </button>
                 );
               }
