@@ -25,6 +25,7 @@ If you (Claude) are unsure where info belongs, prefer `wiki/` for: project state
 - All filenames: lowercase, kebab-case, `.md` extension. Example: `chess-narrative-engine.md`.
 - Note titles inside the file: H1 in Title Case. Example: `# Chess Narrative Engine`.
 - Daily notes: `YYYY-MM-DD.md` (no title needed, date is the title).
+- Session test plans: `test-plan-[date]-[topic].md` in `notes/` — date before topic, e.g. `test-plan-2026-07-10-personas.md` (user 2026-07-10).
 
 ## Linking
 
