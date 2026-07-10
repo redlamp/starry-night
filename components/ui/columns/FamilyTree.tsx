@@ -338,9 +338,10 @@ function FamilyChart({
       // landing early would be counted twice in every later read (the v6
       // double-shift bug) — they land in one batch later.
       // Inter-UNION gap deliberately larger than the intra-couple gap
-      // (gap-1.5 in renderUnion) so partner pairs read as units and the
-      // seams between couples are unmistakable (user 2026-07-10).
-      const packGap = vertical ? 20 : 28;
+      // (gap-1.5 in renderUnion) so partner pairs read as units, the seams
+      // between couples are unmistakable, and the descendant drop lines have
+      // clear air to run through (user 2026-07-10, widened twice).
+      const packGap = vertical ? 28 : 36;
       const packToward = (row: UnionNode[], targetFor: (u: UnionNode, cur: Box) => number) => {
         const calc = row.flatMap((u) => {
           const cur = blockBox(u);
