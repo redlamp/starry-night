@@ -3,7 +3,6 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import {
   Blend,
-  Columns3,
   Fan,
   Maximize2,
   Network,
@@ -11,7 +10,6 @@ import {
   PanelRightClose,
   PanelRightOpen,
   Pin,
-  Rows3,
   Undo2,
   X,
 } from "lucide-react";
@@ -635,16 +633,18 @@ function FamilyChart({
   );
 
   return (
-    // Shell: centers the fitted chart in the flex-1 region. The sized
-    // wrapper is the ONLY element contributing layout size (exactly the
-    // normalized+scaled content box — no phantom scroll from stale w-max
-    // extents or transform overflow); the content root inside is absolute,
-    // laid out at natural size, then translated/scaled by the measure pass.
-    // No min-h-0: when even the 0.65-scale floor cannot fit, the shell must
-    // GROW past the flex-1 slot so the panel's overflow-auto scrolls, rather
-    // than letting the chart bleed over the footer/controls rows.
-    <div ref={hostRef} className="flex flex-1 items-center justify-center">
-      <div className="relative shrink-0" style={{ width: view.w, height: view.h }}>
+    // Shell: the chart's OWN scroll viewport (user 2026-07-10: header and
+    // footer rows stay fixed; only the tree scrolls) — min-h-0 caps it at
+    // the flex slot, overflow-auto scrolls internally when even the
+    // 0.65-scale floor cannot fit. The sized wrapper is the ONLY element
+    // contributing layout size (exactly the normalized+scaled content box —
+    // no phantom scroll from stale w-max extents or transform overflow);
+    // m-auto (not items-center) centers it when smaller AND keeps all edges
+    // scroll-reachable when larger — centered flex content clips its
+    // overflowing top. The content root inside is absolute, laid out at
+    // natural size, then translated/scaled by the measure pass.
+    <div ref={hostRef} className="flex min-h-0 flex-1 overflow-auto">
+      <div className="relative m-auto shrink-0" style={{ width: view.w, height: view.h }}>
         <div
           ref={contentRef}
           className={cn(
@@ -793,7 +793,10 @@ export function FamilyTree({ personaId, indexes }: { personaId: string; indexes:
                   re-rolled multi-household city, where three-generation
                   charts are common (user 2026-07-10); the max caps keep
                   small screens working. */}
-              <div className="relative flex max-h-[85vh] min-h-[30rem] w-fit min-w-[44rem] max-w-[calc(96vw-19.5rem)] flex-col overflow-auto rounded-xl border border-border bg-popover/95 p-4 text-popover-foreground shadow-lg backdrop-blur-md tabular-nums">
+              {/* overflow-hidden on the PANEL, overflow-auto on the chart
+                  viewport below (user 2026-07-10): the header and both footer
+                  rows stay fixed in place — only the tree scrolls. */}
+              <div className="relative flex max-h-[85vh] min-h-[30rem] w-fit min-w-[44rem] max-w-[calc(96vw-19.5rem)] flex-col overflow-hidden rounded-xl border border-border bg-popover/95 p-4 text-popover-foreground shadow-lg backdrop-blur-md tabular-nums">
                 {/* One header row — title left; back control + X share the
                     right cluster so they align on the same vertical center
                     (user 2026-07-08: the absolute X sat off the title line).
@@ -858,19 +861,22 @@ export function FamilyTree({ personaId, indexes }: { personaId: string; indexes:
                   <div className="flex items-center gap-1">
                     {/* 3-way display-mode cluster — exactly one active
                         (user 2026-07-10: rows / columns / fan). */}
+                    {/* Network glyph reads as the tree itself: upright for
+                        rows, rotated 90° CCW for columns so the flow arrow
+                        matches each mode's direction (user 2026-07-10). */}
                     <LayerToggle
                       label="Row View"
                       pressed={mode === "rows"}
                       onToggle={() => setMode("rows")}
                     >
-                      <Rows3 />
+                      <Network />
                     </LayerToggle>
                     <LayerToggle
                       label="Column View"
                       pressed={mode === "columns"}
                       onToggle={() => setMode("columns")}
                     >
-                      <Columns3 />
+                      <Network className="-rotate-90" />
                     </LayerToggle>
                     <LayerToggle
                       label="Fan View"
