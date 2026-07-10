@@ -9,12 +9,15 @@ import { ViewHotkeys } from "@/components/scene/ViewHotkeys";
 import { CameraSideView } from "@/components/scene/CameraSideView";
 import { ControlsGuide } from "@/components/ui/ControlsGuide";
 import { ControlDock } from "@/components/ui/ControlDock";
+import { DirectoryPrewarm } from "@/components/ui/DirectoryPrewarm";
 
 export default function Page() {
   return (
     <main className="relative h-dvh w-dvw">
       <CaptureBoot />
       <ViewHotkeys />
+      {/* Idle staged persona generation (§7.5) — no visual output. */}
+      <DirectoryPrewarm />
       <Scene />
       <div className="pointer-events-none absolute inset-0">
         <CameraPanel />

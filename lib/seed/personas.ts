@@ -506,13 +506,22 @@ function unitFor(building: Building, householdIndex: number, count: number): str
 
 // --- The build --------------------------------------------------------------------------
 
-function buildDirectoryImpl(
+// Resumable build (test plan 07-10 §7.5): the exact pass sequence as before,
+// restructured as a generator that yields at chunk boundaries so the idle
+// prewarmer can run it in ~5ms frame slices instead of one ~1.4s hit. Draw
+// order is UNCHANGED — a drained generator is byte-identical to the old
+// synchronous build; `yield` only marks where it's safe to pause.
+function* buildDirectorySteps(
   masterSeed: string,
   shape: CityShapeSetting,
   shapeScale: number,
-): PersonaDirectory {
+): Generator<void, PersonaDirectory> {
   const city = generateCity(masterSeed, shape, shapeScale);
+  // Names are one ~250ms monolith (addresses ride a spatial hash) — give it
+  // its own slice at least. Chunking naming itself is a parked follow-up.
+  yield;
   const names = buildCityNames(masterSeed, shape, shapeScale);
+  yield;
   const districtById = new Map(city.districts.map((d) => [d.id, d]));
 
   const personas = new Map<PersonaId, Persona>();
@@ -540,7 +549,12 @@ function buildDirectoryImpl(
   const hhScale = estimated > TARGET_MAX_PERSONAS ? TARGET_MAX_PERSONAS / estimated : 1;
 
   // ---- Pass 1: households + people ----
+  let sinceYield = 0;
   for (const b of buildings) {
+    if (++sinceYield >= 60) {
+      sinceYield = 0;
+      yield;
+    }
     const raw = rawHouseholds.get(b.id);
     if (!raw) continue;
     const count = Math.max(1, Math.floor(raw * hhScale));
@@ -819,7 +833,12 @@ function buildDirectoryImpl(
   }
 
   // ---- Pass 2: businesses ----
+  sinceYield = 0;
   for (const b of buildings) {
+    if (++sinceYield >= 300) {
+      sinceYield = 0;
+      yield;
+    }
     const kinds = BUSINESS_KINDS[b.archetype];
     if (!kinds) continue;
     const district = districtById.get(b.districtId);
@@ -984,7 +1003,12 @@ function buildDirectoryImpl(
       list.push({ school: biz, site });
       byTier.set(biz.schoolTier, list);
     }
+    sinceYield = 0;
     for (const p of personas.values()) {
+      if (++sinceYield >= 1000) {
+        sinceYield = 0;
+        yield;
+      }
       if (p.age < 5 || p.age >= 18) continue;
       const tier = p.age < 11 ? "elementary" : p.age < 14 ? "middle" : "high";
       const options = byTier.get(tier);
@@ -1026,7 +1050,12 @@ function buildDirectoryImpl(
       (x) => x.title === "High School Teacher" && x.workplaceType === "school",
     );
     // Stable worker order: persona insertion order is already building-ascending.
+    sinceYield = 0;
     for (const p of personas.values()) {
+      if (++sinceYield >= 250) {
+        sinceYield = 0;
+        yield;
+      }
       if (p.workStatus !== "employed" || !p.profession) continue;
       const candidates = byKind.get(p.profession.workplaceType);
       if (!candidates || candidates.length === 0) {
@@ -1079,7 +1108,12 @@ function buildDirectoryImpl(
   {
     const rng = seedrandom(`${masterSeed}::personas::commute`);
     const buildingById = new Map(buildings.map((b) => [b.id, b]));
+    sinceYield = 0;
     for (const p of personas.values()) {
+      if (++sinceYield >= 2000) {
+        sinceYield = 0;
+        yield;
+      }
       if (!p.businessId) continue;
       const biz = businesses.get(p.businessId);
       const home = buildingById.get(p.homeBuildingId);
@@ -1123,7 +1157,12 @@ function buildDirectoryImpl(
       eldersBySurname.set(p.familyName, list);
     }
     const extraChildren = new Map<PersonaId, number>();
+    sinceYield = 0;
     for (const p of personas.values()) {
+      if (++sinceYield >= 2000) {
+        sinceYield = 0;
+        yield;
+      }
       if (p.age < 25 || p.age > 45) continue;
       // Skip anyone who already has an in-city parent (multigen households).
       if (p.family.some((l) => l.role === "parent")) continue;
@@ -1175,7 +1214,13 @@ function buildDirectoryImpl(
       return (seeksSame.get(a.id) ?? false) === same && (seeksSame.get(b.id) ?? false) === same;
     };
     const paired = new Set<PersonaId>();
+    sinceYield = 0;
     for (let i = 0; i < seekers.length; i++) {
+      // The unmatched tail scans the remaining seekers each — chunk small.
+      if (++sinceYield >= 200) {
+        sinceYield = 0;
+        yield;
+      }
       const a = seekers[i];
       if (paired.has(a.id)) continue;
       for (let j = i + 1; j < seekers.length; j++) {
@@ -1237,16 +1282,58 @@ export function peekPersonaDirectory(
   return dirCache.get(dirCacheKey(masterSeed, shape, shapeScale)) ?? null;
 }
 
+// One in-progress resumable build at a time, shared between the synchronous
+// path and the idle prewarmer (§7.5): if the prewarmer is halfway through
+// when a panel demands the directory NOW, the sync path resumes the same
+// generator and finishes it — partial work is never discarded or duplicated.
+let activeBuild: { key: string; gen: Generator<void, PersonaDirectory> } | null = null;
+
+function resumeBuild(masterSeed: string, shape: CityShapeSetting, shapeScale: number) {
+  const key = dirCacheKey(masterSeed, shape, shapeScale);
+  if (activeBuild?.key !== key) {
+    activeBuild = { key, gen: buildDirectorySteps(masterSeed, shape, shapeScale) };
+  }
+  return { key, gen: activeBuild.gen };
+}
+
+function finishBuild(key: string, result: PersonaDirectory): PersonaDirectory {
+  if (dirCache.size > 8) dirCache.clear();
+  dirCache.set(key, result);
+  activeBuild = null;
+  return result;
+}
+
 export function buildPersonaDirectory(
   masterSeed: string,
   shape: CityShapeSetting = "square",
   shapeScale = 1,
 ): PersonaDirectory {
-  const key = dirCacheKey(masterSeed, shape, shapeScale);
-  const hit = dirCache.get(key);
+  const hit = dirCache.get(dirCacheKey(masterSeed, shape, shapeScale));
   if (hit) return hit;
-  const result = buildDirectoryImpl(masterSeed, shape, shapeScale);
-  if (dirCache.size > 8) dirCache.clear();
-  dirCache.set(key, result);
-  return result;
+  const { key, gen } = resumeBuild(masterSeed, shape, shapeScale);
+  for (;;) {
+    const r = gen.next();
+    if (r.done) return finishBuild(key, r.value);
+  }
+}
+
+// Budgeted slice for the idle prewarmer: runs the resumable build for up to
+// ~budgetMs, returns the directory once complete, else null. The clock only
+// decides when to PAUSE between chunks — the generated output is identical
+// whatever the timing, so the determinism contract holds.
+export function stepPersonaDirectoryBuild(
+  masterSeed: string,
+  shape: CityShapeSetting = "square",
+  shapeScale = 1,
+  budgetMs = 5,
+): PersonaDirectory | null {
+  const hit = dirCache.get(dirCacheKey(masterSeed, shape, shapeScale));
+  if (hit) return hit;
+  const { key, gen } = resumeBuild(masterSeed, shape, shapeScale);
+  const deadline = performance.now() + budgetMs;
+  do {
+    const r = gen.next();
+    if (r.done) return finishBuild(key, r.value);
+  } while (performance.now() < deadline);
+  return null;
 }
