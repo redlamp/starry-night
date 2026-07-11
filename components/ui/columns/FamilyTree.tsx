@@ -13,7 +13,6 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { HelpHint } from "@/components/ui/tooltip";
 import {
   Dialog,
   DialogTrigger,
@@ -1138,6 +1137,19 @@ function FamilyChart({
   );
 }
 
+// Nav cheat-sheet rows (user 2026-07-11 round 3 follow-up): the same
+// kbd-chip anatomy as the main "?" ControlsGuide, laid out as a horizontal
+// strip flush to the panel's bottom while the "?" toggle is on.
+const CHART_CONTROLS: Array<{ cap: string; label: string }> = [
+  { cap: "Drag", label: "Pan" },
+  { cap: "Scroll", label: "Pan" },
+  { cap: "Shift+Scroll", label: "Sideways" },
+  { cap: "Ctrl+Scroll", label: "Zoom" },
+  { cap: "Pinch", label: "Zoom" },
+  { cap: "2×Click", label: "Reset" },
+  { cap: "Click", label: "Re-root" },
+];
+
 // Chart control toggle — icon button following the app's icon-toggle
 // convention (aria-pressed + bg-primary/30 active state); the tooltip is
 // the action name only, Title Case.
@@ -1181,6 +1193,8 @@ export function FamilyTree({ personaId, indexes }: { personaId: string; indexes:
   const [lineage, setLineage] = useState(true);
   const [tintOn, setTintOn] = useState(true);
   const [cardMin, setCardMin] = useState(false);
+  // "?" is a TOGGLE (user 2026-07-11) — shows the nav strip while pressed.
+  const [helpOpen, setHelpOpen] = useState(false);
   // Display mode (user 2026-07-10): Rows = the web chart, Columns = the
   // same chart transposed (generations as columns — often a better fit for
   // the panel with 3-4 generations), Fan = the bow-tie blood-lineage fan.
@@ -1336,6 +1350,21 @@ export function FamilyTree({ personaId, indexes }: { personaId: string; indexes:
                   <div className="h-5 shrink-0 truncate text-xs text-muted-foreground">
                     {footerBits.join(" · ")}
                   </div>
+                  {/* Nav strip (user 2026-07-11): the main "?" guide's
+                      kbd-chip anatomy as a horizontal list flush to the
+                      panel bottom, shown while the "?" toggle is pressed. */}
+                  {helpOpen && (
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pb-1.5 text-sm">
+                      {CHART_CONTROLS.map((c) => (
+                        <span key={`${c.cap}:${c.label}`} className="flex items-center gap-1.5">
+                          <kbd className="inline-flex justify-center rounded bg-amber-400 px-1.5 py-0.5 font-mono text-xs font-semibold text-black">
+                            {c.cap}
+                          </kbd>
+                          <span className="text-foreground/80">{c.label}</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
                   <div className="flex h-8 shrink-0 items-center justify-between">
                     <div className="pointer-events-auto flex items-center gap-1">
                       {/* Mode cluster (Rows/Columns/Fan) hidden for now (user
@@ -1355,16 +1384,13 @@ export function FamilyTree({ personaId, indexes }: { personaId: string; indexes:
                       >
                         <Blend />
                       </LayerToggle>
-                      {/* Nav cheat-sheet (user 2026-07-11 round 3). */}
-                      <HelpHint side="top" label="Chart Controls">
-                        <div className="flex flex-col gap-0.5">
-                          <span>drag or scroll: pan</span>
-                          <span>shift + scroll: pan sideways</span>
-                          <span>ctrl/cmd + scroll, or pinch: zoom</span>
-                          <span>double-click: reset the view</span>
-                          <span>click a person: re-root the tree</span>
-                        </div>
-                      </HelpHint>
+                      <LayerToggle
+                        label="Chart Controls"
+                        pressed={helpOpen}
+                        onToggle={() => setHelpOpen((v) => !v)}
+                      >
+                        <span className="text-sm leading-none font-semibold">?</span>
+                      </LayerToggle>
                     </div>
                     {/* Icon pair reads as panel show/hide and swaps with
                         state; the tooltip is the pending ACTION's name. */}

@@ -214,21 +214,22 @@ export function SelectedDistrictOutline({ masterSeed }: { masterSeed: string }) 
     const target = field.districts.find((d) => d.id === hoverDistrictId);
     if (!target) return null;
     const loops = districtBoundaryLoops(field, target.index, tensorWallRoads(masterSeed));
-    // Ground-level fill UNDER the buildings (user 2026-07-11 round 3):
-    // depth-tested so towers occlude it — it reads on streets and gaps —
-    // while the thick border stays a GIS overlay ABOVE everything. 40% of
-    // the border's own colour compensates for the occlusion.
+    // The depth-tested under-the-buildings fill didn't read in practice
+    // (user 2026-07-11: "I'm not seeing the fill below the buildings") —
+    // fall back to the stated alternative: an overlay fill in the border's
+    // own colour at 40%, drawn like the other GIS layers.
     const mat = new THREE.MeshBasicMaterial({
       color: new THREE.Color(target.color),
       transparent: true,
       opacity: 0.4,
-      depthTest: true,
+      depthTest: false,
       depthWrite: false,
       fog: false,
       toneMapped: false,
       side: THREE.DoubleSide,
     });
-    const group = loopsToFillGroup(loops, mat, FILL_Y, 0);
+    // renderOrder 1000: above the shells' fill, below the outlines.
+    const group = loopsToFillGroup(loops, mat, FILL_Y, 1000);
     return group.children.length > 0 ? group : null;
   }, [hoverDistrictId, masterSeed, citySize, citySketch]);
 
