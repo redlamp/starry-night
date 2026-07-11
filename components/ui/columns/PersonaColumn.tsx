@@ -6,10 +6,8 @@ import {
   BadgeDollarSign,
   Bike,
   BookOpen,
-  Briefcase,
   BriefcaseBusiness,
   Bus,
-  CalendarDays,
   Car,
   ChefHat,
   ClipboardList,
@@ -41,6 +39,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleTrigger, CollapsiblePanel } from "@/components/ui/collapsible";
 import { HoverCard, HoverCardTrigger, HoverCardContent } from "@/components/ui/hover-card";
 import { Separator } from "@/components/ui/separator";
 import { useSceneStore } from "@/lib/state/sceneStore";
@@ -48,11 +47,15 @@ import { flyToBuilding, flyToSpan } from "@/lib/scene/focusBuilding";
 import {
   CHINESE_ANIMAL_GLYPHS,
   WESTERN_SIGN_TRAITS,
+  WESTERN_ZODIAC,
+  MOON_SIGN_TRAITS,
+  RISING_SIGN_TRAITS,
   CHINESE_ANIMAL_TRAITS,
   CHINESE_ELEMENT_TRAITS,
   MBTI_DESCRIPTIONS,
+  EDUCATION_LABELS,
 } from "@/lib/seed/personaData";
-import type { ProfessionCategory } from "@/lib/seed/personaData";
+import type { EducationTier, ProfessionCategory } from "@/lib/seed/personaData";
 import {
   personaFlavor,
   type CommuteMode,
@@ -132,11 +135,10 @@ function professionIconFor(p: Persona): LucideIcon {
   return BriefcaseBusiness;
 }
 
-// Row-icon colour coding (user 2026-07-10): home rides the residential
-// district green, work the downtown gold, education the transit blue —
-// colours the map legend already taught.
-const HOME_ICON_COLOR = "#3fa87e";
-const WORK_ICON_COLOR = "#f2b134";
+// Row-icon colour coding (re-cut 2026-07-11): work is GREEN (money), home is
+// ORANGE (hearth), education keeps the transit blue.
+const HOME_ICON_COLOR = "#f2a24a";
+const WORK_ICON_COLOR = "#3fa87e";
 const EDUCATION_ICON_COLOR = "#6fa8ff";
 
 const MONTHS = [
@@ -159,19 +161,30 @@ function transitLineFor(personaId: string, indexes: ReturnType<typeof useEntityI
   return options[h % options.length];
 }
 
-function formatHour(hour: number): string {
-  if (hour === 0) return "midnight";
-  if (hour === 12) return "noon";
-  return hour < 12 ? `${hour} a.m.` : `${hour - 12} p.m.`;
+// 12-hour clock with exact minutes (user 2026-07-11: "an exact time in the
+// ~3 range" — the ~ approximation is gone, e.g. `3:27 PM`).
+function formatTime(hour: number, minute: number): string {
+  const h = hour % 12 === 0 ? 12 : hour % 12;
+  return `${h}:${String(minute).padStart(2, "0")} ${hour < 12 ? "AM" : "PM"}`;
 }
 
-const ELEMENT_COLORS: Record<string, string> = {
-  Wood: "#3fa87e",
-  Fire: "#e86f5a",
-  Earth: "#c9a35a",
-  Metal: "#a8b0bd",
-  Water: "#6fa8ff",
+// Chinese-sign badge is glyph-only (user 2026-07-11): element emoji + animal
+// glyph, no words. The hover card still names both in prose.
+const ELEMENT_EMOJI: Record<string, string> = {
+  Wood: "🪵",
+  Fire: "🔥",
+  Earth: "⛰️",
+  Metal: "⚙️",
+  Water: "💧",
 };
+
+// Sign name → symbol, for the moon/rising signs (stored as names). U+FE0F
+// asks for the EMOJI presentation of the zodiac glyph (colored, larger)
+// rather than the plain text form (user 2026-07-11).
+const SIGN_SYMBOL: Record<string, string> = Object.fromEntries(
+  WESTERN_ZODIAC.map((s) => [s.name, s.symbol]),
+);
+const signEmoji = (name: string) => (SIGN_SYMBOL[name] ?? "") + "️";
 
 function capitalize(s: string): string {
   return s.length > 0 ? s[0].toUpperCase() + s.slice(1) : s;
@@ -206,12 +219,15 @@ function StatRow({
   );
   return (
     <div className="flex flex-col gap-0.5 text-base">
-      <div className="flex items-start justify-between gap-3">
-        <span className="flex min-w-0 shrink-0 items-center gap-2 text-muted-foreground">
+      {/* flex-wrap so the value drops WHOLE to its own right-aligned line when
+          it can't share the row with the label (user 2026-07-11) — never a
+          mid-phrase wrap beside the label. */}
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+        <span className="flex shrink-0 items-center gap-2 text-muted-foreground">
           <span className="flex w-5 shrink-0 items-center justify-center">
             {glyph &&
               (iconAction ? (
-                <IconTip label={iconLabel ?? label}>
+                <IconTip label={iconLabel ?? label} delay={0}>
                   <Button
                     variant="ghost"
                     size="icon-xs"
@@ -230,7 +246,7 @@ function StatRow({
         </span>
         {/* [&_button]:text-right — button UA style centers wrapped text,
             which read as centre-aligned values (user 2026-07-10). */}
-        <span className="min-w-0 break-words text-right font-medium [&_button]:text-right">
+        <span className="ml-auto min-w-0 max-w-full break-words text-right font-medium [&_button]:text-right">
           {top}
         </span>
       </div>
@@ -256,6 +272,12 @@ export function PersonaColumn({
 }) {
   const push = useSceneStore((s) => s.pushColumn);
   const masterSeed = useSceneStore((s) => s.masterSeed);
+  // Card disclosure state is shared across every card instance (user
+  // 2026-07-11) — see sceneStore. Both PersonaColumn parts read it.
+  const cardDetailsOpen = useSceneStore((s) => s.cardDetailsOpen);
+  const setCardDetailsOpen = useSceneStore((s) => s.setCardDetailsOpen);
+  const cardFamilyOpen = useSceneStore((s) => s.cardFamilyOpen);
+  const setCardFamilyOpen = useSceneStore((s) => s.setCardFamilyOpen);
   const indexes = useEntityIndexes();
   const persona = indexes.directory.personas.get(id);
   if (!persona) {
@@ -274,6 +296,9 @@ export function PersonaColumn({
     ? indexes.directory.businesses.get(persona.businessId)
     : undefined;
   const school = persona.schoolId ? indexes.directory.businesses.get(persona.schoolId) : undefined;
+  // A CURRENT student: their school stands in for both Profession and Work —
+  // one folded "School" row under Education (user 2026-07-11).
+  const isStudent = !!school && !business;
   const homeAddress = indexes.names.addresses.get(persona.homeBuildingId);
   const homeDistrictName = indexes.names.districtNames.get(persona.homeDistrictId);
   const partner = persona.partnerId
@@ -312,34 +337,6 @@ export function PersonaColumn({
     if (building) flyToBuilding(building);
   };
 
-  // Alma mater (user 2026-07-10): derived, never stored — an adult who was in
-  // the city through their teens "attended" the nearest high school by the
-  // SAME pure-distance rule the enrollment pass uses for current kids. No rng
-  // draws, so no re-roll; the nearest-to-current-home approximation is the
-  // fiction's price for retroactive alumni. Current students link their real
-  // school instead.
-  let almaMater = school;
-  if (
-    !almaMater &&
-    persona.age >= 18 &&
-    (persona.bornHere || persona.yearsInCity >= persona.age - 17)
-  ) {
-    const home = indexes.buildingById.get(persona.homeBuildingId);
-    if (home) {
-      let bestD = Infinity;
-      for (const biz of indexes.directory.businesses.values()) {
-        if (biz.schoolTier !== "high") continue;
-        const site = indexes.buildingById.get(biz.buildingId);
-        if (!site) continue;
-        const d = Math.hypot(site.x - home.x, site.z - home.z);
-        if (d < bestD) {
-          bestD = d;
-          almaMater = biz;
-        }
-      }
-    }
-  }
-
   const workPlace = business ?? school;
 
   // educationDetail is authored as "{subject}, {institution}" (one comma) —
@@ -355,108 +352,231 @@ export function PersonaColumn({
       ? persona.educationDetail.slice(eduComma + 2)
       : undefined;
 
+  // Alma mater (user 2026-07-11, was 2026-07-10): derived, never stored.
+  //   Current student → their real school (rendered as the School row, not
+  //     here).
+  //   Adult, degree tier ≥ 2 → prefer the in-city campus their educationDetail
+  //     names; else, if they lived here through ~age 22, the university
+  //     (tier ≥ 3) or college (tier 2) by exact name; else fall back to the
+  //     nearest-high-school rule only if in city through their teens.
+  //   Adult, tier ≤ 1 → the nearest high school (the original pure-distance
+  //     rule the enrollment pass uses for kids), if in city through their teens.
+  // Campuses are matched by NAME against generation's two campus businesses
+  // (indexes.names.city.university / .college); if they don't exist yet the
+  // scans find nothing and everything degrades to the high-school fallback.
+  // No rng draws here, so no re-roll.
+  const campusByName = (name: string | undefined) =>
+    name ? [...indexes.directory.businesses.values()].find((b) => b.name === name) : undefined;
+  const nearestHighSchool = () => {
+    const home = indexes.buildingById.get(persona.homeBuildingId);
+    if (!home) return undefined;
+    let best = school;
+    let bestD = Infinity;
+    for (const biz of indexes.directory.businesses.values()) {
+      if (biz.schoolTier !== "high") continue;
+      const site = indexes.buildingById.get(biz.buildingId);
+      if (!site) continue;
+      const d = Math.hypot(site.x - home.x, site.z - home.z);
+      if (d < bestD) {
+        bestD = d;
+        best = biz;
+      }
+    }
+    return best;
+  };
+
+  let almaMater = school;
+  if (!isStudent && !school && persona.age >= 18) {
+    // Reverse-lookup the attained tier from the display label.
+    let attainedTier: EducationTier | undefined;
+    for (let t = 0 as EducationTier; t <= 4; t = (t + 1) as EducationTier) {
+      if (EDUCATION_LABELS[t].includes(persona.education)) {
+        attainedTier = t;
+        break;
+      }
+    }
+    const inCityThroughTeens =
+      persona.bornHere || persona.yearsInCity >= persona.age - 17;
+    const inCityThroughCollege =
+      persona.bornHere || persona.yearsInCity >= persona.age - 22;
+    if (attainedTier !== undefined && attainedTier >= 2) {
+      const matched = campusByName(eduInstitution);
+      if (matched) {
+        almaMater = matched;
+      } else if (inCityThroughCollege) {
+        const uni = campusByName(indexes.names.city.university);
+        const col = campusByName(indexes.names.city.college);
+        almaMater = attainedTier >= 3 ? uni ?? col : col ?? uni;
+      } else if (inCityThroughTeens) {
+        almaMater = nearestHighSchool();
+      }
+    } else if (inCityThroughTeens) {
+      almaMater = nearestHighSchool();
+    }
+  }
+  // const binding so the value narrows inside the fly-to closures below.
+  const alma = almaMater;
 
   if (part === "pinned") {
+    const born = `${MONTHS[persona.birthday.month - 1]} ${persona.birthday.day}, ${persona.birthday.year}`;
     return (
     <>
-      {/* Header is text-only (user 2026-07-10): the Go Home / Go to Work
-          buttons live on the Home/Work rows below, and the meta lines sit at
-          text-sm — the header earns its space with information, not chrome. */}
-      <div className="flex min-w-0 flex-col">
+      {/* Header (user 2026-07-11): epithet, then the details in this exact
+          order — gender line, DOB + birth time with age in parens, Height +
+          Build side by side, ID. Minor-only fields (height/build) drop out;
+          née rides the card title. The whole block is selectable (spans, not
+          buttons, so select-none doesn't apply — set it explicitly for
+          drag-select). */}
+      <div className="flex min-w-0 cursor-text flex-col gap-0.5 select-text">
         {story.epithet && (
           <span className="truncate text-base italic text-muted-foreground">{story.epithet}</span>
         )}
-        <span className="inline-flex items-center gap-1.5 text-base text-muted-foreground">
-          <GenderIcon identity={persona.genderIdentity} className="size-5 shrink-0" />
-          {[
-            persona.pronouns,
-            String(persona.age),
-            flavor.heightCm ? formatHeight(flavor.heightCm) : null,
-            flavor.build,
-            persona.maidenName ? `née ${persona.maidenName}` : null,
-          ]
-            .filter(Boolean)
-            .join(" · ")}
-        </span>
-        <span className="text-base text-muted-foreground">
-          b. {MONTHS[persona.birthday.month - 1]} {persona.birthday.day},{" "}
-          {persona.birthday.year} · ~{formatHour(flavor.birthHour)}
-        </span>
-        {/* Fictional-format civic ID (user 2026-07-10) — records-office
-            flavour, deliberately unlike any real document's grouping. */}
-        <span className="font-mono text-base text-muted-foreground">ID {flavor.civicId}</span>
+        {/* Two-column fact grid (user 2026-07-11): Gender|Age, DOB|Time,
+            Height|T-Shirt, ID|In City. Each cell spreads label left / value
+            right (justify-between + nowrap) so no fact ever wraps; the
+            gender icon + pronouns are their own label. In City lives HERE,
+            not in the Details rows. */}
+        {/* 1.25fr/1fr (user 2026-07-11): the left column carries the longer
+            values (DOB, ID) — a hair more width keeps them on one line. */}
+        <div className="grid grid-cols-[1.25fr_1fr] gap-x-4 gap-y-0.5 text-base">
+          <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+            <GenderIcon identity={persona.genderIdentity} className="size-5 shrink-0" />
+            {persona.pronouns}
+          </span>
+          <span className="flex items-baseline justify-between gap-2">
+            <span className="text-muted-foreground">Age</span>
+            <span>{persona.age}</span>
+          </span>
+          {/* Date + time compose into ONE value (user 2026-07-11) — they're
+              separate seeded draws, not a Date object, but read as one fact. */}
+          <span className="col-span-2 flex items-baseline justify-between gap-2">
+            <span className="text-muted-foreground">DOB</span>
+            <span className="whitespace-nowrap">
+              {born} · {formatTime(flavor.birthHour, flavor.birthMinute)}
+            </span>
+          </span>
+          {flavor.heightCm && (
+            <span className="flex items-baseline justify-between gap-2">
+              <span className="text-muted-foreground">Height</span>
+              <span className="whitespace-nowrap">{formatHeight(flavor.heightCm)}</span>
+            </span>
+          )}
+          {flavor.build && (
+            <span className="flex items-baseline justify-between gap-2">
+              <span className="text-muted-foreground">T-Shirt</span>
+              <span>{flavor.build}</span>
+            </span>
+          )}
+          <span className="flex items-baseline justify-between gap-2">
+            <span className="text-muted-foreground">ID</span>
+            <span className="font-mono">{flavor.civicId}</span>
+          </span>
+          <span className="flex items-baseline justify-between gap-2">
+            <span className="text-muted-foreground">In City</span>
+            <span className="whitespace-nowrap">
+              {persona.bornHere ? "Born here" : `${persona.yearsInCity} yrs`}
+            </span>
+          </span>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5">
         {/* Trait badges explain themselves on hover (shadcn hover cards,
             user 2026-07-08) — birthday context on the sun sign, animal +
             element on the Chinese sign, nickname + read on the MBTI type. */}
+        {/* Badge anatomy (user 2026-07-11): astrology glyphs at emoji size
+            (text-base + emoji presentation), sign names as 2-letter
+            abbreviations. Hover cards read at text-base with the big three
+            (Sun/Moon/Rising) each carrying their sign emoji. */}
         <HoverCard>
           <HoverCardTrigger
             render={
-              <Badge variant="outline" className="cursor-help">
-                {persona.westernSign.symbol} {persona.westernSign.name}
+              <Badge variant="outline" className="cursor-help text-sm">
+                <span className="text-base leading-none">
+                  {signEmoji(persona.westernSign.name)}
+                </span>{" "}
+                {persona.westernSign.name.slice(0, 2)}
               </Badge>
             }
           />
-          <HoverCardContent>
+          <HoverCardContent className="w-72 text-base">
+            {/* The big three each read as emoji-marked headings (☀️/🌙/🌅 +
+                sign emoji) with their DETAILS on the line below (user
+                2026-07-11) — no trailing "· descriptor" on the heading. */}
             <div className="font-medium">
-              {persona.westernSign.symbol} {persona.westernSign.name} Sun
+              <span className="text-lg leading-none">
+                ☀️ {signEmoji(persona.westernSign.name)}
+              </span>{" "}
+              {persona.westernSign.name} Sun
             </div>
-            <div className="text-xs text-muted-foreground">
+            <div className="text-sm text-muted-foreground">
               {persona.westernSign.element} · {persona.westernSign.modality} · born{" "}
               {persona.birthday.month}/{persona.birthday.day}
             </div>
             <p className="mt-1.5">{WESTERN_SIGN_TRAITS[persona.westernSign.name]}</p>
-            <div className="mt-2 border-t border-border pt-2 text-xs text-muted-foreground">
-              <div>
-                <span className="font-medium text-foreground">{flavor.moonSign} Moon</span> · the
-                inner weather
+            <div className="mt-2 border-t border-border pt-2">
+              {/* Sub head on its OWN line under each of the big three (user
+                  2026-07-11) — never continued off the heading. */}
+              <div className="font-medium">
+                <span className="text-base leading-none">🌙 {signEmoji(flavor.moonSign)}</span>{" "}
+                {flavor.moonSign} Moon
               </div>
-              <div className="mt-0.5">
-                <span className="font-medium text-foreground">{flavor.risingSign} Rising</span> ·
-                the first impression
+              <div className="text-sm text-muted-foreground">the inner weather</div>
+              <div>{MOON_SIGN_TRAITS[flavor.moonSign]}</div>
+              <div className="mt-1.5 font-medium">
+                <span className="text-base leading-none">🌅 {signEmoji(flavor.risingSign)}</span>{" "}
+                {flavor.risingSign} Rising
               </div>
+              <div className="text-sm text-muted-foreground">the first impression</div>
+              <div>{RISING_SIGN_TRAITS[flavor.risingSign]}</div>
             </div>
           </HoverCardContent>
         </HoverCard>
         <HoverCard>
           <HoverCardTrigger
             render={
-              <Badge variant="outline" className="cursor-help">
-                {CHINESE_ANIMAL_GLYPHS[persona.chineseSign.animal]} {persona.chineseSign.element}{" "}
-                {persona.chineseSign.animal}
+              <Badge variant="outline" className="cursor-help text-sm">
+                <span className="text-base leading-none">
+                  {ELEMENT_EMOJI[persona.chineseSign.element]}{" "}
+                  {CHINESE_ANIMAL_GLYPHS[persona.chineseSign.animal]}
+                </span>
               </Badge>
             }
           />
-          <HoverCardContent>
+          <HoverCardContent className="w-72 text-base">
+            {/* Layout (user 2026-07-11): header, born year, then two glyph-led
+                lines — animal-year description (without renaming the animal)
+                and element description. */}
             <div className="font-medium">
-              {CHINESE_ANIMAL_GLYPHS[persona.chineseSign.animal]} Year of the{" "}
-              {persona.chineseSign.animal}
+              <span className="text-lg leading-none">
+                {CHINESE_ANIMAL_GLYPHS[persona.chineseSign.animal]}
+              </span>{" "}
+              Year of the {persona.chineseSign.animal}
             </div>
-            <div className="mt-1 flex items-center gap-1.5 text-sm font-medium">
-              <span
-                className="inline-block size-2.5 rounded-full"
-                style={{ background: ELEMENT_COLORS[persona.chineseSign.element] }}
-                aria-hidden
-              />
-              {persona.chineseSign.element} — {CHINESE_ELEMENT_TRAITS[persona.chineseSign.element]}
-            </div>
-            <div className="text-xs text-muted-foreground">born {persona.birthday.year}</div>
+            <div className="text-sm text-muted-foreground">born {persona.birthday.year}</div>
             <p className="mt-1.5">
-              The {persona.chineseSign.animal}: {CHINESE_ANIMAL_TRAITS[persona.chineseSign.animal]}.
+              <span className="text-base leading-none">
+                {CHINESE_ANIMAL_GLYPHS[persona.chineseSign.animal]}
+              </span>{" "}
+              {capitalize(CHINESE_ANIMAL_TRAITS[persona.chineseSign.animal])}.
+            </p>
+            <p className="mt-1">
+              <span className="text-base leading-none">
+                {ELEMENT_EMOJI[persona.chineseSign.element]}
+              </span>{" "}
+              {capitalize(CHINESE_ELEMENT_TRAITS[persona.chineseSign.element])}.
             </p>
           </HoverCardContent>
         </HoverCard>
         <HoverCard>
           <HoverCardTrigger
             render={
-              <Badge variant="outline" className="cursor-help">
+              <Badge variant="outline" className="cursor-help text-sm">
                 {flavor.mbtiNickname.replace(/^The /, "")}
               </Badge>
             }
           />
-          <HoverCardContent>
+          <HoverCardContent className="w-72 text-base">
             <div className="font-medium">
               {flavor.mbti} · {flavor.mbtiNickname}
             </div>
@@ -469,239 +589,320 @@ export function PersonaColumn({
     );
   }
 
+  const commuteRow = persona.commute && workBuildingId !== undefined && (
+    <StatRow
+      icon={COMMUTE_ICONS[persona.commute.mode]}
+      iconTint={COMMUTE_COLORS[persona.commute.mode]}
+      iconAction={() => {
+        // Frame the whole commute (home + destination) so the arc fits —
+        // camera only, no selection change (user 2026-07-10).
+        const home = indexes.buildingById.get(persona.homeBuildingId);
+        const work = indexes.buildingById.get(workBuildingId);
+        if (home && work) flyToSpan(home, work);
+      }}
+      iconLabel="Show Commute"
+      label="Commute"
+      top={
+        persona.commute.distance >= 1000
+          ? `${(persona.commute.distance / 1000).toFixed(1)} km`
+          : `${persona.commute.distance} m`
+      }
+      bottom={
+        persona.commute.mode === "transit"
+          ? `Rides ${transitLineFor(persona.id, indexes)}`
+          : COMMUTE_LABELS[persona.commute.mode]
+      }
+    />
+  );
+
   return (
     <>
-      {/* whyAwake stays up top — it's the line that explains the lit window.
-          The rest of the flavour (wasIs, detail, refusal, relation) reads
-          below the Family section (user 2026-07-10: facts first). */}
-      {story.whyAwake && <p className="text-base">{story.whyAwake}</p>}
-
-      <Separator />
-
-      <div className="flex flex-col gap-1.5">
-        {/* Tenure leads the section (user 2026-07-10). */}
-        <StatRow
-          icon={CalendarDays}
-          label="In City"
-          top={persona.bornHere ? "Born here" : `${persona.yearsInCity} years`}
-        />
-        {/* Title on its own line, employer on the next (user 2026-07-11) —
-            the composed "title · employer" wrapped mid-phrase. */}
-        <StatRow
-          icon={professionIconFor(persona)}
-          label={school && !business ? "School" : "Profession"}
-          top={
-            persona.profession
-              ? persona.profession.title
-              : school
-                ? "Student"
-                : capitalize(persona.workStatus)
-          }
-          bottom={
-            workPlace && (
-              <button
-                type="button"
-                onClick={() => push({ kind: "company", id: workPlace.id })}
-                className="hover:underline"
-              >
-                {workPlace.name}
-              </button>
-            )
-          }
-        />
-        {persona.commute && workBuildingId !== undefined && (
-          <StatRow
-            icon={COMMUTE_ICONS[persona.commute.mode]}
-            iconTint={COMMUTE_COLORS[persona.commute.mode]}
-            iconAction={() => {
-              // Frame the whole commute (home + destination) so the arc fits —
-              // camera only, no selection change (user 2026-07-10).
-              const home = indexes.buildingById.get(persona.homeBuildingId);
-              const work = indexes.buildingById.get(workBuildingId);
-              if (home && work) flyToSpan(home, work);
-            }}
-            iconLabel="Show Commute"
-            label="Commute"
-            top={
-              persona.commute.distance >= 1000
-                ? `${(persona.commute.distance / 1000).toFixed(1)} km`
-                : `${persona.commute.distance} m`
-            }
-            bottom={
-              persona.commute.mode === "transit"
-                ? `Rides ${transitLineFor(persona.id, indexes)}`
-                : COMMUTE_LABELS[persona.commute.mode]
-            }
-          />
-        )}
-        <StatRow
-          icon={GraduationCap}
-          iconTint={EDUCATION_ICON_COLOR}
-          iconAction={
-            almaMater
-              ? () => {
-                  const site = indexes.buildingById.get(almaMater.buildingId);
-                  if (site) flyToBuilding(site);
-                }
-              : undefined
-          }
-          iconLabel="Fly to School"
-          label="Education"
-          // Conceptual line breaks (user 2026-07-11, same as Profession):
-          // level on the header row, then subject, institution, and the
-          // linked school each on their own line — never a mid-phrase wrap.
-          top={persona.education}
-          bottom={
-            (eduSubject || eduInstitution || almaMater) && (
-              <span className="flex flex-col items-end gap-0.5">
-                {eduSubject && <span className="max-w-full truncate">{eduSubject}</span>}
-                {eduInstitution && <span className="max-w-full truncate">{eduInstitution}</span>}
-                {almaMater && (
+      {/* Row order (user 2026-07-11): Home → Commute → Work (adults only:
+          Profession + Work) → Education (students fold their school here as
+          a single row; adults get level + alma mater) → Relationship. In City
+          moved into the pinned header's fact grid. The whole stack lives
+          under a "Details" disclosure. */}
+      <Collapsible open={cardDetailsOpen} onOpenChange={setCardDetailsOpen}>
+        <CollapsibleTrigger className="text-base font-medium text-muted-foreground">
+          Details
+        </CollapsibleTrigger>
+        <CollapsiblePanel>
+          <div className="flex flex-col gap-1.5 pt-1.5">
+            <StatRow
+              icon={Home}
+              iconTint={HOME_ICON_COLOR}
+              iconAction={() => flyTo(persona.homeBuildingId)}
+              iconLabel="Fly Home"
+              label="Home"
+              top={
+                homeDistrictName && (
                   <button
                     type="button"
-                    onClick={() => push({ kind: "company", id: almaMater.id })}
+                    onClick={() => push({ kind: "district", id: persona.homeDistrictId })}
                     className="hover:underline"
                   >
-                    {almaMater.name}
+                    {homeDistrictName}
                   </button>
-                )}
-              </span>
-            )
-          }
-        />
-        <StatRow
-          icon={Home}
-          iconTint={HOME_ICON_COLOR}
-          iconAction={() => flyTo(persona.homeBuildingId)}
-          iconLabel="Fly Home"
-          label="Home"
-          top={
-            homeDistrictName && (
-              <button
-                type="button"
-                onClick={() => push({ kind: "district", id: persona.homeDistrictId })}
-                className="hover:underline"
-              >
-                {homeDistrictName}
-              </button>
-            )
-          }
-          bottom={
-            homeAddressLine && (
-              <button
-                type="button"
-                onClick={() => push({ kind: "building", id: persona.homeBuildingId })}
-                className="hover:underline"
-              >
-                {homeAddressLine}
-              </button>
-            )
-          }
-        />
-        {workBuildingId !== undefined && (
-          <StatRow
-            icon={Briefcase}
-            iconTint={WORK_ICON_COLOR}
-            iconAction={() => flyTo(workBuildingId)}
-            iconLabel={school && !business ? "Fly to School" : "Fly to Work"}
-            label={school && !business ? "School" : "Work"}
-            top={
-              workDistrictName &&
-              workDistrictId && (
-                <button
-                  type="button"
-                  onClick={() => push({ kind: "district", id: workDistrictId })}
-                  className="hover:underline"
-                >
-                  {workDistrictName}
-                </button>
-              )
-            }
-            bottom={
-              workAddressLine && (
-                <button
-                  type="button"
-                  onClick={() => push({ kind: "building", id: workBuildingId })}
-                  className="hover:underline"
-                >
-                  {workAddressLine}
-                </button>
-              )
-            }
-          />
-        )}
-        <StatRow
-          icon={RELATIONSHIP_ICONS[persona.relationshipStatus]}
-          // Hearts read pink (user 2026-07-10 🩷); single/widowed stay muted.
-          iconTint={
-            persona.relationshipStatus === "married" ||
-            persona.relationshipStatus === "dating" ||
-            persona.relationshipStatus === "divorced"
-              ? "#f472b6"
-              : undefined
-          }
-          iconAction={
-            partner
-              ? () => {
-                  const home = indexes.buildingById.get(partner.homeBuildingId);
-                  if (home) flyToBuilding(home);
+                )
+              }
+              bottom={
+                homeAddressLine && (
+                  <button
+                    type="button"
+                    onClick={() => push({ kind: "building", id: persona.homeBuildingId })}
+                    className="hover:underline"
+                  >
+                    {homeAddressLine}
+                  </button>
+                )
+              }
+            />
+            {commuteRow}
+            {/* Work — adults only, Profession folded IN (user 2026-07-11):
+                one green row, profession-category icon, title on the header
+                line, then employer / district / address each on their own
+                conceptual line. */}
+            {!isStudent && (
+              <StatRow
+                icon={professionIconFor(persona)}
+                iconTint={WORK_ICON_COLOR}
+                iconAction={
+                  workBuildingId !== undefined ? () => flyTo(workBuildingId) : undefined
                 }
-              : undefined
-          }
-          iconLabel="Fly to Partner"
-          label="Relationship"
-          top={capitalize(persona.relationshipStatus)}
-          bottom={
-            partner && (
-              <button
-                type="button"
-                onClick={() => push({ kind: "persona", id: partner.id })}
-                className="hover:underline"
-              >
-                {partner.fullName}
-              </button>
-            )
-          }
-        />
-      </div>
+                iconLabel="Fly to Work"
+                label="Work"
+                top={
+                  persona.profession ? persona.profession.title : capitalize(persona.workStatus)
+                }
+                bottom={
+                  (workPlace || (workDistrictName && workDistrictId) || workAddressLine) && (
+                    <span className="flex flex-col items-end gap-0.5">
+                      {workPlace && (
+                        <button
+                          type="button"
+                          onClick={() => push({ kind: "company", id: workPlace.id })}
+                          className="hover:underline"
+                        >
+                          {workPlace.name}
+                        </button>
+                      )}
+                      {workDistrictName && workDistrictId && (
+                        <button
+                          type="button"
+                          onClick={() => push({ kind: "district", id: workDistrictId })}
+                          className="hover:underline"
+                        >
+                          {workDistrictName}
+                        </button>
+                      )}
+                      {workAddressLine && workBuildingId !== undefined && (
+                        <button
+                          type="button"
+                          onClick={() => push({ kind: "building", id: workBuildingId })}
+                          className="hover:underline"
+                        >
+                          {workAddressLine}
+                        </button>
+                      )}
+                    </span>
+                  )
+                }
+              />
+            )}
+            {/* Education. Current students: their school IS their education —
+                one row (district on top, address + school name below), fly-to
+                lands on the school building (user 2026-07-11). */}
+            {isStudent && school ? (
+              <StatRow
+                icon={GraduationCap}
+                iconTint={EDUCATION_ICON_COLOR}
+                iconAction={() => {
+                  const site = indexes.buildingById.get(school.buildingId);
+                  if (site) flyToBuilding(site);
+                }}
+                iconLabel="Fly to School"
+                label="School"
+                top={
+                  workDistrictName &&
+                  workDistrictId && (
+                    <button
+                      type="button"
+                      onClick={() => push({ kind: "district", id: workDistrictId })}
+                      className="hover:underline"
+                    >
+                      {workDistrictName}
+                    </button>
+                  )
+                }
+                bottom={
+                  <span className="flex flex-col items-end gap-0.5">
+                    {workAddressLine && (
+                      <button
+                        type="button"
+                        onClick={() => push({ kind: "building", id: school.buildingId })}
+                        className="hover:underline"
+                      >
+                        {workAddressLine}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => push({ kind: "company", id: school.id })}
+                      className="hover:underline"
+                    >
+                      {school.name}
+                    </button>
+                  </span>
+                }
+              />
+            ) : (
+              <StatRow
+                icon={GraduationCap}
+                iconTint={EDUCATION_ICON_COLOR}
+                iconAction={
+                  alma
+                    ? () => {
+                        const site = indexes.buildingById.get(alma.buildingId);
+                        if (site) flyToBuilding(site);
+                      }
+                    : undefined
+                }
+                iconLabel="Fly to School"
+                label="Education"
+                // Conceptual line breaks: level on the header row, then
+                // subject, institution, and the linked school each on their
+                // own line. When the linked campus IS the institution string,
+                // the link replaces the plain text (no duplicate).
+                top={persona.education}
+                bottom={
+                  (eduSubject || eduInstitution || alma) && (
+                    <span className="flex flex-col items-end gap-0.5">
+                      {eduSubject && <span className="max-w-full truncate">{eduSubject}</span>}
+                      {eduInstitution && !(alma && alma.name === eduInstitution) && (
+                        <span className="max-w-full truncate">{eduInstitution}</span>
+                      )}
+                      {alma && (
+                        <button
+                          type="button"
+                          onClick={() => push({ kind: "company", id: alma.id })}
+                          className="hover:underline"
+                        >
+                          {alma.name}
+                        </button>
+                      )}
+                    </span>
+                  )
+                }
+              />
+            )}
+            {/* Minors don't carry a romantic status (user 2026-07-11) — the
+                row is omitted rather than showing "Single" on a child; their
+                family role already reads in the Family section. The partner
+                guard keeps the row if data ever paired a minor. */}
+            {(persona.age >= 18 || partner) && (
+            <StatRow
+              icon={RELATIONSHIP_ICONS[persona.relationshipStatus]}
+              // Hearts read pink (user 2026-07-10 🩷); single/widowed stay muted.
+              iconTint={
+                persona.relationshipStatus === "married" ||
+                persona.relationshipStatus === "dating" ||
+                persona.relationshipStatus === "divorced"
+                  ? "#f472b6"
+                  : undefined
+              }
+              iconAction={
+                partner
+                  ? () => {
+                      const home = indexes.buildingById.get(partner.homeBuildingId);
+                      if (home) flyToBuilding(home);
+                    }
+                  : undefined
+              }
+              iconLabel="Fly to Partner"
+              label="Relationship"
+              top={capitalize(persona.relationshipStatus)}
+              bottom={
+                partner && (
+                  <button
+                    type="button"
+                    onClick={() => push({ kind: "persona", id: partner.id })}
+                    className="hover:underline"
+                  >
+                    {partner.fullName}
+                  </button>
+                )
+              }
+            />
+            )}
+          </div>
+        </CollapsiblePanel>
+      </Collapsible>
 
       {(persona.family.length > 0 || persona.offstage.length > 0) && (
         <>
           <Separator />
-          <div className="flex flex-col gap-0.5">
-            <div className="flex items-center justify-between">
-              <div className="text-base font-medium" style={{ color: CONNECTION_COLOR }}>
+          <Collapsible open={cardFamilyOpen} onOpenChange={setCardFamilyOpen}>
+            {/* The whole header row is the disclosure trigger; the tree
+                button rides INSIDE it as a span-rendered Button (the
+                directory pin pattern — a real <button> can't nest) so the
+                tree icon sits immediately LEFT of the chevron and the
+                chevron stays on the far right (user 2026-07-11). The span
+                wrapper stops the click from also toggling the disclosure. */}
+            <CollapsibleTrigger className="items-center text-base font-medium">
+              <span className="flex-1 text-left" style={{ color: CONNECTION_COLOR }}>
                 Family
+              </span>
+              {!hideFamilyTree && (
+                <span className="flex items-center" onClick={(e) => e.stopPropagation()}>
+                  <FamilyTree personaId={persona.id} indexes={indexes} />
+                </span>
+              )}
+            </CollapsibleTrigger>
+            <CollapsiblePanel>
+              <div className="flex flex-col gap-0.5 pt-1.5">
+                {persona.family.map((link) => {
+                  const relative = indexes.directory.personas.get(link.personaId);
+                  if (!relative) return null;
+                  return (
+                    <button
+                      key={link.personaId}
+                      type="button"
+                      onClick={() => push({ kind: "persona", id: link.personaId })}
+                      className="-mx-1 flex flex-wrap items-baseline justify-between gap-x-4 rounded px-1 text-left text-base hover:bg-foreground/10"
+                    >
+                      <span className="shrink-0 capitalize text-muted-foreground">{link.role}</span>
+                      <span className="ml-auto min-w-0 max-w-full break-words text-right">
+                        {relative.fullName}
+                      </span>
+                    </button>
+                  );
+                })}
+                {persona.offstage.map((rel, i) => (
+                  <div
+                    key={`${rel.role}:${rel.name}:${i}`}
+                    className="flex flex-wrap items-baseline justify-between gap-x-4 text-base text-muted-foreground"
+                  >
+                    <span className="shrink-0 capitalize">{rel.role}</span>
+                    <span className="ml-auto min-w-0 max-w-full break-words text-right">
+                      {rel.name}, lives elsewhere
+                    </span>
+                  </div>
+                ))}
               </div>
-              {!hideFamilyTree && <FamilyTree personaId={persona.id} indexes={indexes} />}
-            </div>
-            {persona.family.map((link) => {
-              const relative = indexes.directory.personas.get(link.personaId);
-              if (!relative) return null;
-              return (
-                <button
-                  key={link.personaId}
-                  type="button"
-                  onClick={() => push({ kind: "persona", id: link.personaId })}
-                  className="-mx-1 flex items-baseline justify-between gap-4 rounded px-1 text-left text-base hover:bg-foreground/10"
-                >
-                  <span className="capitalize text-muted-foreground">{link.role}</span>
-                  <span>{relative.fullName}</span>
-                </button>
-              );
-            })}
-            {persona.offstage.map((rel, i) => (
-              <div
-                key={`${rel.role}:${rel.name}:${i}`}
-                className="flex items-baseline justify-between gap-4 text-base text-muted-foreground"
-              >
-                <span className="capitalize">{rel.role}</span>
-                <span>{rel.name}, lives elsewhere</span>
-              </div>
-            ))}
-          </div>
+            </CollapsiblePanel>
+          </Collapsible>
         </>
       )}
+
+      {/* whyAwake moves below Details + Family (user 2026-07-11): facts first,
+          then the line that explains the lit window, then the rest of the
+          flavour, ending on the hook. */}
+      {(story.whyAwake ||
+        story.wasIs ||
+        story.detail ||
+        story.refusal ||
+        story.relation) && <Separator />}
+      {story.whyAwake && <p className="text-base">{story.whyAwake}</p>}
 
       {(story.wasIs || story.detail || story.refusal || story.relation) && (
         <div className="flex flex-col gap-1">

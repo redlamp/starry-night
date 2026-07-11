@@ -69,6 +69,28 @@ const KIND_LABEL: Record<EntityRef["kind"], string> = {
   persona: "Resident",
 };
 
+// Card title (user 2026-07-11): larger + selectable for residents, and their
+// maiden name rides the header as secondary text — `Jessica Chen born Park`
+// ("born" over "née", user 2026-07-11: same meaning, no French gloss) —
+// instead of a separate meta line inside the card.
+function RefTitle({ entityRef, indexes }: { entityRef: EntityRef; indexes: EntityIndexes }) {
+  const persona =
+    entityRef.kind === "persona" ? indexes.directory.personas.get(entityRef.id) : undefined;
+  return (
+    <div
+      className={cn(
+        "select-text cursor-text font-medium leading-snug [overflow-wrap:anywhere]",
+        entityRef.kind === "persona" ? "text-lg" : "text-sm",
+      )}
+    >
+      {refTitle(entityRef, indexes)}
+      {persona?.maidenName && (
+        <span className="text-sm font-normal text-muted-foreground"> born {persona.maidenName}</span>
+      )}
+    </div>
+  );
+}
+
 function refTitle(ref: EntityRef, indexes: EntityIndexes): string {
   switch (ref.kind) {
     case "district":
@@ -408,6 +430,9 @@ function EntityColumnsBody() {
   return (
     <div
       ref={rootRef}
+      // data-camera-obstruction: fly-to framing measures this row's right
+      // edge and fits targets into the viewport right of it (user 2026-07-11).
+      data-camera-obstruction
       className="pointer-events-auto fixed top-16 z-30 tabular-nums"
       style={{
         left: leftOffset,
@@ -549,9 +574,7 @@ function EntityColumnsBody() {
                 </div>
                 )}
               </div>
-              <div className="text-sm font-medium leading-snug [overflow-wrap:anywhere]">
-                {refTitle(ref, indexes)}
-              </div>
+              <RefTitle entityRef={ref} indexes={indexes} />
             </div>
             {/* One persistent wrapper whose MAX-HEIGHT tweens between the
                 deck-tab cap and the full-card cap — a component swap here
@@ -625,9 +648,7 @@ export function StandaloneEntityCard({
           </div>
           {actions && <div className="flex shrink-0 items-center">{actions}</div>}
         </div>
-        <div className="text-sm font-medium leading-snug [overflow-wrap:anywhere]">
-          {refTitle(entityRef, indexes)}
-        </div>
+        <RefTitle entityRef={entityRef} indexes={indexes} />
       </div>
       <div className="flex flex-col gap-2.5 px-3 pt-3">
         <ColumnBody entityRef={entityRef} part="pinned" hideFamilyTree={hideFamilyTree} />
@@ -644,9 +665,18 @@ export function StandaloneEntityCard({
 // shadcn tooltip for short action labels (user 2026-07-08: shadcn tooltips or
 // hover cards everywhere — no native title attrs). Rich content stays in
 // hover-card.tsx; this is the action-name-only wrapper for icon buttons.
-export function IconTip({ label, children }: { label: string; children: ReactElement }) {
+export function IconTip({
+  label,
+  children,
+  delay = 300,
+}: {
+  label: string;
+  children: ReactElement;
+  // Fly-to buttons pass delay={0} for instant tooltips (user 2026-07-11).
+  delay?: number;
+}) {
   return (
-    <TooltipProvider delay={300}>
+    <TooltipProvider delay={delay}>
       <Tooltip>
         <TooltipTrigger render={children} />
         <TooltipContent>{label}</TooltipContent>
@@ -707,10 +737,18 @@ export function ColumnStat({
       </div>
     );
   }
+  // flex-wrap so the value drops WHOLE to its own right-aligned line when it
+  // can't share the row with the label, instead of word-wrapping in place
+  // (user 2026-07-11).
   return (
-    <div className="flex items-start justify-between gap-4 text-sm">
+    <div className="flex flex-wrap items-baseline justify-between gap-x-3 text-sm">
       <span className="shrink-0 text-muted-foreground">{label}</span>
-      <span className={cn("min-w-0 text-right", muted ? "text-muted-foreground" : "font-medium")}>
+      <span
+        className={cn(
+          "ml-auto min-w-0 max-w-full break-words text-right",
+          muted ? "text-muted-foreground" : "font-medium",
+        )}
+      >
         {value}
       </span>
     </div>
