@@ -214,18 +214,21 @@ export function SelectedDistrictOutline({ masterSeed }: { masterSeed: string }) 
     const target = field.districts.find((d) => d.id === hoverDistrictId);
     if (!target) return null;
     const loops = districtBoundaryLoops(field, target.index, tensorWallRoads(masterSeed));
+    // Ground-level fill UNDER the buildings (user 2026-07-11 round 3):
+    // depth-tested so towers occlude it — it reads on streets and gaps —
+    // while the thick border stays a GIS overlay ABOVE everything. 40% of
+    // the border's own colour compensates for the occlusion.
     const mat = new THREE.MeshBasicMaterial({
       color: new THREE.Color(target.color),
       transparent: true,
-      opacity: 0.22,
-      depthTest: false,
+      opacity: 0.4,
+      depthTest: true,
       depthWrite: false,
       fog: false,
       toneMapped: false,
       side: THREE.DoubleSide,
     });
-    // renderOrder 1000: above the shells' fill, below the outlines.
-    const group = loopsToFillGroup(loops, mat, FILL_Y, 1000);
+    const group = loopsToFillGroup(loops, mat, FILL_Y, 0);
     return group.children.length > 0 ? group : null;
   }, [hoverDistrictId, masterSeed, citySize, citySketch]);
 
