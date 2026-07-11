@@ -13,6 +13,7 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { HelpHint } from "@/components/ui/tooltip";
 import {
   Dialog,
   DialogTrigger,
@@ -276,18 +277,57 @@ function FamilyChart({
     const ah = Math.max(80, vp.clientHeight - FIT_PAD_TOP - FIT_PAD_BOTTOM);
     return Math.min(1, aw / w, ah / h);
   };
+  const fitTarget = () => {
+    const vp = viewportRef.current;
+    const { w, h } = sizeRef.current;
+    if (!vp || !w || !h) return null;
+    const s = fitScale();
+    const ah = Math.max(80, vp.clientHeight - FIT_PAD_TOP - FIT_PAD_BOTTOM);
+    return {
+      s,
+      tx: (vp.clientWidth - w * s) / 2,
+      ty: FIT_PAD_TOP + (ah - h * s) / 2,
+    };
+  };
   // The automatic view: whole tree visible, centered between the overlays,
   // never upscaled past 1.
   const fitView = () => {
-    const vp = viewportRef.current;
-    const { w, h } = sizeRef.current;
-    if (!vp || !w || !h) return;
+    const t = fitTarget();
+    if (!t) return;
     const g = gesture.current;
-    g.s = fitScale();
-    g.tx = (vp.clientWidth - w * g.s) / 2;
-    const ah = Math.max(80, vp.clientHeight - FIT_PAD_TOP - FIT_PAD_BOTTOM);
-    g.ty = FIT_PAD_TOP + (ah - h * g.s) / 2;
+    g.s = t.s;
+    g.tx = t.tx;
+    g.ty = t.ty;
     applyTransform();
+  };
+  // Double-click reset TWEENS home (user 2026-07-11 round 3) — ease-out
+  // cubic over ~280ms; any new gesture cancels it and takes over. UI-only
+  // animation, never an input to scene state.
+  const tweenRaf = useRef<number | null>(null);
+  const cancelTween = () => {
+    if (tweenRaf.current !== null) {
+      cancelAnimationFrame(tweenRaf.current);
+      tweenRaf.current = null;
+    }
+  };
+  const tweenToFit = () => {
+    const t = fitTarget();
+    if (!t) return;
+    cancelTween();
+    const g = gesture.current;
+    const from = { tx: g.tx, ty: g.ty, s: g.s };
+    const t0 = performance.now();
+    const D = 280;
+    const step = (now: number) => {
+      const k = Math.min(1, (now - t0) / D);
+      const e = 1 - Math.pow(1 - k, 3);
+      g.tx = from.tx + (t.tx - from.tx) * e;
+      g.ty = from.ty + (t.ty - from.ty) * e;
+      g.s = from.s + (t.s - from.s) * e;
+      applyTransform();
+      tweenRaf.current = k < 1 ? requestAnimationFrame(step) : null;
+    };
+    tweenRaf.current = requestAnimationFrame(step);
   };
 
   const refFor = (id: string) => (el: HTMLButtonElement | null) => {
@@ -777,6 +817,9 @@ function FamilyChart({
 
   const prevFocusRef = useRef(focusId);
 
+  // A reset tween must not outlive the chart (dialog close mid-tween).
+  useEffect(() => cancelTween, []);
+
   // First measure of a new tree: the explicit width/height only reach the
   // DOM with this render, so the viewport's client size is only now correct
   // for fit math — settle the automatic fit (or re-clamp a user view).
@@ -844,6 +887,7 @@ function FamilyChart({
 
     const onPointerDown = (e: PointerEvent) => {
       if (e.button !== 0 && e.pointerType === "mouse") return;
+      cancelTween(); // a new gesture takes over any reset tween
       gesture.current.suppressClick = false;
       pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (pointers.size === 1) {
@@ -922,6 +966,7 @@ function FamilyChart({
     };
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
+      cancelTween();
       const g = gesture.current;
       // Desktop zoom is deliberate-only (user 2026-07-11: "not sure about
       // desktop"): Ctrl/Cmd+wheel zooms — which is ALSO what trackpad pinch
@@ -1025,7 +1070,7 @@ function FamilyChart({
       onDoubleClick={(e) => {
         if ((e.target as HTMLElement).closest("button")) return;
         gesture.current.touched = false;
-        fitView();
+        tweenToFit();
       }}
     >
       {/* The gesture layer: pan/zoom land here as one transform. NO
@@ -1310,6 +1355,16 @@ export function FamilyTree({ personaId, indexes }: { personaId: string; indexes:
                       >
                         <Blend />
                       </LayerToggle>
+                      {/* Nav cheat-sheet (user 2026-07-11 round 3). */}
+                      <HelpHint side="top" label="Chart Controls">
+                        <div className="flex flex-col gap-0.5">
+                          <span>drag or scroll: pan</span>
+                          <span>shift + scroll: pan sideways</span>
+                          <span>ctrl/cmd + scroll, or pinch: zoom</span>
+                          <span>double-click: reset the view</span>
+                          <span>click a person: re-root the tree</span>
+                        </div>
+                      </HelpHint>
                     </div>
                     {/* Icon pair reads as panel show/hide and swaps with
                         state; the tooltip is the pending ACTION's name. */}
