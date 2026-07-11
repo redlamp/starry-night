@@ -16,6 +16,7 @@ import {
   User,
 } from "lucide-react";
 import { ScrollArea as ScrollAreaPrimitive } from "@base-ui/react/scroll-area";
+import { flyToBuilding } from "@/lib/scene/focusBuilding";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -84,8 +85,15 @@ function RefTitle({ entityRef, indexes }: { entityRef: EntityRef; indexes: Entit
       )}
     >
       {refTitle(entityRef, indexes)}
+      {/* Long name + maiden pairs drop the word and read "(Park)" so the
+          line stays comfortable (user 2026-07-11 round 3). */}
       {persona?.maidenName && (
-        <span className="text-sm font-normal text-muted-foreground"> born {persona.maidenName}</span>
+        <span className="text-sm font-normal text-muted-foreground">
+          {" "}
+          {refTitle(entityRef, indexes).length + persona.maidenName.length > 24
+            ? `(${persona.maidenName})`
+            : `born ${persona.maidenName}`}
+        </span>
       )}
     </div>
   );
@@ -196,6 +204,37 @@ function showLocations(ref: EntityRef, indexes: EntityIndexes): void {
   const st = useSceneStore.getState();
   st.setFocusPivot([cx, cy, cz]);
   st.setFocusRequest({ x: cx, y: cy, z: cz, radius, fit: "fill" });
+}
+
+// Camera follows the SELECTION (user 2026-07-11 round 3): whichever card
+// lands on top of the drill, glide to its place — a resident's home, a
+// company's or building's site, a street's run, a district's bounds. Fly-to
+// buttons still exist for the row-specific places (work, partner, commute).
+function flyToEntity(ref: EntityRef, indexes: EntityIndexes): void {
+  switch (ref.kind) {
+    case "persona": {
+      const p = indexes.directory.personas.get(ref.id);
+      const b = p ? indexes.buildingById.get(p.homeBuildingId) : undefined;
+      if (b) flyToBuilding(b);
+      break;
+    }
+    case "company": {
+      const biz = indexes.directory.businesses.get(ref.id);
+      const b = biz ? indexes.buildingById.get(biz.buildingId) : undefined;
+      if (b) flyToBuilding(b);
+      break;
+    }
+    case "building": {
+      const b = indexes.buildingById.get(ref.id);
+      if (b) flyToBuilding(b);
+      break;
+    }
+    // Streets and districts have no single building — frame their extent.
+    case "street":
+    case "district":
+      showLocations(ref, indexes);
+      break;
+  }
 }
 
 function ColumnBody({
@@ -382,6 +421,16 @@ function EntityColumnsBody() {
     showLocations(topRef, indexes);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [coneFollow, topKey, indexes]);
+
+  // Selection-follow (user 2026-07-11 round 3): every card that lands on
+  // top glides the camera to its place — pushing, back/forward, and the
+  // tree's Open Full Card included. Cone-follow supersedes with its
+  // multi-location framing above.
+  useEffect(() => {
+    if (coneFollow || !topRef || !indexes) return;
+    flyToEntity(topRef, indexes);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [topKey, indexes]);
 
   if (!open) return null;
 

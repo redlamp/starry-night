@@ -447,12 +447,18 @@ export function PersonaColumn({
             <span className="text-muted-foreground">Age</span>
             <span>{persona.age}</span>
           </span>
-          {/* Date + time compose into ONE value (user 2026-07-11) — they're
-              separate seeded draws, not a Date object, but read as one fact. */}
-          <span className="col-span-2 flex items-baseline justify-between gap-2">
+          {/* DOB and Time as two neat fields (user 2026-07-11, round 3) —
+              they stay separate seeded numbers rather than a Date object
+              (a real Date would drag timezone semantics into the fiction);
+              the formatter composes what display needs. */}
+          <span className="flex items-baseline justify-between gap-2">
             <span className="text-muted-foreground">DOB</span>
+            <span className="whitespace-nowrap">{born}</span>
+          </span>
+          <span className="flex items-baseline justify-between gap-2">
+            <span className="text-muted-foreground">Time</span>
             <span className="whitespace-nowrap">
-              {born} · {formatTime(flavor.birthHour, flavor.birthMinute)}
+              {formatTime(flavor.birthHour, flavor.birthMinute)}
             </span>
           </span>
           {flavor.heightCm && (
