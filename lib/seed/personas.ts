@@ -144,8 +144,10 @@ export type Business = {
   titleAffinity?: string[];
   // Schools only: the kids enrolled here (staff stay in employeeIds).
   studentIds?: PersonaId[];
-  // Schools only: which tier of kid this school takes.
-  schoolTier?: "elementary" | "middle" | "high";
+  // Schools only: which tier of kid/student this school takes. College and
+  // university are the two adult campuses (test plan §3.5) — no enrollment
+  // age ceiling, sited after the K-12 pass.
+  schoolTier?: "elementary" | "middle" | "high" | "college" | "university";
 };
 
 export type Household = {
@@ -419,6 +421,9 @@ export type PersonaFlavor = {
   // letters + six digits, unlike SSN (3-2-4, digits only) or any real state
   // ID, so nothing pairs with real-life documents (user 2026-07-10).
   civicId: string;
+  // Exact minutes past birthHour (user 2026-07-11: "an exact time in the ~3
+  // range") — the hour still drives any zodiac-adjacent reads.
+  birthMinute: number;
 };
 
 export function personaFlavor(masterSeed: string, p: Persona): PersonaFlavor {
@@ -441,6 +446,10 @@ export function personaFlavor(masterSeed: string, p: Persona): PersonaFlavor {
   // ~676M combinations keeps 42k residents collision-free in practice.
   const letter = () => String.fromCharCode(65 + Math.floor(rng() * 26));
   const civicId = `${letter()}${letter()}-${String(Math.floor(rng() * 1_000_000)).padStart(6, "0")}`;
+  // Drawn LAST on purpose (added 2026-07-11): appending to the stream's tail
+  // leaves every earlier draw — and so every previously shipped flavour
+  // value — untouched. Keep any new draws below this line.
+  const birthMinute = Math.floor(rng() * 60);
   return {
     birthHour,
     moonSign,
@@ -450,6 +459,7 @@ export function personaFlavor(masterSeed: string, p: Persona): PersonaFlavor {
     heightCm,
     build,
     civicId,
+    birthMinute,
   };
 }
 
@@ -520,6 +530,25 @@ function unitFor(building: Building, householdIndex: number, count: number): str
 
 // --- The build --------------------------------------------------------------------------
 
+// Build-progress observation (test plan 07-11): a 0..1 fraction of the CURRENT
+// (or most recently finished) resumable build, for the directory panel's
+// progress ring. Purely observational — never read as generation input, never
+// affects a single draw. Phase weights are rough by design: persona pass
+// (households + businesses) ~55%, schools ~5%, employment ~20%, weave
+// (commute/family/dating) ~15%, then finishBuild() snaps it to 1. Reset to 0
+// only when resumeBuild() starts a genuinely NEW generator (key change).
+let dirBuildProgress = 0;
+
+export function personaDirectoryBuildProgress(): number {
+  return dirBuildProgress;
+}
+
+// Interpolate within a phase's [start, end) band by a loop counter/total —
+// clamped since a chunk boundary can straddle a total of 0 (empty city tier).
+function progressWithin(start: number, end: number, frac: number): number {
+  return start + (end - start) * Math.min(1, Math.max(0, frac));
+}
+
 // Resumable build (test plan 07-10 §7.5): the exact pass sequence as before,
 // restructured as a generator that yields at chunk boundaries so the idle
 // prewarmer can run it in ~5ms frame slices instead of one ~1.4s hit. Draw
@@ -531,10 +560,12 @@ function* buildDirectorySteps(
   shapeScale: number,
 ): Generator<void, PersonaDirectory> {
   const city = generateCity(masterSeed, shape, shapeScale);
+  dirBuildProgress = 0.02;
   // Names are one ~250ms monolith (addresses ride a spatial hash) — give it
   // its own slice at least. Chunking naming itself is a parked follow-up.
   yield;
   const names = buildCityNames(masterSeed, shape, shapeScale);
+  dirBuildProgress = 0.05;
   yield;
   const districtById = new Map(city.districts.map((d) => [d.id, d]));
 
@@ -564,9 +595,12 @@ function* buildDirectorySteps(
 
   // ---- Pass 1: households + people ----
   let sinceYield = 0;
+  let pass1Done = 0;
   for (const b of buildings) {
+    pass1Done++;
     if (++sinceYield >= 60) {
       sinceYield = 0;
+      dirBuildProgress = progressWithin(0.05, 0.45, pass1Done / buildings.length);
       yield;
     }
     const raw = rawHouseholds.get(b.id);
@@ -921,12 +955,16 @@ function* buildDirectorySteps(
     }
     if (homeList.length > 0) byHomeBuilding.set(b.id, homeList);
   }
+  dirBuildProgress = 0.45;
 
   // ---- Pass 2: businesses ----
   sinceYield = 0;
+  let pass2Done = 0;
   for (const b of buildings) {
+    pass2Done++;
     if (++sinceYield >= 300) {
       sinceYield = 0;
+      dirBuildProgress = progressWithin(0.45, 0.55, pass2Done / buildings.length);
       yield;
     }
     const kinds = BUSINESS_KINDS[b.archetype];
@@ -986,6 +1024,7 @@ function* buildDirectorySteps(
     }
     if (list.length > 0) byWorkBuilding.set(b.id, list);
   }
+  dirBuildProgress = 0.55;
 
   // ---- Pass 2.5: schools ----
   // Real schools in real buildings, before the employment weave so teachers
@@ -1094,9 +1133,12 @@ function* buildDirectorySteps(
       byTier.set(biz.schoolTier, list);
     }
     sinceYield = 0;
+    let schoolEnrollDone = 0;
     for (const p of personas.values()) {
+      schoolEnrollDone++;
       if (++sinceYield >= 1000) {
         sinceYield = 0;
+        dirBuildProgress = progressWithin(0.55, 0.6, schoolEnrollDone / personas.size);
         yield;
       }
       if (p.age < 5 || p.age >= 18) continue;
@@ -1120,13 +1162,95 @@ function* buildDirectorySteps(
       const distance = Math.round(bestDist);
       p.commute = { mode: distance < 900 ? "walk" : "bus", distance };
     }
+
+    // ---- Pass 2.6: college + university campuses (test plan §3.5) ----
+    // Sited AFTER every K-12 school AND the K-12 enrollment loop above, so
+    // nothing in the existing pass shifts — usedSites already reflects every
+    // elementary/middle/high pick, and this reads it, never rewinds it. Its
+    // own FRESH derived stream keeps it from disturbing any existing draw.
+    {
+      const campusRng = seededRng(`${masterSeed}::personas::campuses`);
+      // Largest-footprint mid-rise-or-taller buildings not already claimed by
+      // a K-12 school — the two campuses get the city's biggest unclaimed
+      // shells, university first.
+      const campusCandidates = buildings
+        .filter(
+          (b) =>
+            !usedSites.has(b.id) &&
+            (b.archetype === "mid-rise" ||
+              b.archetype === "residential-tower" ||
+              b.archetype === "office-block" ||
+              b.archetype === "spire"),
+        )
+        .sort((a, b) => b.width * b.depth - a.width * a.depth);
+      // Exact-footprint ties for the top slot break on the fresh stream
+      // rather than array (id) order.
+      const topFootprint = campusCandidates[0] ? campusCandidates[0].width * campusCandidates[0].depth : 0;
+      const tiedForTop = campusCandidates.filter((b) => b.width * b.depth === topFootprint);
+      const university =
+        tiedForTop.length > 1 ? tiedForTop[Math.floor(campusRng() * tiedForTop.length)] : campusCandidates[0];
+      // Prefer a different district for the college when one's available;
+      // otherwise just take the next-biggest unclaimed shell.
+      const college =
+        campusCandidates.find((b) => b.id !== university?.id && b.districtId !== university?.districtId) ??
+        campusCandidates.find((b) => b.id !== university?.id);
+      if (university) {
+        usedSites.add(university.id);
+        addSchool(university, names.city.university, "university");
+      }
+      if (college) {
+        usedSites.add(college.id);
+        addSchool(college, names.city.college, "college");
+      }
+
+      // Adult students: enroll to the nearest campus by pure distance — same
+      // idiom as the K-12 enrollment loop just above.
+      const campusSchools = [...businesses.values()].filter(
+        (b) => b.schoolTier === "college" || b.schoolTier === "university",
+      );
+      if (campusSchools.length > 0) {
+        for (const p of personas.values()) {
+          if (p.workStatus !== "student" || p.age < 18 || p.schoolId || p.businessId) continue;
+          const home = buildingById.get(p.homeBuildingId);
+          if (!home) continue;
+          let best: Business | null = null;
+          let bestSite: Building | undefined;
+          let bestDist = Infinity;
+          for (const campus of campusSchools) {
+            const site = buildingById.get(campus.buildingId);
+            if (!site) continue;
+            const d = Math.hypot(site.x - home.x, site.z - home.z);
+            if (d < bestDist) {
+              bestDist = d;
+              best = campus;
+              bestSite = site;
+            }
+          }
+          if (!best || !bestSite) continue;
+          p.schoolId = best.id;
+          p.commuteTargetBuildingId = bestSite.id;
+          best.studentIds!.push(p.id);
+          const distance = Math.round(bestDist);
+          p.commute = { mode: distance < 900 ? "walk" : "transit", distance };
+        }
+      }
+    }
   }
+  dirBuildProgress = 0.6;
 
   // ---- Pass 3: employment weave ----
   {
     const rng = seededRng(`${masterSeed}::personas::employment`);
     const byKind = new Map<WorkplaceType, Business[]>();
     for (const biz of businesses.values()) {
+      // College/university campuses sit out the ordinary kind-matching hiring
+      // ladder (they're not eligible-in-general for arbitrary school-kind
+      // workers) — their pool inclusion would soak up hires that otherwise
+      // land on pre-existing K-12 schools via the least-staffed spread,
+      // shifting counts on entities this pass doesn't own. Keeps this pass's
+      // candidate set — and therefore its rng() outputs against pre-existing
+      // businesses — byte-identical to before campuses existed.
+      if (biz.schoolTier === "college" || biz.schoolTier === "university") continue;
       const list = byKind.get(biz.kind) ?? [];
       list.push(biz);
       byKind.set(biz.kind, list);
@@ -1141,9 +1265,12 @@ function* buildDirectorySteps(
     );
     // Stable worker order: persona insertion order is already building-ascending.
     sinceYield = 0;
+    let employmentDone = 0;
     for (const p of personas.values()) {
+      employmentDone++;
       if (++sinceYield >= 250) {
         sinceYield = 0;
+        dirBuildProgress = progressWithin(0.6, 0.8, employmentDone / personas.size);
         yield;
       }
       if (p.workStatus !== "employed" || !p.profession) continue;
@@ -1190,6 +1317,7 @@ function* buildDirectorySteps(
       biz.employeeIds.push(p.id);
     }
   }
+  dirBuildProgress = 0.8;
 
   // ---- Pass 3.2: commute modes ----
   // Distance decides the plausible set; age and district character thumb the
@@ -1199,9 +1327,12 @@ function* buildDirectorySteps(
     const rng = seededRng(`${masterSeed}::personas::commute`);
     const buildingById = new Map(buildings.map((b) => [b.id, b]));
     sinceYield = 0;
+    let commuteDone = 0;
     for (const p of personas.values()) {
+      commuteDone++;
       if (++sinceYield >= 2000) {
         sinceYield = 0;
+        dirBuildProgress = progressWithin(0.8, 0.87, commuteDone / personas.size);
         yield;
       }
       if (!p.businessId) continue;
@@ -1229,6 +1360,7 @@ function* buildDirectorySteps(
       p.commute = { mode, distance };
     }
   }
+  dirBuildProgress = 0.87;
 
   // ---- Pass 3.5: cross-building family weave ----
   // Adult children whose parents live across town (and vice versa). Matching
@@ -1248,9 +1380,12 @@ function* buildDirectorySteps(
     }
     const extraChildren = new Map<PersonaId, number>();
     sinceYield = 0;
+    let familyWeaveDone = 0;
     for (const p of personas.values()) {
+      familyWeaveDone++;
       if (++sinceYield >= 2000) {
         sinceYield = 0;
+        dirBuildProgress = progressWithin(0.87, 0.92, familyWeaveDone / personas.size);
         yield;
       }
       if (p.age < 25 || p.age > 45) continue;
@@ -1289,6 +1424,7 @@ function* buildDirectorySteps(
       }
     }
   }
+  dirBuildProgress = 0.92;
 
   // ---- Pass 4: dating weave (cross-building) ----
   {
@@ -1336,6 +1472,7 @@ function* buildDirectorySteps(
       // The unmatched tail scans the remaining seekers each — chunk small.
       if (++sinceYield >= 200) {
         sinceYield = 0;
+        dirBuildProgress = progressWithin(0.92, 0.95, seekers.length > 0 ? i / seekers.length : 1);
         yield;
       }
       const a = seekers[i];
@@ -1353,6 +1490,7 @@ function* buildDirectorySteps(
       }
     }
   }
+  dirBuildProgress = 0.95;
 
   const directory: PersonaDirectory = {
     personas,
@@ -1409,6 +1547,7 @@ function resumeBuild(masterSeed: string, shape: CityShapeSetting, shapeScale: nu
   const key = dirCacheKey(masterSeed, shape, shapeScale);
   if (activeBuild?.key !== key) {
     activeBuild = { key, gen: buildDirectorySteps(masterSeed, shape, shapeScale) };
+    dirBuildProgress = 0;
   }
   return { key, gen: activeBuild.gen };
 }
@@ -1417,6 +1556,7 @@ function finishBuild(key: string, result: PersonaDirectory): PersonaDirectory {
   if (dirCache.size > 8) dirCache.clear();
   dirCache.set(key, result);
   activeBuild = null;
+  dirBuildProgress = 1;
   return result;
 }
 
