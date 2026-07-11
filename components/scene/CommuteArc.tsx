@@ -7,8 +7,10 @@ import { LineGeometry } from "three/examples/jsm/lines/LineGeometry.js";
 import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
 import { useFrame } from "@react-three/fiber";
 import { useSceneStore } from "@/lib/state/sceneStore";
+import { usePersonaDirectoryDeferred } from "@/lib/hooks/usePersonaDirectory";
 import { generateCity } from "@/lib/seed/cityGen";
-import { buildPersonaDirectory, type CommuteMode } from "@/lib/seed/personas";
+import type { CommuteMode } from "@/lib/seed/personas";
+import { ensureBuildingStories } from "@/lib/seed/personaStory";
 
 // Relationship arcs over the city, X-RAY drawn (depthTest off) like the #87
 // selection outline. Line2 with SCREEN-SPACE widths (user 2026-07-08: tubes
@@ -27,7 +29,10 @@ export const COMMUTE_COLORS: Record<CommuteMode, string> = {
 };
 
 const ARC_SAMPLES = 48;
-const CONNECTION_COLOR = "#9b6bc9";
+// Exported: the resident/company cards colour their Family/Employees
+// headers with the same violet the connection/employment arcs use
+// (user 2026-07-10) — card and skyline share one legend.
+export const CONNECTION_COLOR = "#9b6bc9";
 
 export function CommuteArc({ masterSeed }: { masterSeed: string }) {
   const selectedPersonaId = useSceneStore((s) => s.selectedPersonaId);
@@ -41,6 +46,12 @@ export function CommuteArc({ masterSeed }: { masterSeed: string }) {
   const topRef = columnCursor >= 0 ? columnPath[columnCursor] : undefined;
   const topKey = topRef ? `${topRef.kind}:${topRef.id}` : null;
 
+  // Stage A perf fix: only pay/wait for the persona directory's cold build
+  // when there's actually something to draw arcs for. Null while the build
+  // is pending — arcs pop in a beat after it lands, which is fine (this is a
+  // decorative overlay, not a gate on anything else).
+  const directory = usePersonaDirectoryDeferred(Boolean(selectedPersonaId || topRef));
+
   // Line2 materials need the live viewport size for pixel-width rendering.
   const materialsRef = useRef<LineMaterial[]>([]);
   useFrame(({ size }) => {
@@ -53,7 +64,7 @@ export function CommuteArc({ masterSeed }: { masterSeed: string }) {
     void topKey;
     const materials: LineMaterial[] = [];
     if (!selectedPersonaId && !topRef) return null;
-    const directory = buildPersonaDirectory(masterSeed, cityShape, cityShapeScale);
+    if (!directory) return null;
     const { buildings } = generateCity(masterSeed, cityShape, cityShapeScale);
     const buildingById = new Map(buildings.map((b) => [b.id, b]));
 
@@ -177,12 +188,24 @@ export function CommuteArc({ masterSeed }: { masterSeed: string }) {
     };
     connect(persona.partnerId);
     for (const link of persona.family) connect(link.personaId);
+    // The relation edge is lazy-tier — materialize this persona's building
+    // before reading it (idempotent, sub-ms for one building).
+    ensureBuildingStories(masterSeed, directory, persona.homeBuildingId);
     connect(persona.story.relation?.targetId);
 
     return done();
     // topRef's identity changes every store update; topKey is its stable key.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedPersonaId, topKey, masterSeed, cityShape, cityShapeScale, citySize, citySketch]);
+  }, [
+    selectedPersonaId,
+    topKey,
+    directory,
+    masterSeed,
+    cityShape,
+    cityShapeScale,
+    citySize,
+    citySketch,
+  ]);
 
   // Publish the memo's materials to the frame-loop ref OUTSIDE render.
   useEffect(() => {

@@ -4,7 +4,8 @@ import { BookUser, History, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIdle } from "@/lib/useIdle";
 import { useSceneStore } from "@/lib/state/sceneStore";
-import { DirectorySection } from "@/components/ui/DirectoryPanel";
+import { DirectorySection, DirectoryBuildRing } from "@/components/ui/DirectoryPanel";
+import { IconTip } from "@/components/ui/columns/EntityColumns";
 
 // Top-left control dock (user 2026-07-08): [City Directory] [Inspect]
 // [Resume]. Inspect moved here from bottom-right; the directory moved out of
@@ -26,21 +27,22 @@ function DockButton({
   children: React.ReactNode;
 }) {
   return (
-    <button
-      onClick={onClick}
-      aria-label={label}
-      aria-pressed={active}
-      title={label}
-      className={cn(
-        "flex size-11 items-center justify-center rounded-full border shadow-lg backdrop-blur-md transition-[opacity,background-color,color] duration-700",
-        active
-          ? "border-transparent bg-primary text-primary-foreground"
-          : "border-foreground/10 bg-popover/70 text-foreground/85 hover:bg-foreground/10",
-        idleFade && !active ? "pointer-events-none opacity-0" : "pointer-events-auto opacity-100",
-      )}
-    >
-      {children}
-    </button>
+    <IconTip label={label}>
+      <button
+        onClick={onClick}
+        aria-label={label}
+        aria-pressed={active}
+        className={cn(
+          "flex size-11 items-center justify-center rounded-full border shadow-lg backdrop-blur-md transition-[opacity,background-color,color] duration-700",
+          active
+            ? "border-transparent bg-primary text-primary-foreground"
+            : "border-foreground/10 bg-popover/70 text-foreground/85 hover:bg-foreground/10",
+          idleFade && !active ? "pointer-events-none opacity-0" : "pointer-events-auto opacity-100",
+        )}
+      >
+        {children}
+      </button>
+    </IconTip>
   );
 }
 
@@ -61,31 +63,43 @@ export function ControlDock() {
   return (
     <>
       <div className="pointer-events-auto fixed top-3 left-3 z-40 flex items-center gap-1.5">
-        <DockButton
-          active={directoryOpen}
-          onClick={() => setDirectoryOpen(!directoryOpen)}
-          label="City Directory"
-          idleFade={idle}
-        >
-          <BookUser className="size-5" />
-        </DockButton>
+        {/* Relative wrapper lets the build ring overlay the round button from
+            outside DockButton's own IconTip/render composition (user
+            2026-07-11: the panel-mounted ring is rarely seen since the panel
+            is usually closed during the build). */}
+        <span className="relative inline-flex">
+          <DockButton
+            active={directoryOpen}
+            onClick={() => setDirectoryOpen(!directoryOpen)}
+            label="City Directory"
+            idleFade={idle}
+          >
+            <BookUser className="size-5" />
+          </DockButton>
+          <DirectoryBuildRing className="rounded-full" thickness={3} />
+        </span>
         <DockButton
           active={inspectMode}
           onClick={() => setInspectMode(!inspectMode)}
-          label="Inspect buildings"
+          label="Inspect Buildings"
           idleFade={idle}
         >
           <Search className="size-5" />
         </DockButton>
         {canResume && (
-          <DockButton onClick={resumeColumns} label="Resume last selection" idleFade={idle}>
+          <DockButton onClick={resumeColumns} label="Resume Last Selection" idleFade={idle}>
             <History className="size-5" />
           </DockButton>
         )}
       </div>
 
       {directoryOpen && (
-        <div className="pointer-events-auto fixed top-16 left-3 z-40 flex max-h-[calc(100vh-5.5rem)] w-[21rem] max-w-[calc(100vw-1.5rem)] flex-col rounded-xl border border-border bg-popover/95 text-popover-foreground shadow-lg backdrop-blur-md">
+        <div
+          // Fly-to framing avoids the space this panel covers (user 2026-07-11).
+          data-camera-obstruction
+          className="pointer-events-auto fixed top-16 left-3 z-40 flex max-h-[calc(100vh-5.5rem)] w-[21rem] max-w-[calc(100vw-1.5rem)] flex-col rounded-xl border border-border bg-popover/95 text-popover-foreground shadow-lg backdrop-blur-md"
+        >
+          <DirectoryBuildRing />
           <div className="flex items-center justify-between border-b border-border/60 px-3 py-2">
             <span className="text-sm font-medium">City Directory</span>
             <button

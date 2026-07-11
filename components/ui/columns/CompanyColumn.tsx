@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useSceneStore } from "@/lib/state/sceneStore";
+import { CONNECTION_COLOR } from "@/components/scene/CommuteArc";
 import { useEntityIndexes } from "./entityData";
 import { ColumnStat, ShowMore } from "./EntityColumns";
 
@@ -55,7 +56,9 @@ export function CompanyColumn({ id, part }: { id: string; part: "pinned" | "rest
       {biz.employeeIds.length > 0 && (
         <>
           <div className="flex flex-col gap-0.5">
-            <div className="text-sm font-medium">{biz.schoolTier ? "Staff" : "Employees"}</div>
+            <div className="text-sm font-medium" style={{ color: CONNECTION_COLOR }}>
+              {biz.schoolTier ? "Staff" : "Employees"}
+            </div>
             {biz.employeeIds.map((pid) => {
               const persona = indexes.directory.personas.get(pid);
               if (!persona) return null;
@@ -71,7 +74,7 @@ export function CompanyColumn({ id, part }: { id: string; part: "pinned" | "rest
                     className="-mx-1 flex flex-col rounded px-1 text-left text-sm hover:bg-foreground/10"
                   >
                     <span className="truncate">{persona.fullName}</span>
-                    <span className="text-muted-foreground truncate text-xs">{title}</span>
+                    <span className="text-muted-foreground truncate text-right text-xs">{title}</span>
                   </button>
                 );
               }

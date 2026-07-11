@@ -520,6 +520,13 @@ type SceneState = {
   // back after an accidental empty-ground click (user 2026-07-08).
   lastColumnPath: EntityRef[];
   resumeColumns: () => void;
+  // Resident-card disclosure state, shared across every card instance and
+  // column so opening a different resident keeps whatever the user left open
+  // (user 2026-07-11). Session state only — not persisted.
+  cardDetailsOpen: boolean;
+  setCardDetailsOpen: (v: boolean) => void;
+  cardFamilyOpen: boolean;
+  setCardFamilyOpen: (v: boolean) => void;
   // City Directory overlay (ControlDock) — in the store so the entity-columns
   // dock can shift to its right while it's open. Runtime tier.
   directoryOpen: boolean;
@@ -532,6 +539,11 @@ type SceneState = {
   setHoverDistrictId: (id: string | null) => void;
   pinnedDistrictId: string | null;
   setPinnedDistrictId: (id: string | null) => void;
+  // Directory "Districts" header toggle (user 2026-07-10): outline EVERY
+  // district in its colour on the map; hovering a district header adds a
+  // 20%-alpha fill of that colour. Runtime tier.
+  showDistrictBoundaries: boolean;
+  setShowDistrictBoundaries: (on: boolean) => void;
   setColumnsView: (v: "side" | "deck" | "collapsed") => void;
   // Inspect mode (user-facing, toggled by the Info button). When on, buildings
   // highlight on hover and a click selects one (info panel + outline + pin);
@@ -546,7 +558,9 @@ type SceneState = {
   // Runtime tier only.
   // fit: "height" (default) frames the sphere at ~a third of display height
   // (single-building focus); "fill" fits it to the whole available frame
-  // (the cone's multi-location sets — user 2026-07-08).
+  // (the cone's multi-location sets — user 2026-07-08). The model measures
+  // docked-UI obstruction itself at consume time (uiObstructionInsetLeft)
+  // and frames every request into the unobstructed width (user 2026-07-11).
   focusRequest: { x: number; y: number; z: number; radius: number; fit?: "height" | "fill" } | null;
   setFocusRequest: (
     r: { x: number; y: number; z: number; radius: number; fit?: "height" | "fill" } | null,
@@ -1211,16 +1225,24 @@ export const useSceneStore = create<SceneState>((set, get) => ({
       directoryOpen
         ? { directoryOpen }
         : // Closing the directory drops both district highlights with it.
+          // showDistrictBoundaries survives — it also has a home in
+          // Settings > Districts (user 2026-07-10), so it isn't orphaned.
           { directoryOpen, hoverDistrictId: null, pinnedDistrictId: null },
     ),
   hoverDistrictId: null,
   setHoverDistrictId: (hoverDistrictId) => set({ hoverDistrictId }),
   pinnedDistrictId: null,
   setPinnedDistrictId: (pinnedDistrictId) => set({ pinnedDistrictId }),
+  showDistrictBoundaries: false,
+  setShowDistrictBoundaries: (showDistrictBoundaries) => set({ showDistrictBoundaries }),
   resumeColumns: () => {
     const last = get().lastColumnPath;
     if (last.length > 0) get().resetColumns(last);
   },
+  cardDetailsOpen: true,
+  setCardDetailsOpen: (cardDetailsOpen) => set({ cardDetailsOpen }),
+  cardFamilyOpen: true,
+  setCardFamilyOpen: (cardFamilyOpen) => set({ cardFamilyOpen }),
   setColumnsView: (columnsView) => set({ columnsView }),
   settingsPanelWidth: 448,
   setSettingsPanelWidth: (settingsPanelWidth) => set({ settingsPanelWidth }),

@@ -17,7 +17,10 @@ import { isTypingTarget } from "@/lib/utils";
 export function ViewHotkeys() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const k = e.key.toLowerCase();
+      // e.key can be undefined on synthetic dispatches (e.g. component
+      // library internals) — never assume it.
+      const k = e.key?.toLowerCase();
+      if (!k) return;
       if (k !== "t" && k !== "p" && k !== "f" && k !== "i") return;
       if (e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
       if (isTypingTarget(e)) return;

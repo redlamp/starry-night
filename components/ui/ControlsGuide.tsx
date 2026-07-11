@@ -16,6 +16,7 @@ import { toggleProjection, toggleAllWireframe } from "@/lib/scene/cameraView";
 import { Eye, MapPin, Move } from "lucide-react";
 import { getCameraModelMeta } from "@/components/scene/camera-models/catalog";
 import type { CameraModelId } from "@/lib/state/sceneStore";
+import { IconTip } from "@/components/ui/columns/EntityColumns";
 
 // In-app controls cheat-sheet. A small, NON-MODAL card anchored bottom-right (no scrim — it STAYS UP
 // while you test the gestures; dismiss with the ✕, the "?" button, or Esc — a click on the scene does
@@ -468,19 +469,20 @@ export function ControlsGuide() {
           <HotkeyToggles showKeys={mode === "mouse"} ids={guide.hotkeys} />
         </div>
       )}
-      <button
-        ref={btnRef}
-        onClick={() => setOpen((o) => !o)}
-        aria-label="Camera controls"
-        title="Camera controls"
-        className={cn(
-          "border-foreground/10 bg-popover/70 text-foreground/85 hover:bg-foreground/10 fixed right-3 bottom-3 z-20 flex size-11 items-center justify-center rounded-full border text-lg font-semibold shadow-lg backdrop-blur-md transition-[opacity,background-color,color] duration-700",
-          open && "border-transparent bg-primary text-primary-foreground",
-          idle && !open ? "pointer-events-none opacity-0" : "pointer-events-auto opacity-100",
-        )}
-      >
-        ?
-      </button>
+      <IconTip label="Camera Controls">
+        <button
+          ref={btnRef}
+          onClick={() => setOpen((o) => !o)}
+          aria-label="Camera controls"
+          className={cn(
+            "border-foreground/10 bg-popover/70 text-foreground/85 hover:bg-foreground/10 fixed right-3 bottom-3 z-20 flex size-11 items-center justify-center rounded-full border text-lg font-semibold shadow-lg backdrop-blur-md transition-[opacity,background-color,color] duration-700",
+            open && "border-transparent bg-primary text-primary-foreground",
+            idle && !open ? "pointer-events-none opacity-0" : "pointer-events-auto opacity-100",
+          )}
+        >
+          ?
+        </button>
+      </IconTip>
     </>
   );
 }

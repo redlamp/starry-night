@@ -443,6 +443,39 @@ export const WESTERN_SIGN_TRAITS: Record<string, string> = {
   Pisces: "Porous to other people's weather; dreams with the window open.",
 };
 
+// Moon = the inner weather, Rising = the first impression (user 2026-07-11:
+// "a bit more detail") — same wry-concrete register as the sun traits above,
+// but tuned to what each placement colors.
+export const MOON_SIGN_TRAITS: Record<string, string> = {
+  Aries: "Feelings arrive fast and loud, then blow through by morning.",
+  Taurus: "Steady inner weather; upset needs a running start.",
+  Gemini: "Moods narrate themselves — talking it out IS the feeling.",
+  Cancer: "Tides, not weather; homesick even at home, sometimes.",
+  Leo: "Feels things in bold type; sulks handsomely, recovers on applause.",
+  Virgo: "Worry sorted into labeled drawers; calm once the list exists.",
+  Libra: "Uneasy until the room is; borrows the mood of whoever's nearest.",
+  Scorpio: "Deep water, small surface; nothing felt by halves, little shown.",
+  Sagittarius: "Restless heart — a bad day is cured by any open road.",
+  Capricorn: "Feelings filed under 'later'; grief and joy both arrive on schedule.",
+  Aquarius: "Watches their own moods from one seat back, taking notes.",
+  Pisces: "Absorbs the whole room's weather and calls it their own.",
+};
+
+export const RISING_SIGN_TRAITS: Record<string, string> = {
+  Aries: "Reads as already mid-stride; strangers assume they're in charge.",
+  Taurus: "Comes across unhurried and planted — people relax around them.",
+  Gemini: "First impression: quick eyes, three questions before hello ends.",
+  Cancer: "Leads with warmth; strangers tell them things at bus stops.",
+  Leo: "Enters like the room was waiting; remembered even when quiet.",
+  Virgo: "Reads as composed and precise; people hand them the plan unasked.",
+  Libra: "Instantly agreeable surface; everyone's sure the liking is mutual.",
+  Scorpio: "First read: unreadable. People behave slightly better nearby.",
+  Sagittarius: "Comes across loose and lucky, like they just got back from somewhere.",
+  Capricorn: "Reads older than their years, in the useful, trusted way.",
+  Aquarius: "Strikes strangers as slightly off-pattern, in a way they remember.",
+  Pisces: "Soft-focus first impression; people project their favorite version.",
+};
+
 export const CHINESE_ANIMAL_TRAITS: Record<(typeof CHINESE_ANIMALS)[number], string> = {
   Rat: "quick, resourceful, first to the opportunity",
   Ox: "steady, patient, carries what others put down",

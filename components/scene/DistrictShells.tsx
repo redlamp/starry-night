@@ -3,118 +3,68 @@
 import { useMemo, useEffect } from "react";
 import * as THREE from "three";
 import { useSceneStore } from "@/lib/state/sceneStore";
-import { tensorDistrictField } from "@/lib/seed/cityGen";
+import { tensorDistrictField, tensorWallRoads } from "@/lib/seed/cityGen";
+import { districtBoundaryLoops } from "@/lib/seed/districtOutline";
+import { loopsToSegments, loopsToFillGroup } from "@/lib/scene/districtOverlayGeometry";
 
-// Color-coded district fill overlay for the planning layer. Samples the
-// district field on a grid and draws one flat quad per occupied cell, colored
-// by its district. Single InstancedMesh = one draw call. A white LineSegments
-// pass traces every cell edge where the two neighbours belong to different
-// districts (internal seams + outer perimeter), so each district reads as an
-// outlined region. Sits just above the ground (y=0.25) and below the highway
-// lines (y=0.5).
-const OVERLAY_STEPS = 80;
+// Color-coded district fill overlay for the planning layer. Since 2026-07-10
+// this draws from districtOutline's traced boundary loops (the label raster's
+// native ~7.5m resolution, simplified) instead of 80×80 sample-grid quads —
+// the SAME street-following shapes the directory's boundary overlay uses, so
+// there is exactly one district drawing style in the app. Fill = one flat
+// shape per district; seams = white traced perimeters; the Population panel's
+// hover highlight re-fills the hovered district brighter. Sits just above the
+// ground and below the highway lines (y=0.5).
 const OVERLAY_Y = 0.25;
 const BORDER_Y = 0.3; // just above the fill so the line is never z-hidden
+const HIGHLIGHT_Y = 0.4;
+
+function disposeObject(obj: THREE.Object3D | null): void {
+  if (!obj) return;
+  obj.traverse((child) => {
+    const c = child as THREE.Mesh | THREE.LineSegments;
+    if (c.geometry) c.geometry.dispose();
+    if (c.material) (c.material as THREE.Material).dispose();
+  });
+}
 
 export function DistrictShells({ masterSeed }: { masterSeed: string }) {
   const show = useSceneStore((s) => s.cityPlanning.showDistrictShells);
-  const highlightId = useSceneStore((s) => s.highlightDistrictId);
+  // hoverDistrictId (shared with the directory + settings hover, user
+  // 2026-07-11) — the old highlightDistrictId lost its last setter when the
+  // settings hover unified onto the directory's traced-outline path.
+  const highlightId = useSceneStore((s) => s.hoverDistrictId);
   const citySize = useSceneStore((s) => s.citySize);
 
-  const { group, cellsByDistrict, stepX, stepZ } = useMemo(() => {
+  const group = useMemo(() => {
     void citySize; // tier drives the module-level gen extent (#58) — a switch must rebuild
     const field = tensorDistrictField(masterSeed);
-    const { minX, maxX, minZ, maxZ } = field.bounds;
-    const stepX = (maxX - minX) / OVERLAY_STEPS;
-    const stepZ = (maxZ - minZ) / OVERLAY_STEPS;
-
-    // Sample district index per cell once; reused for the fill + the borders.
-    const idxGrid: number[][] = [];
-    for (let gx = 0; gx < OVERLAY_STEPS; gx++) {
-      const col: number[] = [];
-      for (let gz = 0; gz < OVERLAY_STEPS; gz++) {
-        const x = minX + (gx + 0.5) * stepX;
-        const z = minZ + (gz + 0.5) * stepZ;
-        col.push(field.classify(x, z));
-      }
-      idxGrid.push(col);
+    const walls = tensorWallRoads(masterSeed);
+    const g = new THREE.Group();
+    const seamPts: number[] = [];
+    for (const d of field.districts) {
+      const loops = districtBoundaryLoops(field, d.index, walls);
+      // Planning overlay: draws over the scene (depthTest off, high render
+      // order) like a GIS layer so districts read regardless of building
+      // occlusion or camera angle. Fog off so distant fills keep their colour.
+      const mat = new THREE.MeshBasicMaterial({
+        color: new THREE.Color(d.color),
+        transparent: true,
+        opacity: 0.5,
+        depthWrite: false,
+        depthTest: false,
+        fog: false,
+        side: THREE.DoubleSide,
+        toneMapped: false,
+      });
+      g.add(loopsToFillGroup(loops, mat, OVERLAY_Y, 999));
+      seamPts.push(...loopsToSegments(loops, BORDER_Y));
     }
 
-    // --- Fill: one quad per occupied cell ---
-    const cells: Array<{ x: number; z: number; color: string }> = [];
-    // Cells grouped by owning district — the hover-highlight layer (Population
-    // panel district list) builds its emphasis mesh from these.
-    const cellsByDistrict = new Map<string, { cells: Array<{ x: number; z: number }>; color: string }>();
-    for (let gx = 0; gx < OVERLAY_STEPS; gx++) {
-      for (let gz = 0; gz < OVERLAY_STEPS; gz++) {
-        const idx = idxGrid[gx][gz];
-        if (idx < 0) continue;
-        const x = minX + (gx + 0.5) * stepX;
-        const z = minZ + (gz + 0.5) * stepZ;
-        const d = field.districts[idx];
-        cells.push({ x, z, color: d.color });
-        let entry = cellsByDistrict.get(d.id);
-        if (!entry) {
-          entry = { cells: [], color: d.color };
-          cellsByDistrict.set(d.id, entry);
-        }
-        entry.cells.push({ x, z });
-      }
-    }
-
-    const geo = new THREE.PlaneGeometry(stepX, stepZ);
-    // Planning overlay: draws over the scene (depthTest off, high render order)
-    // like a GIS layer so districts read regardless of building occlusion or
-    // camera angle. Fog off so distant cells keep their colour.
-    const mat = new THREE.MeshBasicMaterial({
-      transparent: true,
-      opacity: 0.5,
-      depthWrite: false,
-      depthTest: false,
-      fog: false,
-      side: THREE.DoubleSide,
-      toneMapped: false,
-    });
-    const im = new THREE.InstancedMesh(geo, mat, cells.length);
-    im.frustumCulled = false;
-    im.renderOrder = 999;
-
-    const matrix = new THREE.Matrix4();
-    const pos = new THREE.Vector3();
-    const quat = new THREE.Quaternion();
-    const scale = new THREE.Vector3(1, 1, 1);
-    quat.setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0)); // lay flat
-    const color = new THREE.Color();
-    for (let i = 0; i < cells.length; i++) {
-      pos.set(cells[i].x, OVERLAY_Y, cells[i].z);
-      matrix.compose(pos, quat, scale);
-      im.setMatrixAt(i, matrix);
-      im.setColorAt(i, color.set(cells[i].color));
-    }
-    im.instanceMatrix.needsUpdate = true;
-    if (im.instanceColor) im.instanceColor.needsUpdate = true;
-
-    // --- Borders: a segment on each cell edge where the two sides differ ---
-    const pts: number[] = [];
-    const isBorder = (a: number, b: number) => a !== b && (a >= 0 || b >= 0);
-    for (let gx = 0; gx < OVERLAY_STEPS; gx++) {
-      for (let gz = 0; gz < OVERLAY_STEPS; gz++) {
-        const a = idxGrid[gx][gz];
-        // shared edge with the right neighbour → vertical line in XZ
-        if (gx + 1 < OVERLAY_STEPS && isBorder(a, idxGrid[gx + 1][gz])) {
-          const ex = minX + (gx + 1) * stepX;
-          pts.push(ex, BORDER_Y, minZ + gz * stepZ, ex, BORDER_Y, minZ + (gz + 1) * stepZ);
-        }
-        // shared edge with the bottom neighbour → horizontal line in XZ
-        if (gz + 1 < OVERLAY_STEPS && isBorder(a, idxGrid[gx][gz + 1])) {
-          const ez = minZ + (gz + 1) * stepZ;
-          pts.push(minX + gx * stepX, BORDER_Y, ez, minX + (gx + 1) * stepX, BORDER_Y, ez);
-        }
-      }
-    }
-
+    // Seams: every district's traced perimeter in white — internal boundaries
+    // draw twice (once per side), which is invisible for coincident lines.
     const lineGeo = new THREE.BufferGeometry();
-    lineGeo.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
+    lineGeo.setAttribute("position", new THREE.Float32BufferAttribute(seamPts, 3));
     const lineMat = new THREE.LineBasicMaterial({
       color: 0xffffff,
       transparent: true,
@@ -127,21 +77,20 @@ export function DistrictShells({ masterSeed }: { masterSeed: string }) {
     const lines = new THREE.LineSegments(lineGeo, lineMat);
     lines.frustumCulled = false;
     lines.renderOrder = 1000; // above the fill
-
-    const g = new THREE.Group();
-    g.add(im);
     g.add(lines);
-    return { group: g, cellsByDistrict, stepX, stepZ };
+    return g;
   }, [masterSeed, citySize]);
 
-  // Hover highlight: the hovered district's cells, brighter + above everything
+  // Hover highlight: the hovered district re-filled brighter, above everything
   // (renders with or without the base shells — hover alone reveals a district).
   const highlight = useMemo(() => {
+    void citySize;
     if (!highlightId) return null;
-    const entry = cellsByDistrict.get(highlightId);
-    if (!entry || entry.cells.length === 0) return null;
-    const geo = new THREE.PlaneGeometry(stepX, stepZ);
-    const color = new THREE.Color(entry.color).lerp(new THREE.Color("#ffffff"), 0.25);
+    const field = tensorDistrictField(masterSeed);
+    const target = field.districts.find((d) => d.id === highlightId);
+    if (!target) return null;
+    const loops = districtBoundaryLoops(field, target.index, tensorWallRoads(masterSeed));
+    const color = new THREE.Color(target.color).lerp(new THREE.Color("#ffffff"), 0.25);
     const mat = new THREE.MeshBasicMaterial({
       color,
       transparent: true,
@@ -152,43 +101,14 @@ export function DistrictShells({ masterSeed }: { masterSeed: string }) {
       side: THREE.DoubleSide,
       toneMapped: false,
     });
-    const im = new THREE.InstancedMesh(geo, mat, entry.cells.length);
-    im.frustumCulled = false;
-    im.renderOrder = 1002; // above fill, borders, and the population heat map
-    const matrix = new THREE.Matrix4();
-    const pos = new THREE.Vector3();
-    const quat = new THREE.Quaternion();
-    const scale = new THREE.Vector3(1, 1, 1);
-    quat.setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0));
-    for (let i = 0; i < entry.cells.length; i++) {
-      pos.set(entry.cells[i].x, BORDER_Y + 0.1, entry.cells[i].z);
-      matrix.compose(pos, quat, scale);
-      im.setMatrixAt(i, matrix);
-    }
-    im.instanceMatrix.needsUpdate = true;
-    return im;
-  }, [highlightId, cellsByDistrict, stepX, stepZ]);
+    // renderOrder 1002: above fill, borders, and the population heat map.
+    const g = loopsToFillGroup(loops, mat, HIGHLIGHT_Y, 1002);
+    return g.children.length > 0 ? g : null;
+  }, [highlightId, masterSeed, citySize]);
 
-  useEffect(() => {
-    return () => {
-      group.traverse((o) => {
-        const m = o as THREE.Mesh | THREE.LineSegments;
-        m.geometry?.dispose();
-        const mat = m.material as THREE.Material | undefined;
-        mat?.dispose();
-      });
-    };
-  }, [group]);
+  useEffect(() => () => disposeObject(group), [group]);
+  useEffect(() => () => disposeObject(highlight), [highlight]);
 
-  useEffect(() => {
-    return () => {
-      if (!highlight) return;
-      highlight.geometry.dispose();
-      (highlight.material as THREE.Material).dispose();
-    };
-  }, [highlight]);
-
-  if (!show && !highlight) return null;
   return (
     <>
       {show && <primitive object={group} />}

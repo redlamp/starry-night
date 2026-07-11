@@ -1,4 +1,4 @@
-import seedrandom from "seedrandom";
+import { seededRng } from "./rng";
 import { generateCity, type Building, type Archetype } from "./cityGen";
 import type { DistrictCharacter } from "./district";
 import { buildingPopulation } from "./population";
@@ -32,7 +32,7 @@ import {
   type ChineseSign,
   type EducationTier,
 } from "./personaData";
-import { weaveStories, type PersonaStory, type ShiftKind, type CityLoreEntry } from "./personaStory";
+import type { PersonaStory, ShiftKind, CityLoreEntry } from "./personaStory";
 
 // Story layer types ride along for consumers (panel, scripts).
 export type { PersonaStory, StoryRelation, CityLoreEntry, ShiftKind } from "./personaStory";
@@ -80,21 +80,19 @@ export type Persona = {
   givenName: string;
   middleInitial?: string;
   familyName: string;
+  // Married name-takers (most married women in this world's fiction — user
+  // 2026-07-10) keep their birth surname on record. Dating partners never
+  // share a name.
+  maidenName?: string;
   fullName: string;
   age: number;
   birthday: { year: number; month: number; day: number };
-  westernSign: WesternSign; // the sun sign
-  // The rest of the "big three" — fake ephemeris, seeded per persona (real
-  // moon/ascendant need birth-time astronomy; these are character flavour).
-  moonSign: string;
-  risingSign: string;
-  birthHour: number; // 0-23, the "birth time" the rising sign hangs off
-  chineseSign: ChineseSign;
-  // Physical descriptors (adults only; undefined for kids).
-  heightCm?: number;
-  build?: string;
-  mbti: string;
-  mbtiNickname: string;
+  westernSign: WesternSign; // the sun sign — free, derived from the birthday
+  chineseSign: ChineseSign; // likewise, derived from the birth year
+  // Moon/rising signs, MBTI, and physical descriptors are deep-tier flavour:
+  // drawn on demand by personaFlavor() from a per-persona stream, never
+  // stored here. Keeps the 39k-record eager build lean, and pins the fields
+  // to the persona's own seed so pass edits can't re-roll them.
   ethnicity: Ethnicity;
   genderIdentity: GenderIdentity;
   pronouns: string;
@@ -122,7 +120,8 @@ export type Persona = {
   partnerId?: PersonaId;
   family: FamilyLink[];
   offstage: OffstageRelative[];
-  // Story layer — filled by weaveStories() as the directory's final pass.
+  // Story layer — placeholders until ensureBuildingStories() materializes
+  // this persona's building (lazy since 2026-07-10).
   schedule: { shift: ShiftKind };
   story: PersonaStory;
   // The Grinblat "domain word": one concrete noun-world this persona's lines
@@ -145,8 +144,10 @@ export type Business = {
   titleAffinity?: string[];
   // Schools only: the kids enrolled here (staff stay in employeeIds).
   studentIds?: PersonaId[];
-  // Schools only: which tier of kid this school takes.
-  schoolTier?: "elementary" | "middle" | "high";
+  // Schools only: which tier of kid/student this school takes. College and
+  // university are the two adult campuses (test plan §3.5) — no enrollment
+  // age ceiling, sited after the K-12 pass.
+  schoolTier?: "elementary" | "middle" | "high" | "college" | "university";
 };
 
 export type Household = {
@@ -401,6 +402,67 @@ function drawMbti(rng: () => number): string {
   );
 }
 
+// Deep-tier flavour: the character-sheet extras a card shows on open —
+// fake-ephemeris moon/rising (real ones need birth-time astronomy; these are
+// flavour), MBTI, and adult physical descriptors. Drawn from the persona's
+// OWN stream the moment a card asks, never during the directory build: the
+// 39k-record eager pass stays lean, and because the stream is keyed by
+// persona id, editing any build pass can't re-roll anyone's flavour.
+export type PersonaFlavor = {
+  birthHour: number; // 0-23, the "birth time" the rising sign hangs off
+  moonSign: string;
+  risingSign: string;
+  mbti: string;
+  mbtiNickname: string;
+  // Adults only; undefined for kids.
+  heightCm?: number;
+  build?: string;
+  // Records-office identifier in a deliberately FICTIONAL format — two
+  // letters + six digits, unlike SSN (3-2-4, digits only) or any real state
+  // ID, so nothing pairs with real-life documents (user 2026-07-10).
+  civicId: string;
+  // Exact minutes past birthHour (user 2026-07-11: "an exact time in the ~3
+  // range") — the hour still drives any zodiac-adjacent reads.
+  birthMinute: number;
+};
+
+export function personaFlavor(masterSeed: string, p: Persona): PersonaFlavor {
+  const rng = seededRng(`${masterSeed}::personas::flavor::${p.id}`);
+  const mbti = drawMbti(rng);
+  const birthHour = Math.floor(rng() * 24);
+  const moonSign = WESTERN_ZODIAC[Math.floor(rng() * 12)].name;
+  const risingSign = WESTERN_ZODIAC[Math.floor(rng() * 12)].name;
+  const isAdult = p.age >= 18;
+  // Height keys off gender identity (the old pass keyed off the name-pool
+  // presentation, which isn't stored); nonbinary folks draw around the midline.
+  const base =
+    p.genderIdentity === "cis man" || p.genderIdentity === "trans man"
+      ? 178
+      : p.genderIdentity === "nonbinary"
+        ? 171
+        : 164;
+  const heightCm = isAdult ? Math.round(base + (rng() + rng() + rng() - 1.5) * 9) : undefined;
+  const build = isAdult ? pick(rng, BUILDS) : undefined;
+  // ~676M combinations keeps 42k residents collision-free in practice.
+  const letter = () => String.fromCharCode(65 + Math.floor(rng() * 26));
+  const civicId = `${letter()}${letter()}-${String(Math.floor(rng() * 1_000_000)).padStart(6, "0")}`;
+  // Drawn LAST on purpose (added 2026-07-11): appending to the stream's tail
+  // leaves every earlier draw — and so every previously shipped flavour
+  // value — untouched. Keep any new draws below this line.
+  const birthMinute = Math.floor(rng() * 60);
+  return {
+    birthHour,
+    moonSign,
+    risingSign,
+    mbti,
+    mbtiNickname: MBTI_NICKNAMES[mbti] ?? "",
+    heightCm,
+    build,
+    civicId,
+    birthMinute,
+  };
+}
+
 function drawProfession(rng: () => number, character: DistrictCharacter): Profession {
   const weights = DISTRICT_CATEGORY_WEIGHT[character] ?? {};
   return weightedPick(
@@ -445,13 +507,15 @@ type HouseholdKind =
   | "multigen"
   | "widowed-elder";
 
+// Multigen 5 → 8 (user 2026-07-10: "more multi-generational families") —
+// taken from single/roommates so the sum stays 100.
 const HOUSEHOLD_MIX: Array<{ value: HouseholdKind; weight: number }> = [
-  { value: "single", weight: 26 },
+  { value: "single", weight: 24 },
   { value: "couple", weight: 22 },
   { value: "family", weight: 26 },
   { value: "single-parent", weight: 8 },
-  { value: "roommates", weight: 9 },
-  { value: "multigen", weight: 5 },
+  { value: "roommates", weight: 8 },
+  { value: "multigen", weight: 8 },
   { value: "widowed-elder", weight: 4 },
 ];
 
@@ -466,13 +530,43 @@ function unitFor(building: Building, householdIndex: number, count: number): str
 
 // --- The build --------------------------------------------------------------------------
 
-function buildDirectoryImpl(
+// Build-progress observation (test plan 07-11): a 0..1 fraction of the CURRENT
+// (or most recently finished) resumable build, for the directory panel's
+// progress ring. Purely observational — never read as generation input, never
+// affects a single draw. Phase weights are rough by design: persona pass
+// (households + businesses) ~55%, schools ~5%, employment ~20%, weave
+// (commute/family/dating) ~15%, then finishBuild() snaps it to 1. Reset to 0
+// only when resumeBuild() starts a genuinely NEW generator (key change).
+let dirBuildProgress = 0;
+
+export function personaDirectoryBuildProgress(): number {
+  return dirBuildProgress;
+}
+
+// Interpolate within a phase's [start, end) band by a loop counter/total —
+// clamped since a chunk boundary can straddle a total of 0 (empty city tier).
+function progressWithin(start: number, end: number, frac: number): number {
+  return start + (end - start) * Math.min(1, Math.max(0, frac));
+}
+
+// Resumable build (test plan 07-10 §7.5): the exact pass sequence as before,
+// restructured as a generator that yields at chunk boundaries so the idle
+// prewarmer can run it in ~5ms frame slices instead of one ~1.4s hit. Draw
+// order is UNCHANGED — a drained generator is byte-identical to the old
+// synchronous build; `yield` only marks where it's safe to pause.
+function* buildDirectorySteps(
   masterSeed: string,
   shape: CityShapeSetting,
   shapeScale: number,
-): PersonaDirectory {
+): Generator<void, PersonaDirectory> {
   const city = generateCity(masterSeed, shape, shapeScale);
+  dirBuildProgress = 0.02;
+  // Names are one ~250ms monolith (addresses ride a spatial hash) — give it
+  // its own slice at least. Chunking naming itself is a parked follow-up.
+  yield;
   const names = buildCityNames(masterSeed, shape, shapeScale);
+  dirBuildProgress = 0.05;
+  yield;
   const districtById = new Map(city.districts.map((d) => [d.id, d]));
 
   const personas = new Map<PersonaId, Persona>();
@@ -500,7 +594,15 @@ function buildDirectoryImpl(
   const hhScale = estimated > TARGET_MAX_PERSONAS ? TARGET_MAX_PERSONAS / estimated : 1;
 
   // ---- Pass 1: households + people ----
+  let sinceYield = 0;
+  let pass1Done = 0;
   for (const b of buildings) {
+    pass1Done++;
+    if (++sinceYield >= 60) {
+      sinceYield = 0;
+      dirBuildProgress = progressWithin(0.05, 0.45, pass1Done / buildings.length);
+      yield;
+    }
     const raw = rawHouseholds.get(b.id);
     if (!raw) continue;
     const count = Math.max(1, Math.floor(raw * hhScale));
@@ -509,7 +611,7 @@ function buildDirectoryImpl(
     const homeList: Household[] = [];
 
     for (let h = 0; h < count; h++) {
-      const rng = seedrandom(`${masterSeed}::personas::hh::${b.id}::${h}`);
+      const rng = seededRng(`${masterSeed}::personas::hh::${b.id}::${h}`);
       const kind = weightedPick(rng, HOUSEHOLD_MIX);
 
       // Shared household facts.
@@ -601,10 +703,22 @@ function buildDirectoryImpl(
             familyName,
             ethnicity: baseEthnicity === partnerEthnicity ? baseEthnicity : ("Multiracial" as Ethnicity),
           });
+          const grandAge = parentAge + midInt(rng, 24, 32);
+          const g1 = pres();
           specs.push({
-            slot: 3, presentation: pres(), age: parentAge + midInt(rng, 24, 32),
+            slot: 3, presentation: g1, age: grandAge,
             familyName, ethnicity: baseEthnicity,
           });
+          // ~45% of multigen households keep BOTH grandparents (user
+          // 2026-07-10: more three-generation presence) — the trees then show
+          // a grandparent COUPLE instead of a lone widowed elder.
+          if (rng() < 0.45) {
+            specs.push({
+              slot: 4, presentation: g1 === "m" ? "f" : "m",
+              age: Math.max(parentAge + 20, grandAge + midInt(rng, -4, 4)),
+              familyName, ethnicity: baseEthnicity,
+            });
+          }
           break;
         }
         case "widowed-elder": {
@@ -667,22 +781,12 @@ function buildDirectoryImpl(
           }
         }
 
-        const mbti = drawMbti(rng);
         const edu = drawEducation(rng, profession, age, names);
 
         const pronouns = drawPronouns(rng, genderIdentity);
-        // Fake-ephemeris big three: moon + rising drawn per persona; the
-        // rising sign notionally hangs off a generated birth hour.
-        const birthHour = Math.floor(rng() * 24);
-        const moonSign = WESTERN_ZODIAC[Math.floor(rng() * 12)].name;
-        const risingSign = WESTERN_ZODIAC[Math.floor(rng() * 12)].name;
-        // Physical descriptors, adults only.
-        const heightCm = isAdult
-          ? Math.round(
-              (spec.presentation === "m" ? 178 : 164) + (rng() + rng() + rng() - 1.5) * 9,
-            )
-          : undefined;
-        const build = isAdult ? pick(rng, BUILDS) : undefined;
+        // MBTI, fake-ephemeris moon/rising, and physical descriptors moved to
+        // personaFlavor() (deep tier, per-persona stream) — 2026-07-10. This
+        // shortened the household stream: one-time population re-roll.
 
         // Sparse offstage relatives — negative space, not a full tree.
         const offstage: OffstageRelative[] = [];
@@ -704,16 +808,9 @@ function buildDirectoryImpl(
           birthday,
           westernSign: westernSignFor(birthday.month, birthday.day),
           chineseSign: chineseSignFor(birthday.year),
-          mbti,
-          mbtiNickname: MBTI_NICKNAMES[mbti] ?? "",
           ethnicity: spec.ethnicity,
           genderIdentity,
           pronouns,
-          moonSign,
-          risingSign,
-          birthHour,
-          heightCm,
-          build,
           homeBuildingId: b.id,
           homeDistrictId: b.districtId,
           householdIndex: h,
@@ -727,8 +824,9 @@ function buildDirectoryImpl(
           relationshipStatus: "single",
           family: [],
           offstage,
-          // Placeholders — weaveStories() overwrites these before the
-          // directory is returned.
+          // Placeholders — ensureBuildingStories() fills these lazily, the
+          // first time any card/panel for this building asks. Readers go
+          // through that gate, never straight to these fields cold.
           schedule: { shift: "day" },
           story: { hook: "", loreRefs: [] },
           domain: "",
@@ -771,13 +869,77 @@ function buildDirectoryImpl(
           setStatus(ids[0], rng() < 0.6 ? "divorced" : "single");
         }
         if (kind === "multigen") {
-          // Grandparent (slot 3) is parent of the slot-0 adult.
+          // Grandparent (slot 3) is parent of the slot-0 adult; when slot 4
+          // exists, the grandparents are a married couple and BOTH parent the
+          // slot-0 adult (user 2026-07-10: more three-generation presence).
           link(ids[3], "child", ids[0]);
           link(ids[0], "parent", ids[3]);
-          setStatus(ids[3], rng() < 0.7 ? "widowed" : "divorced");
+          if (ids.length > 4) {
+            link(ids[4], "child", ids[0]);
+            link(ids[0], "parent", ids[4]);
+            setStatus(ids[3], "married", ids[4]);
+            setStatus(ids[4], "married", ids[3]);
+            link(ids[3], "partner", ids[4]);
+            link(ids[4], "partner", ids[3]);
+          } else {
+            setStatus(ids[3], rng() < 0.7 ? "widowed" : "divorced");
+          }
         }
       }
       if (kind === "widowed-elder") setStatus(ids[0], "widowed");
+
+      // Surname fiction (user 2026-07-10): married women take their
+      // husband's name — the taken partner keeps a MAIDEN name on record.
+      // Dating couples do NOT share a name — the non-anchor partner redraws
+      // their own surname. Both draws come from per-persona derived streams,
+      // never the household stream, so adding this re-rolled nothing else.
+      for (const pid of ids) {
+        const p = personas.get(pid)!;
+        if (!p.partnerId || pid > p.partnerId) continue; // once per pair
+        const q = personas.get(p.partnerId)!;
+        if (q.householdIndex !== p.householdIndex || q.homeBuildingId !== p.homeBuildingId)
+          continue;
+        const woman = (x: Persona) =>
+          x.genderIdentity === "cis woman" || x.genderIdentity === "trans woman";
+        const man = (x: Persona) =>
+          x.genderIdentity === "cis man" || x.genderIdentity === "trans man";
+        if (p.relationshipStatus === "married") {
+          // The name-taker: the woman in a hetero pair; the younger partner
+          // (id tie-break) otherwise.
+          const taker =
+            woman(p) && man(q)
+              ? p
+              : woman(q) && man(p)
+                ? q
+                : p.age !== q.age
+                  ? p.age < q.age
+                    ? p
+                    : q
+                  : p.id < q.id
+                    ? p
+                    : q;
+          const mrng = seededRng(`${masterSeed}::personas::maiden::${taker.id}`);
+          let maiden = drawFamilyName(mrng, taker.ethnicity);
+          for (let tries = 0; tries < 5 && maiden === taker.familyName; tries++) {
+            maiden = drawFamilyName(mrng, taker.ethnicity);
+          }
+          if (maiden !== taker.familyName) taker.maidenName = maiden;
+        } else if (p.relationshipStatus === "dating" && p.familyName === q.familyName) {
+          // Cohabiting-but-dating pairs shared the household draw — give the
+          // second partner their own name back (kids keep the household's).
+          const orng = seededRng(`${masterSeed}::personas::ownname::${q.id}`);
+          let own = drawFamilyName(orng, q.ethnicity);
+          for (let tries = 0; tries < 5 && own === q.familyName; tries++) {
+            own = drawFamilyName(orng, q.ethnicity);
+          }
+          if (own !== q.familyName) {
+            q.familyName = own;
+            q.fullName = q.middleInitial
+              ? `${q.givenName} ${q.middleInitial}. ${own}`
+              : `${q.givenName} ${own}`;
+          }
+        }
+      }
 
       const surnames = [...new Set(ids.map((pid) => personas.get(pid)!.familyName))];
       const label =
@@ -793,9 +955,18 @@ function buildDirectoryImpl(
     }
     if (homeList.length > 0) byHomeBuilding.set(b.id, homeList);
   }
+  dirBuildProgress = 0.45;
 
   // ---- Pass 2: businesses ----
+  sinceYield = 0;
+  let pass2Done = 0;
   for (const b of buildings) {
+    pass2Done++;
+    if (++sinceYield >= 300) {
+      sinceYield = 0;
+      dirBuildProgress = progressWithin(0.45, 0.55, pass2Done / buildings.length);
+      yield;
+    }
     const kinds = BUSINESS_KINDS[b.archetype];
     if (!kinds) continue;
     const district = districtById.get(b.districtId);
@@ -804,7 +975,7 @@ function buildDirectoryImpl(
     // Residential archetypes only host ground-floor shops in street-life
     // districts; dedicated work archetypes host everywhere.
     if (isShopHost && !SHOP_DISTRICTS.has(character)) continue;
-    const rng = seedrandom(`${masterSeed}::personas::biz::${b.id}`);
+    const rng = seededRng(`${masterSeed}::personas::biz::${b.id}`);
     if (isShopHost && rng() > 0.45) continue; // not every block has a storefront
     const count = BUSINESS_COUNT[b.archetype] ?? 1;
     const list: Business[] = [];
@@ -853,6 +1024,7 @@ function buildDirectoryImpl(
     }
     if (list.length > 0) byWorkBuilding.set(b.id, list);
   }
+  dirBuildProgress = 0.55;
 
   // ---- Pass 2.5: schools ----
   // Real schools in real buildings, before the employment weave so teachers
@@ -862,7 +1034,7 @@ function buildDirectoryImpl(
   // highs ~5 (min one citywide). Kids are then assigned to the NEAREST school
   // of their age tier — no rng, pure distance — and get a walk/bus commute.
   {
-    const rng = seedrandom(`${masterSeed}::personas::schools`);
+    const rng = seededRng(`${masterSeed}::personas::schools`);
     const CARDINAL_WORD: Record<string, string> = {
       n: "North", s: "South", e: "East", w: "West",
       ne: "Northeast", nw: "Northwest", se: "Southeast", sw: "Southwest",
@@ -960,7 +1132,15 @@ function buildDirectoryImpl(
       list.push({ school: biz, site });
       byTier.set(biz.schoolTier, list);
     }
+    sinceYield = 0;
+    let schoolEnrollDone = 0;
     for (const p of personas.values()) {
+      schoolEnrollDone++;
+      if (++sinceYield >= 1000) {
+        sinceYield = 0;
+        dirBuildProgress = progressWithin(0.55, 0.6, schoolEnrollDone / personas.size);
+        yield;
+      }
       if (p.age < 5 || p.age >= 18) continue;
       const tier = p.age < 11 ? "elementary" : p.age < 14 ? "middle" : "high";
       const options = byTier.get(tier);
@@ -982,13 +1162,95 @@ function buildDirectoryImpl(
       const distance = Math.round(bestDist);
       p.commute = { mode: distance < 900 ? "walk" : "bus", distance };
     }
+
+    // ---- Pass 2.6: college + university campuses (test plan §3.5) ----
+    // Sited AFTER every K-12 school AND the K-12 enrollment loop above, so
+    // nothing in the existing pass shifts — usedSites already reflects every
+    // elementary/middle/high pick, and this reads it, never rewinds it. Its
+    // own FRESH derived stream keeps it from disturbing any existing draw.
+    {
+      const campusRng = seededRng(`${masterSeed}::personas::campuses`);
+      // Largest-footprint mid-rise-or-taller buildings not already claimed by
+      // a K-12 school — the two campuses get the city's biggest unclaimed
+      // shells, university first.
+      const campusCandidates = buildings
+        .filter(
+          (b) =>
+            !usedSites.has(b.id) &&
+            (b.archetype === "mid-rise" ||
+              b.archetype === "residential-tower" ||
+              b.archetype === "office-block" ||
+              b.archetype === "spire"),
+        )
+        .sort((a, b) => b.width * b.depth - a.width * a.depth);
+      // Exact-footprint ties for the top slot break on the fresh stream
+      // rather than array (id) order.
+      const topFootprint = campusCandidates[0] ? campusCandidates[0].width * campusCandidates[0].depth : 0;
+      const tiedForTop = campusCandidates.filter((b) => b.width * b.depth === topFootprint);
+      const university =
+        tiedForTop.length > 1 ? tiedForTop[Math.floor(campusRng() * tiedForTop.length)] : campusCandidates[0];
+      // Prefer a different district for the college when one's available;
+      // otherwise just take the next-biggest unclaimed shell.
+      const college =
+        campusCandidates.find((b) => b.id !== university?.id && b.districtId !== university?.districtId) ??
+        campusCandidates.find((b) => b.id !== university?.id);
+      if (university) {
+        usedSites.add(university.id);
+        addSchool(university, names.city.university, "university");
+      }
+      if (college) {
+        usedSites.add(college.id);
+        addSchool(college, names.city.college, "college");
+      }
+
+      // Adult students: enroll to the nearest campus by pure distance — same
+      // idiom as the K-12 enrollment loop just above.
+      const campusSchools = [...businesses.values()].filter(
+        (b) => b.schoolTier === "college" || b.schoolTier === "university",
+      );
+      if (campusSchools.length > 0) {
+        for (const p of personas.values()) {
+          if (p.workStatus !== "student" || p.age < 18 || p.schoolId || p.businessId) continue;
+          const home = buildingById.get(p.homeBuildingId);
+          if (!home) continue;
+          let best: Business | null = null;
+          let bestSite: Building | undefined;
+          let bestDist = Infinity;
+          for (const campus of campusSchools) {
+            const site = buildingById.get(campus.buildingId);
+            if (!site) continue;
+            const d = Math.hypot(site.x - home.x, site.z - home.z);
+            if (d < bestDist) {
+              bestDist = d;
+              best = campus;
+              bestSite = site;
+            }
+          }
+          if (!best || !bestSite) continue;
+          p.schoolId = best.id;
+          p.commuteTargetBuildingId = bestSite.id;
+          best.studentIds!.push(p.id);
+          const distance = Math.round(bestDist);
+          p.commute = { mode: distance < 900 ? "walk" : "transit", distance };
+        }
+      }
+    }
   }
+  dirBuildProgress = 0.6;
 
   // ---- Pass 3: employment weave ----
   {
-    const rng = seedrandom(`${masterSeed}::personas::employment`);
+    const rng = seededRng(`${masterSeed}::personas::employment`);
     const byKind = new Map<WorkplaceType, Business[]>();
     for (const biz of businesses.values()) {
+      // College/university campuses sit out the ordinary kind-matching hiring
+      // ladder (they're not eligible-in-general for arbitrary school-kind
+      // workers) — their pool inclusion would soak up hires that otherwise
+      // land on pre-existing K-12 schools via the least-staffed spread,
+      // shifting counts on entities this pass doesn't own. Keeps this pass's
+      // candidate set — and therefore its rng() outputs against pre-existing
+      // businesses — byte-identical to before campuses existed.
+      if (biz.schoolTier === "college" || biz.schoolTier === "university") continue;
       const list = byKind.get(biz.kind) ?? [];
       list.push(biz);
       byKind.set(biz.kind, list);
@@ -1002,7 +1264,15 @@ function buildDirectoryImpl(
       (x) => x.title === "High School Teacher" && x.workplaceType === "school",
     );
     // Stable worker order: persona insertion order is already building-ascending.
+    sinceYield = 0;
+    let employmentDone = 0;
     for (const p of personas.values()) {
+      employmentDone++;
+      if (++sinceYield >= 250) {
+        sinceYield = 0;
+        dirBuildProgress = progressWithin(0.6, 0.8, employmentDone / personas.size);
+        yield;
+      }
       if (p.workStatus !== "employed" || !p.profession) continue;
       const candidates = byKind.get(p.profession.workplaceType);
       if (!candidates || candidates.length === 0) {
@@ -1047,15 +1317,24 @@ function buildDirectoryImpl(
       biz.employeeIds.push(p.id);
     }
   }
+  dirBuildProgress = 0.8;
 
   // ---- Pass 3.2: commute modes ----
   // Distance decides the plausible set; age and district character thumb the
   // scale inside it. Downtown/subcentre/mixed homes sit on the transit spine,
   // so their mid-range commuters ride; everyone else defaults to the car.
   {
-    const rng = seedrandom(`${masterSeed}::personas::commute`);
+    const rng = seededRng(`${masterSeed}::personas::commute`);
     const buildingById = new Map(buildings.map((b) => [b.id, b]));
+    sinceYield = 0;
+    let commuteDone = 0;
     for (const p of personas.values()) {
+      commuteDone++;
+      if (++sinceYield >= 2000) {
+        sinceYield = 0;
+        dirBuildProgress = progressWithin(0.8, 0.87, commuteDone / personas.size);
+        yield;
+      }
       if (!p.businessId) continue;
       const biz = businesses.get(p.businessId);
       const home = buildingById.get(p.homeBuildingId);
@@ -1081,6 +1360,7 @@ function buildDirectoryImpl(
       p.commute = { mode, distance };
     }
   }
+  dirBuildProgress = 0.87;
 
   // ---- Pass 3.5: cross-building family weave ----
   // Adult children whose parents live across town (and vice versa). Matching
@@ -1088,7 +1368,7 @@ function buildDirectoryImpl(
   // discovered genealogy rather than assignment: "Diaz, 34, Little Harbor"
   // clicks through to "Diaz, 63, Chestnut Hollow".
   {
-    const rng = seedrandom(`${masterSeed}::personas::family`);
+    const rng = seededRng(`${masterSeed}::personas::family`);
     // Elders indexed by surname; only heads-of-household adults qualify (a
     // 60-year-old already living with their kids shouldn't gain extras).
     const eldersBySurname = new Map<string, Persona[]>();
@@ -1099,17 +1379,35 @@ function buildDirectoryImpl(
       eldersBySurname.set(p.familyName, list);
     }
     const extraChildren = new Map<PersonaId, number>();
+    sinceYield = 0;
+    let familyWeaveDone = 0;
     for (const p of personas.values()) {
+      familyWeaveDone++;
+      if (++sinceYield >= 2000) {
+        sinceYield = 0;
+        dirBuildProgress = progressWithin(0.87, 0.92, familyWeaveDone / personas.size);
+        yield;
+      }
       if (p.age < 25 || p.age > 45) continue;
       // Skip anyone who already has an in-city parent (multigen households).
       if (p.family.some((l) => l.role === "parent")) continue;
-      if (rng() > 0.22) continue;
-      const candidates = (eldersBySurname.get(p.familyName) ?? []).filter(
+      // 0.22 → 0.32 (user 2026-07-10): more cross-town parents = more trees
+      // with a visible third generation.
+      if (rng() > 0.32) continue;
+      // Match on the BIRTH surname (user 2026-07-10, no-incest fix): a
+      // married name-taker searching under her HUSBAND'S name matched HIS
+      // parents — making her a sibling of her own spouse. maidenName is the
+      // birth family's name; it also finally reconnects married daughters to
+      // their real cross-town parents.
+      const partner = p.partnerId ? personas.get(p.partnerId) : undefined;
+      const candidates = (eldersBySurname.get(p.maidenName ?? p.familyName) ?? []).filter(
         (e) =>
           e.homeBuildingId !== p.homeBuildingId &&
           e.age - p.age >= 22 &&
           e.age - p.age <= 38 &&
-          (extraChildren.get(e.id) ?? 0) < 2,
+          (extraChildren.get(e.id) ?? 0) < 2 &&
+          // Never an elder who already parents p's partner (spouse-siblings).
+          !partner?.family.some((l) => l.role === "parent" && l.personaId === e.id),
       );
       if (candidates.length === 0) continue;
       const parent = candidates[Math.floor(rng() * candidates.length)];
@@ -1126,10 +1424,11 @@ function buildDirectoryImpl(
       }
     }
   }
+  dirBuildProgress = 0.92;
 
   // ---- Pass 4: dating weave (cross-building) ----
   {
-    const rng = seedrandom(`${masterSeed}::personas::dating`);
+    const rng = seededRng(`${masterSeed}::personas::dating`);
     // Eligible: single adults (not widowed elders), some fraction looking.
     const seekers: Persona[] = [];
     for (const p of personas.values()) {
@@ -1144,14 +1443,38 @@ function buildDirectoryImpl(
     const seeksSame = new Map<PersonaId, boolean>();
     for (const p of seekers) seeksSame.set(p.id, rng() < 0.12);
     const woman = (p: Persona) => p.genderIdentity === "cis woman" || p.genderIdentity === "trans woman";
+    // Kinship guard (user 2026-07-10: "no incest") — the family weave runs
+    // BEFORE dating, so two cross-town siblings (shared woven parent) were
+    // pairable. Blocked: any direct family link, or any common parent.
+    const parentsOf = new Map<PersonaId, string[]>();
+    for (const p of seekers) {
+      parentsOf.set(
+        p.id,
+        p.family.filter((l) => l.role === "parent").map((l) => l.personaId),
+      );
+    }
+    const related = (a: Persona, b: Persona) => {
+      if (a.family.some((l) => l.personaId === b.id)) return true;
+      const pa = parentsOf.get(a.id) ?? [];
+      const pb = parentsOf.get(b.id) ?? [];
+      return pa.some((id) => pb.includes(id));
+    };
     const compatible = (a: Persona, b: Persona) => {
       if (a.homeBuildingId === b.homeBuildingId && a.householdIndex === b.householdIndex) return false;
       if (Math.abs(a.age - b.age) > 12) return false;
+      if (related(a, b)) return false;
       const same = woman(a) === woman(b);
       return (seeksSame.get(a.id) ?? false) === same && (seeksSame.get(b.id) ?? false) === same;
     };
     const paired = new Set<PersonaId>();
+    sinceYield = 0;
     for (let i = 0; i < seekers.length; i++) {
+      // The unmatched tail scans the remaining seekers each — chunk small.
+      if (++sinceYield >= 200) {
+        sinceYield = 0;
+        dirBuildProgress = progressWithin(0.92, 0.95, seekers.length > 0 ? i / seekers.length : 1);
+        yield;
+      }
       const a = seekers[i];
       if (paired.has(a.id)) continue;
       for (let j = i + 1; j < seekers.length; j++) {
@@ -1167,6 +1490,7 @@ function buildDirectoryImpl(
       }
     }
   }
+  dirBuildProgress = 0.95;
 
   const directory: PersonaDirectory = {
     personas,
@@ -1183,8 +1507,14 @@ function buildDirectoryImpl(
     },
   };
 
-  // ---- Pass 5: story weave (schedules, epithets, hooks, one-sided relations) ----
-  weaveStories(masterSeed, directory);
+  // Pass 5 (story weave: schedules, epithets, hooks, one-sided relations) is
+  // NO LONGER eager — it was ~39k template fills and seedrandom constructions
+  // per cold build. Stories materialize per building via
+  // ensureBuildingStories() the first time a card, sift, or hover asks.
+  // Byte-identical to the old eager weave: every de-dupe set was already
+  // household/building-scoped, and each persona draws from its own
+  // `::story::<id>` stream. (Relations were re-keyed per persona — one-time
+  // relations re-roll, 2026-07-10.)
 
   return directory;
 }
@@ -1192,16 +1522,75 @@ function buildDirectoryImpl(
 // Memoised with the shared cache-key recipe (see population.ts).
 const dirCache = new Map<string, PersonaDirectory>();
 
+function dirCacheKey(masterSeed: string, shape: CityShapeSetting, shapeScale: number): string {
+  return `${masterSeed}::${shape}::${shapeScale}::${maxHalfExtent()}::${sketchKey()}::${fieldDeviation()}::${densityProfileKey()}`;
+}
+
+// Cache probe for the deferred UI hooks: reports whether the cold build has
+// been paid without paying it on the render thread. Null means a consumer
+// should schedule buildPersonaDirectory() off the current frame.
+export function peekPersonaDirectory(
+  masterSeed: string,
+  shape: CityShapeSetting = "square",
+  shapeScale = 1,
+): PersonaDirectory | null {
+  return dirCache.get(dirCacheKey(masterSeed, shape, shapeScale)) ?? null;
+}
+
+// One in-progress resumable build at a time, shared between the synchronous
+// path and the idle prewarmer (§7.5): if the prewarmer is halfway through
+// when a panel demands the directory NOW, the sync path resumes the same
+// generator and finishes it — partial work is never discarded or duplicated.
+let activeBuild: { key: string; gen: Generator<void, PersonaDirectory> } | null = null;
+
+function resumeBuild(masterSeed: string, shape: CityShapeSetting, shapeScale: number) {
+  const key = dirCacheKey(masterSeed, shape, shapeScale);
+  if (activeBuild?.key !== key) {
+    activeBuild = { key, gen: buildDirectorySteps(masterSeed, shape, shapeScale) };
+    dirBuildProgress = 0;
+  }
+  return { key, gen: activeBuild.gen };
+}
+
+function finishBuild(key: string, result: PersonaDirectory): PersonaDirectory {
+  if (dirCache.size > 8) dirCache.clear();
+  dirCache.set(key, result);
+  activeBuild = null;
+  dirBuildProgress = 1;
+  return result;
+}
+
 export function buildPersonaDirectory(
   masterSeed: string,
   shape: CityShapeSetting = "square",
   shapeScale = 1,
 ): PersonaDirectory {
-  const key = `${masterSeed}::${shape}::${shapeScale}::${maxHalfExtent()}::${sketchKey()}::${fieldDeviation()}::${densityProfileKey()}`;
-  const hit = dirCache.get(key);
+  const hit = dirCache.get(dirCacheKey(masterSeed, shape, shapeScale));
   if (hit) return hit;
-  const result = buildDirectoryImpl(masterSeed, shape, shapeScale);
-  if (dirCache.size > 8) dirCache.clear();
-  dirCache.set(key, result);
-  return result;
+  const { key, gen } = resumeBuild(masterSeed, shape, shapeScale);
+  for (;;) {
+    const r = gen.next();
+    if (r.done) return finishBuild(key, r.value);
+  }
+}
+
+// Budgeted slice for the idle prewarmer: runs the resumable build for up to
+// ~budgetMs, returns the directory once complete, else null. The clock only
+// decides when to PAUSE between chunks — the generated output is identical
+// whatever the timing, so the determinism contract holds.
+export function stepPersonaDirectoryBuild(
+  masterSeed: string,
+  shape: CityShapeSetting = "square",
+  shapeScale = 1,
+  budgetMs = 5,
+): PersonaDirectory | null {
+  const hit = dirCache.get(dirCacheKey(masterSeed, shape, shapeScale));
+  if (hit) return hit;
+  const { key, gen } = resumeBuild(masterSeed, shape, shapeScale);
+  const deadline = performance.now() + budgetMs;
+  do {
+    const r = gen.next();
+    if (r.done) return finishBuild(key, r.value);
+  } while (performance.now() < deadline);
+  return null;
 }

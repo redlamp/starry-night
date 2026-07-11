@@ -1,13 +1,24 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Briefcase, Building2, MapPin, Route, Users, type LucideIcon } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  Briefcase,
+  Building2,
+  MapPin,
+  Route,
+  Signature,
+  SquareDashed,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
 import { useSceneStore } from "@/lib/state/sceneStore";
+import { usePersonaDirectoryDeferred } from "@/lib/hooks/usePersonaDirectory";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { HoverCard, HoverCardTrigger, HoverCardContent } from "@/components/ui/hover-card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -22,7 +33,9 @@ import {
 import { cn } from "@/lib/utils";
 import { generateCity, type Building } from "@/lib/seed/cityGen";
 import type { Address } from "@/lib/seed/naming";
-import { buildPersonaDirectory, type Persona } from "@/lib/seed/personas";
+import type { Persona } from "@/lib/seed/personas";
+import { personaDirectoryBuildProgress } from "@/lib/seed/personas";
+import { ensureBuildingStories } from "@/lib/seed/personaStory";
 import { focusBuilding } from "@/lib/scene/focusBuilding";
 
 // City Directory (ControlDock overlay): search-first phone book over the
@@ -32,14 +45,6 @@ import { focusBuilding } from "@/lib/scene/focusBuilding";
 // recomputes from the seed; only query/filter/spotlight-step are UI state.
 
 const MAX_SEARCH_RESULTS = 50;
-
-// Pinned pins sit on a near-black or near-white plate — whichever contrasts
-// with the district colour (user 2026-07-08). Plain Rec.709 luma threshold.
-function pinPlateFor(hex: string): string {
-  const n = parseInt(hex.replace("#", ""), 16);
-  const luma = 0.2126 * ((n >> 16) & 255) + 0.7152 * ((n >> 8) & 255) + 0.0722 * (n & 255);
-  return luma > 140 ? "rgba(10, 12, 16, 0.9)" : "rgba(245, 247, 250, 0.95)";
-}
 
 // Address numbers render as a right-aligned column sized by the city's widest
 // address (tabular-nums is inherited panel-wide), so "1203 Martin Parkway"
@@ -125,6 +130,80 @@ type DistrictAgg = {
   bounds?: { minX: number; maxX: number; minZ: number; maxZ: number };
 };
 
+// Traces a host's border while the persona directory's cold build is still in
+// flight (test plan 07-11) — a conic-gradient ring masked down to a stroke.
+// Purely observational: polls personaDirectoryBuildProgress() (derived-from-seed
+// state, never Date.now/Math.random) via requestAnimationFrame, only
+// re-rendering when the fraction moves by more than half a percent, and stops
+// polling for good once the build completes.
+//
+// `className` carries the radius (default `rounded-xl`, matching the panel
+// this was originally built for) so callers mounting it over a different
+// shape — e.g. the round dock button — can override it (`rounded-full`).
+// `thickness` sets the mask padding (stroke width) in px. A second, static
+// low-alpha track ring renders underneath the animated arc so progress reads
+// against a dark backdrop (the dock button has no panel chrome to contrast
+// against); it shares the mask/radius and disappears with the arc at 100%.
+export function DirectoryBuildRing({
+  className = "rounded-xl",
+  thickness = 2,
+}: {
+  className?: string;
+  thickness?: number;
+} = {}) {
+  const [progress, setProgress] = useState(() => personaDirectoryBuildProgress());
+  const lastRef = useRef(progress);
+
+  useEffect(() => {
+    if (lastRef.current >= 1) return;
+    let raf = 0;
+    let stopped = false;
+    const tick = () => {
+      const next = personaDirectoryBuildProgress();
+      if (next >= 1 || Math.abs(next - lastRef.current) > 0.005) {
+        lastRef.current = next;
+        setProgress(next);
+      }
+      if (next < 1 && !stopped) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => {
+      stopped = true;
+      cancelAnimationFrame(raf);
+    };
+  }, []);
+
+  if (progress >= 1) return null;
+
+  const maskStyle = {
+    padding: thickness,
+    WebkitMask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+    WebkitMaskComposite: "xor",
+    mask: "linear-gradient(#fff 0 0) content-box exclude, linear-gradient(#fff 0 0)",
+  } as const;
+
+  return (
+    <>
+      <div
+        aria-hidden
+        className={cn("pointer-events-none absolute inset-0", className)}
+        style={{
+          ...maskStyle,
+          background: "color-mix(in oklab, var(--primary) 25%, transparent)",
+        }}
+      />
+      <div
+        aria-hidden
+        className={cn("pointer-events-none absolute inset-0", className)}
+        style={{
+          ...maskStyle,
+          background: `conic-gradient(var(--primary) ${progress * 360}deg, transparent 0deg)`,
+        }}
+      />
+    </>
+  );
+}
+
 export function DirectorySection() {
   const masterSeed = useSceneStore((s) => s.masterSeed);
   const cityShape = useSceneStore((s) => s.cityShape);
@@ -150,15 +229,24 @@ export function DirectorySection() {
   const setHoverDistrictId = useSceneStore((s) => s.setHoverDistrictId);
   const pinnedDistrictId = useSceneStore((s) => s.pinnedDistrictId);
   const setPinnedDistrictId = useSceneStore((s) => s.setPinnedDistrictId);
+  const showDistrictBoundaries = useSceneStore((s) => s.showDistrictBoundaries);
+  const setShowDistrictBoundaries = useSceneStore((s) => s.setShowDistrictBoundaries);
 
   const [query, setQuery] = useState("");
   const [kindFilter, setKindFilter] = useState<KindFilter>("all");
   const [districtSort, setDistrictSort] = useState<DistrictSort>("residents");
 
-  const { directory, idToBuilding, adults, searchIndex, districtList } = useMemo(() => {
+  // Stage A perf fix: null until the persona directory's ~2.2s cold build
+  // lands. DirectorySection only mounts while the directory overlay is open
+  // (ControlDock's `{directoryOpen && <DirectorySection />}`), so `true` just
+  // means "peek/build as soon as this component exists" — the panel itself
+  // is already the gate.
+  const directory = usePersonaDirectoryDeferred(true);
+
+  const bundle = useMemo(() => {
     void citySize;
     void citySketch;
-    const directory = buildPersonaDirectory(masterSeed, cityShape, cityShapeScale);
+    if (!directory) return null;
     const { buildings, districts } = generateCity(masterSeed, cityShape, cityShapeScale);
     const idToBuilding = new Map<number, Building>(buildings.map((b) => [b.id, b]));
     const idToDistrict = new Map(districts.map((d) => [d.id, d]));
@@ -266,17 +354,31 @@ export function DirectorySection() {
     const districtList = [...byDistrict.values()].sort((a, b) => b.residentCount - a.residentCount);
     for (const d of districtList) d.buildings.sort((a, b) => b.householdCount - a.householdCount);
 
-    return { directory, idToBuilding, adults, searchIndex, districtList };
-  }, [masterSeed, cityShape, cityShapeScale, citySize, citySketch]);
+    return { idToBuilding, adults, searchIndex, districtList };
+  }, [directory, masterSeed, cityShape, cityShapeScale, citySize, citySketch]);
 
   // Marquee cast: a seed-stable run of adults starting at the old spotlight
-  // index (the "resident of the night" now leads the parade).
+  // index (the "resident of the night" now leads the parade). Guarded on the
+  // bundle (null while the directory build is still pending) rather than
+  // `adults` directly, since `adults` only exists once `bundle` does.
   const marqueeCast = useMemo(() => {
-    if (adults.length === 0) return [];
+    if (!bundle || !directory || bundle.adults.length === 0) return [];
+    const { adults } = bundle;
     const start = hashSeedIndex(masterSeed, adults.length);
     const count = Math.min(MARQUEE_COUNT, adults.length);
-    return Array.from({ length: count }, (_, i) => adults[(start + i) % adults.length]);
-  }, [adults, masterSeed]);
+    const cast = Array.from({ length: count }, (_, i) => adults[(start + i) % adults.length]);
+    // The hover cards read epithet/hook, which are lazy-tier — materialize
+    // the cast's buildings now (two dozen buildings, single-digit ms).
+    for (const p of cast) ensureBuildingStories(masterSeed, directory, p.homeBuildingId);
+    return cast;
+  }, [bundle, directory, masterSeed]);
+
+  // After the directory build lands the bundle derivation above is warm;
+  // until then render the masthead skeleton below instead of blocking.
+  if (!directory || !bundle) {
+    return <DirectorySkeleton />;
+  }
+  const { idToBuilding, searchIndex, districtList } = bundle;
 
   const trimmedQuery = query.trim().toLowerCase();
   const allMatches = trimmedQuery
@@ -397,8 +499,13 @@ export function DirectorySection() {
           viewport makes it the real scroll container and keeps the panel
           content-sized when the list is short. */}
       {trimmedQuery ? (
-        <ScrollArea className="**:data-[slot=scroll-area-viewport]:max-h-[calc(100vh-21rem)]">
-          <div className="flex flex-col gap-0.5 pr-2">
+        // -mr-3 bleeds through ControlDock's own p-3 pr-3 wrapper so the
+        // scrollbar sits flush at the card's inner edge, same as the columns'
+        // ScrollArea (which has no such outer padding to fight); pr-4 on the
+        // content below is the columns' text-to-scrollbar gap (user
+        // 2026-07-08: "scrollbar too close to text, and far from edge").
+        <ScrollArea className="-mr-3 **:data-[slot=scroll-area-viewport]:max-h-[calc(100vh-21rem)]">
+          <div className="flex flex-col gap-0.5 pr-4">
             {allMatches.length > MAX_SEARCH_RESULTS && (
               <div className="text-muted-foreground px-1 text-sm">{allMatches.length} matches</div>
             )}
@@ -448,115 +555,247 @@ export function DirectorySection() {
 
           <div className="flex shrink-0 items-center justify-between gap-2">
             <span className="text-sm font-medium">Districts</span>
-            <Select value={districtSort} onValueChange={(v) => setDistrictSort(v as DistrictSort)}>
-              <SelectTrigger size="sm" className="w-32">
-                <SelectValue>
-                  {(v: DistrictSort) => DISTRICT_SORTS.find((o) => o.value === v)?.label ?? "Sort"}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {DISTRICT_SORTS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex items-center gap-1">
+              {/* Boundaries toggle (user 2026-07-10): outline every district
+                  in its colour on the map; hovering a header then fills its
+                  district at 20% alpha (SelectedDistrictOutline). */}
+              <IconTip label="Show Boundaries">
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Show Boundaries"
+                  aria-pressed={showDistrictBoundaries}
+                  onClick={() => setShowDistrictBoundaries(!showDistrictBoundaries)}
+                  className={cn(
+                    "text-muted-foreground size-7",
+                    // /30, not the usual /15 selection tint — an icon-only
+                    // active state needs the extra contrast (user 2026-07-10).
+                    showDistrictBoundaries && "bg-primary/30 text-foreground",
+                  )}
+                >
+                  <SquareDashed className="size-3.5" />
+                </Button>
+              </IconTip>
+              <Select value={districtSort} onValueChange={(v) => setDistrictSort(v as DistrictSort)}>
+                <SelectTrigger size="sm" className="w-32">
+                  <SelectValue>
+                    {(v: DistrictSort) => DISTRICT_SORTS.find((o) => o.value === v)?.label ?? "Sort"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {DISTRICT_SORTS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
-          <ScrollArea className="**:data-[slot=scroll-area-viewport]:max-h-[calc(100vh-24rem)]">
-            <div className="flex flex-col gap-1 pr-2">
-          {[...districtList]
-            .sort((a, b) =>
-              districtSort === "name"
-                ? a.properName.localeCompare(b.properName)
-                : districtSort === "roads"
-                  ? b.roadCount - a.roadCount
-                  : districtSort === "businesses"
-                    ? b.businessCount - a.businessCount
-                    : b.residentCount - a.residentCount,
-            )
-            .map((d) => (
-            <Collapsible key={d.id}>
-              {/* The WHOLE header expands (user 2026-07-08): district name in
-                  its legend color on one line, counts below. Hovering traces
-                  the district border on the map; the pin makes it stick and
-                  flies the camera to the district. */}
-              <div
-                className={cn(
-                  "flex items-center",
-                  topRef?.kind === "district" && topRef.id === d.id && "rounded-md bg-primary/15",
-                )}
-                onMouseEnter={() => setHoverDistrictId(d.id)}
-                onMouseLeave={() => setHoverDistrictId(null)}
-              >
-                <IconTip label="Pin District">
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={`Pin ${d.properName}`}
-                    aria-pressed={pinnedDistrictId === d.id}
-                    onClick={() => pinDistrict(d)}
-                    className="size-6 shrink-0 [&_svg]:size-3.5"
-                    style={{
-                      color: d.color,
-                      ...(pinnedDistrictId === d.id
-                        ? { backgroundColor: pinPlateFor(d.color) }
-                        : {}),
-                    }}
+          {/* -mr-3/pr-4: same edge-and-gap fix as the search list above. */}
+          <ScrollArea className="-mr-3 **:data-[slot=scroll-area-viewport]:max-h-[calc(100vh-24rem)]">
+            <div className="flex flex-col pr-4">
+              {[...districtList]
+                .sort((a, b) =>
+                  districtSort === "name"
+                    ? a.properName.localeCompare(b.properName)
+                    : districtSort === "roads"
+                      ? b.roadCount - a.roadCount
+                      : districtSort === "businesses"
+                        ? b.businessCount - a.businessCount
+                        : b.residentCount - a.residentCount,
+                )
+                .map((d) => (
+                  // Hover lives on the Collapsible ROOT, not just the header (user
+                  // 2026-07-08): that way the expanded building list — which sits
+                  // between this header and the next one — keeps the district
+                  // highlighted instead of dropping through to the pinned fallback.
+                  // The list above dropped its row gap-1 in favor of py-0.5 HERE so
+                  // every row's hover hitbox is vertically contiguous with its
+                  // neighbors — no dead gap that snaps the highlight back to the
+                  // pinned district while the cursor is between headers.
+                  <Collapsible
+                    key={d.id}
+                    className="py-0.5"
+                    onMouseEnter={() => setHoverDistrictId(d.id)}
+                    onMouseLeave={() => setHoverDistrictId(null)}
                   >
-                    <MapPin />
-                  </Button>
-                </IconTip>
-                <CollapsibleTrigger className="min-w-0 flex-1 rounded-md px-1.5 py-1.5 hover:bg-muted/60">
-                <span className="flex min-w-0 flex-1 flex-col gap-0.5 text-left">
-                  <span className="truncate text-sm">
-                    <span className="font-medium" style={{ color: d.color }}>
-                      {d.properName}
-                    </span>
-                    <span className="text-muted-foreground text-xs"> · {d.displayName}</span>
-                  </span>
-                  <span className="text-muted-foreground truncate text-xs">
-                    {d.roadCount} roads · {d.businessCount} businesses ·{" "}
-                    {d.residentCount.toLocaleString()} residents
-                  </span>
-                </span>
-                </CollapsibleTrigger>
-              </div>
-              <CollapsiblePanel>
-                <div className="flex flex-col gap-0.5 py-1 pl-2">
-                  {/* Building rows (user 2026-07-08): italic building name OR
-                      plain street name on the left; the address number right-
-                      aligned, then a gap, then the household count. */}
-                  {d.buildings.map((b) => (
-                    <button
-                      key={b.buildingId}
-                      type="button"
-                      onClick={() => goToBuilding(b.buildingId)}
+                    {/* The WHOLE header expands (user 2026-07-08): district name in
+                        its legend color on one line, counts below. Hovering traces
+                        the district border on the map; the pin makes it stick and
+                        flies the camera to the district. Pin sits inside the
+                        trigger, immediately left of its auto-appended chevron
+                        (user 2026-07-08), rendered as a span (not a button) so it
+                        doesn't nest inside the trigger's own button element. */}
+                    <CollapsibleTrigger
                       className={cn(
-                        "hover:bg-foreground/10 -mx-1 flex items-baseline justify-between gap-2 rounded px-1 text-left text-sm",
-                        isSelected("building", String(b.buildingId)) && "bg-primary/15",
+                        "hover:bg-muted/60 min-w-0 items-center rounded-md px-1.5 py-1.5",
+                        topRef?.kind === "district" && topRef.id === d.id && "bg-primary/15",
                       )}
                     >
-                      <span className={cn("min-w-0 truncate", b.name && "italic")}>
-                        {b.name ?? b.address?.street ?? `Building #${b.buildingId}`}
+                      <span className="flex min-w-0 flex-1 flex-col gap-0.5 text-left">
+                        <span className="truncate text-sm">
+                          <span className="font-medium" style={{ color: d.color }}>
+                            {d.properName}
+                          </span>
+                          <span className="text-muted-foreground text-xs"> · {d.displayName}</span>
+                        </span>
+                        <span className="text-muted-foreground truncate text-xs">
+                          {d.roadCount} roads · {d.businessCount} businesses ·{" "}
+                          {d.residentCount.toLocaleString()} residents
+                        </span>
                       </span>
-                      <span className="text-muted-foreground flex shrink-0 items-baseline gap-3 text-xs">
-                        {b.address && (
-                          <AddrNum n={b.address.number} width={directory.names.maxAddressDigits} />
-                        )}
-                        <span className="inline-block w-9 text-right">{b.householdCount} hh</span>
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </CollapsiblePanel>
-            </Collapsible>
-          ))}
+                      <IconTip label="Pin District">
+                        <Button
+                          render={<span />}
+                          // Renders as a span ON PURPOSE (a real <button> can't
+                          // nest inside the CollapsibleTrigger's button) — this
+                          // tells Base UI so it wires role/keyboard semantics
+                          // instead of warning about the missing native element.
+                          nativeButton={false}
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={`Pin ${d.properName}`}
+                          aria-pressed={pinnedDistrictId === d.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            pinDistrict(d);
+                          }}
+                          className={cn(
+                            "size-6 shrink-0 [&_svg]:size-3.5",
+                            // Pinned state matches the Show Boundaries toggle's
+                            // primary tint, at /30 for contrast (user 2026-07-10 —
+                            // replaced the foreground plate). The pin icon keeps
+                            // its district color in both states.
+                            pinnedDistrictId === d.id && "bg-primary/30",
+                          )}
+                          style={{ color: d.color }}
+                        >
+                          <MapPin />
+                        </Button>
+                      </IconTip>
+                    </CollapsibleTrigger>
+                    <CollapsiblePanel>
+                      <div className="flex flex-col gap-0.5 py-1 pl-2">
+                        {/* Building rows (user 2026-07-08): address leads — number
+                            right-aligned in a fixed 4-char column, then the street.
+                            Named buildings get a Signature icon right-aligned just
+                            left of the "N hh" column; hovering it reveals the name
+                            (the row itself no longer carries the name inline). The
+                            icon's slot width is reserved even when empty so the hh
+                            column stays aligned across named and unnamed rows. */}
+                        {d.buildings.map((b) => (
+                          <button
+                            key={b.buildingId}
+                            type="button"
+                            onClick={() => goToBuilding(b.buildingId)}
+                            className={cn(
+                              "hover:bg-foreground/10 -mx-1 flex items-baseline justify-between gap-2 rounded px-1 text-left text-sm",
+                              isSelected("building", String(b.buildingId)) && "bg-primary/15",
+                            )}
+                          >
+                            <span className="flex min-w-0 items-baseline gap-1.5">
+                              {b.address ? (
+                                <>
+                                  <AddrNum n={b.address.number} width={4} />
+                                  <span className="truncate">{b.address.street}</span>
+                                </>
+                              ) : (
+                                <span className="truncate">Building #{b.buildingId}</span>
+                              )}
+                            </span>
+                            <span className="text-muted-foreground flex shrink-0 items-baseline gap-3 text-xs">
+                              <span className="inline-flex w-3.5 shrink-0 justify-end">
+                                {b.name && (
+                                  <IconTip label={b.name}>
+                                    <span className="inline-flex">
+                                      <Signature className="size-3.5" aria-hidden />
+                                    </span>
+                                  </IconTip>
+                                )}
+                              </span>
+                              <span className="inline-block w-9 text-right">
+                                {b.householdCount} hh
+                              </span>
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </CollapsiblePanel>
+                  </Collapsible>
+                ))}
             </div>
           </ScrollArea>
         </>
       )}
+    </div>
+  );
+}
+
+// Skeleton state for the directory build's cold ~2.2s window (Stage A perf
+// fix). Mirrors DirectorySection's masthead/search/districts vertical rhythm
+// (same gap classes) so the real content doesn't jump when it swaps in — the
+// search Input + kind-filter tabs are the REAL controls (just disabled),
+// since they're cheap and static; everything that depends on the directory
+// (city name, stat chips, marquee, district rows) is a Skeleton bar instead.
+function DirectorySkeleton() {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-3 pt-1 tabular-nums">
+      <div className="flex shrink-0 flex-col gap-1">
+        <Skeleton className="h-6 w-40" />
+        <div className="flex items-center gap-3">
+          <Skeleton className="h-4 w-16" />
+          <Skeleton className="h-4 w-16" />
+        </div>
+      </div>
+
+      <Skeleton className="h-6 w-full" />
+
+      <div className="flex shrink-0 flex-col gap-1.5">
+        <Input
+          type="search"
+          disabled
+          placeholder="Search the city…"
+          aria-label="Search streets, buildings, companies, and people"
+          className="h-8"
+        />
+        <Tabs defaultValue="all">
+          <TabsList className="h-7 w-full">
+            {KIND_FILTERS.map((f) =>
+              f.icon ? (
+                <IconTip key={f.value} label={f.label}>
+                  <TabsTrigger
+                    value={f.value}
+                    disabled
+                    aria-label={f.label}
+                    className="px-2 text-xs"
+                  >
+                    <f.icon className="size-3.5" />
+                  </TabsTrigger>
+                </IconTip>
+              ) : (
+                <TabsTrigger key={f.value} value={f.value} disabled className="px-2 text-xs">
+                  {f.label}
+                </TabsTrigger>
+              ),
+            )}
+          </TabsList>
+        </Tabs>
+      </div>
+
+      <Separator className="shrink-0" />
+
+      <div className="flex shrink-0 items-center justify-between gap-2">
+        <Skeleton className="h-4 w-16" />
+        <Skeleton className="h-7 w-32" />
+      </div>
+
+      <div className="flex flex-col gap-1">
+        {Array.from({ length: 8 }, (_, i) => (
+          <Skeleton key={i} className="h-6 w-full" />
+        ))}
+      </div>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import seedrandom from "seedrandom";
+import { seededRng } from "./rng";
 import type { Persona, PersonaId, PersonaDirectory } from "./personas";
 import type { CityNames } from "./naming";
 import type { ProfessionCategory } from "./personaData";
@@ -48,7 +48,7 @@ function pick<T>(rng: () => number, arr: readonly T[]): T {
 }
 
 export function buildCityLore(masterSeed: string, names: CityNames): CityLoreEntry[] {
-  const rng = seedrandom(`${masterSeed}::personas::lore`);
+  const rng = seededRng(`${masterSeed}::personas::lore`);
   const streets = [...names.streetNames.values()];
   const streetBase = () => {
     const s = streets.length > 0 ? pick(rng, streets) : "Harbor Street";
@@ -523,35 +523,117 @@ function fill(template: string, ctx: FillCtx): string {
 
 // --- Weave -----------------------------------------------------------------------
 
-// Mutates every persona in the directory: schedule + story (+ one-sided
-// relations). Runs as the directory's final pass, on its own streams.
-export function weaveStories(masterSeed: string, dir: PersonaDirectory): void {
-  const lore = buildCityLore(masterSeed, dir.names);
-  dir.lore = lore;
-
-  // Deterministic legend pick: first adult in a mid-rise walk of the persona
-  // list, chosen by a dedicated stream so it doesn't shift with pool edits.
-  const legendRng = seedrandom(`${masterSeed}::personas::legend`);
-  const adults = [...dir.personas.values()].filter((p) => p.age >= 25 && p.age <= 75);
-  const legendId = adults.length > 0 ? adults[Math.floor(legendRng() * adults.length)].id : null;
-
+// Lazy story weave (2026-07-10). The old weaveStories() walked all ~39k
+// personas eagerly at directory-build time — the single heaviest slice of the
+// cold build. Every de-dupe set below is household- or building-scoped and
+// every persona draws from its own `::story::<id>` stream, so the weave
+// decomposes exactly by building: ensureBuildingStories() produces
+// byte-identical output to the old eager pass, one building at a time, the
+// first time a card, sift, or hover asks. (The relations pass was re-keyed
+// from one global stream to `::relations::<id>` per persona so it decomposes
+// too — a one-time relations re-roll.)
+type WeaveState = {
+  lore: CityLoreEntry[];
+  legendId: PersonaId | null;
   // Per-household de-dupe of hook + whyAwake templates (a couple sharing the
   // same 3 a.m. line reads as a copy-paste bug), and per-building de-dupe of
   // epithets (two "fortune keepers" on one block breaks the nickname fiction).
-  const usedByHousehold = new Map<string, Set<string>>();
-  const usedAwakeByHousehold = new Map<string, Set<string>>();
-  const usedEpithetsByBuilding = new Map<number, Set<string>>();
-  const usedDomainsByBuilding = new Map<number, Set<string>>();
+  usedByHousehold: Map<string, Set<string>>;
+  usedAwakeByHousehold: Map<string, Set<string>>;
+  usedEpithetsByBuilding: Map<number, Set<string>>;
+  usedDomainsByBuilding: Map<number, Set<string>>;
+  // Street index for the relations pass's "across the street" pool.
+  byStreet: Map<string, Persona[]>;
+  woven: Set<number>; // buildingIds whose residents have stories
+};
 
+// Keyed by directory instance: a re-rolled/re-tiered directory is a new
+// object, so its weave state starts fresh and the old one is collectable.
+const weaveStates = new WeakMap<PersonaDirectory, WeaveState>();
+
+function weaveStateFor(masterSeed: string, dir: PersonaDirectory): WeaveState {
+  let st = weaveStates.get(dir);
+  if (st) return st;
+  const lore = buildCityLore(masterSeed, dir.names);
+  dir.lore = lore;
+
+  // Deterministic legend pick: chosen by a dedicated stream over the full
+  // adult walk so it doesn't shift with pool edits — and doesn't depend on
+  // which building happens to be woven first.
+  const legendRng = seededRng(`${masterSeed}::personas::legend`);
+  const adults = [...dir.personas.values()].filter((p) => p.age >= 25 && p.age <= 75);
+  const legendId = adults.length > 0 ? adults[Math.floor(legendRng() * adults.length)].id : null;
+
+  const byStreet = new Map<string, Persona[]>();
   for (const p of dir.personas.values()) {
-    const rng = seedrandom(`${masterSeed}::personas::story::${p.id}`);
+    const street = dir.names.addresses.get(p.homeBuildingId)?.street;
+    if (!street) continue;
+    const list = byStreet.get(street) ?? [];
+    list.push(p);
+    byStreet.set(street, list);
+  }
+
+  st = {
+    lore,
+    legendId,
+    usedByHousehold: new Map(),
+    usedAwakeByHousehold: new Map(),
+    usedEpithetsByBuilding: new Map(),
+    usedDomainsByBuilding: new Map(),
+    byStreet,
+    woven: new Set(),
+  };
+  weaveStates.set(dir, st);
+  return st;
+}
+
+// Materialize schedule + story (+ one-sided relation) for every resident of
+// one building. Idempotent; a building is a few dozen personas at most, so a
+// cold call is sub-millisecond — cheap enough to run synchronously from a
+// card render.
+export function ensureBuildingStories(
+  masterSeed: string,
+  dir: PersonaDirectory,
+  buildingId: number,
+): void {
+  const st = weaveStateFor(masterSeed, dir);
+  if (st.woven.has(buildingId)) return;
+  st.woven.add(buildingId);
+  const households = dir.byHomeBuilding.get(buildingId);
+  if (!households) return;
+  for (const hh of households) {
+    for (const pid of hh.memberIds) {
+      const p = dir.personas.get(pid);
+      if (!p) continue;
+      weavePersonaStory(masterSeed, dir, st, p);
+      weavePersonaRelation(masterSeed, dir, st, p);
+    }
+  }
+}
+
+// Whole-city weave for consumers that genuinely read everything (writing lab,
+// audit scripts). Same output as calling ensureBuildingStories per building.
+export function ensureAllStories(masterSeed: string, dir: PersonaDirectory): void {
+  for (const buildingId of dir.byHomeBuilding.keys()) {
+    ensureBuildingStories(masterSeed, dir, buildingId);
+  }
+}
+
+function weavePersonaStory(
+  masterSeed: string,
+  dir: PersonaDirectory,
+  st: WeaveState,
+  p: Persona,
+): void {
+  {
+    const rng = seededRng(`${masterSeed}::personas::story::${p.id}`);
     p.schedule = { shift: shiftFor(p, rng) };
 
     // Domain word — deduped within the building (two crow-keepers on one
     // block reads as a bug; one per building keeps the coincidence citywide,
     // where it belongs — see DOMAIN_HOOKS' "two people in this city").
-    const buildingDomains = usedDomainsByBuilding.get(p.homeBuildingId) ?? new Set<string>();
-    usedDomainsByBuilding.set(p.homeBuildingId, buildingDomains);
+    const buildingDomains = st.usedDomainsByBuilding.get(p.homeBuildingId) ?? new Set<string>();
+    st.usedDomainsByBuilding.set(p.homeBuildingId, buildingDomains);
     let domain = pick(rng, DOMAIN_WORDS);
     if (buildingDomains.has(domain)) domain = pick(rng, DOMAIN_WORDS);
     buildingDomains.add(domain);
@@ -561,19 +643,19 @@ export function weaveStories(masterSeed: string, dir: PersonaDirectory): void {
     const street = address ? address.street.split(" ").slice(0, -1).join(" ") || address.street : "Harbor";
     const district = dir.names.districtNames.get(p.homeDistrictId) ?? "the neighborhood";
     const bizName = p.businessId ? dir.businesses.get(p.businessId)?.name : undefined;
-    const ctx: FillCtx = { p, names: dir.names, lore, rng, street, district, bizName, used: [] };
+    const ctx: FillCtx = { p, names: dir.names, lore: st.lore, rng, street, district, bizName, used: [] };
 
     const cluster = clusterFor(p);
     const isKid = cluster === "kid" || cluster === "teen";
 
     // Hook — legend > outsized (10%) > cluster pool (70%) > generic.
     const hhKey = `${p.homeBuildingId}:${p.householdIndex}`;
-    const usedHooks = usedByHousehold.get(hhKey) ?? new Set<string>();
-    usedByHousehold.set(hhKey, usedHooks);
+    const usedHooks = st.usedByHousehold.get(hhKey) ?? new Set<string>();
+    st.usedByHousehold.set(hhKey, usedHooks);
     let hookTemplate: string;
     let epithetOverride: string | undefined;
     let detailOverride: string | undefined;
-    if (p.id === legendId) {
+    if (p.id === st.legendId) {
       hookTemplate = LEGEND.hook;
       epithetOverride = LEGEND.epithet;
       detailOverride = LEGEND.detail;
@@ -601,8 +683,8 @@ export function weaveStories(masterSeed: string, dir: PersonaDirectory): void {
 
     // Detail + epithet come as a pair so the neighbor's name for them matches
     // what's on the sheet. ~55% of adults, ~30% of kids.
-    const buildingEpithets = usedEpithetsByBuilding.get(p.homeBuildingId) ?? new Set<string>();
-    usedEpithetsByBuilding.set(p.homeBuildingId, buildingEpithets);
+    const buildingEpithets = st.usedEpithetsByBuilding.get(p.homeBuildingId) ?? new Set<string>();
+    st.usedEpithetsByBuilding.set(p.homeBuildingId, buildingEpithets);
     let detail: string | undefined;
     let epithet: string | undefined = epithetOverride;
     if (detailOverride) {
@@ -651,8 +733,8 @@ export function weaveStories(masterSeed: string, dir: PersonaDirectory): void {
     }
 
     // whyAwake — everyone gets one; it's the line that explains the lit window.
-    const usedAwake = usedAwakeByHousehold.get(hhKey) ?? new Set<string>();
-    usedAwakeByHousehold.set(hhKey, usedAwake);
+    const usedAwake = st.usedAwakeByHousehold.get(hhKey) ?? new Set<string>();
+    st.usedAwakeByHousehold.set(hhKey, usedAwake);
     let awakeTemplate = pick(rng, WHY_AWAKE[p.schedule.shift]);
     for (let i = 0; i < 4 && usedAwake.has(awakeTemplate); i++) {
       awakeTemplate = pick(rng, WHY_AWAKE[p.schedule.shift]);
@@ -662,72 +744,76 @@ export function weaveStories(masterSeed: string, dir: PersonaDirectory): void {
 
     p.story = { epithet, wasIs, whyAwake, detail, refusal, hook, loreRefs: ctx.used };
   }
+}
 
-  // --- One-sided relations pass (cross-persona, after all sheets exist) ---
-  {
-    const rng = seedrandom(`${masterSeed}::personas::relations`);
-    // Index personas by street for the "across the street" context.
-    const byStreet = new Map<string, Persona[]>();
-    for (const p of dir.personas.values()) {
-      const street = dir.names.addresses.get(p.homeBuildingId)?.street;
-      if (!street) continue;
-      const list = byStreet.get(street) ?? [];
-      list.push(p);
-      byStreet.set(street, list);
-    }
-    for (const p of dir.personas.values()) {
-      if (p.age < 16 || rng() < 0.7) continue; // ~30% of adults get an edge
-      // Candidate pools by context.
-      const neighbors = (dir.byHomeBuilding.get(p.homeBuildingId) ?? [])
-        .filter((h) => h.index !== p.householdIndex)
-        .flatMap((h) => h.memberIds)
+// One-sided relation edge (~30% of 16+). Re-keyed 2026-07-10 from one global
+// call-count-coupled stream to `::relations::<id>` per persona so the weave
+// decomposes by building. Targets need only eager-tier facts (names, address,
+// workplace) — their own stories don't have to exist yet.
+function weavePersonaRelation(
+  masterSeed: string,
+  dir: PersonaDirectory,
+  st: WeaveState,
+  p: Persona,
+): void {
+  if (p.age < 16) return;
+  const rng = seededRng(`${masterSeed}::personas::relations::${p.id}`);
+  if (rng() < 0.7) return; // ~30% of adults get an edge
+  // Candidate pools by context.
+  const neighbors = (dir.byHomeBuilding.get(p.homeBuildingId) ?? [])
+    .filter((h) => h.index !== p.householdIndex)
+    .flatMap((h) => h.memberIds)
+    .map((id) => dir.personas.get(id)!)
+    .filter((q) => q.age >= 16);
+  const coworkers = p.businessId
+    ? (dir.businesses.get(p.businessId)?.employeeIds ?? [])
+        .filter((id) => id !== p.id)
         .map((id) => dir.personas.get(id)!)
-        .filter((q) => q.age >= 16);
-      const coworkers = p.businessId
-        ? (dir.businesses.get(p.businessId)?.employeeIds ?? [])
-            .filter((id) => id !== p.id)
-            .map((id) => dir.personas.get(id)!)
-        : [];
-      const streetmates = (byStreet.get(dir.names.addresses.get(p.homeBuildingId)?.street ?? "") ?? []).filter(
-        (q) => q.id !== p.id && q.homeBuildingId !== p.homeBuildingId && q.age >= 16,
-      );
-      const optionPools: Array<{ context: "neighbor" | "coworker" | "street"; pool: Persona[] }> = [
-        { context: "neighbor", pool: neighbors },
-        { context: "coworker", pool: coworkers },
-        { context: "street", pool: streetmates },
-      ];
-      const options = optionPools.filter((o) => o.pool.length > 0);
-      if (options.length === 0) continue;
-      const opt = pick(rng, options);
-      const target = pick(rng, opt.pool);
-      const templates = RELATION_TEMPLATES.filter((t) => t.context === opt.context);
-      const t = pick(rng, templates);
-      // "used to date" needs both parties plausibly single-ish and adult.
-      if (t.verb === "used to date" && (p.age < 22 || target.age < 22 || Math.abs(p.age - target.age) > 15)) continue;
-      const address = dir.names.addresses.get(p.homeBuildingId);
-      const street = address ? address.street.split(" ").slice(0, -1).join(" ") : "Harbor";
-      const district = dir.names.districtNames.get(p.homeDistrictId) ?? "the neighborhood";
-      const ctx: FillCtx = {
-        p, names: dir.names, lore, rng, street, district,
-        bizName: p.businessId ? dir.businesses.get(p.businessId)?.name : undefined,
-        used: [],
-      };
-      const line = fill(
-        t.line.replace(/\{T\}/g, target.fullName).replace(/\{Tfirst\}/g, target.givenName),
-        ctx,
-      );
-      p.story.relation = { verb: t.verb, targetId: target.id, line };
-      if (ctx.used.length > 0) p.story.loreRefs.push(...ctx.used);
-    }
-  }
+    : [];
+  const streetmates = (st.byStreet.get(dir.names.addresses.get(p.homeBuildingId)?.street ?? "") ?? []).filter(
+    (q) => q.id !== p.id && q.homeBuildingId !== p.homeBuildingId && q.age >= 16,
+  );
+  const optionPools: Array<{ context: "neighbor" | "coworker" | "street"; pool: Persona[] }> = [
+    { context: "neighbor", pool: neighbors },
+    { context: "coworker", pool: coworkers },
+    { context: "street", pool: streetmates },
+  ];
+  const options = optionPools.filter((o) => o.pool.length > 0);
+  if (options.length === 0) return;
+  const opt = pick(rng, options);
+  const target = pick(rng, opt.pool);
+  const templates = RELATION_TEMPLATES.filter((t) => t.context === opt.context);
+  const t = pick(rng, templates);
+  // "used to date" needs both parties plausibly single-ish and adult.
+  if (t.verb === "used to date" && (p.age < 22 || target.age < 22 || Math.abs(p.age - target.age) > 15)) return;
+  const address = dir.names.addresses.get(p.homeBuildingId);
+  const street = address ? address.street.split(" ").slice(0, -1).join(" ") : "Harbor";
+  const district = dir.names.districtNames.get(p.homeDistrictId) ?? "the neighborhood";
+  const ctx: FillCtx = {
+    p, names: dir.names, lore: st.lore, rng, street, district,
+    bizName: p.businessId ? dir.businesses.get(p.businessId)?.name : undefined,
+    used: [],
+  };
+  const line = fill(
+    t.line.replace(/\{T\}/g, target.fullName).replace(/\{Tfirst\}/g, target.givenName),
+    ctx,
+  );
+  p.story.relation = { verb: t.verb, targetId: target.id, line };
+  if (ctx.used.length > 0) p.story.loreRefs.push(...ctx.used);
 }
 
 // --- Building sift -----------------------------------------------------------------
 
 // Curation pass (Ryan's "story sifting"): scan a building's residents for the
 // single most interesting pattern and return one line the occupants panel can
-// lead with. Deterministic — pure function of already-woven directory state.
-export function siftBuilding(dir: PersonaDirectory, buildingId: number): string | undefined {
+// lead with. Deterministic; self-materializes the building's stories first
+// (it reads shifts and relations), so callers don't have to.
+export function siftBuilding(
+  masterSeed: string,
+  dir: PersonaDirectory,
+  buildingId: number,
+): string | undefined {
+  ensureBuildingStories(masterSeed, dir, buildingId);
   const households = dir.byHomeBuilding.get(buildingId);
   if (!households || households.length === 0) return undefined;
   const residents = households.flatMap((h) => h.memberIds).map((id) => dir.personas.get(id)!);

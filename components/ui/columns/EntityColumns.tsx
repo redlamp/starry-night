@@ -16,8 +16,10 @@ import {
   User,
 } from "lucide-react";
 import { ScrollArea as ScrollAreaPrimitive } from "@base-ui/react/scroll-area";
+import { flyToBuilding } from "@/lib/scene/focusBuilding";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Tooltip,
   TooltipTrigger,
@@ -25,8 +27,9 @@ import {
   TooltipProvider,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { ensureBuildingStories } from "@/lib/seed/personaStory";
 import { useSceneStore, type EntityRef } from "@/lib/state/sceneStore";
-import { useEntityIndexes, type EntityIndexes } from "./entityData";
+import { useEntityIndexes, useEntityIndexesDeferred, type EntityIndexes } from "./entityData";
 import { DistrictColumn } from "./DistrictColumn";
 import { StreetColumn } from "./StreetColumn";
 import { BuildingColumn } from "./BuildingColumn";
@@ -66,6 +69,35 @@ const KIND_LABEL: Record<EntityRef["kind"], string> = {
   company: "Company",
   persona: "Resident",
 };
+
+// Card title (user 2026-07-11): larger + selectable for residents, and their
+// maiden name rides the header as secondary text — `Jessica Chen born Park`
+// ("born" over "née", user 2026-07-11: same meaning, no French gloss) —
+// instead of a separate meta line inside the card.
+function RefTitle({ entityRef, indexes }: { entityRef: EntityRef; indexes: EntityIndexes }) {
+  const persona =
+    entityRef.kind === "persona" ? indexes.directory.personas.get(entityRef.id) : undefined;
+  return (
+    <div
+      className={cn(
+        "select-text cursor-text font-medium leading-snug [overflow-wrap:anywhere]",
+        entityRef.kind === "persona" ? "text-lg" : "text-sm",
+      )}
+    >
+      {refTitle(entityRef, indexes)}
+      {/* Long name + maiden pairs drop the word and read "(Park)" so the
+          line stays comfortable (user 2026-07-11 round 3). */}
+      {persona?.maidenName && (
+        <span className="text-sm font-normal text-muted-foreground">
+          {" "}
+          {refTitle(entityRef, indexes).length + persona.maidenName.length > 24
+            ? `(${persona.maidenName})`
+            : `born ${persona.maidenName}`}
+        </span>
+      )}
+    </div>
+  );
+}
 
 function refTitle(ref: EntityRef, indexes: EntityIndexes): string {
   switch (ref.kind) {
@@ -110,6 +142,9 @@ function showLocations(ref: EntityRef, indexes: EntityIndexes): void {
     };
     connect(p.partnerId);
     for (const link of p.family) connect(link.personaId);
+    // The relation edge is lazy-tier: materialize this persona's building
+    // before reading it (event-path helper, so getState() is the idiom).
+    ensureBuildingStories(useSceneStore.getState().masterSeed, indexes.directory, p.homeBuildingId);
     connect(p.story.relation?.targetId);
   };
   switch (ref.kind) {
@@ -171,6 +206,37 @@ function showLocations(ref: EntityRef, indexes: EntityIndexes): void {
   st.setFocusRequest({ x: cx, y: cy, z: cz, radius, fit: "fill" });
 }
 
+// Camera follows the SELECTION (user 2026-07-11 round 3): whichever card
+// lands on top of the drill, glide to its place — a resident's home, a
+// company's or building's site, a street's run, a district's bounds. Fly-to
+// buttons still exist for the row-specific places (work, partner, commute).
+function flyToEntity(ref: EntityRef, indexes: EntityIndexes): void {
+  switch (ref.kind) {
+    case "persona": {
+      const p = indexes.directory.personas.get(ref.id);
+      const b = p ? indexes.buildingById.get(p.homeBuildingId) : undefined;
+      if (b) flyToBuilding(b);
+      break;
+    }
+    case "company": {
+      const biz = indexes.directory.businesses.get(ref.id);
+      const b = biz ? indexes.buildingById.get(biz.buildingId) : undefined;
+      if (b) flyToBuilding(b);
+      break;
+    }
+    case "building": {
+      const b = indexes.buildingById.get(ref.id);
+      if (b) flyToBuilding(b);
+      break;
+    }
+    // Streets and districts have no single building — frame their extent.
+    case "street":
+    case "district":
+      showLocations(ref, indexes);
+      break;
+  }
+}
+
 function ColumnBody({
   entityRef,
   part,
@@ -194,24 +260,19 @@ function ColumnBody({
   }
 }
 
+// Outer shell: subscribes only what's needed to decide open/close and to run
+// the two store-bridge effects that must keep working while the panel is
+// closed (a scene click opening a path; a reroll closing one). Everything
+// that only matters once a path is open — including the persona-directory
+// build — lives in EntityColumnsBody, so those subscriptions/effects/hooks
+// never mount (and never pay the directory's cold build) while closed.
 export function EntityColumns() {
   const columnPath = useSceneStore((s) => s.columnPath);
   const columnCursor = useSceneStore((s) => s.columnCursor);
-  const columnsView = useSceneStore((s) => s.columnsView);
-  const setColumnsView = useSceneStore((s) => s.setColumnsView);
-  const columnBack = useSceneStore((s) => s.columnBack);
-  const columnForward = useSceneStore((s) => s.columnForward);
-  const jumpToColumn = useSceneStore((s) => s.jumpToColumn);
-  const closeColumns = useSceneStore((s) => s.closeColumns);
-  const resetColumns = useSceneStore((s) => s.resetColumns);
   const selectedBuildingId = useSceneStore((s) => s.selectedBuildingId);
   const masterSeed = useSceneStore((s) => s.masterSeed);
-  const panelHidden = useSceneStore((s) => s.panelHidden);
-  const settingsPanelWidth = useSceneStore((s) => s.settingsPanelWidth);
-  const directoryOpen = useSceneStore((s) => s.directoryOpen);
-  const coneFollow = useSceneStore((s) => s.coneFollow);
-  const setConeFollow = useSceneStore((s) => s.setConeFollow);
-  const indexes = useEntityIndexes();
+  const closeColumns = useSceneStore((s) => s.closeColumns);
+  const resetColumns = useSceneStore((s) => s.resetColumns);
 
   const visible = columnPath.slice(0, columnCursor + 1);
   const open = visible.length > 0;
@@ -241,6 +302,37 @@ export function EntityColumns() {
     closeColumns();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [masterSeed]);
+
+  if (!open) return null;
+  return <EntityColumnsBody />;
+}
+
+// Everything that only runs while a path is open: the rest of the store
+// subscriptions, the (deferred — Stage A perf fix) persona-directory-backed
+// indexes, and the keyboard/wheel/cone-follow effects. Recomputes its own
+// visible/open (cheap — slice + length check) rather than threading them
+// down as props.
+function EntityColumnsBody() {
+  const columnPath = useSceneStore((s) => s.columnPath);
+  const columnCursor = useSceneStore((s) => s.columnCursor);
+  const columnsView = useSceneStore((s) => s.columnsView);
+  const setColumnsView = useSceneStore((s) => s.setColumnsView);
+  const columnBack = useSceneStore((s) => s.columnBack);
+  const columnForward = useSceneStore((s) => s.columnForward);
+  const jumpToColumn = useSceneStore((s) => s.jumpToColumn);
+  const closeColumns = useSceneStore((s) => s.closeColumns);
+  const panelHidden = useSceneStore((s) => s.panelHidden);
+  const settingsPanelWidth = useSceneStore((s) => s.settingsPanelWidth);
+  const directoryOpen = useSceneStore((s) => s.directoryOpen);
+  const coneFollow = useSceneStore((s) => s.coneFollow);
+  const setConeFollow = useSceneStore((s) => s.setConeFollow);
+  // Stage A perf fix: null until the ~2.2s persona-directory cold build has
+  // landed (deferred off the mount-critical path) — render a skeleton card
+  // below until then instead of blocking on the sync build.
+  const indexes = useEntityIndexesDeferred();
+
+  const visible = columnPath.slice(0, columnCursor + 1);
+  const open = visible.length > 0;
 
   // Escape closes the whole stack (same idiom the old panels used).
   useEffect(() => {
@@ -320,14 +412,25 @@ export function EntityColumns() {
   }, [open]);
 
   // Cone-follow: re-frame to the top card's location set whenever the drill
-  // moves (or the mode is switched on).
+  // moves (or the mode is switched on). Needs indexes — while the directory
+  // build hasn't landed there's nothing to frame yet.
   const topRef = visible.length > 0 ? visible[visible.length - 1] : undefined;
   const topKey = topRef ? `${topRef.kind}:${topRef.id}` : null;
   useEffect(() => {
-    if (!coneFollow || !topRef) return;
+    if (!coneFollow || !topRef || !indexes) return;
     showLocations(topRef, indexes);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [coneFollow, topKey, indexes]);
+
+  // Selection-follow (user 2026-07-11 round 3): every card that lands on
+  // top glides the camera to its place — pushing, back/forward, and the
+  // tree's Open Full Card included. Cone-follow supersedes with its
+  // multi-location framing above.
+  useEffect(() => {
+    if (coneFollow || !topRef || !indexes) return;
+    flyToEntity(topRef, indexes);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [topKey, indexes]);
 
   if (!open) return null;
 
@@ -342,9 +445,43 @@ export function EntityColumns() {
   // row slides to its right instead of stacking underneath (user 2026-07-08).
   const leftOffset = directoryOpen ? 12 + 336 + 12 : 12;
 
+  if (!indexes) {
+    // Same positioned container the real row uses (left/maxWidth math),
+    // holding one skeleton card in place of the row — the real card swaps in
+    // at the same origin so nothing jumps once the directory build lands.
+    return (
+      <div
+        ref={rootRef}
+        className="pointer-events-auto fixed top-16 z-30 tabular-nums"
+        style={{
+          left: leftOffset,
+          maxWidth: `calc(100vw - ${leftOffset + rightReserve}px)`,
+        }}
+      >
+        <div className="flex w-72 shrink-0 flex-col gap-2.5 rounded-xl border border-border bg-popover/95 p-3 text-popover-foreground shadow-lg backdrop-blur-md">
+          <div className="flex flex-col gap-1.5">
+            <Skeleton className="h-5 w-2/3" />
+            <Skeleton className="h-3.5 w-1/3" />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Skeleton className="h-3.5 w-full" />
+            <Skeleton className="h-3.5 w-5/6" />
+            <Skeleton className="h-3.5 w-4/6" />
+            <Skeleton className="h-3.5 w-full" />
+            <Skeleton className="h-3.5 w-3/4" />
+            <Skeleton className="h-3.5 w-1/2" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       ref={rootRef}
+      // data-camera-obstruction: fly-to framing measures this row's right
+      // edge and fits targets into the viewport right of it (user 2026-07-11).
+      data-camera-obstruction
       className="pointer-events-auto fixed top-16 z-30 tabular-nums"
       style={{
         left: leftOffset,
@@ -486,9 +623,7 @@ export function EntityColumns() {
                 </div>
                 )}
               </div>
-              <div className="text-sm font-medium leading-snug [overflow-wrap:anywhere]">
-                {refTitle(ref, indexes)}
-              </div>
+              <RefTitle entityRef={ref} indexes={indexes} />
             </div>
             {/* One persistent wrapper whose MAX-HEIGHT tweens between the
                 deck-tab cap and the full-card cap — a component swap here
@@ -562,9 +697,7 @@ export function StandaloneEntityCard({
           </div>
           {actions && <div className="flex shrink-0 items-center">{actions}</div>}
         </div>
-        <div className="text-sm font-medium leading-snug [overflow-wrap:anywhere]">
-          {refTitle(entityRef, indexes)}
-        </div>
+        <RefTitle entityRef={entityRef} indexes={indexes} />
       </div>
       <div className="flex flex-col gap-2.5 px-3 pt-3">
         <ColumnBody entityRef={entityRef} part="pinned" hideFamilyTree={hideFamilyTree} />
@@ -581,9 +714,18 @@ export function StandaloneEntityCard({
 // shadcn tooltip for short action labels (user 2026-07-08: shadcn tooltips or
 // hover cards everywhere — no native title attrs). Rich content stays in
 // hover-card.tsx; this is the action-name-only wrapper for icon buttons.
-export function IconTip({ label, children }: { label: string; children: ReactElement }) {
+export function IconTip({
+  label,
+  children,
+  delay = 300,
+}: {
+  label: string;
+  children: ReactElement;
+  // Fly-to buttons pass delay={0} for instant tooltips (user 2026-07-11).
+  delay?: number;
+}) {
   return (
-    <TooltipProvider delay={300}>
+    <TooltipProvider delay={delay}>
       <Tooltip>
         <TooltipTrigger render={children} />
         <TooltipContent>{label}</TooltipContent>
@@ -644,10 +786,18 @@ export function ColumnStat({
       </div>
     );
   }
+  // flex-wrap so the value drops WHOLE to its own right-aligned line when it
+  // can't share the row with the label, instead of word-wrapping in place
+  // (user 2026-07-11).
   return (
-    <div className="flex items-start justify-between gap-4 text-sm">
+    <div className="flex flex-wrap items-baseline justify-between gap-x-3 text-sm">
       <span className="shrink-0 text-muted-foreground">{label}</span>
-      <span className={cn("min-w-0 text-right", muted ? "text-muted-foreground" : "font-medium")}>
+      <span
+        className={cn(
+          "ml-auto min-w-0 max-w-full break-words text-right",
+          muted ? "text-muted-foreground" : "font-medium",
+        )}
+      >
         {value}
       </span>
     </div>
