@@ -8,6 +8,7 @@ import { ValueSlider } from "@/components/ui/value-slider";
 import { tensorDistrictField } from "@/lib/seed/cityGen";
 import { buildPopulationField } from "@/lib/seed/population";
 import { MAX_CENTRES } from "@/lib/seed/density";
+import { IconTip } from "@/components/ui/columns/EntityColumns";
 
 // Population panel sections (user 2026-06-07): Density (population heat map +
 // traffic coupling) + Districts (the original panel, now a sub-group).
@@ -18,12 +19,13 @@ export function DistrictShellsAction() {
   const showShells = useSceneStore((s) => s.cityPlanning.showDistrictShells);
   const setCityPlanning = useSceneStore((s) => s.setCityPlanning);
   return (
-    <Switch
-      checked={showShells}
-      onCheckedChange={(v) => setCityPlanning({ showDistrictShells: v })}
-      title="Toggle the color-coded district overlay"
-      aria-label="Toggle district shells"
-    />
+    <IconTip label="District Shells">
+      <Switch
+        checked={showShells}
+        onCheckedChange={(v) => setCityPlanning({ showDistrictShells: v })}
+        aria-label="Toggle district shells"
+      />
+    </IconTip>
   );
 }
 
@@ -33,12 +35,13 @@ export function PopulationHeatAction() {
   const showHeat = useSceneStore((s) => s.cityPlanning.showPopulationHeat);
   const setCityPlanning = useSceneStore((s) => s.setCityPlanning);
   return (
-    <Switch
-      checked={showHeat}
-      onCheckedChange={(v) => setCityPlanning({ showPopulationHeat: v })}
-      title="Toggle the population heat-map overlay"
-      aria-label="Toggle population heat map"
-    />
+    <IconTip label="Population Heat Map">
+      <Switch
+        checked={showHeat}
+        onCheckedChange={(v) => setCityPlanning({ showPopulationHeat: v })}
+        aria-label="Toggle population heat map"
+      />
+    </IconTip>
   );
 }
 
@@ -46,7 +49,10 @@ export function PopulationHeatAction() {
 // highlights that district in the scene (works with the shells off too).
 export function DistrictsSection() {
   const masterSeed = useSceneStore((s) => s.masterSeed);
-  const setHighlight = useSceneStore((s) => s.setHighlightDistrictId);
+  // Same setter the City Directory's district headers use (user 2026-07-10) —
+  // drives SelectedDistrictOutline, so hovering here reproduces the exact
+  // same street-traced outline + boundary fill as hovering the directory.
+  const setHoverDistrictId = useSceneStore((s) => s.setHoverDistrictId);
   // Same flag the directory's Districts-header toggle drives (user
   // 2026-07-10) — two homes, one overlay.
   const showBoundaries = useSceneStore((s) => s.showDistrictBoundaries);
@@ -64,25 +70,26 @@ export function DistrictsSection() {
 
   // Collapsing the group (or panel) mid-hover skips mouseleave — clear on
   // unmount so a highlight can't strand on screen.
-  useEffect(() => () => setHighlight(null), [setHighlight]);
+  useEffect(() => () => setHoverDistrictId(null), [setHoverDistrictId]);
 
   return (
     <div className="flex flex-col gap-1 pt-1">
       <div className="flex items-center justify-between gap-2 text-xs">
         <span className="text-foreground/70">boundaries</span>
-        <Switch
-          checked={showBoundaries}
-          onCheckedChange={setShowBoundaries}
-          title="Toggle district boundary outlines"
-          aria-label="Toggle district boundaries"
-        />
+        <IconTip label="District Boundaries">
+          <Switch
+            checked={showBoundaries}
+            onCheckedChange={setShowBoundaries}
+            aria-label="Toggle district boundaries"
+          />
+        </IconTip>
       </div>
       {districts.map((d) => (
         <div
           key={d.id}
           className="hover:bg-foreground/10 -mx-1 flex items-center gap-2 rounded px-1 text-xs"
-          onMouseEnter={() => setHighlight(d.id)}
-          onMouseLeave={() => setHighlight(null)}
+          onMouseEnter={() => setHoverDistrictId(d.id)}
+          onMouseLeave={() => setHoverDistrictId(null)}
         >
           <span
             className="border-foreground/20 size-3 shrink-0 rounded-sm border"
@@ -193,7 +200,6 @@ export function DensitySection() {
             variant="ghost"
             size="sm"
             className="h-6 px-2 text-xs"
-            title="Discard the previewed profile"
             onClick={() => setDraft(null)}
           >
             reset
@@ -201,7 +207,6 @@ export function DensitySection() {
           <Button
             size="sm"
             className="h-6 bg-emerald-400 px-2 text-xs text-black hover:bg-emerald-400/90"
-            title="Commit the previewed profile and rebuild the city"
             onClick={() => {
               setDensityProfile(draft);
               setDraft(null);

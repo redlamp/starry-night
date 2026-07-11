@@ -1,12 +1,16 @@
 "use client";
 
-import { useMemo, useEffect } from "react";
+import { useMemo, useEffect, useRef } from "react";
 import * as THREE from "three";
+import { useFrame } from "@react-three/fiber";
 import { Html } from "@react-three/drei";
+import { Line2 } from "three/examples/jsm/lines/Line2.js";
+import { LineGeometry } from "three/examples/jsm/lines/LineGeometry.js";
+import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
 import { MapPin } from "lucide-react";
 import { useSceneStore } from "@/lib/state/sceneStore";
 import { generateCity, tensorDistrictField, tensorWallRoads } from "@/lib/seed/cityGen";
-import { districtBoundaryLoops } from "@/lib/seed/districtOutline";
+import { districtBoundaryLoops, type BoundaryLoop } from "@/lib/seed/districtOutline";
 import { loopsToSegments, loopsToFillGroup } from "@/lib/scene/districtOverlayGeometry";
 
 // #87 follow-up: trace an outline around a district's true, irregular
@@ -22,7 +26,19 @@ import { loopsToSegments, loopsToFillGroup } from "@/lib/scene/districtOverlayGe
 // Two additions behind the directory's Districts-header toggle
 // (showDistrictBoundaries, user 2026-07-10): every district outlined in its
 // own colour, and a 20%-alpha fill under the hovered district.
+//
+// (user 2026-07-11): the single highlighted district's outline is a THICK
+// border — LineBasicMaterial's linewidth is capped at 1px on most platforms
+// (Windows/ANGLE included), so that path can't produce a real fat line. This
+// one district instead draws with three's Line2/LineGeometry/LineMaterial
+// (fat-line extension, screen-space width via a shader), one Line2 per
+// boundary loop. Everything else (the all-districts toggle outlines) stays
+// on the cheap LineSegments path — only the single highlight needs weight.
+// Also: the hover fill is no longer gated behind showDistrictBoundaries —
+// hovering a district in the directory or Settings list now always shows
+// translucent full-colour fill, toggle on or off.
 const OUTLINE_Y = 0.35; // just above DistrictShells' border line (0.3)
+const OUTLINE_LINEWIDTH = 3; // fat outline width, in screen px (Line2)
 const FILL_Y = 0.32; // hover fill sits under the outlines, above the shells
 const PIN_Y = 10; // marker height above ground, clear of buildings' bases
 // Keep the marker's <Html> permanently mounted and park it far off-screen
@@ -65,6 +81,47 @@ function disposeObject(obj: THREE.Object3D | null): void {
   });
 }
 
+// Fat (screen-px width) outline for the single highlighted district (user
+// 2026-07-11) — LineBasicMaterial's linewidth is capped at 1px on most
+// platforms, so this path uses three's Line2/LineGeometry/LineMaterial
+// fat-line extension instead. Its material needs a live `resolution` uniform
+// (viewport px) to size correctly; same fix CommuteArc.tsx already uses for
+// its Line2 arcs — a ref + useFrame syncs it every frame rather than
+// rebuilding geometry on resize.
+function fatLineMaterial(color: string, opacity: number): LineMaterial {
+  const mat = new LineMaterial({
+    color: new THREE.Color(color),
+    transparent: true,
+    opacity,
+    linewidth: OUTLINE_LINEWIDTH,
+    depthTest: false, // GIS overlay — visible through buildings, like DistrictShells
+    depthWrite: false,
+  });
+  mat.toneMapped = false;
+  return mat;
+}
+
+// One Line2 per boundary loop (LineGeometry is a single strip; a district's
+// holes/disjoint pieces are separate loops, so separate lines sharing mat).
+function fatLoopsObject(loops: BoundaryLoop[], y: number, mat: LineMaterial): THREE.Group {
+  const group = new THREE.Group();
+  for (const loop of loops) {
+    if (loop.length < 2) continue;
+    const pts: number[] = [];
+    for (const p of loop) pts.push(p.x, y, p.z);
+    const first = loop[0];
+    pts.push(first.x, y, first.z); // close the loop
+    const geo = new LineGeometry();
+    geo.setPositions(pts);
+    const line = new Line2(geo, mat);
+    line.computeLineDistances();
+    line.frustumCulled = false;
+    line.renderOrder = 1001; // above the district shells' fill (999) + seams (1000)
+    group.add(line);
+  }
+  return group;
+}
+
 export function SelectedDistrictOutline({ masterSeed }: { masterSeed: string }) {
   const selectedBuildingId = useSceneStore((s) => s.selectedBuildingId);
   const hoverDistrictId = useSceneStore((s) => s.hoverDistrictId);
@@ -76,7 +133,8 @@ export function SelectedDistrictOutline({ masterSeed }: { masterSeed: string }) 
   const citySketch = useSceneStore((s) => s.citySketch);
 
   // The single highlighted district's outline (hover ?? pinned ?? selection).
-  const lines = useMemo(() => {
+  // Drawn as fat Line2 (user 2026-07-11) — see the fatLine* helpers above.
+  const linesBundle = useMemo(() => {
     void citySize; // tier drives the module-level gen extent — a switch must resample
     void citySketch; // sketch field likewise — a different city
     const directDistrictId = hoverDistrictId ?? pinnedDistrictId;
@@ -100,9 +158,10 @@ export function SelectedDistrictOutline({ masterSeed }: { masterSeed: string }) 
     const target = field.districts.find((d) => d.id === districtId);
     if (!target) return null;
     const walls = tensorWallRoads(masterSeed);
-    const pts = loopsToSegments(districtBoundaryLoops(field, target.index, walls), OUTLINE_Y);
-    if (pts.length === 0) return null;
-    return segmentsObject(pts, outlineMaterial(owner.color, 0.95));
+    const loops = districtBoundaryLoops(field, target.index, walls);
+    if (loops.length === 0) return null;
+    const material = fatLineMaterial(owner.color, 0.95);
+    return { group: fatLoopsObject(loops, OUTLINE_Y, material), material };
   }, [
     selectedBuildingId,
     hoverDistrictId,
@@ -113,6 +172,17 @@ export function SelectedDistrictOutline({ masterSeed }: { masterSeed: string }) 
     citySize,
     citySketch,
   ]);
+  const lines = linesBundle?.group ?? null;
+
+  // Line2's fat-line shader needs the viewport size every frame (resize
+  // included) — same fix as CommuteArc.tsx's commute/connection arcs.
+  const lineMaterialRef = useRef<LineMaterial | null>(null);
+  useEffect(() => {
+    lineMaterialRef.current = linesBundle?.material ?? null;
+  }, [linesBundle]);
+  useFrame(({ size }) => {
+    lineMaterialRef.current?.resolution.set(size.width, size.height);
+  });
 
   // Toggle mode: EVERY district's boundary in its own colour, dimmer than the
   // hovered/pinned highlight so that still pops.
@@ -131,11 +201,15 @@ export function SelectedDistrictOutline({ masterSeed }: { masterSeed: string }) 
     return group;
   }, [showBoundaries, masterSeed, citySize, citySketch]);
 
-  // Toggle mode: hovering a district header fills it at 20% alpha.
+  // Hovering a district (directory list or Settings > Districts list) always
+  // fills it at ~22% alpha, independent of the showDistrictBoundaries toggle
+  // (user 2026-07-11 — previously gated behind the toggle). Hover only: the
+  // pinned district and the selected building's district get the thick
+  // outline above but no fill.
   const fill = useMemo(() => {
     void citySize;
     void citySketch;
-    if (!showBoundaries || hoverDistrictId === null) return null;
+    if (hoverDistrictId === null) return null;
     const field = tensorDistrictField(masterSeed);
     const target = field.districts.find((d) => d.id === hoverDistrictId);
     if (!target) return null;
@@ -143,7 +217,7 @@ export function SelectedDistrictOutline({ masterSeed }: { masterSeed: string }) 
     const mat = new THREE.MeshBasicMaterial({
       color: new THREE.Color(target.color),
       transparent: true,
-      opacity: 0.2,
+      opacity: 0.22,
       depthTest: false,
       depthWrite: false,
       fog: false,
@@ -153,9 +227,9 @@ export function SelectedDistrictOutline({ masterSeed }: { masterSeed: string }) 
     // renderOrder 1000: above the shells' fill, below the outlines.
     const group = loopsToFillGroup(loops, mat, FILL_Y, 1000);
     return group.children.length > 0 ? group : null;
-  }, [showBoundaries, hoverDistrictId, masterSeed, citySize, citySketch]);
+  }, [hoverDistrictId, masterSeed, citySize, citySketch]);
 
-  useEffect(() => () => disposeObject(lines), [lines]);
+  useEffect(() => () => disposeObject(linesBundle?.group ?? null), [linesBundle]);
   useEffect(() => () => disposeObject(allLines), [allLines]);
   useEffect(() => () => disposeObject(fill), [fill]);
 

@@ -6,6 +6,7 @@ import { randomSeedForReroll } from "@/lib/seed/rng";
 import { cn, isTypingTarget } from "@/lib/utils";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { useIdle } from "@/lib/useIdle";
+import { IconTip } from "@/components/ui/columns/EntityColumns";
 import {
   Bug,
   Building2,
@@ -272,17 +273,18 @@ export function CameraPanel() {
 
   if (hidden) {
     return (
-      <button
-        onClick={() => setHidden(false)}
-        className={cn(
-          "bg-popover/70 text-foreground/85 border-foreground/10 active:bg-foreground/5 fixed top-3 right-3 z-20 flex size-11 items-center justify-center rounded-full border shadow-lg backdrop-blur-md transition-opacity duration-700",
-          idle ? "pointer-events-none opacity-0" : "pointer-events-auto opacity-100",
-        )}
-        title="Show settings (H)"
-        aria-label="Show settings"
-      >
-        <Settings className="size-5" />
-      </button>
+      <IconTip label="Show Settings">
+        <button
+          onClick={() => setHidden(false)}
+          className={cn(
+            "bg-popover/70 text-foreground/85 border-foreground/10 active:bg-foreground/5 fixed top-3 right-3 z-20 flex size-11 items-center justify-center rounded-full border shadow-lg backdrop-blur-md transition-opacity duration-700",
+            idle ? "pointer-events-none opacity-0" : "pointer-events-auto opacity-100",
+          )}
+          aria-label="Show Settings"
+        >
+          <Settings className="size-5" />
+        </button>
+      </IconTip>
     );
   }
 
@@ -343,16 +345,17 @@ export function CameraPanel() {
           </span>
           <div className="flex items-center gap-1.5">
             <ThemeToggle />
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => setHidden(true)}
-              title="Hide (H)"
-              aria-label="Hide settings"
-              className="text-foreground/70 hover:bg-foreground/10 hover:text-foreground"
-            >
-              ×
-            </Button>
+            <IconTip label="Hide Settings">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => setHidden(true)}
+                aria-label="Hide Settings"
+                className="text-foreground/70 hover:bg-foreground/10 hover:text-foreground"
+              >
+                ×
+              </Button>
+            </IconTip>
           </div>
         </div>
         <div className="relative">

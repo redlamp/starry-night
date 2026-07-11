@@ -30,7 +30,10 @@ function disposeObject(obj: THREE.Object3D | null): void {
 
 export function DistrictShells({ masterSeed }: { masterSeed: string }) {
   const show = useSceneStore((s) => s.cityPlanning.showDistrictShells);
-  const highlightId = useSceneStore((s) => s.highlightDistrictId);
+  // hoverDistrictId (shared with the directory + settings hover, user
+  // 2026-07-11) — the old highlightDistrictId lost its last setter when the
+  // settings hover unified onto the directory's traced-outline path.
+  const highlightId = useSceneStore((s) => s.hoverDistrictId);
   const citySize = useSceneStore((s) => s.citySize);
 
   const group = useMemo(() => {

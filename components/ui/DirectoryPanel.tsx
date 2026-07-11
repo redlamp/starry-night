@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Briefcase,
   Building2,
@@ -34,6 +34,7 @@ import { cn } from "@/lib/utils";
 import { generateCity, type Building } from "@/lib/seed/cityGen";
 import type { Address } from "@/lib/seed/naming";
 import type { Persona } from "@/lib/seed/personas";
+import { personaDirectoryBuildProgress } from "@/lib/seed/personas";
 import { ensureBuildingStories } from "@/lib/seed/personaStory";
 import { focusBuilding } from "@/lib/scene/focusBuilding";
 
@@ -128,6 +129,80 @@ type DistrictAgg = {
   }>;
   bounds?: { minX: number; maxX: number; minZ: number; maxZ: number };
 };
+
+// Traces a host's border while the persona directory's cold build is still in
+// flight (test plan 07-11) — a conic-gradient ring masked down to a stroke.
+// Purely observational: polls personaDirectoryBuildProgress() (derived-from-seed
+// state, never Date.now/Math.random) via requestAnimationFrame, only
+// re-rendering when the fraction moves by more than half a percent, and stops
+// polling for good once the build completes.
+//
+// `className` carries the radius (default `rounded-xl`, matching the panel
+// this was originally built for) so callers mounting it over a different
+// shape — e.g. the round dock button — can override it (`rounded-full`).
+// `thickness` sets the mask padding (stroke width) in px. A second, static
+// low-alpha track ring renders underneath the animated arc so progress reads
+// against a dark backdrop (the dock button has no panel chrome to contrast
+// against); it shares the mask/radius and disappears with the arc at 100%.
+export function DirectoryBuildRing({
+  className = "rounded-xl",
+  thickness = 2,
+}: {
+  className?: string;
+  thickness?: number;
+} = {}) {
+  const [progress, setProgress] = useState(() => personaDirectoryBuildProgress());
+  const lastRef = useRef(progress);
+
+  useEffect(() => {
+    if (lastRef.current >= 1) return;
+    let raf = 0;
+    let stopped = false;
+    const tick = () => {
+      const next = personaDirectoryBuildProgress();
+      if (next >= 1 || Math.abs(next - lastRef.current) > 0.005) {
+        lastRef.current = next;
+        setProgress(next);
+      }
+      if (next < 1 && !stopped) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => {
+      stopped = true;
+      cancelAnimationFrame(raf);
+    };
+  }, []);
+
+  if (progress >= 1) return null;
+
+  const maskStyle = {
+    padding: thickness,
+    WebkitMask: "linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)",
+    WebkitMaskComposite: "xor",
+    mask: "linear-gradient(#fff 0 0) content-box exclude, linear-gradient(#fff 0 0)",
+  } as const;
+
+  return (
+    <>
+      <div
+        aria-hidden
+        className={cn("pointer-events-none absolute inset-0", className)}
+        style={{
+          ...maskStyle,
+          background: "color-mix(in oklab, var(--primary) 25%, transparent)",
+        }}
+      />
+      <div
+        aria-hidden
+        className={cn("pointer-events-none absolute inset-0", className)}
+        style={{
+          ...maskStyle,
+          background: `conic-gradient(var(--primary) ${progress * 360}deg, transparent 0deg)`,
+        }}
+      />
+    </>
+  );
+}
 
 export function DirectorySection() {
   const masterSeed = useSceneStore((s) => s.masterSeed);
