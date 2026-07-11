@@ -23,6 +23,23 @@ export function focusBuilding(b: Building): void {
   st.setFocusRequest({ x: center[0], y: center[1], z: center[2], radius });
 }
 
+// How much of the viewport's LEFT edge is covered by docked UI — the
+// directory panel and the card-columns row, both tagged
+// data-camera-obstruction (the settings drawer is deliberately NOT tagged —
+// user 2026-07-11). The camera model measures this at focus-CONSUME time
+// (one rAF after the request, so a column pushed by the same click is
+// already laid out) and frames targets in the remaining width. Clamped to
+// 60% so a maxed-out row can never starve the frame.
+export function uiObstructionInsetLeft(): number {
+  if (typeof document === "undefined" || typeof window === "undefined") return 0;
+  let right = 0;
+  for (const el of document.querySelectorAll<HTMLElement>("[data-camera-obstruction]")) {
+    const r = el.getBoundingClientRect();
+    if (r.width > 0 && r.height > 0) right = Math.max(right, r.right);
+  }
+  return Math.min(right, window.innerWidth * 0.6);
+}
+
 // Camera-only variant (user 2026-07-10): glide to the building and drop the
 // roof pin WITHOUT selecting — the resident card's row buttons show a place
 // on the map without replacing the open card/columns.

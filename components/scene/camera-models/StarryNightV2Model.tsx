@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
+import { uiObstructionInsetLeft } from "@/lib/scene/focusBuilding";
 import { CameraControls, Html } from "@react-three/drei";
 import CameraControlsImpl from "camera-controls";
 import { MapPin } from "lucide-react";
@@ -374,10 +375,13 @@ export function StarryNightV2Model() {
   // any orbit angle, in any aspect bucket). Consumed once; focusPivot then keeps
   // LMB-orbit pivoting on this centre (see the orbit branch below).
   useEffect(() => {
-    const unsub = useSceneStore.subscribe((s, p) => {
-      const f = s.focusRequest;
-      if (f === p.focusRequest || !f) return;
+    // Runs one rAF after the request lands: a click that pushes a column AND
+    // focuses (address links) has its new card in the DOM by then, so the
+    // obstruction measurement below sees the row's REAL width (user
+    // 2026-07-11: fly-tos center in the space right of directory + cards).
+    const frameRequest = (f: NonNullable<ReturnType<typeof useSceneStore.getState>["focusRequest"]>) => {
       const c = controls.current;
+      const s = useSceneStore.getState();
       if (!c || s.cameraMode !== "orbit") return;
       const pc = c.camera as THREE.PerspectiveCamera;
       const vFov = (pc.fov * DEG) / 2; // vertical half-fov
@@ -385,10 +389,29 @@ export function StarryNightV2Model() {
       // multi-location sets should use the whole frame); the default frames
       // it at FOCUS_HEIGHT_FRACTION of display height (single buildings).
       const hFov = Math.atan(Math.tan(vFov) * (pc.aspect || 1));
-      const dist =
+      // Obstruction-aware framing (user 2026-07-11): fit the sphere into the
+      // width the directory + card columns leave free (`avail`) and, below,
+      // bias the target into that region's center with a screen-parallel
+      // focal offset — focus centers on the free area, not the canvas.
+      const viewW = gl.domElement.clientWidth || 1;
+      const inset = Math.max(0, Math.min(uiObstructionInsetLeft(), viewW * 0.6));
+      const avail = 1 - inset / viewW;
+      const hFovAvail = Math.atan(Math.tan(hFov) * avail);
+      let dist =
         f.fit === "fill"
-          ? Math.max((f.radius / Math.sin(Math.max(1e-3, Math.min(vFov, hFov)))) * 1.08, FOCUS_MIN_DIST)
+          ? Math.max(
+              (f.radius / Math.sin(Math.max(1e-3, Math.min(vFov, hFovAvail)))) * 1.08,
+              FOCUS_MIN_DIST,
+            )
           : Math.max(f.radius / (Math.max(1e-3, Math.tan(vFov)) * FOCUS_HEIGHT_FRACTION), FOCUS_MIN_DIST);
+      if (inset > 0 && f.fit !== "fill") {
+        // Height-framed targets must still FIT the reduced width once offset.
+        dist = Math.max(dist, (f.radius / Math.sin(Math.max(1e-3, hFovAvail))) * 1.02);
+      }
+      // Target appears at the available region's center: offset the camera
+      // screen-left by half the inset's world width at the fit distance
+      // (negative x shifts the camera left, so the subject reads right).
+      const focalX = inset > 0 ? -((inset / 2 / viewW) * 2 * dist * Math.tan(hFov)) : 0;
       // POSITION/rotation get a stronger ease-out: run this transition at a shorter
       // smoothTime so the pivot zeroes in decisively, then restore the default.
       // (camera-controls' smoothTime is global to transitions, so save/restore it.)
@@ -403,6 +426,7 @@ export function StarryNightV2Model() {
         c.moveTo(f.x, f.y, f.z, true),
         c.dollyTo(dist, true),
         c.rotateTo(c.azimuthAngle, Math.PI / 4, true),
+        c.setFocalOffset(focalX, 0, 0, true),
       ]).finally(() => {
         c.smoothTime = base;
       });
@@ -417,18 +441,37 @@ export function StarryNightV2Model() {
         orthoFocusT.current = 0;
         // Ortho mirrors the two framings: fill -> sphere spans the frame
         // (oeff = r, small margin); height -> the 33% rule (oeff = r/fraction).
+        // The avail divide mirrors the perspective inset fit: the sphere gets
+        // the REMAINING width; the focal offset above re-centers it there
+        // (screen-parallel offsets apply to ortho identically).
         orthoFocusTarget.current = THREE.MathUtils.clamp(
           (f.fit === "fill" ? f.radius * 1.08 : f.radius / FOCUS_HEIGHT_FRACTION) /
-            orbitFramingFactor(pc.aspect || 1),
+            orbitFramingFactor(pc.aspect || 1) /
+            Math.max(0.4, avail),
           ORTHO_SIZE_MIN,
           ORTHO_SIZE_MAX,
         );
       } else {
         orthoFocusTarget.current = null;
       }
+    };
+
+    const unsub = useSceneStore.subscribe((s, p) => {
+      const c = controls.current;
+      // Closing the card columns retires any framing bias a fly-to applied —
+      // the next plain focus recenters anyway, but don't leave the view
+      // shifted once the obstruction is gone (user 2026-07-11).
+      if (c && s.columnCursor < 0 && p.columnCursor >= 0) {
+        void c.setFocalOffset(0, 0, 0, true);
+      }
+      const f = s.focusRequest;
+      if (f === p.focusRequest || !f) return;
+      // Consume NOW (re-entrant subscribe sees null), frame next frame.
       useSceneStore.getState().setFocusRequest(null);
+      requestAnimationFrame(() => frameRequest(f));
     });
     return unsub;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Frame the city + control config. ALL mouse input is custom (below) — including the wheel, so
