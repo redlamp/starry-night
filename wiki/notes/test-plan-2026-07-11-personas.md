@@ -38,13 +38,15 @@ Reference residents: **Joseph Ortiz (9)** (rich three-generation tree), **Amanda
 ## 4. Family Tree (columns chart)
 
 1. [ ] Opens in column view (only view — mode buttons hidden); Lineage Colors + Gender Tint on by default.
-2. [ ] Cells uniform width (names truncate); three generation-columns fit without horizontal scroll; tall charts scale down to fit (floor ~0.65) before scrolling; header/footers stay fixed — only the chart scrolls.
-3. [ ] Lineage: cell BORDERS carry the line hue (blend where two lines merge); connectors match; married unions solid, dating dashed. Toggling layers never moves anything.
-4. [ ] Gender tint: green men / orange women / purple other, clearly visible; icons match the palette.
+2. [ ] Cells uniform width (names truncate); the chart NEVER scales — the CARD grows to fit the full-size tree (up to 85vh), oversized generations trim into "+N more" instead of scrolling. NO scrollbar on any tree (verified via Playwright: scrollHeight === clientHeight, both axes, on Amanda); header fixed, footer/controls pinned to the card's BOTTOM even for short trees.
+3. [ ] Lineage: cell BORDERS carry the line hue (blend where two lines merge); connectors match; couples connect via a visible genogram BRACKET outside the boxes (stubs + marriage bar — married solid, dating dashed; check a dating couple reads clearly). Toggling layers never moves anything.
+4. [ ] Gender tint: green men / orange women / purple other, clearly visible; icons match the palette and follow lived gender (Mars/Venus for trans men/women; NonBinary keeps its glyph).
 5. [ ] Selection: white ring OUTSIDE the focused cell; same-window clicks move the highlight only — zero jumping, zero size change.
 6. [ ] Spacing: partners and true siblings tight (8px); cousin boundaries and couples get wide air (check the Gonzales-kids / Ortiz-kids seam near Joseph); children groups centered under their parents' forks; fork lines centered in the channel, never overlapping cells.
 7. [ ] Amanda Gonzales: "+N more in this line…" trim note in the footer; panel usable.
 8. [ ] Bottom controls: Lineage/Gender toggles left; card show/hide right (panel icon swaps with state).
+9. [ ] Clicking the scrim (outside the tree/card, including the gap between the two panels) closes the dialog.
+10. [ ] Resident card details break between CONCEPTS, never mid-phrase: Profession = title / employer lines; Education = level / subject / institution / linked school lines.
 
 ## 5. World Fiction
 
