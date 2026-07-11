@@ -1,20 +1,18 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState } from "react";
-import { ScrollArea as ScrollAreaPrimitive } from "@base-ui/react/scroll-area";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   Blend,
-  Maximize2,
   Network,
   Palette,
   PanelRightClose,
   PanelRightOpen,
   Pin,
+  SquareArrowOutUpRight,
   Undo2,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ScrollBar } from "@/components/ui/scroll-area";
 import {
   Dialog,
   DialogTrigger,
@@ -223,7 +221,10 @@ function FamilyChart({
   vertical: boolean;
   onSelect: (id: string) => void;
 }) {
-  const hostRef = useRef<HTMLDivElement | null>(null);
+  const viewportRef = useRef<HTMLDivElement | null>(null);
+  // The gesture layer between viewport and content: pan/zoom land here as a
+  // single translate+scale, so the measured chart underneath never reflows.
+  const canvasRef = useRef<HTMLDivElement | null>(null);
   // The un-transformed layout root: flex lays rows out here, blocks shift
   // within it, and the normalize step translates/scales it as one unit so
   // boxes and connectors always move together.
@@ -234,13 +235,68 @@ function FamilyChart({
   // overlay's nominal size — it draws outside via overflow-visible).
   const [view, setView] = useState({ w: 0, h: 0, svgW: 0, svgH: 0 });
 
+  // Infinite-canvas gesture state (user 2026-07-11: pinch zoom + pan, like a
+  // map). Lives in refs and lands as a direct style transform — no React
+  // render per pointermove. `touched` distinguishes "user has navigated"
+  // (keep their view across re-measures) from "still on the automatic fit".
+  const gesture = useRef({ tx: 0, ty: 0, s: 1, touched: false, suppressClick: false });
+  // Chart's natural size + per-generation column starts (content px, post-
+  // normalize), refreshed by the measure pass for fit + snap math.
+  const sizeRef = useRef({ w: 0, h: 0 });
+  const genStartsRef = useRef<number[]>([]);
+
+  const applyTransform = () => {
+    const el = canvasRef.current;
+    if (!el) return;
+    const g = gesture.current;
+    el.style.transform = `translate(${g.tx}px, ${g.ty}px) scale(${g.s})`;
+  };
+  // Keep at least a corner of the chart on screen — a pan can never lose it.
+  const clampPan = () => {
+    const vp = viewportRef.current;
+    if (!vp) return;
+    const g = gesture.current;
+    const w = sizeRef.current.w * g.s;
+    const h = sizeRef.current.h * g.s;
+    const keepX = Math.min(48, w);
+    const keepY = Math.min(48, h);
+    g.tx = Math.min(Math.max(g.tx, keepX - w), vp.clientWidth - keepX);
+    g.ty = Math.min(Math.max(g.ty, keepY - h), vp.clientHeight - keepY);
+  };
+  // The header/footer hover OVER the canvas (user 2026-07-11) — the fit
+  // keeps the tree clear of them; panning can still travel underneath.
+  const FIT_PAD_X = 16;
+  const FIT_PAD_TOP = 56;
+  const FIT_PAD_BOTTOM = 72;
+  const fitScale = () => {
+    const vp = viewportRef.current;
+    const { w, h } = sizeRef.current;
+    if (!vp || !w || !h) return 1;
+    const aw = Math.max(80, vp.clientWidth - FIT_PAD_X * 2);
+    const ah = Math.max(80, vp.clientHeight - FIT_PAD_TOP - FIT_PAD_BOTTOM);
+    return Math.min(1, aw / w, ah / h);
+  };
+  // The automatic view: whole tree visible, centered between the overlays,
+  // never upscaled past 1.
+  const fitView = () => {
+    const vp = viewportRef.current;
+    const { w, h } = sizeRef.current;
+    if (!vp || !w || !h) return;
+    const g = gesture.current;
+    g.s = fitScale();
+    g.tx = (vp.clientWidth - w * g.s) / 2;
+    const ah = Math.max(80, vp.clientHeight - FIT_PAD_TOP - FIT_PAD_BOTTOM);
+    g.ty = FIT_PAD_TOP + (ah - h * g.s) / 2;
+    applyTransform();
+  };
+
   const refFor = (id: string) => (el: HTMLButtonElement | null) => {
     if (el) boxRefs.current.set(id, el);
     else boxRefs.current.delete(id);
   };
 
   useLayoutEffect(() => {
-    const host = hostRef.current;
+    const host = viewportRef.current;
     if (!host) return;
 
     const measure = () => {
@@ -253,10 +309,15 @@ function FamilyChart({
         blockEls.set(el.dataset.blockKey as string, el);
       }
       // Natural-layout read: clear transforms from a previous pass first
-      // (blocks AND the normalize/fit transform on the content root).
-      // Transforms never affect layout, so this cannot loop the observer.
+      // (blocks AND the normalize/fit transform on the content root, AND the
+      // pan/zoom transform on the canvas layer — a scale there would scale
+      // every rect delta below and corrupt the pack shifts; it's restored
+      // after the pass, all inside one synchronous task, so nothing paints
+      // in between). Transforms never affect layout, so this cannot loop
+      // the observer.
       for (const el of blockEls.values()) el.style.transform = "";
       contentEl.style.transform = "";
+      if (canvasRef.current) canvasRef.current.style.transform = "";
 
       // All coordinates below are relative to the content root's natural
       // (un-transformed) box — the same space the SVG overlay draws in.
@@ -600,6 +661,19 @@ function FamilyChart({
         }
       }
 
+      // Per-generation snap targets (user 2026-07-11: "some snapping for
+      // columns"): the gen-axis start of each generation row. Pack shifts
+      // move blocks along the pack axis only, so genS here is final.
+      const rowGenStarts: number[] = [];
+      for (const row of web.rows) {
+        let g0 = Infinity;
+        for (const u of row) {
+          const b = blockBox(u);
+          if (b) g0 = Math.min(g0, genS(b));
+        }
+        if (Number.isFinite(g0)) rowGenStarts.push(g0);
+      }
+
       // Content bounding box across shifted blocks AND connector segments,
       // read BEFORE transforms land (blockBox double-counts afterwards).
       let minX = Infinity;
@@ -642,23 +716,35 @@ function FamilyChart({
         }
       }
 
-      // NORMALIZE + FIT (user 2026-07-10: "no horizontal scroll despite
-      // fitting", "adjust to fit the vertical size"). The flex layout
-      // centers content naturally, then the pack shifts move blocks — which
-      // extends the scrollable bounds without shrinking the stale w-max
-      // extents (phantom scroll + dead margins). Fix: translate the whole
-      // content root so the actual bounding box starts at the padding, and
-      // size an explicit wrapper to exactly that box. The chart NEVER
-      // scales (user 2026-07-11: "do not scale the content down, expand
-      // the card to fit the content") — the panel grows around the wrapper
-      // (the ScrollArea root is flex-auto, so the wrapper's intrinsic size
-      // drives the panel up to its 85vh/96vw caps); the view-aware trim in
-      // familyWeb keeps generations within the screen's ceiling, so the
-      // scrollbar only exists when a protected line genuinely exceeds it.
+      // NORMALIZE (user 2026-07-10: "no horizontal scroll despite fitting").
+      // The flex layout centers content naturally, then the pack shifts move
+      // blocks — extending the natural bounds without shrinking the stale
+      // w-max extents. Fix: translate the whole content root so the actual
+      // bounding box starts at the padding, and size an explicit wrapper to
+      // exactly that box. The panel still grows around the wrapper for small
+      // trees; when the panel's caps shrink the viewport, the canvas fit
+      // below scales the whole tree into view — navigation from there is
+      // pan/pinch-zoom (user 2026-07-11), never scrollbars.
       const pad = 12;
       const w0 = maxX - minX + pad * 2;
       const h0 = maxY - minY + pad * 2;
       contentEl.style.transform = `translate(${pad - minX}px, ${pad - minY}px)`;
+
+      sizeRef.current = { w: Math.ceil(w0), h: Math.ceil(h0) };
+      // Snap targets in post-normalize content coordinates.
+      const genOrigin = vertical ? pad - minX : pad - minY;
+      genStartsRef.current = rowGenStarts.map((g) => g + genOrigin).sort((a, b) => a - b);
+
+      // Restore the gesture view over the fresh layout: the user's own
+      // pan/zoom if they've navigated, else the automatic fit. (A view-size
+      // change also re-runs the fit via the layout effect keyed on `view`,
+      // once the new explicit width/height have landed in the DOM.)
+      if (gesture.current.touched) {
+        clampPan();
+        applyTransform();
+      } else {
+        fitView();
+      }
 
       setSegs(next);
       setView({
@@ -669,18 +755,204 @@ function FamilyChart({
       });
     };
 
+    // A re-root is a new chart — drop any user pan/zoom back to the fit.
+    if (prevFocusRef.current !== focusId) {
+      prevFocusRef.current = focusId;
+      gesture.current.touched = false;
+    }
+
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(host);
     // ALSO observe the natural-size content root: late box growth (web-font
     // swap, icon load) doesn't resize the host — its size is pinned by the
     // wrapper WE sized — so without this the chart outgrows a stale wrapper
-    // by a sliver and scrolls (the 33px Amanda case, user 2026-07-11).
-    // No feedback: measure only sets a translate transform on this element,
-    // which never changes its observed box.
+    // by a sliver (the 33px Amanda case, user 2026-07-11). No feedback:
+    // measure only sets a translate transform on this element, which never
+    // changes its observed box.
     if (contentRef.current) ro.observe(contentRef.current);
     return () => ro.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [web, focusId, vertical]);
+
+  const prevFocusRef = useRef(focusId);
+
+  // First measure of a new tree: the explicit width/height only reach the
+  // DOM with this render, so the viewport's client size is only now correct
+  // for fit math — settle the automatic fit (or re-clamp a user view).
+  useLayoutEffect(() => {
+    if (gesture.current.touched) {
+      clampPan();
+      applyTransform();
+    } else {
+      fitView();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view]);
+
+  // Gesture wiring (user 2026-07-11: "navigable on mobile — pinch zooming
+  // and panning around, like an infinite canvas with some snapping for
+  // columns"). Native listeners: wheel needs passive:false to preventDefault,
+  // and pointer capture is only taken once a drag is real, so plain taps
+  // still click the person boxes underneath.
+  useEffect(() => {
+    const vp = viewportRef.current;
+    if (!vp) return;
+    const pointers = new Map<number, { x: number; y: number }>();
+    let panStart: { x: number; y: number; tx: number; ty: number } | null = null;
+    let dragging = false;
+    let pinch: { d0: number; s0: number; mid0: { x: number; y: number }; tx0: number; ty0: number } | null =
+      null;
+
+    const local = (e: { clientX: number; clientY: number }) => {
+      const r = vp.getBoundingClientRect();
+      return { x: e.clientX - r.left, y: e.clientY - r.top };
+    };
+    const zoomAt = (px: number, py: number, targetS: number) => {
+      const g = gesture.current;
+      const s2 = Math.min(2.5, Math.max(fitScale() * 0.5, targetS));
+      const k = s2 / g.s;
+      g.tx = px - (px - g.tx) * k;
+      g.ty = py - (py - g.ty) * k;
+      g.s = s2;
+      g.touched = true;
+      clampPan();
+      applyTransform();
+    };
+    // Magnetic column snap on release: if a generation column's leading edge
+    // is within reach of the viewport's leading edge, glide it flush. Only
+    // when the chart actually overflows on the gen axis — a fitted tree
+    // never jumps.
+    const snapColumns = () => {
+      const g = gesture.current;
+      const starts = genStartsRef.current;
+      if (starts.length < 2) return;
+      const genExtent = (vertical ? sizeRef.current.w : sizeRef.current.h) * g.s;
+      const vpExtent = vertical ? vp.clientWidth : vp.clientHeight;
+      if (genExtent <= vpExtent + 4) return;
+      const t = vertical ? g.tx : g.ty;
+      const cNow = (12 - t) / g.s; // content coord at the leading edge + margin
+      let best = starts[0];
+      for (const c of starts) if (Math.abs(c - cNow) < Math.abs(best - cNow)) best = c;
+      const t2 = 12 - best * g.s;
+      if (Math.abs(t2 - t) > 40) return;
+      if (vertical) g.tx = t2;
+      else g.ty = t2;
+      clampPan();
+      applyTransform();
+    };
+
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.button !== 0 && e.pointerType === "mouse") return;
+      gesture.current.suppressClick = false;
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pointers.size === 1) {
+        const g = gesture.current;
+        panStart = { x: e.clientX, y: e.clientY, tx: g.tx, ty: g.ty };
+        dragging = false;
+      } else if (pointers.size === 2) {
+        const [a, b] = [...pointers.values()];
+        const g = gesture.current;
+        pinch = {
+          d0: Math.hypot(a.x - b.x, a.y - b.y),
+          s0: g.s,
+          mid0: local({ clientX: (a.x + b.x) / 2, clientY: (a.y + b.y) / 2 }),
+          tx0: g.tx,
+          ty0: g.ty,
+        };
+        panStart = null;
+        // Two fingers are never a tap — take the pointers now.
+        for (const id of pointers.keys()) vp.setPointerCapture(id);
+        gesture.current.suppressClick = true;
+      }
+    };
+    const onPointerMove = (e: PointerEvent) => {
+      if (!pointers.has(e.pointerId)) return;
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      const g = gesture.current;
+      if (pinch && pointers.size >= 2) {
+        const [a, b] = [...pointers.values()];
+        const d = Math.hypot(a.x - b.x, a.y - b.y);
+        const mid = local({ clientX: (a.x + b.x) / 2, clientY: (a.y + b.y) / 2 });
+        const s2 = Math.min(2.5, Math.max(fitScale() * 0.5, pinch.s0 * (d / Math.max(1, pinch.d0))));
+        const k = s2 / pinch.s0;
+        // Anchor the content point under the initial midpoint, then follow
+        // the midpoint as it moves — zoom and pan in one gesture.
+        g.tx = mid.x - (pinch.mid0.x - pinch.tx0) * k;
+        g.ty = mid.y - (pinch.mid0.y - pinch.ty0) * k;
+        g.s = s2;
+        g.touched = true;
+        clampPan();
+        applyTransform();
+        return;
+      }
+      if (!panStart) return;
+      const dx = e.clientX - panStart.x;
+      const dy = e.clientY - panStart.y;
+      if (!dragging) {
+        if (Math.hypot(dx, dy) < 4) return;
+        dragging = true;
+        gesture.current.suppressClick = true;
+        // Capture only once the drag is real — capturing on pointerdown
+        // would retarget pointerup and eat plain clicks on the boxes.
+        vp.setPointerCapture(e.pointerId);
+      }
+      g.tx = panStart.tx + dx;
+      g.ty = panStart.ty + dy;
+      g.touched = true;
+      clampPan();
+      applyTransform();
+    };
+    const onPointerEnd = (e: PointerEvent) => {
+      if (!pointers.delete(e.pointerId)) return;
+      if (pointers.size < 2) pinch = null;
+      if (pointers.size === 1) {
+        // Pinch → single-finger pan continues from the survivor.
+        const [rest] = [...pointers.values()];
+        const g = gesture.current;
+        panStart = { x: rest.x, y: rest.y, tx: g.tx, ty: g.ty };
+        dragging = true;
+        return;
+      }
+      if (pointers.size === 0) {
+        if (dragging || gesture.current.suppressClick) snapColumns();
+        panStart = null;
+        dragging = false;
+      }
+    };
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const g = gesture.current;
+      // Desktop zoom is deliberate-only (user 2026-07-11: "not sure about
+      // desktop"): Ctrl/Cmd+wheel zooms — which is ALSO what trackpad pinch
+      // reports as — while a plain wheel PANS, keeping the chart at crisp
+      // 1:1 for ordinary scrolling around a big tree.
+      if (e.ctrlKey || e.metaKey) {
+        const p = local(e);
+        zoomAt(p.x, p.y, g.s * Math.exp(-e.deltaY * 0.0035));
+        return;
+      }
+      g.tx -= e.deltaX;
+      if (e.shiftKey) g.tx -= e.deltaY;
+      else g.ty -= e.deltaY;
+      g.touched = true;
+      clampPan();
+      applyTransform();
+    };
+
+    vp.addEventListener("pointerdown", onPointerDown);
+    vp.addEventListener("pointermove", onPointerMove);
+    vp.addEventListener("pointerup", onPointerEnd);
+    vp.addEventListener("pointercancel", onPointerEnd);
+    vp.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      vp.removeEventListener("pointerdown", onPointerDown);
+      vp.removeEventListener("pointermove", onPointerMove);
+      vp.removeEventListener("pointerup", onPointerEnd);
+      vp.removeEventListener("pointercancel", onPointerEnd);
+      vp.removeEventListener("wheel", onWheel);
+    };
+  }, [vertical]);
 
   const renderBox = (p: Persona) => (
     <PersonBox
@@ -712,91 +984,112 @@ function FamilyChart({
   );
 
   return (
-    // Shell: the chart's OWN scroll viewport (user 2026-07-10: header and
-    // footer rows stay fixed) — a shadcn/base-ui ScrollArea (user
-    // 2026-07-11), composed from primitives so BOTH orientations get the
-    // styled bar. The root is sized EXPLICITLY to the measured chart box
-    // (no intrinsic-size percolation through viewport percentages — that
-    // chain silently failed and left scrollbars): the panel is w-fit /
-    // max-h-capped, so an explicitly-sized root GROWS the card to fit the
-    // full-size chart (user 2026-07-11: never scale the content), and
-    // min-h-0/max-w-full let flex shrink the root only when the panel hits
-    // its caps — the sole case the viewport scrolls, made rare by the
-    // view-aware trim. The host div (min-h/w-full, measurement origin +
-    // ResizeObserver target) holds the sized wrapper; m-auto keeps all
-    // edges scroll-reachable when shrunk. The content root inside is
-    // absolute, laid out at natural size, then translated by the measure
-    // pass.
-    // my-auto: with the root explicitly sized, a SHORT chart no longer fills
-    // the panel's 30rem floor — auto margins soak the leftover space so the
-    // chart centers and the footer/controls rows stay pinned to the card's
-    // BOTTOM, not to the tree content (user 2026-07-11).
-    <ScrollAreaPrimitive.Root
-      className="relative my-auto min-h-0 max-w-full"
-      style={{ width: view.w || undefined, height: view.h || undefined }}
+    // Shell: an infinite-canvas viewport (user 2026-07-11 — replaced the
+    // ScrollArea; there is no scroll container anymore, so the transform
+    // ghost-box scrollbars can't come back). The viewport is still sized
+    // EXPLICITLY to the measured chart box, so the w-fit panel GROWS to fit
+    // small trees exactly as before; min-h-0/max-w-full let flex shrink it
+    // when the panel hits its 85vh/96vw caps — and THAT is where the canvas
+    // takes over: the automatic fit scales the whole tree into view, then
+    // drag pans, wheel/pinch zooms (anchored on cursor/midpoint), release
+    // snaps the nearest generation column flush, double-click re-fits.
+    // touch-action:none hands touch gestures to the pointer handlers.
+    // my-auto: a SHORT chart doesn't fill the panel's 30rem floor — auto
+    // margins soak the leftover space so the chart centers and the footer/
+    // controls rows stay pinned to the card's BOTTOM (user 2026-07-11).
+    <>
+      {/* In-flow SIZER: drives the panel's grow-to-fit sizing (chart box +
+          overlay allowance) while the canvas itself is ABSOLUTE and fills
+          the whole panel — the chart runs edge to edge under the hovering
+          header/footer (user 2026-07-11). min-h-0/max-w-full let the panel's
+          caps shrink it exactly like the old in-flow viewport. */}
+      <div
+        aria-hidden
+        className="pointer-events-none min-h-0 max-w-full"
+        style={{
+          width: view.w ? view.w + FIT_PAD_X * 2 : undefined,
+          height: view.h ? view.h + FIT_PAD_TOP + FIT_PAD_BOTTOM : undefined,
+        }}
+      />
+      <div
+      ref={viewportRef}
+      className="absolute inset-0 cursor-grab touch-none overflow-hidden select-none active:cursor-grabbing"
+      onClickCapture={(e) => {
+        // A pan that ends over a person box must not read as a click.
+        if (gesture.current.suppressClick) {
+          e.preventDefault();
+          e.stopPropagation();
+          gesture.current.suppressClick = false;
+        }
+      }}
+      onDoubleClick={(e) => {
+        if ((e.target as HTMLElement).closest("button")) return;
+        gesture.current.touched = false;
+        fitView();
+      }}
     >
-      <ScrollAreaPrimitive.Viewport data-slot="scroll-area-viewport" className="size-full">
-        <div ref={hostRef} className="flex min-h-full min-w-full">
-          {/* overflow-hidden: the normalize contract puts ALL visible content
-              inside this box — but the content root's own natural-layout box
-              (translated, not resized) can hang past it and feed phantom
-              scrollHeight to the viewport (the 33px Amanda sliver, user
-              2026-07-11). Clipping here removes that contribution and can
-              never hide anything real. */}
-          <div
-            className="relative m-auto shrink-0 overflow-hidden"
-            style={{ width: view.w, height: view.h }}
-          >
+      {/* The gesture layer: pan/zoom land here as one transform. NO
+          will-change — pinning the layer kept its raster cached at layout
+          scale, so zooming scaled PIXELS (user 2026-07-11: "very
+          pixelated"); without it the browser re-rasterizes the DOM/SVG
+          vectors crisp once the gesture settles. */}
+      <div ref={canvasRef} className="absolute top-0 left-0 origin-top-left">
+        {/* overflow-hidden: the normalize contract puts ALL visible content
+            inside this box — the content root's own natural-layout box
+            (translated, not resized) can hang past it (the 33px Amanda
+            sliver, user 2026-07-11); clipping it can never hide anything
+            real. */}
         <div
-          ref={contentRef}
-          className={cn(
-            "absolute top-0 left-0 flex w-max origin-top-left items-center justify-center",
-            // Channel width back to gap-7 — the centered forks made the
-            // extra column distance unnecessary (user 2026-07-10).
-            vertical ? "flex-row gap-7" : "flex-col gap-9",
-          )}
+          className="relative overflow-hidden"
+          style={{ width: view.w, height: view.h }}
         >
-          <svg
-            className="text-muted-foreground/80 pointer-events-none absolute top-0 left-0 overflow-visible"
-            width={view.svgW}
-            height={view.svgH}
-            aria-hidden
+          <div
+            ref={contentRef}
+            className={cn(
+              "absolute top-0 left-0 flex w-max origin-top-left items-center justify-center",
+              // Channel width back to gap-7 — the centered forks made the
+              // extra column distance unnecessary (user 2026-07-10).
+              vertical ? "flex-row gap-7" : "flex-col gap-9",
+            )}
           >
-            {segs.map((s, i) => (
-              <line
-                key={i}
-                x1={s.x1}
-                y1={s.y1}
-                x2={s.x2}
-                y2={s.y2}
-                // Lineage Colors on → the union's line hue/blend; off (or no
-                // colored member) → the muted connector color via currentColor.
-                stroke={lineage && s.color ? s.color : "currentColor"}
-                strokeWidth={1.5}
-                strokeLinecap="round"
-                strokeDasharray={s.dashed ? "2 5" : undefined}
-              />
-            ))}
-          </svg>
-          {web.rows.map((row, i) => (
-            <div
-              key={row[0]?.key ?? i}
-              className={cn(
-                "flex justify-center gap-4",
-                vertical ? "flex-col items-start" : "items-start",
-              )}
+            <svg
+              className="text-muted-foreground/80 pointer-events-none absolute top-0 left-0 overflow-visible"
+              width={view.svgW}
+              height={view.svgH}
+              aria-hidden
             >
-              {row.map(renderUnion)}
-            </div>
-          ))}
+              {segs.map((s, i) => (
+                <line
+                  key={i}
+                  x1={s.x1}
+                  y1={s.y1}
+                  x2={s.x2}
+                  y2={s.y2}
+                  // Lineage Colors on → the union's line hue/blend; off (or no
+                  // colored member) → the muted connector color via currentColor.
+                  stroke={lineage && s.color ? s.color : "currentColor"}
+                  strokeWidth={1.5}
+                  strokeLinecap="round"
+                  strokeDasharray={s.dashed ? "2 5" : undefined}
+                />
+              ))}
+            </svg>
+            {web.rows.map((row, i) => (
+              <div
+                key={row[0]?.key ?? i}
+                className={cn(
+                  "flex justify-center gap-4",
+                  vertical ? "flex-col items-start" : "items-start",
+                )}
+              >
+                {row.map(renderUnion)}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
-        </div>
-      </ScrollAreaPrimitive.Viewport>
-      <ScrollBar />
-      <ScrollBar orientation="horizontal" />
-      <ScrollAreaPrimitive.Corner />
-    </ScrollAreaPrimitive.Root>
+    </div>
+    </>
   );
 }
 
@@ -859,14 +1152,10 @@ export function FamilyTree({ personaId, indexes }: { personaId: string; indexes:
 
   const focus = indexes.directory.personas.get(focusId) ?? indexes.directory.personas.get(personaId);
   if (!focus) return null;
-  // View-aware trim budget (user 2026-07-11): the chart never scales — the
-  // panel grows to fit it — so a generation must fit the panel's 85vh
-  // ceiling at FULL size; anything past that trims into "+N more" instead
-  // of scrolling. ~52px cell + ~10px average gap; 190px ≈ the panel's
-  // fixed rows + padding.
-  const chartCap = Math.max(480, (typeof window === "undefined" ? 900 : window.innerHeight) * 0.85);
-  const maxPerGeneration = Math.max(6, Math.floor((chartCap - 190) / 62));
-  const web = buildFamilyWeb(indexes, focus, { maxPerGeneration });
+  // No view-aware per-generation budget anymore (user 2026-07-11): the
+  // pan/zoom canvas makes oversized generations navigable, so only
+  // familyWeb's global box cap still trims (the "+N more" footer note).
+  const web = buildFamilyWeb(indexes, focus);
   const fan = mode === "fan" ? buildFamilyFan(indexes, focus, web) : null;
   const origin = indexes.directory.personas.get(personaId);
 
@@ -889,8 +1178,19 @@ export function FamilyTree({ personaId, indexes }: { personaId: string; indexes:
     >
       <IconTip label="Family Tree">
         <DialogTrigger
+          nativeButton={false}
           render={
-            <Button variant="ghost" size="icon-sm" aria-label="Open family tree">
+            // Span-rendered (nativeButton={false}) so the trigger can live
+            // INSIDE the Family header's CollapsibleTrigger button (user
+            // 2026-07-11) — Base UI wires role/keyboard semantics onto the
+            // span, same as the directory's pin.
+            <Button
+              render={<span />}
+              nativeButton={false}
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Open family tree"
+            >
               <Network />
             </Button>
           }
@@ -938,22 +1238,32 @@ export function FamilyTree({ personaId, indexes }: { personaId: string; indexes:
                   rows stay fixed in place — only the tree scrolls. */}
               <div
                 data-slot="family-tree-panel"
-                className="relative flex max-h-[85vh] min-h-[30rem] w-fit min-w-[44rem] max-w-[calc(96vw-19.5rem)] flex-col overflow-hidden rounded-xl border border-border bg-popover/95 p-4 text-popover-foreground shadow-lg backdrop-blur-md tabular-nums"
+                className="relative flex max-h-[85vh] min-h-[30rem] w-fit min-w-[44rem] max-w-[calc(96vw-19.5rem)] flex-col overflow-hidden rounded-xl border border-border bg-popover/95 text-popover-foreground shadow-lg backdrop-blur-md tabular-nums"
               >
-                {/* One header row — title left; back control + X share the
-                    right cluster so they align on the same vertical center
-                    (user 2026-07-08: the absolute X sat off the title line).
-                    Layer toggles live in the bottom controls row (user
-                    2026-07-10). */}
-                {/* w-0 min-w-full: the header sizes to the panel (whose width
-                    the CHART drives) and truncates internally — a long title
-                    ("The {surname} Family" changes with the focus) can never
-                    widen the panel on selection (user 2026-07-10). */}
-                <div className="flex w-0 min-w-full items-center justify-between gap-3">
-                  <DialogTitle className="truncate text-sm font-medium text-foreground">
+                {mode === "fan" && fan ? (
+                  <FanChart fan={fan} lineage={lineage} tint={tintOn} onSelect={setFocusId} />
+                ) : (
+                  <FamilyChart
+                    web={web}
+                    focusId={focus.id}
+                    originId={origin?.id}
+                    lineage={lineage}
+                    tint={tintOn}
+                    vertical={mode === "columns"}
+                    onSelect={setFocusId}
+                  />
+                )}
+                {/* Header HOVERS over the chart on a soft scrim (user
+                    2026-07-11: the canvas fills the entire panel) —
+                    pointer-events pass through the gradient to the chart;
+                    only the controls themselves catch clicks. Title left;
+                    back control + X share the right cluster (user
+                    2026-07-08). */}
+                <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center justify-between gap-3 rounded-t-xl bg-gradient-to-b from-popover via-popover/55 to-transparent px-4 pt-3 pb-6">
+                  <DialogTitle className="min-w-0 truncate text-sm font-medium text-foreground">
                     The {focus.familyName} Family
                   </DialogTitle>
-                  <div className="flex items-center gap-2">
+                  <div className="pointer-events-auto flex items-center gap-2">
                     {/* Always visible (user 2026-07-08) — the anchor reads
                         even before re-rooting; disabled while the focus IS
                         the entry person. */}
@@ -973,64 +1283,46 @@ export function FamilyTree({ personaId, indexes }: { personaId: string; indexes:
                     </DialogClose>
                   </div>
                 </div>
-                {mode === "fan" && fan ? (
-                  <FanChart fan={fan} lineage={lineage} tint={tintOn} onSelect={setFocusId} />
-                ) : (
-                  <FamilyChart
-                    web={web}
-                    focusId={focus.id}
-                    originId={origin?.id}
-                    lineage={lineage}
-                    tint={tintOn}
-                    vertical={mode === "columns"}
-                    onSelect={setFocusId}
-                  />
-                )}
-                {/* Fixed-height slot, rendered whether or not there's
-                    content: FamilyChart above is flex-1 and centers its own
-                    rows within whatever space is left, so any change in this
-                    footer's height (wrapping, or appearing/disappearing
-                    between empty and non-empty) would re-center — and
-                    visibly shift — the whole chart. Single line, truncated,
-                    never wraps (user 2026-07-10). */}
-                <div className="h-5 shrink-0 truncate px-3 text-xs text-muted-foreground">
-                  {footerBits.join(" · ")}
-                </div>
-                {/* Fixed-height controls row (always rendered, constant
-                    height like the footer slot above, so the chart never
-                    shifts): layer toggles bottom-left, the resident-card
-                    show/hide bottom-right (user 2026-07-10). */}
-                <div className="flex h-8 shrink-0 items-center justify-between">
-                  <div className="flex items-center gap-1">
-                    {/* 3-way display-mode cluster — exactly one active
-                        (user 2026-07-10: rows / columns / fan). */}
-                    {/* Mode cluster (Rows/Columns/Fan) hidden for now (user
-                        2026-07-10) — columns only while the layout gets
-                        dialed in; the render paths remain behind `mode`. */}
-                    <LayerToggle
-                      label="Lineage Colors"
-                      pressed={lineage}
-                      onToggle={() => setLineage((v) => !v)}
-                    >
-                      <Palette />
-                    </LayerToggle>
-                    <LayerToggle
-                      label="Gender Tint"
-                      pressed={tintOn}
-                      onToggle={() => setTintOn((v) => !v)}
-                    >
-                      <Blend />
-                    </LayerToggle>
+                {/* Footer overlay: trim/offstage line + the controls row,
+                    hovering over the chart's bottom edge on the mirrored
+                    scrim (user 2026-07-11). Both rows keep constant heights
+                    so nothing shifts when the note appears. */}
+                <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex flex-col rounded-b-xl bg-gradient-to-t from-popover via-popover/55 to-transparent px-4 pt-6 pb-2">
+                  <div className="h-5 shrink-0 truncate text-xs text-muted-foreground">
+                    {footerBits.join(" · ")}
                   </div>
-                  {/* Icon pair reads as panel show/hide and swaps with
-                      state; the tooltip is the pending ACTION's name. */}
-                  <LayerToggle
-                    label={cardMin ? "Show Card" : "Minimize Card"}
-                    pressed={cardMin}
-                    onToggle={() => setCardMin((v) => !v)}
-                  >
-                    {cardMin ? <PanelRightOpen /> : <PanelRightClose />}
-                  </LayerToggle>
+                  <div className="flex h-8 shrink-0 items-center justify-between">
+                    <div className="pointer-events-auto flex items-center gap-1">
+                      {/* Mode cluster (Rows/Columns/Fan) hidden for now (user
+                          2026-07-10) — columns only while the layout gets
+                          dialed in; the render paths remain behind `mode`. */}
+                      <LayerToggle
+                        label="Lineage Colors"
+                        pressed={lineage}
+                        onToggle={() => setLineage((v) => !v)}
+                      >
+                        <Palette />
+                      </LayerToggle>
+                      <LayerToggle
+                        label="Gender Tint"
+                        pressed={tintOn}
+                        onToggle={() => setTintOn((v) => !v)}
+                      >
+                        <Blend />
+                      </LayerToggle>
+                    </div>
+                    {/* Icon pair reads as panel show/hide and swaps with
+                        state; the tooltip is the pending ACTION's name. */}
+                    <div className="pointer-events-auto">
+                      <LayerToggle
+                        label={cardMin ? "Show Card" : "Minimize Card"}
+                        pressed={cardMin}
+                        onToggle={() => setCardMin((v) => !v)}
+                      >
+                        {cardMin ? <PanelRightOpen /> : <PanelRightClose />}
+                      </LayerToggle>
+                    </div>
+                  </div>
                 </div>
               </div>
               {/* The member's details: the SAME card the columns dock shows,
@@ -1051,7 +1343,7 @@ export function FamilyTree({ personaId, indexes }: { personaId: string; indexes:
                           setOpen(false);
                         }}
                       >
-                        <Maximize2 />
+                        <SquareArrowOutUpRight />
                       </Button>
                     </IconTip>
                   }
