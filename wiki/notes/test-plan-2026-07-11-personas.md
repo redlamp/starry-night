@@ -86,15 +86,23 @@ Everything below landed after the morning pass; items 3.4/4.2 from above are sup
 ## 7b. Round 3 — evening feedback build (supersedes R2 items 1, 3, 4, 11, 16)
 
 1. [ ] Family tree fills the WHOLE panel; header + footer hover over the chart on soft gradient scrims; drag/pinch works everywhere including through the gradients (only the actual controls catch clicks).
-2. [ ] Zoomed tree text is CRISP once the gesture settles (no rasterized blur — will-change removed).
-3. [ ] Desktop: plain wheel PANS the tree (shift = horizontal), Ctrl/Cmd+wheel (and trackpad pinch) zooms, double-click refits; touch pinch unchanged.
-4. [ ] Resident card: ONE Work row (green = money) — profession-category icon + title, then employer/district/address lines; Home is orange (hearth). No separate Profession row.
+2. [x] Zoomed tree text is CRISP once the gesture settles (no rasterized blur — will-change removed).
+3. [x] Desktop: plain wheel PANS the tree (shift = horizontal), Ctrl/Cmd+wheel (and trackpad pinch) zooms, double-click refits; touch pinch unchanged.
+4. [x] Resident card: ONE Work row (green = money) — profession-category icon + title, then employer/district/address lines; Home is orange (hearth). No separate Profession row.
 5. [ ] DOB reads `Oct 19, 1980 · 7:31 PM` on one spanning row (Time cell gone).
-6. [ ] Married name-takers read `born {Name}` in the header (née retired).
+6. [x] Married name-takers read `born {Name}` in the header (née retired).
 7. [ ] Focus centering: EVERY focus (fly-tos, address links, cone, district pin) centers the target in the space right of directory + cards — measured one frame AFTER the click, so a click that pushes a new card accounts for that card's width. Settings drawer intentionally not counted.
-8. [ ] Build progress: conic ring around the round City Directory DOCK BUTTON during city-details generation (faint track + primary arc), gone at 100%; the panel-border ring also remains.
-9. [ ] Settings show/hide buttons have shadcn tooltips ("Show Settings" / "Hide Settings").
+8. [x] Build progress: conic ring around the round City Directory DOCK BUTTON during city-details generation (faint track + primary arc), gone at 100%; the panel-border ring also remains.
+9. [x] Settings show/hide buttons have shadcn tooltips ("Show Settings" / "Hide Settings").
 10. [ ] District hover (directory or settings list): THICK 3px full-color outline (Line2 fat lines) + ~22% translucent full-color fill, with Show Boundaries ON or OFF. Pinned district keeps the thick outline, no fill.
+
+## 7c. Round 3 follow-ups (final build of the day)
+
+1. [ ] Tree footer "?" shows the nav cheat-sheet (drag/scroll pan, shift sideways, ctrl/cmd+scroll or pinch zoom, double-click reset, click to re-root); double-click reset TWEENS home (~280ms ease-out, any gesture cancels it).
+2. [ ] DOB and Time are two separate grid fields again (kept as seeded numbers, not a Date object — timezone semantics don't belong in the fiction).
+3. [ ] Long name + maiden combos drop "born" and read `(Park)` so the header line stays comfortable.
+4. [ ] Selection-follow: putting ANY card on top (push, back/forward, tree's Open Full Card, family links) glides the camera to it — resident's home, company/building site, street run, district bounds. Cone-follow supersedes; fly-to buttons still cover work/partner/commute.
+5. [ ] District hover: thick border ABOVE everything; the fill sits UNDER the buildings (occluded by towers, reads on streets/gaps) at 40% of the border color.
 
 ## 8. Known / Parked (don't re-report)
 
