@@ -51,6 +51,12 @@ export function SearchResults({
                   >
                     {hit.text}
                   </span>
+                  <Badge
+                    variant="outline"
+                    className="mt-0.5 shrink-0 font-mono text-[10px] font-normal text-muted-foreground select-all"
+                  >
+                    {hit.entryId}
+                  </Badge>
                   <span
                     className={cn(
                       "mt-1.5 size-1.5 shrink-0 rounded-full",

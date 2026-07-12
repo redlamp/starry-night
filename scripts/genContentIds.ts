@@ -1,0 +1,168 @@
+// Generates/refreshes lib/writing/contentIds.ts, the committed sidecar that
+// pairs every lib/writing/contentRegistry.ts pool entry with a stable,
+// text-edit-proof id. Read-only over the generation source; writes only the
+// sidecar. Never imported at runtime — the app reads the committed
+// contentIds.ts directly (see lib/writing/contentRegistry.ts).
+//
+// Usage: bun scripts/genContentIds.ts
+//
+// --- Ids are short hashes of POSITION, not text ------------------------------
+//
+// Each entry's id is contentHashId(positionKey) — a short base36 hash (see
+// lib/writing/contentHash.ts). The position key is:
+//   ordinal pools (plain string[]):  `${poolId}~${index}`
+//   keyed pools  (the three trait tables, flattened from a Record by the
+//                 registry):         `${poolId}~${key}`  (e.g. traits.western~Aries)
+//
+// Because the input is the entry's POSITION and never its text, editing an
+// entry's wording does NOT change its id — which is the entire reason the
+// sidecar exists (labStore.ts overrides are keyed by id and must survive an
+// edit). And because the hash is a pure function of position, a re-run is
+// automatically stable: an unchanged entry hashes to the same id every time,
+// an appended entry gets a new position and so a new id, and nothing needs to
+// "remember" prior output to stay consistent.
+//
+// The displayed/searchable id is the hash alone (users found the dotted
+// `poolId~ordinal` strings hard to search — user 2026-07-12). The pool
+// grouping still supplies context in the UI; the hash is the unique handle.
+//
+// --- Collision handling -------------------------------------------------------
+//
+// All position keys across all pools are hashed at DEFAULT_CONTENT_ID_WIDTH
+// (6 base36 chars). If any two collide, the width is widened by a char and the
+// whole set re-hashed, until collision-free. The chosen width is written to
+// the sidecar as CONTENT_ID_WIDTH so runtime fallbacks (contentRegistry.ts,
+// provenance.ts) can mint matching ids for a pool the sidecar hasn't captured
+// yet. Widening re-bases every id, which is acceptable at this stage (a clean
+// re-baseline was sanctioned) but should be rare — at 6 chars the collision
+// chance for ~1100 entries is ~3e-4.
+//
+// --- Not for reorders/cuts ----------------------------------------------------
+//
+// Positions are index-based, so the sanctioned append-only source workflow
+// keeps every existing entry's id stable. A source array hand-edited outside
+// the writing lab (splicing/reordering entries directly in lib/seed/*.ts) will
+// shift indices and therefore ids — but that's already a determinism footgun
+// the guarded exporter (labStore.ts) exists to prevent, so it never happens
+// via the tool.
+
+import { writeFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { buildContentRegistry } from "../lib/writing/contentRegistry";
+import { CONTENT_IDS as PREVIOUS_IDS } from "../lib/writing/contentIds";
+import {
+  WESTERN_SIGN_TRAITS,
+  CHINESE_ANIMAL_TRAITS,
+  MBTI_DESCRIPTIONS,
+} from "../lib/seed/personaData";
+import {
+  contentHashId,
+  ordinalPositionKey,
+  keyedPositionKey,
+  DEFAULT_CONTENT_ID_WIDTH,
+} from "../lib/writing/contentHash";
+
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
+const OUT_PATH = path.resolve(SCRIPT_DIR, "../lib/writing/contentIds.ts");
+const MAX_WIDTH = 12; // 36^12 ≈ 4.7e18 — far beyond any realistic pool size
+
+// Pools the registry flattens from a keyed Record — id keys off the dict key,
+// not array position (see header). If a new keyed-dictionary pool is added,
+// list it here.
+const KEYED_POOLS: Record<string, Record<string, string>> = {
+  "traits.western": WESTERN_SIGN_TRAITS,
+  "traits.chinese": CHINESE_ANIMAL_TRAITS,
+  "traits.mbti": MBTI_DESCRIPTIONS,
+};
+
+// Every entry's position key, in pool + entry order. Ordinal pools key off the
+// array index; keyed pools off the dictionary key.
+function positionKeysFor(poolId: string, length: number): string[] {
+  const keyed = KEYED_POOLS[poolId];
+  if (keyed) return Object.keys(keyed).map((k) => keyedPositionKey(poolId, k));
+  return Array.from({ length }, (_, i) => ordinalPositionKey(poolId, i));
+}
+
+// Smallest base36 width (>= DEFAULT) at which no two position keys collide.
+function chooseWidth(allPositionKeys: string[]): number {
+  for (let width = DEFAULT_CONTENT_ID_WIDTH; width <= MAX_WIDTH; width++) {
+    const seen = new Set<string>();
+    let collision = false;
+    for (const pk of allPositionKeys) {
+      const id = contentHashId(pk, width);
+      if (seen.has(id)) {
+        collision = true;
+        break;
+      }
+      seen.add(id);
+    }
+    if (!collision) return width;
+  }
+  throw new Error(`could not find a collision-free id width up to ${MAX_WIDTH}`);
+}
+
+function formatModule(ids: Record<string, string[]>, width: number): string {
+  const lines: string[] = [
+    "// GENERATED by scripts/genContentIds.ts — do not hand-edit; re-run the",
+    "// script to refresh. Stable content ids: CONTENT_IDS[poolId][index] is a",
+    "// short base36 hash (see lib/writing/contentHash.ts) of the entry's",
+    "// POSITION — `${poolId}~${index}` for ordinal pools, `${poolId}~${key}`",
+    "// for the three trait pools — NOT of its text, so an id survives a wording",
+    "// edit. CONTENT_ID_WIDTH is the base36 width the generator settled on",
+    "// (widened past the default only to break a hash collision).",
+    "",
+    "export type PoolId = string;",
+    "",
+    `export const CONTENT_ID_WIDTH = ${width};`,
+    "",
+    "export const CONTENT_IDS: Record<PoolId, string[]> = {",
+  ];
+  for (const poolId of Object.keys(ids).sort()) {
+    lines.push(`  ${JSON.stringify(poolId)}: ${JSON.stringify(ids[poolId])},`);
+  }
+  lines.push("};");
+  lines.push("");
+  return lines.join("\n");
+}
+
+function main() {
+  const pools = buildContentRegistry();
+
+  // Flatten every position key first, so the width is chosen against the whole
+  // id space (collisions are global, not per-pool).
+  const allPositionKeys: string[] = [];
+  for (const pool of pools) allPositionKeys.push(...positionKeysFor(pool.id, pool.entries.length));
+  const width = chooseWidth(allPositionKeys);
+
+  const next: Record<string, string[]> = {};
+  let newPools = 0;
+  let newEntries = 0;
+  for (const pool of pools) {
+    const oldIds = PREVIOUS_IDS[pool.id] ?? [];
+    if (!(pool.id in PREVIOUS_IDS)) newPools++;
+    const ids = positionKeysFor(pool.id, pool.entries.length).map((pk) => contentHashId(pk, width));
+    if (ids.length !== pool.entries.length) {
+      console.error(
+        `FATAL: ${pool.id} produced ${ids.length} ids for ${pool.entries.length} entries — refusing to write a mismatched sidecar.`,
+      );
+      process.exit(1);
+    }
+    newEntries += Math.max(0, ids.length - oldIds.length);
+    next[pool.id] = ids;
+  }
+
+  const droppedPools = Object.keys(PREVIOUS_IDS).filter((id) => !(id in next));
+  const totalEntries = Object.values(next).reduce((n, a) => n + a.length, 0);
+
+  writeFileSync(OUT_PATH, formatModule(next, width), "utf8");
+
+  console.log(`wrote ${path.relative(process.cwd(), OUT_PATH)}`);
+  console.log(`  ${pools.length} pools, ${totalEntries} entries, id width ${width}`);
+  if (width > DEFAULT_CONTENT_ID_WIDTH) console.log(`  (widened past ${DEFAULT_CONTENT_ID_WIDTH} to break a collision)`);
+  if (newPools > 0) console.log(`  ${newPools} new pool(s)`);
+  if (newEntries > 0) console.log(`  ${newEntries} new entr${newEntries === 1 ? "y" : "ies"}`);
+  if (droppedPools.length > 0) console.log(`  dropped pool(s) no longer in the registry: ${droppedPools.join(", ")}`);
+}
+
+main();

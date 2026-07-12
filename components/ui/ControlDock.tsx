@@ -1,6 +1,7 @@
 "use client";
 
-import { BookUser, History, Search, X } from "lucide-react";
+import Link from "next/link";
+import { BookUser, History, NotebookPen, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIdle } from "@/lib/useIdle";
 import { useSceneStore } from "@/lib/state/sceneStore";
@@ -12,6 +13,14 @@ import { IconTip } from "@/components/ui/columns/EntityColumns";
 // the settings drawer into its own toggle; Resume restores the last column
 // stack after an empty-ground click dismissed it. Round buttons match the
 // ControlsGuide "?" idiom (size / idle-fade / sticky-mode fill).
+//
+// [Writing Lab] rides along here too (2026-07-12): /writing-lab was a
+// URL-only orphan — no route in the app links to it, and this dock is the
+// one precedent for "a small extra icon-button of app-level chrome" that
+// exists anywhere in the UI (every other screen corner is already claimed —
+// Settings top-right, Controls "?" + Inspect bottom-right, Seed bottom-left).
+// Opens in a new tab: it's a separate authoring workbench, not part of this
+// page's 3D scene state.
 
 function DockButton({
   active,
@@ -91,6 +100,21 @@ export function ControlDock() {
             <History className="size-5" />
           </DockButton>
         )}
+        <IconTip label="Writing Lab">
+          <Link
+            href="/writing-lab"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Writing Lab"
+            className={cn(
+              "flex size-11 items-center justify-center rounded-full border shadow-lg backdrop-blur-md transition-[opacity,background-color,color] duration-700",
+              "border-foreground/10 bg-popover/70 text-foreground/85 hover:bg-foreground/10",
+              idle ? "pointer-events-none opacity-0" : "pointer-events-auto opacity-100",
+            )}
+          >
+            <NotebookPen className="size-5" />
+          </Link>
+        </IconTip>
       </div>
 
       {directoryOpen && (
