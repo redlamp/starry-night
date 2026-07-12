@@ -137,7 +137,10 @@ export function EntryRow({
         flash && "bg-accent/60",
       )}
     >
-      <td className="px-2 py-2.5 align-top">
+      {/* pl-4 matches the batch bar's px-4 left inset so the boxes line up
+          down the column; py-2 aligns the box top with the # / id-badge line
+          (user 2026-07-12). */}
+      <td className="py-2 pr-2 pl-4 align-top">
         <Checkbox
           checked={checked}
           onCheckedChange={(c) => onCheckedChange(c === true)}

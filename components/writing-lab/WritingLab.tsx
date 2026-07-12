@@ -548,7 +548,6 @@ export function WritingLab() {
               </span>
             )}
             <ThemeToggle />
-            <Tutorial />
             {/* One Export button; the dropdown chooses TS (this pool) vs JSON
                 (all metadata), each copy or download (user 2026-07-12). */}
             <DropdownMenu>
@@ -835,7 +834,7 @@ export function WritingLab() {
                       </colgroup>
                       <thead className="sticky top-0 z-10 bg-background">
                         <tr className="border-b border-border text-xs text-muted-foreground uppercase">
-                          <th className="px-2 py-2 font-medium">
+                          <th className="py-2 pr-2 pl-4 font-medium">
                             <span className="sr-only">Select</span>
                           </th>
                           <th className="px-2 py-2 text-right font-medium">#</th>
@@ -909,6 +908,8 @@ export function WritingLab() {
             )}
           </main>
         </div>
+        {/* Fixed bottom-right corner button (renders its own floating trigger). */}
+        <Tutorial />
       </div>
     </TooltipProvider>
   );

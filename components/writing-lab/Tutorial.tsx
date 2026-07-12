@@ -34,9 +34,17 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 export function Tutorial() {
   return (
     <Dialog>
+      {/* Fixed bottom-right corner button (user 2026-07-12), out of the header.
+          Floating pill — border + shadow + blur so it reads as a corner
+          affordance, matching the main app's "?" ControlsGuide idiom. */}
       <DialogTrigger
         render={
-          <Button variant="ghost" size="sm" aria-label="How to use the writing lab">
+          <Button
+            variant="outline"
+            size="sm"
+            aria-label="How to use the writing lab"
+            className="bg-popover/80 fixed right-4 bottom-4 z-40 gap-1.5 rounded-full shadow-lg backdrop-blur-md"
+          >
             <CircleHelp className="size-4" />
             How It Works
           </Button>
