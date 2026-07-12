@@ -41,6 +41,7 @@ import {
   PAPER_NAMES,
 } from "@/lib/seed/naming";
 import { BUSINESS_TEMPLATES, OFFICE_SUBTYPES, HOSPITAL_SUBTYPES } from "@/lib/seed/personas";
+import { CONTENT_IDS } from "@/lib/writing/contentIds";
 
 export type ContentPool = {
   id: string; // stable: "story.hooks.kid"
@@ -50,6 +51,11 @@ export type ContentPool = {
   kind: "template" | "word";
   slots?: string; // human note about available slots
   entries: string[];
+  // Stable per-entry ids, index-aligned with `entries` — entryIds[i] names
+  // entries[i]. Committed by scripts/genContentIds.ts into contentIds.ts;
+  // survives text edits (id ties to the sidecar's own history, not to the
+  // entry's current text or, for ordinary pools, anything content-derived).
+  entryIds: string[];
   // where the pool lives, for the export-back-to-source workflow
   source: string;
 };
@@ -67,7 +73,16 @@ export function buildContentRegistry(): ContentPool[] {
     entries: string[],
     source: string,
     slots?: string,
-  ) => pools.push({ id, group, label, kind, entries, source, slots });
+  ) => {
+    // Defensive fallback for a pool the sidecar hasn't seen yet (freshly added
+    // pool, script not re-run): mint the same plain ordinal id
+    // scripts/genContentIds.ts would on its next run, in memory only — this
+    // never writes back to contentIds.ts, so it can't drift from what the
+    // script would actually commit.
+    const committed = CONTENT_IDS[id] ?? [];
+    const entryIds = entries.map((_, i) => committed[i] ?? `${id}~${i}`);
+    pools.push({ id, group, label, kind, entries, entryIds, source, slots });
+  };
 
   // --- Story templates ---
   add("story.hooks.generic", "Story", "Hooks · Generic", "template", [...HOOKS_GENERIC], "lib/seed/personaStory.ts · HOOKS_GENERIC", SLOT_NOTE);
@@ -92,8 +107,17 @@ export function buildContentRegistry(): ContentPool[] {
   add("story.domains", "Story", "Domain Words", "word", [...DOMAIN_WORDS], "lib/seed/personaStory.ts · DOMAIN_WORDS");
 
   // --- Names ---
-  add("names.first.masc", "Names", "First Names · Masculine", "word", [...MASCULINE_FIRST_NAMES], "lib/seed/personaData.ts · MASCULINE_FIRST_NAMES");
-  add("names.first.fem", "Names", "First Names · Feminine", "word", [...FEMININE_FIRST_NAMES], "lib/seed/personaData.ts · FEMININE_FIRST_NAMES");
+  // NOT resident given names (2026-07 provenance audit, Finding A): residents
+  // draw given names from the decade-cohort tables in lib/seed/nameCohorts.ts
+  // (MASCULINE_BY_DECADE / FEMININE_BY_DECADE), so a birth-year-appropriate
+  // Barbara or Madison comes out instead of a flat 50/50 pool. These two flat
+  // pools feed only OFFSTAGE relatives (the unseen mother/uncle/etc. named on
+  // a persona's sheet) and the business-name {G} slot — editing "Robert" here
+  // never changes what a resident is called. nameCohorts.ts's ~450 rows of
+  // sourced SSA data aren't (yet) a registered pool here; see
+  // lib/writing/provenance.ts for the reverse lookup.
+  add("names.first.masc", "Names", "First Names · Masculine", "word", [...MASCULINE_FIRST_NAMES], "lib/seed/personaData.ts · MASCULINE_FIRST_NAMES (offstage relatives + business {G} slot only — NOT resident given names; see lib/seed/nameCohorts.ts)");
+  add("names.first.fem", "Names", "First Names · Feminine", "word", [...FEMININE_FIRST_NAMES], "lib/seed/personaData.ts · FEMININE_FIRST_NAMES (offstage relatives + business {G} slot only — NOT resident given names; see lib/seed/nameCohorts.ts)");
   add("names.last", "Names", "Last Names", "word", [...LAST_NAMES], "lib/seed/personaData.ts · LAST_NAMES");
   add("names.professions", "Names", "Professions", "word", PROFESSIONS.map((p) => p.title), "lib/seed/personaData.ts · PROFESSIONS (title only; category/tier/workplace in source)");
 
