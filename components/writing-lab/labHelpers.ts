@@ -1,5 +1,6 @@
 import type { ContentPool } from "@/lib/writing/contentRegistry";
 import {
+  addedEntries,
   entryMeta,
   setEntryMeta,
   type Authorship,
@@ -140,18 +141,84 @@ function matchesFilters(
   return true;
 }
 
-// Indices into pool.entries that pass the active filters, in source order.
-export function filteredIndices(
+// One addressable table row: either source-backed (index/sourceText present
+// — the array position matters, it's the entry's identity in the shipped
+// pool) or locally-added via "Duplicate" (index/sourceText null — it has no
+// array position, addressed purely by entryId; see labStore.ts's
+// addEntry/addedEntries).
+export type DisplayRow = {
+  entryId: string;
+  index: number | null;
+  sourceText: string | null;
+  meta: EntryMeta;
+};
+
+// A pool's full row set — every source entry, plus any locally-added
+// ("Duplicate") entries appended after them in creation order — before
+// filtering/sorting.
+export function poolRows(pool: ContentPool, labState: LabState): DisplayRow[] {
+  const rows: DisplayRow[] = [];
+  for (let i = 0; i < pool.entries.length; i++) {
+    const entryId = pool.entryIds[i];
+    rows.push({ entryId, index: i, sourceText: pool.entries[i], meta: entryMeta(labState, pool.id, entryId) });
+  }
+  for (const { entryId, meta } of addedEntries(labState, pool.id)) {
+    rows.push({ entryId, index: null, sourceText: null, meta });
+  }
+  return rows;
+}
+
+export type SortKey = "id" | "content" | "author" | "status" | "createdAt" | "updatedAt";
+export type SortDir = "asc" | "desc";
+
+export const SORT_OPTIONS: { value: SortKey; label: string }[] = [
+  { value: "id", label: "Id" },
+  { value: "content", label: "Content" },
+  { value: "author", label: "Author" },
+  { value: "status", label: "Status" },
+  { value: "createdAt", label: "Date Added" },
+  { value: "updatedAt", label: "Date Modified" },
+];
+
+const STATUS_SORT_ORDER: Record<ReviewStatus, number> = { draft: 0, review: 1, final: 2, cut: 3 };
+const AUTHOR_SORT_ORDER: Record<Authorship, number> = { ai: 0, human: 1, edited: 2 };
+
+function compareRows(a: DisplayRow, b: DisplayRow, key: SortKey): number {
+  switch (key) {
+    case "id":
+      return a.entryId.localeCompare(b.entryId);
+    case "content":
+      return effectiveText(a.meta, a.sourceText ?? "").localeCompare(effectiveText(b.meta, b.sourceText ?? ""));
+    case "author":
+      return AUTHOR_SORT_ORDER[a.meta.author] - AUTHOR_SORT_ORDER[b.meta.author];
+    case "status":
+      return STATUS_SORT_ORDER[a.meta.status] - STATUS_SORT_ORDER[b.meta.status];
+    // Untouched entries carry no timestamp (never written via setEntryMeta) —
+    // they sort as "oldest" (0), which reads right for both keys: never-
+    // touched is the oldest possible "date added", and (for "date modified")
+    // it puts everything that's ever been edited above everything that
+    // hasn't when sorting newest-first.
+    case "createdAt":
+      return (a.meta.createdAt ?? 0) - (b.meta.createdAt ?? 0);
+    case "updatedAt":
+      return (a.meta.updatedAt ?? 0) - (b.meta.updatedAt ?? 0);
+  }
+}
+
+// Filters (status/author) + optional sort over a pool's full row set (source
+// entries + any locally-added ones). Omitting `sort` keeps the default
+// order: source order, then added entries in creation order.
+export function visibleRows(
   pool: ContentPool,
   labState: LabState,
   statusFilter: StatusFilter,
   authorFilter: AuthorFilter,
-): number[] {
-  const out: number[] = [];
-  for (let i = 0; i < pool.entries.length; i++) {
-    if (matchesFilters(entryMeta(labState, pool.id, i), statusFilter, authorFilter)) out.push(i);
-  }
-  return out;
+  sort?: { key: SortKey; dir: SortDir },
+): DisplayRow[] {
+  const rows = poolRows(pool, labState).filter((r) => matchesFilters(r.meta, statusFilter, authorFilter));
+  if (!sort) return rows;
+  const sign = sort.dir === "asc" ? 1 : -1;
+  return [...rows].sort((a, b) => sign * compareRows(a, b, sort.key));
 }
 
 // Revert an override: clears `text` back to "unchanged" (reads as the source
@@ -165,24 +232,25 @@ export function filteredIndices(
 // JSON.stringify drops undefined-valued keys, so exportLabStateAsJson stays
 // clean. No labStore change needed — this is just the one call, named for the
 // page's use sites.
-export function revertEntry(state: LabState, poolId: string, index: number): LabState {
-  return setEntryMeta(state, poolId, index, { text: undefined });
+export function revertEntry(state: LabState, poolId: string, entryId: string): LabState {
+  return setEntryMeta(state, poolId, entryId, { text: undefined });
 }
 
 // Advance every filtered entry currently in `from` status to `to` (bulk
 // actions respect the active filters — "Mark All Reviewed" only touches what's
-// on screen).
+// on screen). Takes entryIds directly — callers resolve indices to ids via
+// pool.entryIds before calling (see WritingLab.tsx).
 export function bulkAdvanceStatus(
   state: LabState,
   poolId: string,
-  indices: number[],
+  entryIds: string[],
   from: ReviewStatus,
   to: ReviewStatus,
 ): LabState {
   let next = state;
-  for (const i of indices) {
-    if (entryMeta(next, poolId, i).status === from) {
-      next = setEntryMeta(next, poolId, i, { status: to });
+  for (const entryId of entryIds) {
+    if (entryMeta(next, poolId, entryId).status === from) {
+      next = setEntryMeta(next, poolId, entryId, { status: to });
     }
   }
   return next;
@@ -202,8 +270,9 @@ export type LabStats = {
   perPool: Record<string, PoolStats>;
 };
 
-// One pass over every entry in every pool (a few hundred to ~1000 total —
-// cheap to recompute whenever labState changes rather than track deltas).
+// One pass over every entry in every pool (source + locally-added — a few
+// hundred to ~1000 total normally — cheap to recompute whenever labState
+// changes rather than track deltas).
 export function computeLabStats(pools: ContentPool[], labState: LabState): LabStats {
   const byStatus = emptyStatusCounts();
   const byAuthor = emptyAuthorCounts();
@@ -211,14 +280,14 @@ export function computeLabStats(pools: ContentPool[], labState: LabState): LabSt
   let total = 0;
   for (const pool of pools) {
     const poolByStatus = emptyStatusCounts();
-    for (let i = 0; i < pool.entries.length; i++) {
-      const meta = entryMeta(labState, pool.id, i);
-      byStatus[meta.status]++;
-      byAuthor[meta.author]++;
-      poolByStatus[meta.status]++;
+    const rows = poolRows(pool, labState);
+    for (const row of rows) {
+      byStatus[row.meta.status]++;
+      byAuthor[row.meta.author]++;
+      poolByStatus[row.meta.status]++;
       total++;
     }
-    perPool[pool.id] = { total: pool.entries.length, byStatus: poolByStatus };
+    perPool[pool.id] = { total: rows.length, byStatus: poolByStatus };
   }
   return { total, byStatus, byAuthor, perPool };
 }
@@ -226,7 +295,8 @@ export function computeLabStats(pools: ContentPool[], labState: LabState): LabSt
 export type SearchHit = {
   poolId: string;
   poolLabel: string;
-  index: number;
+  index: number | null; // null for a locally-added ("Duplicate") entry
+  entryId: string;
   text: string;
   status: ReviewStatus;
 };
@@ -237,32 +307,87 @@ export type SearchResult = { hits: SearchHit[]; totalMatches: number };
 // pool and the status/author filters (those scope the current table; this
 // scopes the whole registry). Capped at `limit` hits so a broad query over
 // ~1000 entries doesn't render an unbounded list.
+//
+// Id-aware: a query that exactly matches a known entry id ("poolId~ordinal",
+// "poolId~key" for the trait pools, or a locally-added entry's "poolId~new-…"
+// id — the same string this UI shows as a mono badge on every row) resolves
+// directly to that one entry instead of running the substring text scan, so
+// pasting an id jumps straight there.
 export function searchAllEntries(
   pools: ContentPool[],
   labState: LabState,
   query: string,
   limit: number,
 ): SearchResult {
-  const q = query.trim().toLowerCase();
+  const q = query.trim();
   if (!q) return { hits: [], totalMatches: 0 };
+
+  for (const pool of pools) {
+    const row = poolRows(pool, labState).find((r) => r.entryId === q);
+    if (!row) continue;
+    const text = effectiveText(row.meta, row.sourceText ?? "");
+    return {
+      hits: [{ poolId: pool.id, poolLabel: pool.label, index: row.index, entryId: q, text, status: row.meta.status }],
+      totalMatches: 1,
+    };
+  }
+
+  const lower = q.toLowerCase();
   const hits: SearchHit[] = [];
   let totalMatches = 0;
   for (const pool of pools) {
-    for (let i = 0; i < pool.entries.length; i++) {
-      const meta = entryMeta(labState, pool.id, i);
-      const text = effectiveText(meta, pool.entries[i]);
-      if (!text.toLowerCase().includes(q)) continue;
+    for (const row of poolRows(pool, labState)) {
+      const text = effectiveText(row.meta, row.sourceText ?? "");
+      if (!text.toLowerCase().includes(lower)) continue;
       totalMatches++;
       if (hits.length < limit) {
-        hits.push({ poolId: pool.id, poolLabel: pool.label, index: i, text, status: meta.status });
+        hits.push({ poolId: pool.id, poolLabel: pool.label, index: row.index, entryId: row.entryId, text, status: row.meta.status });
       }
     }
   }
   return { hits, totalMatches };
 }
 
-export function entryRowId(poolId: string, index: number): string {
-  return `entry-${poolId}-${index}`;
+// DOM row id — keyed by entryId (not index) so it works uniformly for
+// source-backed AND locally-added rows (the latter have no index at all).
+export function entryRowId(poolId: string, entryId: string): string {
+  return `entry-${poolId}-${entryId}`;
+}
+
+// --- File export / import --------------------------------------------------------
+
+// Triggers a browser file download for a string payload — used for both the
+// TS pool export and the JSON metadata export. A transient object URL + a
+// programmatic <a download> click, revoked right after (the standard
+// no-library way to save a generated string as a file).
+export function triggerDownload(filename: string, content: string, mime: string): void {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+// Reads an uploaded <input type="file"> File as text — the async/Promise
+// wrapper FileReader itself doesn't offer.
+export function readFileAsText(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () => reject(reader.error ?? new Error("file read failed"));
+    reader.readAsText(file);
+  });
+}
+
+// A pool id ("story.hooks.generic") turned into a filesystem-safe basename
+// ("story.hooks.generic") — the ids are already dotted-lowercase-plus-hyphen,
+// so this is mostly a defensive strip of anything that isn't.
+export function poolFileBasename(poolId: string): string {
+  return poolId.replace(/[^a-zA-Z0-9.\-_]/g, "_");
 }
 
 
