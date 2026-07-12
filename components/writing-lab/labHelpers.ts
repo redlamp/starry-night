@@ -1,3 +1,5 @@
+import { Bot, User, UserPen, type LucideIcon } from "lucide-react";
+
 import type { ContentPool } from "@/lib/writing/contentRegistry";
 import {
   addedEntries,
@@ -26,11 +28,21 @@ export const STATUS_OPTIONS: { value: ReviewStatus; label: string }[] = [
   { value: "cut", label: "Cut" },
 ];
 
+// "AI-edited" (not the opaque "Edited") because that's what the value means:
+// an AI draft a human then revised. AI = fully model-written, Human = fully
+// hand-written (user 2026-07-12 — the bare "Edited" read as ambiguous).
 export const AUTHOR_OPTIONS: { value: Authorship; label: string }[] = [
   { value: "ai", label: "AI" },
   { value: "human", label: "Human" },
-  { value: "edited", label: "Edited" },
+  { value: "edited", label: "AI-edited" },
 ];
+
+// One-line meaning per author value, for the Author-column legend (HelpHint).
+export const AUTHOR_HELP: Record<Authorship, string> = {
+  ai: "Model-written, untouched.",
+  human: "Written by a person from scratch.",
+  edited: "AI draft, then revised by a person.",
+};
 
 export const STATUS_LABEL: Record<ReviewStatus, string> = Object.fromEntries(
   STATUS_OPTIONS.map((o) => [o.value, o.label]),
@@ -40,8 +52,8 @@ export const AUTHOR_LABEL: Record<Authorship, string> = Object.fromEntries(
   AUTHOR_OPTIONS.map((o) => [o.value, o.label]),
 ) as Record<Authorship, string>;
 
-// The brief's one explicit exception to token-only styling: status/author
-// accent dots are hardcoded so they read at a glance in a dense table.
+// The brief's one explicit exception to token-only styling: status accent
+// dots are hardcoded so they read at a glance in a dense table.
 export const STATUS_DOT_CLASS: Record<ReviewStatus, string> = {
   draft: "bg-muted-foreground/50",
   review: "bg-blue-400 dark:bg-blue-300",
@@ -49,10 +61,13 @@ export const STATUS_DOT_CLASS: Record<ReviewStatus, string> = {
   cut: "bg-red-400 dark:bg-red-300",
 };
 
-export const AUTHOR_DOT_CLASS: Record<Authorship, string> = {
-  ai: "bg-violet-400 dark:bg-violet-300",
-  human: "bg-amber-400 dark:bg-amber-300",
-  edited: "bg-teal-400 dark:bg-teal-300",
+// Authors read as lucide glyphs, not dots (user 2026-07-12): Bot = AI, User =
+// human, UserPen = AI-edited (the "person revised it" glyph). Rendered by
+// AuthorGlyph in ./controls so the trigger and dropdown options share markup.
+export const AUTHOR_ICON: Record<Authorship, LucideIcon> = {
+  ai: Bot,
+  human: User,
+  edited: UserPen,
 };
 
 // Group pools by their `group` field, in the fixed tab order — any group not
@@ -308,11 +323,10 @@ export type SearchResult = { hits: SearchHit[]; totalMatches: number };
 // scopes the whole registry). Capped at `limit` hits so a broad query over
 // ~1000 entries doesn't render an unbounded list.
 //
-// Id-aware: a query that exactly matches a known entry id ("poolId~ordinal",
-// "poolId~key" for the trait pools, or a locally-added entry's "poolId~new-…"
-// id — the same string this UI shows as a mono badge on every row) resolves
-// directly to that one entry instead of running the substring text scan, so
-// pasting an id jumps straight there.
+// Id-aware: a query that exactly matches a known entry id (the short base36
+// hash this UI shows as a mono badge on every row — source or locally-added)
+// resolves directly to that one entry instead of running the substring text
+// scan, so pasting an id jumps straight there.
 export function searchAllEntries(
   pools: ContentPool[],
   labState: LabState,

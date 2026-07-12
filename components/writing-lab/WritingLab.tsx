@@ -1,10 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDownAZ, ArrowUpAZ, Download, Search, Upload, X } from "lucide-react";
+import { ArrowDownAZ, ArrowUpAZ, Copy, Download, Search, Upload, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -52,14 +62,10 @@ import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { SearchResults } from "./SearchResults";
 import {
   HOOKS_SUBGROUP_KEY,
-  AUTHOR_DOT_CLASS,
-  AUTHOR_LABEL,
   AUTHOR_OPTIONS,
   SORT_OPTIONS,
   STATUS_DOT_CLASS,
-  STATUS_LABEL,
   STATUS_OPTIONS,
-  bulkAdvanceStatus,
   buildSidebarGroups,
   computeLabStats,
   effectiveText,
@@ -77,6 +83,7 @@ import {
   type SortKey,
   type StatusFilter,
 } from "./labHelpers";
+import { AuthorContent, AuthorLegend, StatusContent } from "./controls";
 
 // /writing-lab: a content-review workbench over buildContentRegistry()'s ~80
 // pools. Edits live in localStorage via labStore — the generation modules
@@ -86,7 +93,6 @@ import {
 // separate localStorage key via labUiStore, kept out of the content-shipping
 // blob.
 
-type CopyKind = "ts" | "json";
 type SortKeyOrNone = SortKey | "none";
 
 const GLOBAL_SEARCH_LIMIT = 100;
@@ -126,28 +132,6 @@ function ColumnResizeHandle({ onResize }: { onResize: (deltaPx: number) => void 
   );
 }
 
-// Small icon-button-with-tooltip, matching EntryRow.tsx's action-button idiom
-// (used here for the file download/import row).
-function IconAction({
-  label,
-  onClick,
-  children,
-}: {
-  label: string;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger render={<Button variant="outline" size="icon-sm" onClick={onClick} />}>
-        {children}
-        <span className="sr-only">{label}</span>
-      </TooltipTrigger>
-      <TooltipContent>{label}</TooltipContent>
-    </Tooltip>
-  );
-}
-
 export function WritingLab() {
   const pools = useMemo(() => buildContentRegistry(), []);
   const sidebarGroups = useMemo(() => buildSidebarGroups(pools), [pools]);
@@ -161,25 +145,22 @@ export function WritingLab() {
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [poolFilter, setPoolFilter] = useState("");
   const [globalQuery, setGlobalQuery] = useState("");
-  const [copied, setCopied] = useState<CopyKind | null>(null);
+  const [copied, setCopied] = useState(false);
   const [pendingFocus, setPendingFocus] = useState<{ poolId: string; entryId: string } | null>(null);
   const [flashTarget, setFlashTarget] = useState<{ poolId: string; entryId: string } | null>(null);
-  // Set after "Copy/Download Pool as TS" whenever the guarded exporter
-  // excluded pending changes (cuts, adds, unknown tokens, a changed rng-slot
-  // signature) — the export still succeeds with the SAFE text only; this is
-  // how the UI surfaces what didn't ship rather than silently dropping it.
-  // Cleared on dismiss or on switching pools.
+  // Set after a TS export whenever the guarded exporter excluded pending
+  // changes (cuts, adds, unknown tokens, a changed rng-slot signature) — the
+  // export still succeeds with the SAFE text only; this surfaces what didn't
+  // ship rather than silently dropping it. Cleared on dismiss or pool switch.
   const [exportWarning, setExportWarning] = useState<ExportBlockedEntry[]>([]);
-  // Result/error message from the last file import — kept visible until
-  // dismissed (import outcomes are more consequential than a "Copied" flash).
+  // Result/error from the last file import — kept visible until dismissed.
   const [importNotice, setImportNotice] = useState<string | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
   // Checkbox multi-select, keyed by entryId — batch author/status/duplicate/
-  // delete apply to this set. Cleared on pool switch (ids are pool-scoped by
-  // construction, but a stale cross-pool selection would just be confusing).
+  // delete apply to this set. Cleared on pool switch.
   const [selectedEntryIds, setSelectedEntryIds] = useState<Set<string>>(new Set());
 
-  const jsonFileInputRef = useRef<HTMLInputElement>(null);
-  const tsFileInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Hydrate persisted content overrides + UI layout after mount — the initial
   // render (server and client) uses defaults so there's no hydration
@@ -288,32 +269,23 @@ export function WritingLab() {
     return () => clearTimeout(timer);
   }, [pendingFocus, selectedPool, rows]);
 
-  const flashCopied = useCallback((kind: CopyKind) => {
-    setCopied(kind);
-    setTimeout(() => setCopied((c) => (c === kind ? null : c)), 1500);
+  const flashCopied = useCallback(() => {
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
   }, []);
 
+  // --- Export (one dropdown: TS or JSON, copy or download) ---
   const copyPoolAsTs = useCallback(async () => {
     if (!selectedPool) return;
     const { ts, blocked } = exportPoolGuarded(labState, selectedPool);
     setExportWarning(blocked);
     try {
       await navigator.clipboard.writeText(ts);
-      flashCopied("ts");
+      flashCopied();
     } catch {
-      // clipboard permission denied — nothing more to do in a lab tool
+      /* clipboard permission denied — nothing more to do in a lab tool */
     }
   }, [selectedPool, labState, flashCopied]);
-
-  const copyAllJson = useCallback(async () => {
-    const json = exportLabStateAsJson(labState);
-    try {
-      await navigator.clipboard.writeText(json);
-      flashCopied("json");
-    } catch {
-      // clipboard permission denied — nothing more to do in a lab tool
-    }
-  }, [labState, flashCopied]);
 
   const downloadPoolAsTs = useCallback(() => {
     if (!selectedPool) return;
@@ -322,35 +294,44 @@ export function WritingLab() {
     triggerDownload(`${poolFileBasename(selectedPool.id)}.ts`, ts, "text/typescript");
   }, [selectedPool, labState]);
 
+  const copyAllJson = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(exportLabStateAsJson(labState));
+      flashCopied();
+    } catch {
+      /* clipboard permission denied */
+    }
+  }, [labState, flashCopied]);
+
   const downloadAllJson = useCallback(() => {
     triggerDownload("writing-lab-metadata.json", exportLabStateAsJson(labState), "application/json");
   }, [labState]);
 
-  const handleImportJsonFile = useCallback(
+  // --- Import (one entry point: auto-detect .ts vs .json) ---
+  const importFile = useCallback(
     async (file: File) => {
-      const imported = importLabStateFromJson(await readFileAsText(file));
-      if (!imported) {
-        setImportNotice("That file doesn't look like a writing-lab metadata export (expected the JSON from “Download All Metadata JSON”).");
+      const raw = await readFileAsText(file);
+      const isJson = /\.json$/i.test(file.name) || raw.trim().startsWith("{");
+      if (isJson) {
+        const imported = importLabStateFromJson(raw);
+        if (!imported) {
+          setImportNotice(`"${file.name}" doesn't look like a writing-lab metadata export (expected the JSON from Export → Metadata JSON).`);
+          return;
+        }
+        updateLab((prev) => mergeLabState(prev, imported));
+        setImportNotice(`Imported metadata from "${file.name}" — merged into the current state (existing edits not present in the file are untouched).`);
         return;
       }
-      updateLab((prev) => mergeLabState(prev, imported));
-      setImportNotice("Imported metadata JSON — merged into the current state (existing edits not present in the file are untouched).");
-    },
-    [updateLab],
-  );
-
-  const handleImportTsFile = useCallback(
-    async (file: File) => {
+      // Otherwise treat it as a pool TS array, applied to the CURRENT pool.
       if (!selectedPool) return;
-      const raw = await readFileAsText(file);
       const result = importPoolFromTs(labState, selectedPool, raw);
       if (!result) {
-        setImportNotice("That file doesn't look like a pool TS export (expected an array of strings).");
+        setImportNotice(`"${file.name}" doesn't look like a pool TS export (expected an array of strings).`);
         return;
       }
       updateLab(() => result.state);
       setImportNotice(
-        `Imported ${result.changed} changed line${result.changed === 1 ? "" : "s"} into ${selectedPool.label}.` +
+        `Imported ${result.changed} changed line${result.changed === 1 ? "" : "s"} from "${file.name}" into ${selectedPool.label}.` +
           (result.truncated
             ? " The array length differed from the current source — only overlapping lines were applied."
             : ""),
@@ -359,20 +340,17 @@ export function WritingLab() {
     [selectedPool, labState, updateLab],
   );
 
-  const markAllReviewed = useCallback(() => {
-    if (!selectedPool) return;
-    const poolId = selectedPool.id;
-    const entryIds = rows.map((r) => r.entryId);
-    updateLab((s) => bulkAdvanceStatus(s, poolId, entryIds, "draft", "review"));
-  }, [selectedPool, rows, updateLab]);
+  const onDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDragOver(false);
+      const file = e.dataTransfer.files?.[0];
+      if (file) void importFile(file);
+    },
+    [importFile],
+  );
 
-  const markAllFinal = useCallback(() => {
-    if (!selectedPool) return;
-    const poolId = selectedPool.id;
-    const entryIds = rows.map((r) => r.entryId);
-    updateLab((s) => bulkAdvanceStatus(s, poolId, entryIds, "review", "final"));
-  }, [selectedPool, rows, updateLab]);
-
+  // --- Row + batch actions ---
   const duplicateRow = useCallback(
     (row: DisplayRow) => {
       if (!selectedPool) return;
@@ -382,9 +360,8 @@ export function WritingLab() {
     [selectedPool, updateLab],
   );
 
-  // Source row -> mark "cut" (the existing guarded soft-delete; the row
-  // itself can't leave the array). Added row -> true removal (it never
-  // shipped anywhere, so there's nothing to guard).
+  // Source row -> mark "cut" (the guarded soft-delete; the row can't leave the
+  // array). Added row -> true removal (it never shipped, nothing to guard).
   const deleteRow = useCallback(
     (row: DisplayRow) => {
       if (!selectedPool) return;
@@ -415,12 +392,6 @@ export function WritingLab() {
 
   const allVisibleChecked = rows.length > 0 && rows.every((r) => selectedEntryIds.has(r.entryId));
   const someVisibleChecked = rows.some((r) => selectedEntryIds.has(r.entryId));
-  const headerCheckboxRef = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    if (headerCheckboxRef.current) {
-      headerCheckboxRef.current.indeterminate = someVisibleChecked && !allVisibleChecked;
-    }
-  }, [someVisibleChecked, allVisibleChecked]);
 
   const toggleAllVisibleChecked = useCallback(
     (checked: boolean) => {
@@ -440,6 +411,7 @@ export function WritingLab() {
     () => rows.filter((r) => selectedEntryIds.has(r.entryId)),
     [rows, selectedEntryIds],
   );
+  const hasSelection = selectedRows.length > 0;
 
   const applyToSelected = useCallback(
     (patch: { author?: Authorship; status?: ReviewStatus }) => {
@@ -498,130 +470,77 @@ export function WritingLab() {
     <TooltipProvider>
       <div className="flex h-dvh w-full flex-col bg-background text-foreground">
         {/* Top bar */}
-        <header className="flex shrink-0 flex-wrap items-center gap-3 border-b border-border px-4 py-2.5">
-          <h1 className="text-base font-semibold whitespace-nowrap">Writing Lab</h1>
-          <span className="text-xs text-muted-foreground whitespace-nowrap">
-            {stats.total} entries
-          </span>
-          <StatChips byStatus={stats.byStatus} />
-          <Separator orientation="vertical" className="h-5" />
-          <div className="relative w-56">
-            <Search
-              className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
-              aria-hidden
-            />
-            <Input
-              value={globalQuery}
-              onChange={(e) => setGlobalQuery(e.target.value)}
-              placeholder="Search All Entries"
-              className="h-7 pr-7 pl-7 text-xs"
-            />
-            {globalQuery && (
-              <button
-                type="button"
-                onClick={() => setGlobalQuery("")}
-                className="absolute top-1/2 right-1.5 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                aria-label="Clear Search"
-              >
-                <X className="size-3.5" />
-              </button>
-            )}
+        <header className="flex shrink-0 flex-wrap items-start gap-x-3 gap-y-2 border-b border-border px-4 py-2.5">
+          {/* Title block — total + status summary sit directly BELOW the
+              "Writing Lab" heading (user 2026-07-12). */}
+          <div className="flex flex-col gap-1">
+            <div className="flex items-baseline gap-2">
+              <h1 className="text-base font-semibold whitespace-nowrap">Writing Lab</h1>
+              <span className="text-xs text-muted-foreground whitespace-nowrap">
+                {stats.total} entries
+              </span>
+            </div>
+            <StatChips byStatus={stats.byStatus} />
           </div>
-          <Separator orientation="vertical" className="h-5" />
-          <Select
-            value={statusFilter}
-            onValueChange={(v) => setStatusFilter(v as StatusFilter)}
-          >
-            <SelectTrigger size="sm" className="w-32">
-              <SelectValue>
-                {(v: StatusFilter) =>
-                  v === "all" ? (
-                    "All Statuses"
-                  ) : (
-                    <span className="flex items-center gap-1.5">
-                      <span
-                        className={cn("size-1.5 shrink-0 rounded-full", STATUS_DOT_CLASS[v])}
-                        aria-hidden
-                      />
-                      {STATUS_LABEL[v]}
-                    </span>
-                  )
-                }
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Statuses</SelectItem>
-              {STATUS_OPTIONS.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>
-                  <span
-                    className={cn("size-1.5 shrink-0 rounded-full", STATUS_DOT_CLASS[opt.value])}
-                    aria-hidden
-                  />
-                  {opt.label}
+          <Separator orientation="vertical" className="h-9" />
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative w-56">
+              <Search
+                className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground"
+                aria-hidden
+              />
+              <Input
+                value={globalQuery}
+                onChange={(e) => setGlobalQuery(e.target.value)}
+                placeholder="Search All Entries"
+                className="h-7 pr-7 pl-7 text-xs"
+              />
+              {globalQuery && (
+                <button
+                  type="button"
+                  onClick={() => setGlobalQuery("")}
+                  className="absolute top-1/2 right-1.5 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  aria-label="Clear Search"
+                >
+                  <X className="size-3.5" />
+                </button>
+              )}
+            </div>
+            <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
+              <SelectTrigger size="sm" className="w-32">
+                <SelectValue>
+                  {(v: StatusFilter) => (v === "all" ? "All Statuses" : <StatusContent value={v} />)}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all" className="pl-2.5">
+                  All Statuses
                 </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select
-            value={authorFilter}
-            onValueChange={(v) => setAuthorFilter(v as AuthorFilter)}
-          >
-            <SelectTrigger size="sm" className="w-32">
-              <SelectValue>
-                {(v: AuthorFilter) =>
-                  v === "all" ? (
-                    "All Authors"
-                  ) : (
-                    <span className="flex items-center gap-1.5">
-                      <span
-                        className={cn("size-1.5 shrink-0 rounded-full", AUTHOR_DOT_CLASS[v])}
-                        aria-hidden
-                      />
-                      {AUTHOR_LABEL[v]}
-                    </span>
-                  )
-                }
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Authors</SelectItem>
-              {AUTHOR_OPTIONS.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>
-                  <span
-                    className={cn("size-1.5 shrink-0 rounded-full", AUTHOR_DOT_CLASS[opt.value])}
-                    aria-hidden
-                  />
-                  {opt.label}
+                {STATUS_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value} className="pl-2.5">
+                    <StatusContent value={opt.value} />
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={authorFilter} onValueChange={(v) => setAuthorFilter(v as AuthorFilter)}>
+              <SelectTrigger size="sm" className="w-32">
+                <SelectValue>
+                  {(v: AuthorFilter) => (v === "all" ? "All Authors" : <AuthorContent value={v} />)}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all" className="pl-2.5">
+                  All Authors
                 </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Separator orientation="vertical" className="h-5" />
-          <Select value={sortKey} onValueChange={(v) => setSortKey(v as SortKeyOrNone)}>
-            <SelectTrigger size="sm" className="w-36">
-              <SelectValue>
-                {(v: SortKeyOrNone) =>
-                  v === "none" ? "Original Order" : `Sort · ${SORT_OPTIONS.find((o) => o.value === v)?.label}`
-                }
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">Original Order</SelectItem>
-              {SORT_OPTIONS.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>
-                  {opt.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {sortKey !== "none" && (
-            <IconAction
-              label={sortDir === "asc" ? "Ascending (click for descending)" : "Descending (click for ascending)"}
-              onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
-            >
-              {sortDir === "asc" ? <ArrowDownAZ /> : <ArrowUpAZ />}
-            </IconAction>
-          )}
+                {AUTHOR_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value} className="pl-2.5">
+                    <AuthorContent value={opt.value} />
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <div className="ml-auto flex items-center gap-2">
             {copied && (
               <span className="text-xs text-muted-foreground" role="status">
@@ -630,45 +549,52 @@ export function WritingLab() {
             )}
             <ThemeToggle />
             <Tutorial />
-            <Button variant="outline" size="sm" onClick={copyPoolAsTs}>
-              Copy Pool as TS
+            {/* One Export button; the dropdown chooses TS (this pool) vs JSON
+                (all metadata), each copy or download (user 2026-07-12). */}
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button variant="outline" size="sm">
+                    Export
+                  </Button>
+                }
+              />
+              <DropdownMenuContent>
+                {/* base-ui requires GroupLabel to live inside a Group. */}
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel>This pool · TypeScript</DropdownMenuLabel>
+                  <DropdownMenuItem onClick={copyPoolAsTs}>
+                    <Copy /> Copy to clipboard
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={downloadPoolAsTs}>
+                    <Download /> Download .ts
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel>All metadata · JSON</DropdownMenuLabel>
+                  <DropdownMenuItem onClick={copyAllJson}>
+                    <Copy /> Copy to clipboard
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={downloadAllJson}>
+                    <Download /> Download .json
+                  </DropdownMenuItem>
+                </DropdownMenuGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            {/* One Import button; auto-detects .ts (pool) vs .json (metadata). */}
+            <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
+              <Upload /> Import
             </Button>
-            <Button variant="outline" size="sm" onClick={copyAllJson}>
-              Copy All Metadata JSON
-            </Button>
-            <Separator orientation="vertical" className="h-5" />
-            <IconAction label="Download Pool as TS File" onClick={downloadPoolAsTs}>
-              <Download />
-            </IconAction>
-            <IconAction label="Download All Metadata as JSON File" onClick={downloadAllJson}>
-              <Download />
-            </IconAction>
-            <IconAction label="Import Pool from a TS File" onClick={() => tsFileInputRef.current?.click()}>
-              <Upload />
-            </IconAction>
-            <IconAction label="Import Metadata from a JSON File" onClick={() => jsonFileInputRef.current?.click()}>
-              <Upload />
-            </IconAction>
             <input
-              ref={tsFileInputRef}
+              ref={fileInputRef}
               type="file"
-              accept=".ts,text/typescript,text/plain"
+              accept=".ts,.json,text/typescript,application/json,text/plain"
               className="hidden"
               onChange={(e) => {
                 const file = e.target.files?.[0];
                 e.target.value = "";
-                if (file) void handleImportTsFile(file);
-              }}
-            />
-            <input
-              ref={jsonFileInputRef}
-              type="file"
-              accept=".json,application/json"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                e.target.value = "";
-                if (file) void handleImportJsonFile(file);
+                if (file) void importFile(file);
               }}
             />
           </div>
@@ -715,7 +641,6 @@ export function WritingLab() {
                 if (selectedPoolId.startsWith("story.hooks.")) expanded[HOOKS_SUBGROUP_KEY] = true;
                 return { ...prev, expandedGroups: expanded };
               });
-              // After the groups open, bring the row into view.
               window.setTimeout(() => {
                 document
                   .getElementById(`pool-row-${selectedPoolId}`)
@@ -726,7 +651,21 @@ export function WritingLab() {
           />
 
           {/* Main */}
-          <main className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <main
+            className={cn(
+              "flex min-h-0 min-w-0 flex-1 flex-col",
+              isDragOver && "ring-2 ring-ring ring-inset",
+            )}
+            onDragOver={(e) => {
+              e.preventDefault();
+              if (!isDragOver) setIsDragOver(true);
+            }}
+            onDragLeave={(e) => {
+              // Only clear when the pointer actually leaves the main area.
+              if (e.currentTarget === e.target) setIsDragOver(false);
+            }}
+            onDrop={onDrop}
+          >
             {showSearchResults ? (
               <SearchResults
                 query={globalQuery}
@@ -737,84 +676,125 @@ export function WritingLab() {
             ) : (
               <>
                 {/* Pool header */}
-                <div className="flex shrink-0 flex-wrap items-start justify-between gap-3 border-b border-border px-4 py-3">
-                  <div className="min-w-0">
-                    <h2 className="text-sm font-semibold">{selectedPool.label}</h2>
-                    <p className="font-mono text-xs text-muted-foreground">{selectedPool.source}</p>
-                    {selectedPool.slots && (
-                      <p className="mt-1 max-w-2xl text-xs text-muted-foreground">
-                        Slots: {selectedPool.slots}
-                      </p>
-                    )}
-                    <div className="mt-1.5 flex items-center gap-2 text-xs text-muted-foreground">
-                      <span>{poolStats.total} entries</span>
-                      <StatChips byStatus={poolStats.byStatus} />
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <Button variant="secondary" size="sm" onClick={markAllReviewed}>
-                      Mark All Reviewed
-                    </Button>
-                    <Button variant="secondary" size="sm" onClick={markAllFinal}>
-                      Mark All Final
-                    </Button>
+                <div className="flex shrink-0 flex-col gap-1 border-b border-border px-4 py-3">
+                  <h2 className="text-sm font-semibold">{selectedPool.label}</h2>
+                  <p className="font-mono text-xs text-muted-foreground">{selectedPool.source}</p>
+                  {selectedPool.slots && (
+                    <p className="mt-1 max-w-2xl text-xs text-muted-foreground">
+                      Slots: {selectedPool.slots}
+                    </p>
+                  )}
+                  <div className="mt-1.5 flex items-center gap-2 text-xs text-muted-foreground">
+                    <span>{poolStats.total} entries</span>
+                    <StatChips byStatus={poolStats.byStatus} />
                   </div>
                 </div>
 
-                {/* Batch bar: appears once 1+ rows are checked. Author/Status
-                    apply an EXACT value to every checked row (unlike "Mark All
-                    *" above, which advances a specific from->to transition
-                    across everything currently visible). */}
-                {selectedRows.length > 0 && (
-                  <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border bg-accent/40 px-4 py-2 text-xs">
-                    <span className="font-medium">
-                      {selectedRows.length} selected
-                    </span>
-                    <Select value="" onValueChange={(v) => applyToSelected({ author: v as Authorship })}>
-                      <SelectTrigger size="sm" className="w-36">
-                        <SelectValue placeholder="Set Author…" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {AUTHOR_OPTIONS.map((opt) => (
-                          <SelectItem key={opt.value} value={opt.value}>
-                            {opt.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Select value="" onValueChange={(v) => applyToSelected({ status: v as ReviewStatus })}>
-                      <SelectTrigger size="sm" className="w-36">
-                        <SelectValue placeholder="Set Status…" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {STATUS_OPTIONS.map((opt) => (
-                          <SelectItem key={opt.value} value={opt.value}>
-                            {opt.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Button variant="outline" size="sm" onClick={duplicateSelected}>
-                      Duplicate
+                {/* List toolbar: always-visible batch actions (left) + sort
+                    control (right). Supersedes the old "Mark All" buttons and
+                    the header-row sort affordance (user 2026-07-12). */}
+                <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-4 py-2">
+                  <Checkbox
+                    checked={allVisibleChecked}
+                    indeterminate={someVisibleChecked && !allVisibleChecked}
+                    onCheckedChange={(c) => toggleAllVisibleChecked(c === true)}
+                    aria-label="Select all visible rows"
+                  />
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    {selectedRows.length} selected
+                  </span>
+                  <Separator orientation="vertical" className="h-5" />
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      render={
+                        <Button variant="outline" size="sm" disabled={!hasSelection}>
+                          Set Author
+                        </Button>
+                      }
+                    />
+                    <DropdownMenuContent align="start">
+                      {AUTHOR_OPTIONS.map((opt) => (
+                        <DropdownMenuItem key={opt.value} onClick={() => applyToSelected({ author: opt.value })}>
+                          <AuthorContent value={opt.value} />
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      render={
+                        <Button variant="outline" size="sm" disabled={!hasSelection}>
+                          Set Status
+                        </Button>
+                      }
+                    />
+                    <DropdownMenuContent align="start">
+                      {STATUS_OPTIONS.map((opt) => (
+                        <DropdownMenuItem key={opt.value} onClick={() => applyToSelected({ status: opt.value })}>
+                          <StatusContent value={opt.value} />
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <Button variant="outline" size="sm" disabled={!hasSelection} onClick={duplicateSelected}>
+                    Duplicate
+                  </Button>
+                  <Button variant="outline" size="sm" disabled={!hasSelection} onClick={deleteSelected}>
+                    Delete / Cut
+                  </Button>
+                  {hasSelection && (
+                    <Button variant="ghost" size="sm" onClick={() => setSelectedEntryIds(new Set())}>
+                      Clear
                     </Button>
-                    <Button variant="outline" size="sm" onClick={deleteSelected}>
-                      Delete / Cut
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="ml-auto"
-                      onClick={() => setSelectedEntryIds(new Set())}
-                    >
-                      Clear Selection
-                    </Button>
-                  </div>
-                )}
+                  )}
 
-                {/* Guarded-export warning: which pending changes the last
-                    "Copy/Download Pool as TS" excluded, and why — the export
-                    still succeeds with the safe text only; this is how that
-                    stays visible instead of a silent drop. */}
+                  <div className="ml-auto flex items-center gap-1.5">
+                    <span className="text-xs text-muted-foreground">Sort</span>
+                    <Select value={sortKey} onValueChange={(v) => setSortKey(v as SortKeyOrNone)}>
+                      <SelectTrigger size="sm" className="w-40">
+                        <SelectValue>
+                          {(v: SortKeyOrNone) =>
+                            v === "none"
+                              ? "Original Order"
+                              : (SORT_OPTIONS.find((o) => o.value === v)?.label ?? "Original Order")
+                          }
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Original Order</SelectItem>
+                        {SORT_OPTIONS.map((opt) => (
+                          <SelectItem key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <Button
+                            variant="outline"
+                            size="icon-sm"
+                            disabled={sortKey === "none"}
+                            onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
+                            aria-label={sortDir === "asc" ? "Ascending" : "Descending"}
+                          />
+                        }
+                      >
+                        {sortDir === "asc" ? <ArrowDownAZ /> : <ArrowUpAZ />}
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {sortDir === "asc"
+                          ? "Ascending — click for descending"
+                          : "Descending — click for ascending"}
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                </div>
+
+                {/* Guarded-export warning: which pending changes the last TS
+                    export excluded, and why — the export still succeeds with the
+                    safe text only. */}
                 {exportWarning.length > 0 && (
                   <div className="shrink-0 border-b border-border bg-amber-500/10 px-4 py-2 text-xs text-amber-700 dark:text-amber-300">
                     <div className="flex items-start justify-between gap-3">
@@ -846,7 +826,7 @@ export function WritingLab() {
                   <ScrollArea className="h-full">
                     <table className="w-full border-collapse text-left text-sm" style={{ tableLayout: "fixed" }}>
                       <colgroup>
-                        <col style={{ width: "2rem" }} />
+                        <col style={{ width: "2.5rem" }} />
                         <col style={{ width: "2.75rem" }} />
                         <col />
                         <col style={{ width: `${uiState.columnWidths.author}px` }} />
@@ -856,28 +836,20 @@ export function WritingLab() {
                       <thead className="sticky top-0 z-10 bg-background">
                         <tr className="border-b border-border text-xs text-muted-foreground uppercase">
                           <th className="px-2 py-2 font-medium">
-                            <input
-                              ref={headerCheckboxRef}
-                              type="checkbox"
-                              checked={allVisibleChecked}
-                              onChange={(e) => toggleAllVisibleChecked(e.target.checked)}
-                              aria-label="Select all visible rows"
-                              className="size-3.5 cursor-pointer accent-primary"
-                            />
+                            <span className="sr-only">Select</span>
                           </th>
                           <th className="px-2 py-2 text-right font-medium">#</th>
                           <th className="px-2 py-2 font-medium">Content</th>
                           <th className="relative px-2 py-2 font-medium">
-                            Author
-                            <ColumnResizeHandle
-                              onResize={(delta) => handleResizeColumn("author", delta)}
-                            />
+                            <span className="inline-flex items-center gap-1 normal-case">
+                              <span className="uppercase">Author</span>
+                              <AuthorLegend />
+                            </span>
+                            <ColumnResizeHandle onResize={(delta) => handleResizeColumn("author", delta)} />
                           </th>
                           <th className="relative px-2 py-2 font-medium">
                             Status
-                            <ColumnResizeHandle
-                              onResize={(delta) => handleResizeColumn("status", delta)}
-                            />
+                            <ColumnResizeHandle onResize={(delta) => handleResizeColumn("status", delta)} />
                           </th>
                           <th className="px-1 py-2 font-medium">
                             <span className="sr-only">Actions</span>

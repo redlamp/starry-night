@@ -5,6 +5,7 @@ import { Copy, Pencil, RotateCcw, Trash2 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -15,37 +16,24 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import type { Authorship, EntryMeta, ReviewStatus } from "@/lib/writing/labStore";
-import {
-  AUTHOR_DOT_CLASS,
-  AUTHOR_LABEL,
-  AUTHOR_OPTIONS,
-  STATUS_DOT_CLASS,
-  STATUS_LABEL,
-  STATUS_OPTIONS,
-  effectiveText,
-} from "./labHelpers";
+import { AUTHOR_OPTIONS, STATUS_OPTIONS, effectiveText } from "./labHelpers";
+import { AuthorContent, StatusContent } from "./controls";
+
+// `pl-2.5` on the options matches the SelectTrigger's own left padding, so the
+// leading glyph lines up between the closed trigger and the open option rows
+// (both render the SAME AuthorContent/StatusContent markup — user 2026-07-12).
+const OPTION_PADDING = "pl-2.5";
 
 function AuthorSelect({ value, onChange }: { value: Authorship; onChange: (v: Authorship) => void }) {
   return (
     <Select value={value} onValueChange={(v) => onChange(v as Authorship)}>
       <SelectTrigger size="sm" className="w-full">
-        <SelectValue>
-          {(v: Authorship) => (
-            <span className="flex items-center gap-1.5">
-              <span className={cn("size-1.5 shrink-0 rounded-full", AUTHOR_DOT_CLASS[v])} aria-hidden />
-              {AUTHOR_LABEL[v]}
-            </span>
-          )}
-        </SelectValue>
+        <SelectValue>{(v: Authorship) => <AuthorContent value={v} />}</SelectValue>
       </SelectTrigger>
       <SelectContent>
         {AUTHOR_OPTIONS.map((opt) => (
-          <SelectItem key={opt.value} value={opt.value}>
-            <span
-              className={cn("size-1.5 shrink-0 rounded-full", AUTHOR_DOT_CLASS[opt.value])}
-              aria-hidden
-            />
-            {opt.label}
+          <SelectItem key={opt.value} value={opt.value} className={OPTION_PADDING}>
+            <AuthorContent value={opt.value} />
           </SelectItem>
         ))}
       </SelectContent>
@@ -57,23 +45,12 @@ function StatusSelect({ value, onChange }: { value: ReviewStatus; onChange: (v: 
   return (
     <Select value={value} onValueChange={(v) => onChange(v as ReviewStatus)}>
       <SelectTrigger size="sm" className="w-full">
-        <SelectValue>
-          {(v: ReviewStatus) => (
-            <span className="flex items-center gap-1.5">
-              <span className={cn("size-1.5 shrink-0 rounded-full", STATUS_DOT_CLASS[v])} aria-hidden />
-              {STATUS_LABEL[v]}
-            </span>
-          )}
-        </SelectValue>
+        <SelectValue>{(v: ReviewStatus) => <StatusContent value={v} />}</SelectValue>
       </SelectTrigger>
       <SelectContent>
         {STATUS_OPTIONS.map((opt) => (
-          <SelectItem key={opt.value} value={opt.value}>
-            <span
-              className={cn("size-1.5 shrink-0 rounded-full", STATUS_DOT_CLASS[opt.value])}
-              aria-hidden
-            />
-            {opt.label}
+          <SelectItem key={opt.value} value={opt.value} className={OPTION_PADDING}>
+            <StatusContent value={opt.value} />
           </SelectItem>
         ))}
       </SelectContent>
@@ -160,13 +137,11 @@ export function EntryRow({
         flash && "bg-accent/60",
       )}
     >
-      <td className="px-2 py-2 align-top">
-        <input
-          type="checkbox"
+      <td className="px-2 py-2.5 align-top">
+        <Checkbox
           checked={checked}
-          onChange={(e) => onCheckedChange(e.target.checked)}
+          onCheckedChange={(c) => onCheckedChange(c === true)}
           aria-label={`Select entry ${entryId}`}
-          className="size-3.5 cursor-pointer accent-primary"
         />
       </td>
       <td className="px-2 py-2 text-right align-top text-xs tabular-nums text-muted-foreground">
