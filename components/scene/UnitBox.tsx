@@ -33,6 +33,7 @@ export function UnitBox({
   onPointerOver,
   onPointerOut,
   onClick,
+  proud = false,
 }: {
   building: Building;
   region: TenantRegion;
@@ -41,6 +42,7 @@ export function UnitBox({
   onPointerOver?: (e: ThreeEvent<PointerEvent>) => void;
   onPointerOut?: (e: ThreeEvent<PointerEvent>) => void;
   onClick?: (e: ThreeEvent<MouseEvent>) => void;
+  proud?: boolean;
 }) {
   const floors = building.floors;
   const isWhole = region.floorStart === 0 && region.floorEnd >= floors;
@@ -53,12 +55,15 @@ export function UnitBox({
   const sx = Math.max(1e-3, region.xMax - region.xMin);
   const sz = Math.max(1e-3, region.zMax - region.zMin);
   const sy = Math.max(1e-3, yTop - yBottom);
+  // Sit a hair proud of the facade so an interactive unit wins the raycast over
+  // the building's own surface (clicking a unit selects the person, not the building).
+  const p = proud ? 1.015 : 1;
 
   return (
     <group
       position={[building.x, building.height / 2, building.z]}
       rotation={[0, -building.rotationY, 0]}
-      scale={[building.width, building.height, building.depth]}
+      scale={[building.width * p, building.height * p, building.depth * p]}
     >
       <mesh
         position={[cx, cy, cz]}

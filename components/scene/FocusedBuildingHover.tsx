@@ -82,6 +82,7 @@ function BuildingUnitPicker({
           building={building}
           region={r}
           color={color}
+          proud
           opacity={hovered === i ? 0.62 : 0.12}
           onPointerOver={(e) => {
             e.stopPropagation();

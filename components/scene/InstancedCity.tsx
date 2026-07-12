@@ -605,11 +605,11 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
           // press+release. R3F's onClick fires on same-object press+release
           // regardless of travel, so the drag guard below is what rejects orbits.
           onClick={(ev: ThreeEvent<MouseEvent>) => {
-            // Only select in inspect mode (the Info button); outside it, clicks
-            // on the city do nothing. And while a building is FOCUSED, its units
-            // own clicks (FocusedBuildingHover) — return BEFORE stopPropagation
-            // so the unit box's onClick can fire (user 26/27).
-            if (!inspectMode || hidden || ev.instanceId == null || focusedBuildingId !== null) return;
+            // Only select in inspect mode. Guard BEFORE stopPropagation so a
+            // proud unit box (FocusedBuildingHover) that's the nearer hit fires
+            // its own onClick instead, and a click never reaches a building
+            // behind the front-most hit — topmost-only selection (user request).
+            if (!inspectMode || hidden || ev.instanceId == null) return;
             ev.stopPropagation();
             // Reject drags: R3F's onClick only checks that press+release hit the
             // SAME object, not how far the pointer travelled — so an orbit drag
