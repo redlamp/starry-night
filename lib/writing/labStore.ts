@@ -2,14 +2,16 @@
 // metadata (authorship, status) in localStorage. The generation modules do
 // NOT read this — content ships by exporting a pool and pasting it back into
 // its source array, so the determinism contract never depends on browser
-// state. Entry identity is (poolId, entryId): entryId is the stable id from
-// lib/writing/contentIds.ts (contentRegistry.ts zips it in as each pool's
-// entryIds), NOT the source array's index — an index shifts if anything above
-// it is ever cut or inserted; an id survives an in-place text edit (that's
-// the whole point — see contentIds.ts / scripts/genContentIds.ts).
+// state. Entry identity is (poolId, entryId): entryId is the stable short
+// hash from lib/writing/contentIds.ts (contentRegistry.ts zips it in as each
+// pool's entryIds), a hash of the entry's POSITION — NOT the source array's
+// index (which shifts if anything above it is cut/inserted) and NOT its text
+// (an id must survive an in-place wording edit — that's the whole point; see
+// contentIds.ts / scripts/genContentIds.ts / contentHash.ts).
 
 import type { ContentPool } from "@/lib/writing/contentRegistry";
-import { CONTENT_IDS } from "@/lib/writing/contentIds";
+import { CONTENT_IDS, CONTENT_ID_WIDTH } from "@/lib/writing/contentIds";
+import { contentHashId } from "@/lib/writing/contentHash";
 
 export type Authorship = "ai" | "human" | "edited";
 export type ReviewStatus = "draft" | "review" | "final" | "cut";
@@ -36,24 +38,40 @@ export type EntryMeta = {
 
 export type LabState = Record<string, Record<string, EntryMeta>>; // poolId -> entryId -> meta
 
-const KEY = "starry-night.writing-lab.v2";
-// v1 was (poolId, index)-keyed — read once by the migration below, never
-// written to again. Left in place untouched as a safety net, not deleted.
+const KEY = "starry-night.writing-lab.v3";
+// Older schemas, read once by the migrations below and then left in place
+// untouched (a safety net, never rewritten): v2 was keyed by the dotted
+// `poolId~ordinal` / `poolId~key` string ids; v1 by array index.
+const V2_KEY = "starry-night.writing-lab.v2";
 const V1_KEY = "starry-night.writing-lab.v1";
 
 // Everything generated so far was model-written: ai + draft is the default.
 export const DEFAULT_META: EntryMeta = { author: "ai", status: "draft" };
 
 type LabStateV1 = Record<string, Record<number, EntryMeta>>;
+type LabStateV2 = Record<string, Record<string, EntryMeta>>;
 
-// One-time (poolId, index) -> (poolId, entryId) re-key. contentIds.ts's ids
-// are minted in array order the first time scripts/genContentIds.ts ever sees
-// a pool (see that script's header), so CONTENT_IDS[poolId][index] is exactly
-// the id a v1 override at that index means — for any pool/index the sidecar
-// still recognises. A v1 index with no corresponding id today (pool shrank,
-// was renamed, or no longer exists) is dropped rather than guessed at.
-function migrateV1ToV2(v1: LabStateV1): LabState {
-  const v2: LabState = {};
+// v2 -> v3 re-key. A v2 id was exactly the position key the id hash is built
+// from (`poolId~ordinal`, `poolId~key`, or an added entry's `poolId~new-…`),
+// so the v3 id is simply contentHashId(oldId) — a uniform remap, no per-pool
+// special-casing, added entries included.
+function migrateV2ToV3(v2: LabStateV2): LabState {
+  const v3: LabState = {};
+  for (const [poolId, byOldId] of Object.entries(v2)) {
+    const byId: Record<string, EntryMeta> = {};
+    for (const [oldId, meta] of Object.entries(byOldId)) {
+      byId[contentHashId(oldId, CONTENT_ID_WIDTH)] = meta;
+    }
+    if (Object.keys(byId).length > 0) v3[poolId] = byId;
+  }
+  return v3;
+}
+
+// v1 (array-index-keyed) -> v3. CONTENT_IDS[poolId][index] IS the v3 hash id
+// for that position, so this maps straight through it. A v1 index with no
+// corresponding id today (pool shrank/renamed/gone) is dropped, not guessed.
+function migrateV1ToV3(v1: LabStateV1): LabState {
+  const v3: LabState = {};
   for (const [poolId, byIndex] of Object.entries(v1)) {
     const ids = CONTENT_IDS[poolId];
     if (!ids) continue;
@@ -63,23 +81,29 @@ function migrateV1ToV2(v1: LabStateV1): LabState {
       if (entryId === undefined) continue;
       byId[entryId] = meta;
     }
-    if (Object.keys(byId).length > 0) v2[poolId] = byId;
+    if (Object.keys(byId).length > 0) v3[poolId] = byId;
   }
-  return v2;
+  return v3;
 }
 
 export function loadLabState(): LabState {
   if (typeof window === "undefined") return {};
   try {
-    const rawV2 = window.localStorage.getItem(KEY);
-    if (rawV2) return JSON.parse(rawV2) as LabState;
+    const rawV3 = window.localStorage.getItem(KEY);
+    if (rawV3) return JSON.parse(rawV3) as LabState;
 
-    // No v2 yet in this browser: migrate v1 if present. One-time — once this
-    // returns, the caller's next save writes KEY, so this branch never runs
-    // again here.
+    // No v3 yet in this browser: migrate the newest older schema present, then
+    // persist it under KEY. One-time — the caller's next save writes v3, so
+    // these branches never run again here.
+    const rawV2 = window.localStorage.getItem(V2_KEY);
+    if (rawV2) {
+      const migrated = migrateV2ToV3(JSON.parse(rawV2) as LabStateV2);
+      saveLabState(migrated);
+      return migrated;
+    }
     const rawV1 = window.localStorage.getItem(V1_KEY);
     if (rawV1) {
-      const migrated = migrateV1ToV2(JSON.parse(rawV1) as LabStateV1);
+      const migrated = migrateV1ToV3(JSON.parse(rawV1) as LabStateV1);
       saveLabState(migrated);
       return migrated;
     }
@@ -114,19 +138,20 @@ export function setEntryMeta(
 //
 // "Duplicate" creates a new entry that exists ONLY in labState — it has no
 // source-array position, so it's addressed purely by entryId (never an
-// index). Ids are minted with a "~new-" ordinal segment that can't collide
-// with a scripts/genContentIds.ts-committed id (those are always
-// "~<plain ordinal>" or, for the trait pools, "~<dict key>" — neither shape
-// contains "new-"), so an added entry can never be mistaken for (or clash
-// with) a real source entry once genContentIds.ts next runs.
+// index). The id is a hash (same short-hash shape as every source id, so the
+// UI reads uniformly) of a per-session-unique "new" position key. That key
+// namespace (`poolId~new~<time>~<counter>`) is disjoint from any source
+// position key (`poolId~<ordinal>` / `poolId~<dict key>`), and the isAdded
+// flag — not the id shape — is what marks an entry as added, so an added entry
+// is never confused with a source entry regardless of the hash it lands on.
 let addedIdCounter = 0;
 
 function mintAddedEntryId(poolId: string): string {
   addedIdCounter += 1;
   // Date.now() + a session counter, not crypto.randomUUID(): this is local
   // editorial bookkeeping (never fed back into generation — see EntryMeta's
-  // createdAt/updatedAt comment), so a simple collision-free id is enough.
-  return `${poolId}~new-${Date.now().toString(36)}-${addedIdCounter.toString(36)}`;
+  // createdAt/updatedAt comment), so a simple collision-free seed is enough.
+  return contentHashId(`${poolId}~new~${Date.now()}~${addedIdCounter}`, CONTENT_ID_WIDTH);
 }
 
 // Creates a brand-new, source-less entry seeded with `text` (Duplicate passes

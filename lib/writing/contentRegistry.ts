@@ -41,7 +41,8 @@ import {
   PAPER_NAMES,
 } from "@/lib/seed/naming";
 import { BUSINESS_TEMPLATES, OFFICE_SUBTYPES, HOSPITAL_SUBTYPES } from "@/lib/seed/personas";
-import { CONTENT_IDS } from "@/lib/writing/contentIds";
+import { CONTENT_IDS, CONTENT_ID_WIDTH } from "@/lib/writing/contentIds";
+import { contentHashId, ordinalPositionKey } from "@/lib/writing/contentHash";
 
 export type ContentPool = {
   id: string; // stable: "story.hooks.kid"
@@ -75,12 +76,15 @@ export function buildContentRegistry(): ContentPool[] {
     slots?: string,
   ) => {
     // Defensive fallback for a pool the sidecar hasn't seen yet (freshly added
-    // pool, script not re-run): mint the same plain ordinal id
-    // scripts/genContentIds.ts would on its next run, in memory only — this
-    // never writes back to contentIds.ts, so it can't drift from what the
-    // script would actually commit.
+    // pool, script not re-run): mint the same hash id scripts/genContentIds.ts
+    // would on its next run, in memory only — this never writes back to
+    // contentIds.ts, so it can't drift from what the script would actually
+    // commit. (Keyed trait pools are always present in the committed sidecar,
+    // so this ordinal-position fallback only ever fires for a new ordinal pool.)
     const committed = CONTENT_IDS[id] ?? [];
-    const entryIds = entries.map((_, i) => committed[i] ?? `${id}~${i}`);
+    const entryIds = entries.map(
+      (_, i) => committed[i] ?? contentHashId(ordinalPositionKey(id, i), CONTENT_ID_WIDTH),
+    );
     pools.push({ id, group, label, kind, entries, entryIds, source, slots });
   };
 

@@ -18,7 +18,8 @@
 // provenance (hook / whyAwake / detail / refusal / relation / domain) — see
 // the TODO below.
 
-import { CONTENT_IDS } from "@/lib/writing/contentIds";
+import { CONTENT_IDS, CONTENT_ID_WIDTH } from "@/lib/writing/contentIds";
+import { contentHashId, ordinalPositionKey, keyedPositionKey } from "@/lib/writing/contentHash";
 import {
   LAST_NAMES,
   PROFESSIONS,
@@ -54,7 +55,7 @@ export type NameCohortRef = {
 };
 
 function idFor(poolId: string, index: number): string {
-  return CONTENT_IDS[poolId]?.[index] ?? `${poolId}~${index}`;
+  return CONTENT_IDS[poolId]?.[index] ?? contentHashId(ordinalPositionKey(poolId, index), CONTENT_ID_WIDTH);
 }
 
 function slotRefForArrayValue(
@@ -82,7 +83,8 @@ function keyedSlotRef(
 ): SlotRef | undefined {
   if (!(key in record)) return undefined;
   const index = Object.keys(record).indexOf(key);
-  const entryId = CONTENT_IDS[poolId]?.[index] ?? `${poolId}~${key}`;
+  const entryId =
+    CONTENT_IDS[poolId]?.[index] ?? contentHashId(keyedPositionKey(poolId, key), CONTENT_ID_WIDTH);
   return { poolId, entryId, text: `${key}: ${record[key]}` };
 }
 
