@@ -31,6 +31,8 @@ import { PinPlaneMarker } from "./PinPlaneMarker";
 import { BuildingPin } from "./BuildingPin";
 import { SelectedDistrictOutline } from "./SelectedDistrictOutline";
 import { SelectedBuildingOutline } from "./SelectedBuildingOutline";
+import { UnitHighlight } from "./UnitHighlight";
+import { FocusedBuildingHover } from "./FocusedBuildingHover";
 import { CommuteArc } from "./CommuteArc";
 import { RoadHover } from "./RoadHover";
 import { StreetHighlight } from "./StreetHighlight";
@@ -207,6 +209,8 @@ export function Scene() {
         {cityReady && <SelectedDistrictOutline masterSeed={masterSeed} />}
         {/* #87: x-ray outline of the selected building, visible through occluders. */}
         {cityReady && <SelectedBuildingOutline masterSeed={masterSeed} />}
+        {cityReady && <UnitHighlight masterSeed={masterSeed} />}
+        {cityReady && <FocusedBuildingHover masterSeed={masterSeed} />}
         {/* Personas: home→work arc for the selected persona, mode-coloured. */}
         {cityReady && <CommuteArc masterSeed={masterSeed} />}
         {/* Inspect: street-name hover chip + hovered-road highlight. */}

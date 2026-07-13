@@ -174,7 +174,11 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
   // instances only costs anything while one of them is on.
   const inspectMode = useSceneStore((s) => s.inspectMode);
   const pickHoverDebug = useSceneStore((s) => s.debug.hoverHighlight.pick);
-  const pickEnabled = inspectMode || pickHoverDebug;
+  // While a building is focused, the FocusedBuildingHover owns hover; suppress
+  // the general building pick so background buildings/roads don't light up
+  // behind the focused one (user §5.13).
+  const focusedBuildingId = useSceneStore((s) => s.focusedBuildingId);
+  const pickEnabled = (inspectMode || pickHoverDebug) && focusedBuildingId === null;
   const size = useThree((s) => s.size);
   const gl = useThree((s) => s.gl);
 
@@ -601,11 +605,12 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
           // press+release. R3F's onClick fires on same-object press+release
           // regardless of travel, so the drag guard below is what rejects orbits.
           onClick={(ev: ThreeEvent<MouseEvent>) => {
-            ev.stopPropagation();
-            // Only select in inspect mode (the Info button); outside it, clicks
-            // on the city do nothing. Double-click-to-zoom lands with the camera
-            // transition work (#83/#84) so it can reuse the smooth tween.
+            // Only select in inspect mode. Guard BEFORE stopPropagation so a
+            // proud unit box (FocusedBuildingHover) that's the nearer hit fires
+            // its own onClick instead, and a click never reaches a building
+            // behind the front-most hit — topmost-only selection (user request).
             if (!inspectMode || hidden || ev.instanceId == null) return;
+            ev.stopPropagation();
             // Reject drags: R3F's onClick only checks that press+release hit the
             // SAME object, not how far the pointer travelled — so an orbit drag
             // that begins and ends over one building would select it. Require a

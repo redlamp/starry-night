@@ -11,6 +11,7 @@ Top-level Map of Content. See `CLAUDE.md` for conventions.
 ## Active
 
 - [[projects/personas]] — **feat/personas (2026-07-08):** seeded residents + story hooks (Heat Signature bar); v1 shipped on the worktree, iteration backlog research-ranked
+- [[projects/persona-presence-editorial]] — **active (2026-07-12):** tenant-region highlighting + night lighting (`feat/persona-units`) and the writing-lab ↔ app editorial convergence (`feat/writing-lab-v2`)
 
 - [[plan-issue-clearout-2026-07-04]] — **2026-07-04 morning session plan:** verify-and-close sweep (#79/#61/#53/#43), decision batch, build slot (#69), arc ranking
 - [[projects/window-lab]] — `/window-lab` render bench; Atlas+SDF construction shipped as the hybrid window mode (`v2026.07.03`)
