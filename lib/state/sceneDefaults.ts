@@ -110,7 +110,10 @@ export const DEFAULT_SNV2: Snv2Config = {
 
 export const DEFAULT_SNV3: Snv3Config = {
   ...DEFAULT_SNV2,
-  autoDrift: true,
+  // OFF by default (user 2026-07-15, watchlist 6.4: a camera that moves by itself
+  // shouldn't be the out-of-box behaviour); the Orbit header transport or the Idle
+  // Drift switch turns it on.
+  autoDrift: false,
   idleDelaySec: 30, // 10 read as too eager (user, test round 2026-07-15)
 };
 

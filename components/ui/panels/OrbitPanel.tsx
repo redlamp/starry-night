@@ -578,21 +578,36 @@ export function OrbitHeaderActions() {
   );
 }
 
-// Play/pause the camera auto-revolution. Transport convention: ⏸ while revolving
+// Play/pause the camera's ambient motion. Transport convention: ⏸ while playing
 // (click to pause), ▶ while paused (click to resume); highlighted while playing.
-// Space still toggles it.
+// For Cam v3 the ambient motion IS the idle auto-drift (user 2026-07-15), so the
+// button binds snv3.autoDrift there — one transport, whatever the model; the Idle
+// Drift header switch is the same state. Other models keep the auto-revolution
+// flag (orbitPaused; Space still toggles that one in Drift).
 function OrbitPlayPauseToggle() {
   const orbitPaused = useSceneStore((s) => s.orbitPaused);
   const setOrbitPaused = useSceneStore((s) => s.setOrbitPaused);
-  const playing = !orbitPaused;
+  const isV3 = useSceneStore((s) => s.cameraModel === "snv3");
+  const autoDrift = useSceneStore((s) => s.snv3.autoDrift);
+  const setSnv3 = useSceneStore((s) => s.setSnv3);
+  const playing = isV3 ? autoDrift : !orbitPaused;
+  const v3Title = playing ? "Disable Auto Drift" : "Enable Auto Drift";
   return (
     <Button
       variant="secondary"
       size="icon-sm"
-      title={playing ? "Pause the orbit revolution (Space)" : "Resume the orbit revolution (Space)"}
-      aria-label={playing ? "Pause orbit revolution" : "Resume orbit revolution"}
+      title={
+        isV3
+          ? v3Title
+          : playing
+            ? "Pause the orbit revolution (Space)"
+            : "Resume the orbit revolution (Space)"
+      }
+      aria-label={isV3 ? v3Title : playing ? "Pause orbit revolution" : "Resume orbit revolution"}
       aria-pressed={playing}
-      onClick={() => setOrbitPaused(!orbitPaused)}
+      onClick={() =>
+        isV3 ? setSnv3({ autoDrift: !autoDrift }) : setOrbitPaused(!orbitPaused)
+      }
       className={cn(
         playing
           ? "bg-amber-300 text-black hover:bg-amber-300/90"

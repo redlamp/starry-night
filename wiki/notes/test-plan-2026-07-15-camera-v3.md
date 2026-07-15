@@ -120,10 +120,15 @@ grate so the follow-up pass can address them:
 4. [ ] **The camera moves by itself** (idle drift, on by default). Screensaver-appropriate,
    but it can startle during passive viewing — and any drift means a shared `?cam=` pose
    is no longer what the sender framed. Suppressed while cards are open; NOT suppressed
-   during plain watching. The toggle exists; is on-by-default right?
+   during plain watching. The toggle exists; is on-by-default right? → resolved
+   2026-07-15 (round 6): **auto-drift is OFF by default**; the Orbit header transport or
+   the Idle Drift switch turns it on.
 5. [ ] **Space / the Orbit play-pause button do not govern v3's drift** — they control the
    old auto-revolution and the Drift model. Two "ambient motion" systems with different
    transports now coexist. Candidate cleanup: make Space cancel/pause the idle drift too.
+   → partly resolved 2026-07-15 (round 6): the Orbit header **play/pause button now
+   drives v3's auto-drift** (one transport, whatever the model); Space remains
+   Drift-model-only.
 6. [ ] **1-finger touch = rotate** (v1's mapping) vs the dominant maps convention of
    1-finger = pan (Google Maps/Earth, Apple Maps). Deliberate — rotate is the richer
    gesture for a 3D scene — but it inverts phone muscle memory. Section 4.23 decides.
