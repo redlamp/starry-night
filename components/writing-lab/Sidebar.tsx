@@ -1,6 +1,6 @@
 "use client";
 
-import { Crosshair, FoldVertical, Search, UnfoldVertical } from "lucide-react";
+import { Crosshair, FoldVertical, Search, UnfoldVertical, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -258,8 +258,18 @@ export function Sidebar({
           value={poolFilter}
           onChange={(e) => onPoolFilterChange(e.target.value)}
           placeholder="Filter Pools"
-          className="h-7 pl-7 text-xs"
+          className="h-7 pr-7 pl-7 text-xs"
         />
+        {poolFilter && (
+          <button
+            type="button"
+            onClick={() => onPoolFilterChange("")}
+            className="absolute top-1/2 right-5.5 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            aria-label="Clear Pool Filter"
+          >
+            <X className="size-3.5" />
+          </button>
+        )}
       </div>
       {/* Tree toolbar: bulk expand/collapse + reveal the selected pool. */}
       <TooltipProvider delay={300}>

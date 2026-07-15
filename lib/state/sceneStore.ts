@@ -537,6 +537,9 @@ type SceneState = {
   // hover ?? pinned ?? selected-building's district. Runtime tier.
   hoverDistrictId: string | null;
   setHoverDistrictId: (id: string | null) => void;
+  // A tenant hovered on a building card → highlight their parcel in the scene.
+  hoveredTenant: { buildingId: number; householdIndex?: number; businessId?: string } | null;
+  setHoveredTenant: (t: { buildingId: number; householdIndex?: number; businessId?: string } | null) => void;
   pinnedDistrictId: string | null;
   setPinnedDistrictId: (id: string | null) => void;
   // Directory "Districts" header toggle (user 2026-07-10): outline EVERY
@@ -1231,6 +1234,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     ),
   hoverDistrictId: null,
   setHoverDistrictId: (hoverDistrictId) => set({ hoverDistrictId }),
+  hoveredTenant: null,
+  setHoveredTenant: (hoveredTenant) => set({ hoveredTenant }),
   pinnedDistrictId: null,
   setPinnedDistrictId: (pinnedDistrictId) => set({ pinnedDistrictId }),
   showDistrictBoundaries: false,

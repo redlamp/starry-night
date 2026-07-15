@@ -19,6 +19,7 @@ export function BuildingColumn({ id, part }: { id: number; part: "pinned" | "res
   const push = useSceneStore((s) => s.pushColumn);
   const focusedBuildingId = useSceneStore((s) => s.focusedBuildingId);
   const masterSeed = useSceneStore((s) => s.masterSeed);
+  const setHoveredTenant = useSceneStore((s) => s.setHoveredTenant);
   const indexes = useEntityIndexes();
   const building = indexes.buildingById.get(id);
   if (!building) {
@@ -109,6 +110,8 @@ export function BuildingColumn({ id, part }: { id: number; part: "pinned" | "res
                 key={biz.id}
                 type="button"
                 onClick={() => push({ kind: "company", id: biz.id })}
+                onMouseEnter={() => setHoveredTenant({ buildingId: id, businessId: biz.id })}
+                onMouseLeave={() => setHoveredTenant(null)}
                 className="-mx-1 flex items-center justify-between gap-2 rounded px-1 text-left text-sm hover:bg-foreground/10"
               >
                 <span className="truncate">{biz.name}</span>
@@ -129,7 +132,12 @@ export function BuildingColumn({ id, part }: { id: number; part: "pinned" | "res
               <span>Age</span>
             </div>
             {households.map((hh) => (
-              <div key={`${hh.buildingId}:${hh.index}`} className="flex flex-col gap-0.5">
+              <div
+                key={`${hh.buildingId}:${hh.index}`}
+                className="flex flex-col gap-0.5"
+                onMouseEnter={() => setHoveredTenant({ buildingId: hh.buildingId, householdIndex: hh.index })}
+                onMouseLeave={() => setHoveredTenant(null)}
+              >
                 {/* Unit right-aligned in the row, like the ages column
                     (user 2026-07-08). Pilled so it reads as metadata, distinct
                     from the plain-text ages below (user 2026-07-10). */}

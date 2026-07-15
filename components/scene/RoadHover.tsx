@@ -39,6 +39,9 @@ export function RoadHover({ masterSeed }: { masterSeed: string }) {
   const citySize = useSceneStore((s) => s.citySize);
   const citySketch = useSceneStore((s) => s.citySketch);
   const resetColumns = useSceneStore((s) => s.resetColumns);
+  // While a building is focused, its units own hover — don't also hover roads
+  // behind it (user 5.13).
+  const focusedBuildingId = useSceneStore((s) => s.focusedBuildingId);
 
   const [hit, setHit] = useState<RoadHit | null>(null);
   const anchorRef = useRef<THREE.Group>(null);
@@ -105,7 +108,7 @@ export function RoadHover({ masterSeed }: { masterSeed: string }) {
   // ~10 Hz is plenty for a hover; the grid query itself is microseconds but
   // setState churn at 60 Hz would re-render the chip needlessly.
   useFrame((state) => {
-    if (!inspectMode) {
+    if (!inspectMode || focusedBuildingId !== null) {
       if (hit) setHit(null);
       return;
     }
