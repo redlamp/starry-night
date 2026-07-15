@@ -241,7 +241,7 @@ export function TopDownModel() {
         // the reverse-tween's final frame hands off with zero jump. Set the handoff FIRST and swap
         // the model LAST, so the pose (and orbit/ortho/mode) are in place before CameraModelHost
         // mounts the restored model (its hadHandoffOnMount reads cameraHandoff at render).
-        if (entry.modelId === "snv2") {
+        if (entry.modelId === "snv2" || entry.modelId === "snv3") {
           st.setCameraHandoff({
             position: [_startPos.x, _startPos.y, _startPos.z],
             lookAt: [_startFocal.x, _startFocal.y, _startFocal.z],

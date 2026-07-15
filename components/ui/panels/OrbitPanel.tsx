@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSceneStore } from "@/lib/state/sceneStore";
-import { tweenOrbitToDefault } from "@/lib/scene/cameraView";
 import { cameraCommand } from "@/lib/scene/cameraCommand";
 import { cn } from "@/lib/utils";
 import { MapPin, MousePointer2, Pause, Play, Pointer, ScanSearch } from "lucide-react";
@@ -51,6 +50,8 @@ export function OrbitSection() {
   const setTurntable = useSceneStore((s) => s.setTurntable);
   const snv2 = useSceneStore((s) => s.snv2);
   const setSnv2 = useSceneStore((s) => s.setSnv2);
+  const snv3 = useSceneStore((s) => s.snv3);
+  const setSnv3 = useSceneStore((s) => s.setSnv3);
   const isDrift = cameraModel === "drift";
   const isMap = cameraModel === "map";
   const setFocalAdjust = useSceneStore((s) => s.setFocalAdjust);
@@ -81,24 +82,6 @@ export function OrbitSection() {
   );
   return (
     <>
-      <Button
-        variant="secondary"
-        size="sm"
-        onClick={() => tweenOrbitToDefault()}
-        title="Tween the orbit back to its default framing"
-        className="self-start bg-purple-500/20 text-purple-200 hover:bg-purple-500/30"
-      >
-        Default Orbit
-      </Button>
-      <label className="flex cursor-pointer items-center justify-between gap-2 text-xs">
-        <span
-          className="text-foreground/70"
-          title="Live elevation cross-section of the camera rig, bottom-left"
-        >
-          side-view diagram
-        </span>
-        <Switch checked={showSideView} onCheckedChange={setShowSideView} />
-      </label>
       {/* Drift model controls — its motion is auto-driven, so the Map pose sliders
           (Speed/Distance/Compass/Focal) are hidden while Drift is active; the framing
           controls below (Screen Y / ground pull) still apply to both. */}
@@ -208,6 +191,145 @@ export function OrbitSection() {
             format={{ maximumFractionDigits: 0 }}
           />
         </SubGroup>
+      )}
+      {cameraModel === "snv3" && (
+        <>
+          <SubGroup
+            label="Starry Night Cam v3"
+            defaultOpen
+            action={
+              <HelpHint>
+                Distance bounds — how close (left) and how far (right) the camera may get from its
+                target, in world metres. Wheel zoom is clamped to this range. T dives to a top-down
+                plan view and back; controls stay live up there.
+              </HelpHint>
+            }
+          >
+            <RangeSlider
+              label="Distance"
+              value={[snv3.minDist, snv3.maxDist]}
+              min={1}
+              max={24000}
+              step={100}
+              onChange={([minDist, maxDist]) => setSnv3({ minDist, maxDist })}
+            />
+            <ValueSlider
+              label="Orbit"
+              hint="Tilt / rotate drag sensitivity."
+              value={snv3.orbitSpeed}
+              min={0.25}
+              max={3}
+              step={0.05}
+              onChange={(orbitSpeed) => setSnv3({ orbitSpeed })}
+            />
+            <ValueSlider
+              label="Zoom"
+              hint="Mouse-wheel zoom rate."
+              value={snv3.zoomSpeed}
+              min={0.25}
+              max={3}
+              step={0.05}
+              onChange={(zoomSpeed) => setSnv3({ zoomSpeed })}
+            />
+            <ValueSlider
+              label="Move"
+              hint="WASD glides across the city, Q/E down/up. Speed scales with height above the ground (perspective) or view size (ortho), so it feels constant at any zoom — this multiplies that."
+              value={snv3.moveSpeed}
+              min={0.25}
+              max={3}
+              step={0.05}
+              onChange={(moveSpeed) => setSnv3({ moveSpeed })}
+            />
+            <ValueSlider
+              label="Tilt°"
+              hint="The camera's current tilt (look-down angle). 0 = parallel to the ground; 90 = straight down. Drag to re-pitch in place — azimuth, distance, and target hold. Clamped by Min tilt."
+              value={orbit.elevationDeg}
+              min={0}
+              max={90}
+              step={0.5}
+              onChange={(deg) => cameraCommand.setTiltDeg?.(deg, false)}
+            />
+            <ValueSlider
+              label="Min tilt°"
+              hint="Perspective: lowest the view tilts. 0 = level (no looking up); negative lets the camera drop to a low vantage looking up; positive keeps it angled down."
+              value={snv3.tiltFloorDeg}
+              min={-45}
+              max={60}
+              step={1}
+              onChange={(tiltFloorDeg) => setSnv3({ tiltFloorDeg })}
+            />
+          </SubGroup>
+          <SubGroup
+            label="Idle Drift"
+            defaultOpen
+            afterLabel={
+              <HelpHint>
+                Leave the camera alone this long and it starts a slow drift around the city — the
+                view revolves, the focus wanders, the height bobs gently. Any input hands the
+                camera straight back and re-arms the timer. The feel knobs are shared with the
+                Drift camera model.
+              </HelpHint>
+            }
+            action={
+              <Switch
+                checked={snv3.autoDrift}
+                onCheckedChange={(autoDrift) => setSnv3({ autoDrift })}
+                aria-label="Auto drift"
+              />
+            }
+          >
+            <ValueSlider
+              label="Delay"
+              hint="Seconds of no input before the drift starts."
+              value={snv3.idleDelaySec}
+              min={2}
+              max={60}
+              step={1}
+              onChange={(idleDelaySec) => setSnv3({ idleDelaySec })}
+              format={{ maximumFractionDigits: 0 }}
+            />
+            <ValueSlider
+              label="Wander"
+              hint="How far across the city the drifting focus roams."
+              value={drift.wanderRadius}
+              min={0}
+              max={1}
+              step={0.05}
+              onChange={(v) => setDrift({ wanderRadius: v })}
+              format={{ maximumFractionDigits: 2 }}
+            />
+            <ValueSlider
+              label="Speed"
+              hint="Wander pace — how briskly the focus tours the city."
+              value={drift.wanderSpeed}
+              min={0.2}
+              max={3}
+              step={0.1}
+              onChange={(v) => setDrift({ wanderSpeed: v })}
+              format={{ maximumFractionDigits: 1 }}
+            />
+            <ValueSlider
+              label="Elev bob"
+              hint="The gentle up/down deviation while drifting (degrees)."
+              value={drift.elevAmp}
+              min={0}
+              max={5}
+              step={0.5}
+              onChange={(v) => setDrift({ elevAmp: v })}
+              format={{ maximumFractionDigits: 1 }}
+            />
+            <ValueSlider
+              label="Revolve s"
+              hint="Seconds per full revolution while drifting; 0 = no revolve (pure wander + bob)."
+              value={drift.revolveSec}
+              min={0}
+              max={900}
+              step={30}
+              onChange={(v) => setDrift({ revolveSec: v })}
+              format={{ maximumFractionDigits: 0 }}
+            />
+          </SubGroup>
+        </>
       )}
       {cameraModel === "snv2" && (
         <SubGroup
@@ -362,6 +484,12 @@ export function OrbitSection() {
           />
         </>
       )}
+      {/* Shared framing controls (Screen Y focal pivot + the low-angle ground pull and
+          its easing) are consumed by the Map + Drift models only — Cam v3 (like v2's
+          fork base) drives its own framing, so showing them there was pure confusion
+          (user, test round 2026-07-15 item 2.**). Hidden while v3 is active. */}
+      {cameraModel !== "snv3" && (
+        <>
       <RangeSlider
         label="Screen Y"
         hint={
@@ -418,6 +546,20 @@ export function OrbitSection() {
         onChange={setRotateSlowBelow}
         stepperClass="w-32"
       />
+        </>
+      )}
+      {/* Section-level odds and ends live at the BOTTOM (user 2026-07-15 item 2.*): the
+          per-model groups above are the working controls; these are occasional.
+          ("Default Orbit" removed 2026-07-15 round 3 — R / the model defaults cover it.) */}
+      <label className="flex cursor-pointer items-center justify-between gap-2 text-xs">
+        <span
+          className="text-foreground/70"
+          title="Live elevation cross-section of the camera rig, bottom-left"
+        >
+          Diagram
+        </span>
+        <Switch checked={showSideView} onCheckedChange={setShowSideView} />
+      </label>
     </>
   );
 }

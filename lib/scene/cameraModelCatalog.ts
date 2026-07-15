@@ -26,11 +26,20 @@ export const CAMERA_MODELS: CameraModelMeta[] = [
     startsPaused: true, // the curated still pose — auto-revolution off until you press play
   },
   {
+    id: "snv3",
+    label: "Starry Night Cam v3",
+    character:
+      "v2's drone rig + T dives top-down in place, idle auto-drift, arc-aware inspect framing.",
+    blurb:
+      "The v3 camera: everything v2 does (LMB move, Shift+LMB orbit, Ctrl/⌘+LMB look, wheel zoom, WASD/QE), plus: T sweeps to a top-down plan view WITHOUT leaving the camera — keep panning/zooming up there, T again returns to where you were (or re-squares the view if you tilted away). Leave it alone and it starts to drift around the city on its own (toggle + delay in Settings). Cone-view focus lands at the angle that shows the arcs broadside. Touch: 1-finger orbit, 2-finger pan + pinch, double-tap zoom.",
+    startsPaused: true,
+  },
+  {
     id: "snv2",
     label: "Starry Night Cam v2",
     character: "Drone-style — grab the ground to move, Shift to orbit a point, Ctrl to look.",
     blurb:
-      "The current Starry Night camera (the default): LMB drag moves over the ground, Shift+LMB orbits the clicked point (pinned), Ctrl/⌘+LMB is a grab-look (the grabbed map point stays under the cursor), wheel zooms toward the cursor, double-click zooms in. Touch: 1-finger move, 2-finger pinch + twist. Perspective + orthographic (press p to toggle).",
+      "The v2 camera (v3's base): LMB drag moves over the ground, Shift+LMB orbits the clicked point (pinned), Ctrl/⌘+LMB is a grab-look (the grabbed map point stays under the cursor), wheel zooms toward the cursor, double-click zooms in. Touch: 1-finger move, 2-finger pinch + twist. Perspective + orthographic (press p to toggle).",
     startsPaused: true,
   },
   {
@@ -84,7 +93,7 @@ export const CAMERA_MODELS: CameraModelMeta[] = [
   },
 ];
 
-export const DEFAULT_CAMERA_MODEL: CameraModelId = "snv2";
+export const DEFAULT_CAMERA_MODEL: CameraModelId = "snv3";
 
 export function getCameraModelMeta(id: CameraModelId): CameraModelMeta {
   return CAMERA_MODELS.find((m) => m.id === id) ?? CAMERA_MODELS[0];

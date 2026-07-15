@@ -18,6 +18,7 @@ import type {
   OrbitConfig,
   DriftConfig,
   Snv2Config,
+  Snv3Config,
   TurntableConfig,
   WindowRange,
   WindowProfile,
@@ -90,7 +91,7 @@ export const DEFAULT_ORBIT: OrbitConfig = {
 };
 
 export const DEFAULT_DRIFT: DriftConfig = {
-  wanderRadius: 0.45,
+  wanderRadius: 0.8, // 0.45 → 0.8 (user 2026-07-15): the idle-drift tour should roam most of the city
   wanderSpeed: 1,
   elevMid: 4,
   elevAmp: 2.5,
@@ -105,6 +106,12 @@ export const DEFAULT_SNV2: Snv2Config = {
   zoomSpeed: 1,
   moveSpeed: 1,
   tiltFloorDeg: 0,
+};
+
+export const DEFAULT_SNV3: Snv3Config = {
+  ...DEFAULT_SNV2,
+  autoDrift: true,
+  idleDelaySec: 30, // 10 read as too eager (user, test round 2026-07-15)
 };
 
 export const DEFAULT_TURNTABLE: TurntableConfig = {

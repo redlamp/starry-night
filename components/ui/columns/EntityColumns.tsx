@@ -124,6 +124,12 @@ function refTitle(ref: EntityRef, indexes: EntityIndexes): string {
 // Reuses the #87 focus mechanism: bounding sphere -> 45-degree look-down glide.
 function showLocations(ref: EntityRef, indexes: EntityIndexes): void {
   const pts: Array<[number, number, number]> = [];
+  // A persona's home→work pair is the PRIMARY arc (the thick commute) — the frame is
+  // centred on ITS midpoint and must contain both ends (test round 3.17: a point-mass
+  // cluster of nearby family homes dragged the centroid off the commute midline and the
+  // long commute arc left the frame). Secondary points (connections) still frame by
+  // percentile so one cross-town relative doesn't zoom everything out.
+  let primaryPair: [[number, number, number], [number, number, number]] | null = null;
   const addBuilding = (buildingId: number | undefined) => {
     if (buildingId === undefined) return;
     const b = indexes.buildingById.get(buildingId);
@@ -148,9 +154,22 @@ function showLocations(ref: EntityRef, indexes: EntityIndexes): void {
     connect(p.story.relation?.targetId);
   };
   switch (ref.kind) {
-    case "persona":
+    case "persona": {
       addPersonaPlaces(ref.id, true);
+      const p = indexes.directory.personas.get(ref.id);
+      const h = p ? indexes.buildingById.get(p.homeBuildingId) : undefined;
+      const w =
+        p && p.commuteTargetBuildingId !== undefined
+          ? indexes.buildingById.get(p.commuteTargetBuildingId)
+          : undefined;
+      if (h && w && h.id !== w.id) {
+        primaryPair = [
+          [h.x, h.height / 2, h.z],
+          [w.x, w.height / 2, w.z],
+        ];
+      }
       break;
+    }
     case "company": {
       const biz = indexes.directory.businesses.get(ref.id);
       if (!biz) break;
@@ -192,18 +211,63 @@ function showLocations(ref: EntityRef, indexes: EntityIndexes): void {
     }
   }
   if (pts.length === 0) return;
-  // Centroid + PERCENTILE radius: one cross-town outlier must not zoom the
-  // whole view out (user 2026-07-08) — frame the 85th-percentile cluster and
-  // let the far arc leave the frame; it still reads via its arc.
+  // Frame centre: the primary commute's MIDPOINT when there is one (the thick arc's
+  // midline — 3.17), else the centroid. Radius: the 85th-percentile spread (one
+  // cross-town outlier must not zoom the whole view out, user 2026-07-08) — but the
+  // primary pair's endpoints are ALWAYS inside (the commute arc never leaves frame).
   let cx = 0, cy = 0, cz = 0;
-  for (const [x, y, z] of pts) { cx += x; cy += y; cz += z; }
-  cx /= pts.length; cy /= pts.length; cz /= pts.length;
+  if (primaryPair) {
+    cx = (primaryPair[0][0] + primaryPair[1][0]) / 2;
+    cy = (primaryPair[0][1] + primaryPair[1][1]) / 2;
+    cz = (primaryPair[0][2] + primaryPair[1][2]) / 2;
+  } else {
+    for (const [x, y, z] of pts) { cx += x; cy += y; cz += z; }
+    cx /= pts.length; cy /= pts.length; cz /= pts.length;
+  }
   const dists = pts.map(([x, y, z]) => Math.hypot(x - cx, y - cy, z - cz)).sort((a, b) => a - b);
   const p85 = dists[Math.min(dists.length - 1, Math.ceil(dists.length * 0.85) - 1)] ?? 0;
-  const radius = Math.min(1800, Math.max(150, p85 * 1.15 + 40));
+  const halfSpan = primaryPair
+    ? Math.hypot(primaryPair[1][0] - cx, primaryPair[1][1] - cy, primaryPair[1][2] - cz)
+    : 0;
+  const radius = Math.min(
+    primaryPair ? Math.max(3600, halfSpan * 1.2) : 1800,
+    Math.max(150, Math.max(p85, halfSpan) * 1.15 + 40),
+  );
   const st = useSceneStore.getState();
+  // Arc-perpendicular view bearing (Cam v3): the arcs all emanate from the FIRST
+  // collected point (a persona's home / a company's site / the building itself — each
+  // case above pushes it first), so the spokes anchor→location are the drawn arcs'
+  // ground directions. Find the camera azimuth whose view direction is, on average,
+  // most perpendicular to them, so the arcs present broadside instead of end-on.
+  // Arc directions are AXIAL (an arc and its reverse read the same), so average in
+  // doubled-angle space — φ̄ = ½·atan2(Σ w·sin 2φ, Σ w·cos 2φ), weighted by horizontal
+  // span (a cross-town commute outweighs a next-door neighbour). The two perpendicular
+  // headings are 180° apart; pick the one nearer the live azimuth (shortest swing).
+  let viewAzimuthDeg: number | undefined;
+  if ((ref.kind === "persona" || ref.kind === "company" || ref.kind === "building") && pts.length >= 2) {
+    let s2 = 0, c2 = 0;
+    const [ax, , az] = pts[0];
+    for (let i = 1; i < pts.length; i++) {
+      const dx = pts[i][0] - ax;
+      const dz = pts[i][2] - az;
+      const w = Math.hypot(dx, dz);
+      if (w < 1) continue; // same building / same block — no direction signal
+      const phi = Math.atan2(dx, dz);
+      s2 += w * Math.sin(2 * phi);
+      c2 += w * Math.cos(2 * phi);
+    }
+    if (s2 * s2 + c2 * c2 > 1e-6) {
+      const meanDeg = (0.5 * Math.atan2(s2, c2) * 180) / Math.PI; // dominant arc bearing
+      const cur = st.orbit.azimuthDeg;
+      const candA = meanDeg + 90;
+      const candB = meanDeg - 90;
+      const dA = Math.abs((((candA - cur) % 360) + 540) % 360 - 180);
+      const dB = Math.abs((((candB - cur) % 360) + 540) % 360 - 180);
+      viewAzimuthDeg = ((dA <= dB ? candA : candB) % 360 + 360) % 360;
+    }
+  }
   st.setFocusPivot([cx, cy, cz]);
-  st.setFocusRequest({ x: cx, y: cy, z: cz, radius, fit: "fill" });
+  st.setFocusRequest({ x: cx, y: cy, z: cz, radius, fit: "fill", viewAzimuthDeg });
 }
 
 // Camera follows the SELECTION (user 2026-07-11 round 3): whichever card

@@ -11,6 +11,18 @@ export const cameraCommand: {
   // Re-pitch the camera to an absolute tilt (look-down angle in degrees: 0 = parallel to the ground,
   // 90 = straight down), keeping azimuth, distance, and target fixed. Clamped to the model's tilt floor.
   setTiltDeg: ((deg: number, smooth: boolean) => void) | null;
+  // Cam v3 owns top-down as an IN-MODEL flight (no model swap). When registered, the `t`
+  // hotkey / panel dispatch here instead of swapping to the Top-Down model; returns true
+  // when the model handled it (cameraView.toggleTopDown falls through otherwise).
+  toggleTopDownInModel: (() => boolean) | null;
+  // True while the active model is holding a pose the projection toggle must not dolly
+  // (Cam v3's in-model top-down park + an in-flight idle drift). tweenProjectionTo then
+  // keeps the radius put instead of sliding to the mode's remembered distance — the same
+  // #84 rule the Top-Down MODEL gets via its cameraModel check; v3 never changes
+  // cameraModel, so it signals here (the "breathing" of test round 5.32).
+  projectionRadiusHold: (() => boolean) | null;
 } = {
   setTiltDeg: null,
+  toggleTopDownInModel: null,
+  projectionRadiusHold: null,
 };
