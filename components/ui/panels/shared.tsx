@@ -69,30 +69,37 @@ export function SubGroup({
   label,
   defaultOpen = false,
   action,
+  afterLabel,
   children,
 }: {
   label: string;
   defaultOpen?: boolean;
   action?: ReactNode;
+  // Rendered immediately AFTER the title text (e.g. a "?" HelpHint riding the label),
+  // as opposed to `action`, which sits at the right edge before the chevron.
+  afterLabel?: ReactNode;
   children?: ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
     <>
       <div className="mt-1 flex items-center gap-1.5 border-t border-white/10 pt-2">
-        {children != null ? (
-          <button
-            type="button"
-            onClick={() => setOpen((o) => !o)}
-            className="text-foreground/55 hover:text-foreground/80 flex flex-1 items-center text-[11px] font-medium tracking-wide uppercase transition-colors"
-          >
-            {label}
-          </button>
-        ) : (
-          <span className="text-foreground/55 flex flex-1 items-center text-[11px] font-medium tracking-wide uppercase">
-            {label}
-          </span>
-        )}
+        <div className="flex flex-1 items-center gap-1">
+          {children != null ? (
+            <button
+              type="button"
+              onClick={() => setOpen((o) => !o)}
+              className="text-foreground/55 hover:text-foreground/80 flex items-center text-[11px] font-medium tracking-wide uppercase transition-colors"
+            >
+              {label}
+            </button>
+          ) : (
+            <span className="text-foreground/55 flex items-center text-[11px] font-medium tracking-wide uppercase">
+              {label}
+            </span>
+          )}
+          {afterLabel}
+        </div>
         {action}
         {/* Chevron toggles the body; only shown when there IS a body. Some groups are
             just a header + action (e.g. an overlay switch + "?"), so no chevron. The

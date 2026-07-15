@@ -18,6 +18,7 @@ export type CameraModelId =
   | "topdown"
   | "fly"
   | "snv2"
+  | "snv3"
   | "googleearth"
   | "dreimap"
   | "dreicamera";
@@ -83,6 +84,14 @@ export interface Snv2Config {
   // Perspective: lowest the view may tilt. 0 = level (no looking up); negative lets the camera drop
   // into a low vantage looking up; positive keeps it angled down. Down-tilt still caps near vertical.
   tiltFloorDeg: number;
+}
+
+// Starry Night Cam v3 tunables — v2's knobs plus the idle-drift integration
+// (Cam v3 folds the Drift model in as an idle behaviour instead of a separate
+// model swap). Live-editable in Settings → Orbit → v3, and persisted.
+export interface Snv3Config extends Snv2Config {
+  autoDrift: boolean; // leave the camera alone and it starts drifting (the fly-around)
+  idleDelaySec: number; // seconds of no input before the drift takes over
 }
 
 // Turntable camera-model tunables (the showcase spin). Live-editable in

@@ -6,8 +6,8 @@ import { CameraDiagram, type CamReadout } from "@/components/scene/CameraDiagram
 import { cameraReadout, deriveReadout } from "@/lib/scene/cameraReadout";
 import { tweenProjectionTo } from "@/lib/scene/cameraView";
 
-// DOM overlay that paints the live side-view diagram in the app (Orbit settings → "side-view
-// diagram"). DreiSceneControls writes the live pose into a shared object every frame
+// DOM overlay that paints the live side-view diagram in the app (Orbit settings → "Diagram").
+// DreiSceneControls writes the live pose into a shared object every frame
 // (lib/scene/cameraReadout); this self-drives a rAF loop and snapshots into React state ONLY when a
 // displayed value changes — so the SVG repaints at display rate without re-rendering the scene or
 // the settings panel. Mirrors the lab's LabHud (wiki/notes/camera-lab-test-plan → "ref-backed HUD").
