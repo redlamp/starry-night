@@ -14,6 +14,8 @@ import {
   Check,
   CloudFog,
   Copy,
+  ExternalLink,
+  FlaskConical,
   Gauge,
   Info,
   Link2,
@@ -33,6 +35,7 @@ import {
   Trash2,
   Undo2,
 } from "lucide-react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -166,7 +169,52 @@ const SETTINGS_SECTIONS: { value: string; label: string; keywords: string }[] = 
     keywords:
       "fps frame rate draw calls monitor gpu aa msaa samples smoothing jaggies moire anti-aliasing dpr resolution pixel ratio quality tier lod level of detail distance culling tiles attenuation wash",
   },
+  {
+    value: "labs",
+    label: "Labs",
+    keywords:
+      "writing lab camera lab drei lab window lab palette plan tensor tenancy layout prototype workbench pages tools external",
+  },
 ];
+
+// "Labs" (user 2026-07-15): the standalone workbench pages, linked from the settings
+// drawer instead of app chrome (the Writing Lab button used to ride the ControlDock).
+// Each opens in a NEW TAB — they are separate authoring/testing surfaces, not part of
+// this page's 3D scene state.
+const LAB_LINKS: { href: string; label: string }[] = [
+  { href: "/writing-lab", label: "Writing Lab" },
+  { href: "/camera-lab", label: "Camera Lab" },
+  { href: "/drei-lab", label: "Drei Lab" },
+  { href: "/window-lab", label: "Window Lab" },
+  { href: "/palette", label: "Palette" },
+  { href: "/plan", label: "Plan View" },
+  { href: "/tensor", label: "Tensor Field" },
+  // A static prototype page, not an app route — served from public/prototypes/ (moved
+  // out of docs/prototypes/ so it's reachable in dev AND the Pages export); Link still
+  // applies the deploy basePath. prefetch is off on every row: labs are separate
+  // surfaces and the .html one isn't a route at all.
+  { href: "/prototypes/tenancy-layout.html", label: "Tenancy Layout" },
+];
+
+function LabsSection() {
+  return (
+    <div className="flex flex-col">
+      {LAB_LINKS.map((l) => (
+        <Link
+          key={l.href}
+          href={l.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          prefetch={false}
+          className="text-foreground/80 hover:bg-foreground/10 hover:text-foreground flex items-center justify-between gap-2 rounded px-1.5 py-1.5 text-sm no-underline"
+        >
+          <span>{l.label}</span>
+          <ExternalLink aria-hidden="true" className="text-foreground/50 size-3.5 shrink-0" />
+        </Link>
+      ))}
+    </div>
+  );
+}
 
 function matchSection(query: string, s: (typeof SETTINGS_SECTIONS)[number]): boolean {
   const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
@@ -422,7 +470,7 @@ export function CameraPanel() {
           >
             {/* Section order (2026-07-08): Camera, Orbit, Intro, Roads, Buildings,
                 Population, City Details*, Stars, Moon, Atmosphere,
-                Debug, Performance. (*unlisted — kept with the city group.) */}
+                Debug, Performance, Labs. (*unlisted — kept with the city group.) */}
             <Section
               value="pose"
               icon={Camera}
@@ -608,6 +656,10 @@ export function CameraPanel() {
               <ResolutionSection />
               <LevelOfDetailSection />
               <StatsGroup />
+            </Section>
+
+            <Section value="labs" icon={FlaskConical} label="Labs" hidden={!show("labs")}>
+              <LabsSection />
             </Section>
           </Accordion>
           {searching && matchedValues.length === 0 && (
