@@ -14,6 +14,7 @@ import {
 import { maxHalfExtent, CITY_TIERS, DEFAULT_CITY_TIER } from "@/lib/seed/topology";
 import { resolveCityShape, displayedRadius } from "@/lib/seed/cityShape";
 import { getCameraModelMeta } from "@/lib/scene/cameraModelCatalog";
+import { cameraCommand } from "@/lib/scene/cameraCommand";
 import type { CameraModelId, Vec3 } from "@/lib/state/sceneStore";
 
 // Apply a model's transport default (Map paused, Drift/Turntable playing) on a
@@ -231,6 +232,9 @@ export function setCameraTab(tab: CameraTab) {
 // live here) — this only snapshots the outgoing model/pose, does the mode/model switch
 // that mounts TopDownModel, and — once already mounted — toggles the outro.
 export function toggleTopDown() {
+  // Cam v3 handles top-down INSIDE the model (a continuous flight, not a model swap) —
+  // when its handler is registered and claims the toggle, we're done.
+  if (cameraCommand.toggleTopDownInModel?.()) return;
   const s = useSceneStore.getState();
   if (s.cameraModel === "topdown") {
     // Already in top-down: toggle the outro. Pressing `t` again mid-outro reverses it
@@ -399,7 +403,7 @@ export function tweenProjectionTo(target: "perspective" | "orthographic") {
   // been overwritten with the top-down distance, so later toggles no longer slide. Hold the radius
   // put here, and leave rememberedRadius (the orbit dolly memory) untouched so a later orbit toggle
   // isn't dragged out to the top-down height.
-  const inTopDown = s.cameraModel === "topdown";
+  const inTopDown = s.cameraModel === "topdown" || (cameraCommand.projectionRadiusHold?.() ?? false);
   let targetRadius: number;
   if (inTopDown) {
     targetRadius = s.orbit.radius;

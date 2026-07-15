@@ -16,6 +16,7 @@ import type {
   CameraModelId,
   DriftConfig,
   Snv2Config,
+  Snv3Config,
   TurntableConfig,
   WindowRange,
   WindowProfile,
@@ -31,6 +32,7 @@ import {
   DEFAULT_WINDOW_AA,
   DEFAULT_FACADE,
   DEFAULT_SNV2,
+  DEFAULT_SNV3,
   DEFAULT_FOG,
 } from "./sceneDefaults";
 
@@ -120,6 +122,7 @@ export type SavedConfig = {
   cameraModel?: CameraModelId;
   drift?: DriftConfig;
   snv2?: Snv2Config;
+  snv3?: Snv3Config;
   turntable?: TurntableConfig;
   orbitPaused?: boolean;
   intro?: {
@@ -243,6 +246,7 @@ export function readSavedConfig(): SavedConfig | null {
     if (parsed.windowAA) parsed.windowAA = { ...DEFAULT_WINDOW_AA, ...parsed.windowAA };
     if (parsed.facade) parsed.facade = { ...DEFAULT_FACADE, ...parsed.facade };
     if (parsed.snv2) parsed.snv2 = { ...DEFAULT_SNV2, ...parsed.snv2 };
+    if (parsed.snv3) parsed.snv3 = { ...DEFAULT_SNV3, ...parsed.snv3 };
     if (parsed.fog) {
       // 2026-06-06 fog re-anchor: old saves carry absolute near/far metres —
       // drop them and fill the new fractional brackets so a stale save can't

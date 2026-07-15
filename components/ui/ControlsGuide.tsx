@@ -111,6 +111,42 @@ const MODEL_GUIDE: Record<CameraModelId, GuideSpec> = {
     ],
     hotkeys: ["settings"],
   },
+  snv3: {
+    mouse: [
+      { icon: "mouse-left", motion: "all", label: "Rotate & Tilt", affordance: "pin", action: "rotate" },
+      {
+        icon: "mouse-right",
+        motion: "all",
+        label: "Move",
+        sub: "or Shift + LMB",
+        affordance: "move",
+        action: "pan",
+      },
+      {
+        icon: "mouse-both",
+        motion: "all",
+        label: "Look Around",
+        sub: `or ${MOD} + LMB`,
+        affordance: "eye",
+        action: "look",
+      },
+      { icon: "mouse-wheel", motion: "ud", label: "Zoom", action: "zoom" },
+      { icon: "mouse-left", badge: "×2", label: "Zoom In", sub: "double-click", action: "zoomIn" },
+    ],
+    touch: [
+      { icon: "finger-1", motion: "all", label: "Rotate & Tilt", action: "rotate" },
+      { icon: "finger-2", motion: "all", label: "Move", action: "pan" },
+      { icon: "pinch", label: "Zoom", sub: "pinch in / out", action: "zoom" },
+      { icon: "finger-1", badge: "×2", label: "Zoom In", sub: "double-tap", action: "zoomIn" },
+    ],
+    keys: [
+      { cap: "W A S D", label: "Move", action: "pan" },
+      { cap: "Q / E", label: "Down / Up" },
+      { cap: "T", label: "Top-Down / Back" },
+      { cap: "R", label: "Reset Camera", action: "reset" },
+    ],
+    hotkeys: ["projection", "wireframe", "inspect", "settings"],
+  },
   snv2: {
     mouse: [
       { icon: "mouse-left", motion: "all", label: "Rotate & Tilt", affordance: "pin", action: "rotate" },

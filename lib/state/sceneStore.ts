@@ -44,6 +44,7 @@ export type {
   OrbitConfig,
   DriftConfig,
   Snv2Config,
+  Snv3Config,
   TurntableConfig,
   TweenRequest,
   TopDownEntry,
@@ -64,6 +65,7 @@ export {
   DEFAULT_ORBIT,
   DEFAULT_DRIFT,
   DEFAULT_SNV2,
+  DEFAULT_SNV3,
   DEFAULT_TURNTABLE,
   DEFAULT_MOON,
   DEFAULT_STARS,
@@ -115,6 +117,7 @@ import type {
   OrbitConfig,
   DriftConfig,
   Snv2Config,
+  Snv3Config,
   TurntableConfig,
   TweenRequest,
   TopDownEntry,
@@ -131,6 +134,7 @@ import {
   DEFAULT_ORBIT,
   DEFAULT_DRIFT,
   DEFAULT_SNV2,
+  DEFAULT_SNV3,
   DEFAULT_TURNTABLE,
   DEFAULT_MOON,
   DEFAULT_STARS,
@@ -236,6 +240,7 @@ type AnySettingEntry =
   | SettingEntry<"cameraModel">
   | SettingEntry<"drift">
   | SettingEntry<"snv2">
+  | SettingEntry<"snv3">
   | SettingEntry<"turntable">
   | SettingEntry<"orbitRestore">
   | SettingEntry<"topDownTip">
@@ -310,9 +315,10 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "orbitZoomToPin", defaultValue: true as const, persist: false },
   { key: "allowUnderview", defaultValue: false as const, persist: false },
   { key: "cameraMode", defaultValue: "orbit" as const, persist: true },
-  { key: "cameraModel", defaultValue: "snv2" as const, persist: true },
+  { key: "cameraModel", defaultValue: "snv3" as const, persist: true },
   { key: "drift", defaultValue: DEFAULT_DRIFT, persist: true },
   { key: "snv2", defaultValue: DEFAULT_SNV2, persist: true },
+  { key: "snv3", defaultValue: DEFAULT_SNV3, persist: true },
   { key: "turntable", defaultValue: DEFAULT_TURNTABLE, persist: true },
   { key: "orbitRestore", defaultValue: null as SceneState["orbitRestore"], persist: false },
   { key: "topDownTip", defaultValue: 0, persist: false },
@@ -439,6 +445,8 @@ type SceneState = {
   setDrift: (patch: Partial<DriftConfig>) => void;
   snv2: Snv2Config;
   setSnv2: (patch: Partial<Snv2Config>) => void;
+  snv3: Snv3Config;
+  setSnv3: (patch: Partial<Snv3Config>) => void;
   turntable: TurntableConfig;
   setTurntable: (patch: Partial<TurntableConfig>) => void;
   cameraIntent: CameraIntent;
@@ -564,9 +572,26 @@ type SceneState = {
   // (the cone's multi-location sets — user 2026-07-08). The model measures
   // docked-UI obstruction itself at consume time (uiObstructionInsetLeft)
   // and frames every request into the unobstructed width (user 2026-07-11).
-  focusRequest: { x: number; y: number; z: number; radius: number; fit?: "height" | "fill" } | null;
+  // viewAzimuthDeg (optional): the compass bearing the consuming camera should
+  // settle at — used by the cone view's arc-perpendicular framing (Cam v3). The
+  // model rotates there the short way; absent, azimuth is kept (no revolve).
+  focusRequest: {
+    x: number;
+    y: number;
+    z: number;
+    radius: number;
+    fit?: "height" | "fill";
+    viewAzimuthDeg?: number;
+  } | null;
   setFocusRequest: (
-    r: { x: number; y: number; z: number; radius: number; fit?: "height" | "fill" } | null,
+    r: {
+      x: number;
+      y: number;
+      z: number;
+      radius: number;
+      fit?: "height" | "fill";
+      viewAzimuthDeg?: number;
+    } | null,
   ) => void;
   // Inspect focus-lock: while inspecting a FOCUSED building, LMB-orbit pivots on
   // its 3D centre (this point) instead of the ground pick. Set by focusBuilding,
@@ -931,9 +956,10 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setMoonLive: (moonLive) => set({ moonLive }),
   // Note: cameraMode default is "orbit" — see below.
   cameraMode: "orbit",
-  cameraModel: "snv2",
+  cameraModel: "snv3",
   drift: DEFAULT_DRIFT,
   snv2: DEFAULT_SNV2,
+  snv3: DEFAULT_SNV3,
   turntable: DEFAULT_TURNTABLE,
   cameraIntent: DEFAULT_INTENT,
   cameraLive: {
@@ -1143,6 +1169,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setCameraModel: (cameraModel) => set({ cameraModel }),
   setDrift: (patch) => set((s) => ({ drift: { ...s.drift, ...patch } })),
   setSnv2: (patch) => set((s) => ({ snv2: { ...s.snv2, ...patch } })),
+  setSnv3: (patch) => set((s) => ({ snv3: { ...s.snv3, ...patch } })),
   setTurntable: (patch) => set((s) => ({ turntable: { ...s.turntable, ...patch } })),
   setCameraIntent: (intent) =>
     set((s) => ({

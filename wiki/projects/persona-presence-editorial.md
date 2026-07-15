@@ -12,7 +12,7 @@ Two coupled threads off `dev`, both descending from the 07-08 persona system. On
 - A **region** is a span of bays × floors on one or more faces: unit / floor-band / whole-building, scaling by building size. We know a resident's real floor (`unitFor`); bay/face is newly assigned.
 - Commerce is **district-textured**: downtown → multi-floor **department stores** + wide storefronts; main street → a **row of small storefronts**; residential → townhome vertical parcels; company-owned → whole shell.
 - Each region carries a **light signature** `{hex, intensity, variance, dark-chance}` — storefront variety is a main/high-street trait; department stores uniform bright white; offices mostly-dark-cool; homes warm-scattered. One function yields both **where** a tenant sits and **how** it's lit.
-- Prototype: `docs/prototypes/tenancy-layout.html` (open locally; toggles tenant-type / night-lights).
+- Prototype: `public/prototypes/tenancy-layout.html` (Settings → Labs → Tenancy Layout, or open locally; toggles tenant-type / night-lights). Moved from `docs/prototypes/` 2026-07-15 so the app serves it.
 
 **Highlight mechanism** (from feasibility dig): per-selection shader **uniforms** the `cityInstanced` shader compares against physical `(vFaceId, floor(cell.x), floor(cell.y))` — reuses the #87 position-compare + #86 floor-test + emissive glow, no new per-instance attribute (16-attrib ceiling). Whole-building reuses `SelectedBuildingOutline`; falls back to it at distance. Transient selection-state only — never fed to generation.
 

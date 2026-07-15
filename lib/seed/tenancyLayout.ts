@@ -2,7 +2,7 @@
 // businesses) as volumetric units on the facade, bay-aligned to the window grid,
 // scattered by floor + unit letter, and sized by scale (a big employer takes a
 // whole floor or several). No filler — only nameable, selectable tenants.
-// Ported + evolved from docs/prototypes/tenancy-layout.html (see
+// Ported + evolved from public/prototypes/tenancy-layout.html (see
 // wiki/projects/persona-presence-editorial).
 //
 // Determinism: pure function on its own `${seed}::personas::tenancy::${buildingId}`
