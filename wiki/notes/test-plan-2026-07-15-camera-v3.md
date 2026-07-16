@@ -244,6 +244,34 @@ All landed and headless-verified; re-check live at leisure:
    the disc (e.g. parked at the rim) widens the bound to the start distance so there's no
    clamp jump. Verified: standstill takeoff, free roam, ~600 m cruise hold.
 
+## Round 8 (2026-07-16): drift transport rework — mode vs idle
+
+The single auto-drift flag split into **drift MODE** (the activity: Space / helicopter
+button / Drift header switch / Orbit transport; runtime, never persisted) and **idle
+drift** (the preference: takes off by itself after Delay; persisted, off by default).
+Group renamed "Idle Drift" → "Drift".
+
+1. [ ] Settings → Orbit → **Drift**: the header switch is the drift itself (same as
+   Space); first row inside is the **idle drift** toggle, then Delay + feel knobs.
+2. [ ] **Space / header switch ON** → immediate ramped takeoff (no idle wait). Any
+   manual adjustment (drag/wheel/WASD) pauses the flight; let go and it **eases back
+   into the drift** ~1.6 s later from wherever you left it.
+3. [ ] **Space OFF** while flying → camera holds exactly where the drift left it.
+4. [ ] **Idle drift on, mode off** → takes off after Delay; any input stops it and the
+   FULL timer restarts (no quick resume on this path).
+5. [ ] **Space during an idle-drift flight** → stops the flight and restarts the timer;
+   it does NOT switch the mode on (a "stop" that keeps flying would be wrong).
+6. [ ] **Floating button** left of the settings gear (v3 only): Rotate3d icon when the
+   camera is manual, Helicopter while a drift flight is up (either path); lit while
+   active; click = Space; **fades with the other chrome on idle, even while lit**.
+7. [ ] Old saves: a persisted `autoDrift: true` from rounds 1–7 maps to `idleDrift`
+   on load (preference carried over).
+8. [ ] **Controls guide ("?")**: the Space row is now a live **Drift switch** sitting
+   directly under the key block (WASD/QE/T/R); flipping it = pressing Space. Bottom
+   group order: **Space, P, I, H, F** (user 2026-07-16).
+9. [ ] **Diagram** toggle moved from the bottom of Orbit into the **Camera** section,
+   above "live view link".
+
 ## Known / Parked
 
 - Twist-rotate (2-finger) and 3-finger free-look on touch: deferred from the first pass.

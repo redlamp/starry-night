@@ -17,6 +17,7 @@ import {
   ExternalLink,
   FlaskConical,
   Gauge,
+  Helicopter,
   Info,
   Link2,
   Map as MapIcon,
@@ -42,6 +43,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { CAMERA_MODELS, getCameraModelMeta } from "@/components/scene/camera-models/catalog";
 import { buildViewLink } from "@/lib/scene/viewLink";
+import { cameraCommand } from "@/lib/scene/cameraCommand";
 import type { CameraModelId } from "@/lib/state/sceneStore";
 import { Accordion } from "@/components/ui/accordion";
 import {
@@ -92,6 +94,41 @@ import {
   PerfDisplayToggle,
 } from "@/components/ui/panels/PerformancePanel";
 
+// The drift transport as floating chrome (user 2026-07-16): a round button left of the
+// settings gear, mirroring exactly what Space does (cameraCommand.toggleDrift's
+// three-way). Icon = what the camera is doing: Rotate3d = manual camera (no drift),
+// Helicopter = a drift flight is up (commanded mode OR an idle-drift takeoff). Fades
+// with the rest of the chrome on idle; v3-only (the other models have no drift).
+function DriftTransportButton({ idle }: { idle: boolean }) {
+  const isV3 = useSceneStore((s) => s.cameraModel === "snv3");
+  const driftMode = useSceneStore((s) => s.driftMode);
+  const setDriftMode = useSceneStore((s) => s.setDriftMode);
+  const driftFlying = useSceneStore((s) => s.driftFlying);
+  if (!isV3) return null;
+  const on = driftMode || driftFlying;
+  const label = on ? "Stop Drift" : "Start Drift";
+  return (
+    <IconTip label={label}>
+      <button
+        onClick={() => (cameraCommand.toggleDrift ?? (() => setDriftMode(!driftMode)))()}
+        aria-label={label}
+        aria-pressed={on}
+        className={cn(
+          "flex size-11 items-center justify-center rounded-full border shadow-lg backdrop-blur-md transition-[opacity,background-color,color] duration-700",
+          on
+            ? "border-transparent bg-primary text-primary-foreground"
+            : "bg-popover/70 text-foreground/85 border-foreground/10 active:bg-foreground/5",
+          // Fades with the rest of the chrome even while a flight is up (user
+          // 2026-07-16) — during a drift you're watching the city, not the buttons.
+          idle ? "pointer-events-none opacity-0" : "pointer-events-auto opacity-100",
+        )}
+      >
+        {on ? <Helicopter className="size-5" /> : <Rotate3d className="size-5" />}
+      </button>
+    </IconTip>
+  );
+}
+
 function copyConfigToClipboard() {
   const s = useSceneStore.getState();
   const snippet = JSON.stringify(s.copyableConfig(), null, 2);
@@ -115,12 +152,13 @@ const SETTINGS_SECTIONS: { value: string; label: string; keywords: string }[] = 
     value: "pose",
     label: "Camera",
     keywords:
-      "position rotation fov projection orthographic perspective look at orient pose lens live readout telemetry default free",
+      "position rotation fov projection orthographic perspective look at orient pose lens live readout telemetry default free diagram side view link",
   },
   {
     value: "orbit",
     label: "Orbit",
-    keywords: "elevation azimuth compass radius distance spin speed pause center focal auto rotate",
+    keywords:
+      "elevation azimuth compass radius distance spin speed pause center focal auto rotate drift idle wander delay",
   },
   {
     value: "roads",
@@ -321,18 +359,21 @@ export function CameraPanel() {
 
   if (hidden) {
     return (
-      <IconTip label="Show Settings">
-        <button
-          onClick={() => setHidden(false)}
-          className={cn(
-            "bg-popover/70 text-foreground/85 border-foreground/10 active:bg-foreground/5 fixed top-3 right-3 z-20 flex size-11 items-center justify-center rounded-full border shadow-lg backdrop-blur-md transition-opacity duration-700",
-            idle ? "pointer-events-none opacity-0" : "pointer-events-auto opacity-100",
-          )}
-          aria-label="Show Settings"
-        >
-          <Settings className="size-5" />
-        </button>
-      </IconTip>
+      <div className="fixed top-3 right-3 z-20 flex items-center gap-1.5">
+        <DriftTransportButton idle={idle} />
+        <IconTip label="Show Settings">
+          <button
+            onClick={() => setHidden(false)}
+            className={cn(
+              "bg-popover/70 text-foreground/85 border-foreground/10 active:bg-foreground/5 flex size-11 items-center justify-center rounded-full border shadow-lg backdrop-blur-md transition-opacity duration-700",
+              idle ? "pointer-events-none opacity-0" : "pointer-events-auto opacity-100",
+            )}
+            aria-label="Show Settings"
+          >
+            <Settings className="size-5" />
+          </button>
+        </IconTip>
+      </div>
     );
   }
 

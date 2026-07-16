@@ -447,6 +447,16 @@ type SceneState = {
   setSnv2: (patch: Partial<Snv2Config>) => void;
   snv3: Snv3Config;
   setSnv3: (patch: Partial<Snv3Config>) => void;
+  // Cam v3 drift ACTIVITY (2026-07-16) — runtime tier, never persisted / never in
+  // SETTINGS_REGISTRY/SavedConfig. driftMode = the user-commanded manual drift (Space /
+  // helicopter button / Drift header switch — the camera flies until told otherwise,
+  // easing back in after any manual adjustment). driftFlying = whether a drift flight
+  // is up RIGHT NOW (either mode or an idle-drift takeoff) — written by the model,
+  // read by the helicopter button's icon.
+  driftMode: boolean;
+  setDriftMode: (on: boolean) => void;
+  driftFlying: boolean;
+  setDriftFlying: (on: boolean) => void;
   turntable: TurntableConfig;
   setTurntable: (patch: Partial<TurntableConfig>) => void;
   cameraIntent: CameraIntent;
@@ -1170,6 +1180,10 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setDrift: (patch) => set((s) => ({ drift: { ...s.drift, ...patch } })),
   setSnv2: (patch) => set((s) => ({ snv2: { ...s.snv2, ...patch } })),
   setSnv3: (patch) => set((s) => ({ snv3: { ...s.snv3, ...patch } })),
+  driftMode: false,
+  setDriftMode: (driftMode) => set({ driftMode }),
+  driftFlying: false,
+  setDriftFlying: (driftFlying) => set({ driftFlying }),
   setTurntable: (patch) => set((s) => ({ turntable: { ...s.turntable, ...patch } })),
   setCameraIntent: (intent) =>
     set((s) => ({

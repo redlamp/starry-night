@@ -86,12 +86,15 @@ export interface Snv2Config {
   tiltFloorDeg: number;
 }
 
-// Starry Night Cam v3 tunables — v2's knobs plus the idle-drift integration
-// (Cam v3 folds the Drift model in as an idle behaviour instead of a separate
-// model swap). Live-editable in Settings → Orbit → v3, and persisted.
+// Starry Night Cam v3 tunables — v2's knobs plus the drift integration (Cam v3
+// folds the Drift model in as an in-camera behaviour instead of a model swap).
+// Live-editable in Settings → Orbit → v3, and persisted. The drift has TWO
+// switches (2026-07-16): idleDrift below is the PREFERENCE ("may the camera fly
+// itself after idleDelaySec?"); the ACTIVITY ("drifting right now / manual drift
+// mode") is runtime state (SceneState.driftMode / driftFlying), never persisted.
 export interface Snv3Config extends Snv2Config {
-  autoDrift: boolean; // leave the camera alone and it starts drifting (the fly-around)
-  idleDelaySec: number; // seconds of no input before the drift takes over
+  idleDrift: boolean; // idle for idleDelaySec → the camera starts drifting on its own
+  idleDelaySec: number; // seconds of no input before that idle takeoff
 }
 
 // Turntable camera-model tunables (the showcase spin). Live-editable in

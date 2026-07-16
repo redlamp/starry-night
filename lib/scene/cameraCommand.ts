@@ -21,8 +21,14 @@ export const cameraCommand: {
   // #84 rule the Top-Down MODEL gets via its cameraModel check; v3 never changes
   // cameraModel, so it signals here (the "breathing" of test round 5.32).
   projectionRadiusHold: (() => boolean) | null;
+  // The drift transport (Space / the helicopter button / the Orbit transport): three-way —
+  // Drift mode ON → off (hold pose); mode OFF but an idle-drift flight is up → stop the
+  // flight + restart the idle timer (do NOT flip the mode on); otherwise → mode ON
+  // (immediate ramped takeoff). Registered by Cam v3.
+  toggleDrift: (() => void) | null;
 } = {
   setTiltDeg: null,
   toggleTopDownInModel: null,
   projectionRadiusHold: null,
+  toggleDrift: null,
 };

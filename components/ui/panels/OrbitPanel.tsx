@@ -41,8 +41,6 @@ export function OrbitSection() {
   const setRotateSlowBelow = useSceneStore((s) => s.setRotateSlowBelowDeg);
   const tiltSpeed = useSceneStore((s) => s.tiltSpeed);
   const setTiltSpeed = useSceneStore((s) => s.setTiltSpeed);
-  const showSideView = useSceneStore((s) => s.showSideView);
-  const setShowSideView = useSceneStore((s) => s.setShowSideView);
   const cameraModel = useSceneStore((s) => s.cameraModel);
   const drift = useSceneStore((s) => s.drift);
   const setDrift = useSceneStore((s) => s.setDrift);
@@ -52,6 +50,8 @@ export function OrbitSection() {
   const setSnv2 = useSceneStore((s) => s.setSnv2);
   const snv3 = useSceneStore((s) => s.snv3);
   const setSnv3 = useSceneStore((s) => s.setSnv3);
+  const driftMode = useSceneStore((s) => s.driftMode);
+  const setDriftMode = useSceneStore((s) => s.setDriftMode);
   const isDrift = cameraModel === "drift";
   const isMap = cameraModel === "map";
   const setFocalAdjust = useSceneStore((s) => s.setFocalAdjust);
@@ -260,27 +260,37 @@ export function OrbitSection() {
             />
           </SubGroup>
           <SubGroup
-            label="Idle Drift"
+            label="Drift"
             defaultOpen
             afterLabel={
               <HelpHint>
-                Leave the camera alone this long and it starts a slow drift around the city — the
-                view revolves, the focus wanders, the height bobs gently. Any input hands the
-                camera straight back and re-arms the timer. The feel knobs are shared with the
-                Drift camera model.
+                A slow flight around the city — the view revolves, the focus wanders, the height
+                bobs gently. The header switch (or Space, or the helicopter button) turns the
+                drift on: adjust the camera any time and it eases back into the flight when you
+                let go. With idle drift on instead, the flight starts by itself after Delay
+                seconds of no input, and any input stops it until the timer runs down again.
+                Feel knobs are shared with the Drift camera model.
               </HelpHint>
             }
             action={
               <Switch
-                checked={snv3.autoDrift}
-                onCheckedChange={(autoDrift) => setSnv3({ autoDrift })}
-                aria-label="Auto drift"
+                checked={driftMode}
+                onCheckedChange={setDriftMode}
+                aria-label="Drift"
               />
             }
           >
+            <label className="flex cursor-pointer items-center justify-between gap-2 text-xs">
+              <span className="text-foreground/70">idle drift</span>
+              <Switch
+                checked={snv3.idleDrift}
+                onCheckedChange={(idleDrift) => setSnv3({ idleDrift })}
+                aria-label="Idle drift"
+              />
+            </label>
             <ValueSlider
               label="Delay"
-              hint="Seconds of no input before the drift starts."
+              hint="Seconds of no input before the idle drift starts."
               value={snv3.idleDelaySec}
               min={2}
               max={60}
@@ -548,18 +558,8 @@ export function OrbitSection() {
       />
         </>
       )}
-      {/* Section-level odds and ends live at the BOTTOM (user 2026-07-15 item 2.*): the
-          per-model groups above are the working controls; these are occasional.
-          ("Default Orbit" removed 2026-07-15 round 3 — R / the model defaults cover it.) */}
-      <label className="flex cursor-pointer items-center justify-between gap-2 text-xs">
-        <span
-          className="text-foreground/70"
-          title="Live elevation cross-section of the camera rig, bottom-left"
-        >
-          Diagram
-        </span>
-        <Switch checked={showSideView} onCheckedChange={setShowSideView} />
-      </label>
+      {/* ("Default Orbit" removed 2026-07-15 round 3; the Diagram toggle moved to the
+          Camera section above Live View Link, user 2026-07-16.) */}
     </>
   );
 }
@@ -580,19 +580,19 @@ export function OrbitHeaderActions() {
 
 // Play/pause the camera's ambient motion. Transport convention: ⏸ while playing
 // (click to pause), ▶ while paused (click to resume); highlighted while playing.
-// For Cam v3 the ambient motion IS the idle auto-drift (user 2026-07-15), so the
-// button binds snv3.autoDrift there — one transport, whatever the model; the Idle
-// Drift header switch is the same state, and Space toggles it too (enabling by
-// Space takes off immediately — see the v3 model's key handler). Other models
-// keep the auto-revolution flag (orbitPaused; Space toggles that one in Drift).
+// For Cam v3 the ambient motion is the DRIFT (2026-07-16 rework): this button is
+// the same three-way transport as Space and the helicopter button
+// (cameraCommand.toggleDrift) — lit whenever a flight is up, mode or idle. Other
+// models keep the auto-revolution flag (orbitPaused; Space toggles that in Drift).
 function OrbitPlayPauseToggle() {
   const orbitPaused = useSceneStore((s) => s.orbitPaused);
   const setOrbitPaused = useSceneStore((s) => s.setOrbitPaused);
   const isV3 = useSceneStore((s) => s.cameraModel === "snv3");
-  const autoDrift = useSceneStore((s) => s.snv3.autoDrift);
-  const setSnv3 = useSceneStore((s) => s.setSnv3);
-  const playing = isV3 ? autoDrift : !orbitPaused;
-  const v3Title = playing ? "Disable Auto Drift (Space)" : "Enable Auto Drift (Space)";
+  const driftMode = useSceneStore((s) => s.driftMode);
+  const setDriftMode = useSceneStore((s) => s.setDriftMode);
+  const driftFlying = useSceneStore((s) => s.driftFlying);
+  const playing = isV3 ? driftMode || driftFlying : !orbitPaused;
+  const v3Title = playing ? "Stop Drift (Space)" : "Start Drift (Space)";
   return (
     <Button
       variant="secondary"
@@ -607,7 +607,9 @@ function OrbitPlayPauseToggle() {
       aria-label={isV3 ? v3Title : playing ? "Pause orbit revolution" : "Resume orbit revolution"}
       aria-pressed={playing}
       onClick={() =>
-        isV3 ? setSnv3({ autoDrift: !autoDrift }) : setOrbitPaused(!orbitPaused)
+        isV3
+          ? (cameraCommand.toggleDrift ?? (() => setDriftMode(!driftMode)))()
+          : setOrbitPaused(!orbitPaused)
       }
       className={cn(
         playing
