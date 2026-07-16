@@ -272,6 +272,24 @@ Group renamed "Idle Drift" → "Drift".
 9. [ ] **Diagram** toggle moved from the bottom of Orbit into the **Camera** section,
    above "live view link".
 
+## Round 9 (2026-07-16): unbounded zoom-out / whole-city cull
+
+Report: scrolling far enough away culled the entire city. Two stacked causes, both
+fixed in v2 AND v3:
+
+1. [ ] **Root cause — distance bounds never applied**: the min/max-distance effect
+   early-returns when the CameraControls instance doesn't exist yet, and only re-ran on
+   a bounds change — so a model mounted OUTSIDE orbit mode (a `?cam=` still link, fly,
+   capture) kept camera-controls' default `maxDistance = Infinity` for the whole
+   session, and each wheel notch compounded ~×1.28 forever (measured 10²⁹ m out). The
+   effect now re-applies on mode changes. Re-check: wheel-out pins at the Distance
+   slider's max (default 20 km) with the whole city still in frame.
+2. [ ] **Hardening — zoom clamp measured the wrong leg**: `zoomAboutPoint` clamped the
+   eye→TARGET distance, which the uniform scale holds constant once pinned — the
+   bounds now clamp the eye→PIVOT distance (the thing the zoom scales; the pivot is
+   always inside the city disc), so the Distance range genuinely governs how far from
+   the city the wheel can take you. Zoom-in/-toward-cursor feel unchanged.
+
 ## Known / Parked
 
 - Twist-rotate (2-finger) and 3-finger free-look on touch: deferred from the first pass.
