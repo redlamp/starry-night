@@ -961,6 +961,21 @@ export function StarryNightV3Model() {
       ) {
         resetToDefault();
       }
+      // Space = the drift transport (user 2026-07-16, watchlist 6.5): OFF → enable AND
+      // take off NOW (lastInput is backdated past any delay, so the next frame engages —
+      // no waiting out the idle timer); ON → disable, camera stays where the drift left
+      // it. Same state as the Orbit header transport + the Idle Drift switch. NOTE: no
+      // markInput() here — that would re-arm the timer we're deliberately bypassing.
+      if (e.code === "Space" && !e.repeat && !isTypingTarget(e)) {
+        e.preventDefault(); // keep the page from scrolling
+        const st = useSceneStore.getState();
+        if (st.snv3.autoDrift) {
+          st.setSnv3({ autoDrift: false });
+        } else {
+          st.setSnv3({ autoDrift: true });
+          lastInput.current = -1e9; // "idle forever" — engage on the next frame
+        }
+      }
     };
     const onKeyUp = (e: KeyboardEvent) => {
       if (MOVE_CODES.has(e.code)) moveKeys.current[e.code] = false;

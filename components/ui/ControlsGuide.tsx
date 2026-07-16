@@ -143,6 +143,7 @@ const MODEL_GUIDE: Record<CameraModelId, GuideSpec> = {
       { cap: "W A S D", label: "Move", action: "pan" },
       { cap: "Q / E", label: "Down / Up" },
       { cap: "T", label: "Top-Down / Back" },
+      { cap: "Space", label: "Drift On / Off" },
       { cap: "R", label: "Reset Camera", action: "reset" },
     ],
     hotkeys: ["projection", "wireframe", "inspect", "settings"],
