@@ -254,13 +254,17 @@ function groundHit(
 // Zoom by uniformly scaling eye + target about a world pivot by `k` (k < 1 = closer, > 1 = farther).
 // Uniform scale keeps the look vector's DIRECTION (only its length changes), so the camera's
 // orientation is untouched — position moves, rotation does not — and the pivot stays put on screen.
-// The resulting eye→target distance is clamped to the control's distance bounds. This is Google
-// Earth's zoom-toward-cursor (no re-aim), shared by the wheel and the double-click zoom-in.
-// Returns the transition promise so callers can bracket it (e.g. a smoothTime override).
+// The distance bounds clamp the EYE→PIVOT distance — the thing this zoom actually scales. (It used
+// to clamp eye→TARGET, which the uniform scale holds constant once pinned at max — so wheel-out
+// compounded UNBOUNDED, the camera receded past the far plane, and the whole city culled away;
+// user report 2026-07-16. The pivot is always clamped to the city disc, so bounding the eye against
+// it keeps the city renderable at max zoom-out.) This is Google Earth's zoom-toward-cursor (no
+// re-aim), shared by the wheel and the double-click zoom-in. Returns the transition promise so
+// callers can bracket it (e.g. a smoothTime override).
 function zoomAboutPoint(c: CameraControlsImpl, pivot: THREE.Vector3, k: number, smooth: boolean) {
   c.getPosition(_eye);
   c.getTarget(_tgt);
-  const oldR = _eye.distanceTo(_tgt) || 1e-3;
+  const oldR = _eye.distanceTo(pivot) || 1e-3;
   const s = THREE.MathUtils.clamp(oldR * k, c.minDistance, c.maxDistance) / oldR;
   return c.setLookAt(
     pivot.x + (_eye.x - pivot.x) * s,
@@ -692,6 +696,10 @@ export function StarryNightV3Model() {
   }, []);
 
   // Distance bounds (the user range slider) — applied live; clamp the current distance in on change.
+  // `mode` is a dep on purpose: the CameraControls instance only exists while this model drives
+  // orbit. Mounting in another mode (a ?cam= still link, fly, capture) left this effect's early
+  // return permanent — camera-controls kept its default maxDistance of INFINITY, so wheel-out
+  // compounded forever and the city receded past the far plane (user 2026-07-16).
   useEffect(() => {
     const c = controls.current;
     if (!c) return;
@@ -700,7 +708,7 @@ export function StarryNightV3Model() {
     c.minDistance = lo;
     c.maxDistance = hi;
     void c.dollyTo(THREE.MathUtils.clamp(c.distance, lo, hi), false);
-  }, [bounds]);
+  }, [bounds, mode]);
 
   // `t` — the top-down FLIGHT (behaviour 1; see the module doc). Registered on the
   // shared command channel while this model drives orbit; cameraView.toggleTopDown
