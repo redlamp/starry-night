@@ -37,6 +37,9 @@ parallel modes in as behaviours of ONE continuous camera — no model swaps, no 
    left it. Feel knobs are shared with the Drift model's store slice (`drift`). Any
    input cancels instantly and re-arms the timer. Suppressed while top-down is parked
    or an inspection (drill cards / selected building) is open — reading isn't idling.
+   OFF by default (2026-07-15 round 6); one transport in three skins: the Orbit header
+   play/pause, the Idle Drift header switch, and **Space** (2026-07-16 round 7 —
+   enabling by Space takes off immediately, no idle wait; disabling holds the pose).
 3. **Cone-view focus is arc-aware.** `showLocations` (EntityColumns) now computes the
    arcs' dominant ground bearing (length-weighted axial mean in doubled-angle space)
    and sends `viewAzimuthDeg` — the perpendicular heading nearer the live azimuth —

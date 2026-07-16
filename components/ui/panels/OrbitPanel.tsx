@@ -582,8 +582,9 @@ export function OrbitHeaderActions() {
 // (click to pause), ▶ while paused (click to resume); highlighted while playing.
 // For Cam v3 the ambient motion IS the idle auto-drift (user 2026-07-15), so the
 // button binds snv3.autoDrift there — one transport, whatever the model; the Idle
-// Drift header switch is the same state. Other models keep the auto-revolution
-// flag (orbitPaused; Space still toggles that one in Drift).
+// Drift header switch is the same state, and Space toggles it too (enabling by
+// Space takes off immediately — see the v3 model's key handler). Other models
+// keep the auto-revolution flag (orbitPaused; Space toggles that one in Drift).
 function OrbitPlayPauseToggle() {
   const orbitPaused = useSceneStore((s) => s.orbitPaused);
   const setOrbitPaused = useSceneStore((s) => s.setOrbitPaused);
@@ -591,7 +592,7 @@ function OrbitPlayPauseToggle() {
   const autoDrift = useSceneStore((s) => s.snv3.autoDrift);
   const setSnv3 = useSceneStore((s) => s.setSnv3);
   const playing = isV3 ? autoDrift : !orbitPaused;
-  const v3Title = playing ? "Disable Auto Drift" : "Enable Auto Drift";
+  const v3Title = playing ? "Disable Auto Drift (Space)" : "Enable Auto Drift (Space)";
   return (
     <Button
       variant="secondary"

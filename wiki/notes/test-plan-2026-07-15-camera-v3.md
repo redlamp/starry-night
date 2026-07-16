@@ -126,10 +126,12 @@ grate so the follow-up pass can address them:
 5. [ ] **Space / the Orbit play-pause button do not govern v3's drift** — they control the
    old auto-revolution and the Drift model. Two "ambient motion" systems with different
    transports now coexist. Candidate cleanup: make Space cancel/pause the idle drift too.
-   → partly resolved 2026-07-15 (round 6): the Orbit header **play/pause button now
-   drives v3's auto-drift** (one transport, whatever the model); Space remains
-   Drift-model-only.
-6. [ ] **1-finger touch = rotate** (v1's mapping) vs the dominant maps convention of
+   → resolved: round 6 (2026-07-15) bound the Orbit header **play/pause to v3's
+   auto-drift** (one transport, whatever the model); round 7 (2026-07-16) bound
+   **Space** to the same state — OFF → enable + take off immediately (bypasses the
+   idle delay), ON → disable, camera holds. Space in the Drift MODEL still means
+   pause-revolution, as before.
+6. [x] **1-finger touch = rotate** (v1's mapping) vs the dominant maps convention of
    1-finger = pan (Google Maps/Earth, Apple Maps). Deliberate — rotate is the richer
    gesture for a 3D scene — but it inverts phone muscle memory. Section 4.23 decides.
 7. [ ] **Cone-view rotation on focus.** Focus glides historically never rotate; the
@@ -137,80 +139,80 @@ grate so the follow-up pass can address them:
    click. It's capped at a quarter turn, but watch for disorientation on repeat cones.
 8. [ ] **RMB pan doesn't move the cone pivot** — orbit after a big pan revolves around a
    point that may now be off-centre (or off-screen). Spec said keep it pinned + test.
-9. [ ] **Double-tap zoom is suppressed in inspect mode** (double-tap = focus there), so the
+9. [x] **Double-tap zoom is suppressed in inspect mode** (double-tap = focus there), so the
    same gesture does different things by mode.
 10. [ ] **Tilting from overhead can pass "level" into a low upward vantage** (elevation
     readout goes negative) with the Min-tilt default 0 — the same v2 math, but it's much
     easier to hit from a straight-down start. If it reads wrong, clamp harder near the
     pole or raise the default floor.
-11. [ ] **Persisted-settings inertia:** existing users keep `snv2` (their persisted pick) and
+11. [x] **Persisted-settings inertia:** existing users keep `snv2` (their persisted pick) and
     won't see v3 until they select it; fresh visitors get v3. Two cohorts, one build.
 
 ## Round 2 fixes (2026-07-15, responding to the Section 1–2 notes)
 
 All landed and headless-verified; re-check live at leisure:
 
-1. [ ] **1.1 long-way rotation entering top-down** — the dive/return now flies decomposed
+1. [x] **1.1 long-way rotation entering top-down** — the dive/return now flies decomposed
    `moveTo`/`rotateTo`/`dollyTo` with the azimuth held (dive) or unwrapped to the nearest
    winding (return), instead of `setLookAt`'s numeric theta tween. Verified: after 1.5
    accumulated orbit turns, the dive holds azimuth exactly (242° throughout) and the
    return lands back at the banked pose.
-2. [ ] **2.9** — idle delay default is now **30 s**.
-3. [ ] **2.13** — the auto-drift switch moved into the Idle Drift group header (right side);
+2. [x] **2.9** — idle delay default is now **30 s**.
+3. [x] **2.13** — the auto-drift switch moved into the Idle Drift group header (right side);
    the "?" rides directly right of the title.
-4. [ ] **2.14** — leaving an inspection (cards closed / selection cleared) now **re-arms the
+4. [x] **2.14** — leaving an inspection (cards closed / selection cleared) now **re-arms the
    idle timer**: the countdown starts fresh from the close instead of firing instantly
    after a long read. Verified with a 2 s delay: drift resumed only 2 s after clearing.
 5. [ ] **2.15** — the wander clock and revolve azimuth are now integrated (`+= rate·dt`)
    rather than closed-form (`rate·t`), so dragging **Speed** (or Revolve s) mid-drift
    changes pace only — no position jump. Verified: continuous positions across a 1→3
    speed change.
-6. [ ] **2.*** — "Default Orbit" + "side-view diagram" moved to the bottom of the Orbit
+6. [x] **2.*** — "Default Orbit" + "side-view diagram" moved to the bottom of the Orbit
    section; labels tightened: Orbit / Zoom / Move / Delay / Speed.
-7. [ ] **2.**** — confirmed correct: Cam v3 reads none of the shared framing fields
+7. [x] **2.**** — confirmed correct: Cam v3 reads none of the shared framing fields
    (Screen Y, low-angle ground pull — nor Tilt speed / Low-angle speed / Slow below °,
    which are the same Map/Drift-only family). All five are now hidden while v3 is
    active; they still show for Map/Drift.
 
 ## Round 3 fixes (2026-07-15, responding to the Section 3 + 5 notes)
 
-1. [ ] **3.17 cone centre / commute out of frame** — a persona's frame is now centred on the
+1. [x] **3.17 cone centre / commute out of frame** — a persona's frame is now centred on the
    **commute midpoint** (home↔work midline) instead of the point-mass centroid (a cluster
    of nearby family homes was dragging the centre off the commute and pushing the far end
    out). Both commute endpoints are ALWAYS inside the frame (the 1800 m radius cap that
    was clipping cross-town commutes is lifted to cover the span); connections still frame
    by percentile so one far relative doesn't zoom everything out. The orbit pivot/pin
    moves with it. Re-check with OH-630592.
-2. [ ] **3.21 pan hitting the outer bounds** — the limit was the EYE's pan ring: 2× the city
+2. [x] **3.21 pan hitting the outer bounds** — the limit was the EYE's pan ring: 2× the city
    ground radius, a constant — a zoomed-out cone view starts with the eye near that ring,
    so it pinned while the focal kept sliding (and the eye↔focal distance change is also
    the RMB "zoom" of 5.30). The ring now grows with the camera's current horizontal
    offset (`groundR + |eye−focal|`), so the eye never pins before the focal reaches the
    city rim. No setting needed — it scales with zoom automatically.
-3. [ ] **5.30 wheel zoom** — base wheel rate ×1.6, and each perspective notch now eases
+3. [x] **5.30 wheel zoom** — base wheel rate ×1.6, and each perspective notch now eases
    through camera-controls damping instead of landing instantly (smoothed, chains
    fluidly under fast scrolls). The Zoom slider still multiplies on top.
-4. [ ] **5.31 fly-to speed** — focus glide smoothTime 0.18 → 0.45 (settles in ~1.5 s); the
+4. [x] **5.31 fly-to speed** — focus glide smoothTime 0.18 → 0.45 (settles in ~1.5 s); the
    ortho zoom ramp lengthened to match (0.6 → 1.2 s).
-5. [ ] **5.32 projection breathing** — found for the top-down case: the P toggle slides the
+5. [x] **5.32 projection breathing** — found for the top-down case: the P toggle slides the
    dolly toward the target mode's remembered distance, and the old #84 guard only
    recognised the Top-Down MODEL — v3's in-model top-down (and an in-flight drift)
    weren't covered, so the framing bridge breathed against the sliding radius. v3 now
    signals a radius hold during both (verified: radius pinned through a full morph parked
    overhead). If you still catch a breathe outside those two states, note when — the
    remaining suspect is a morph during a focus glide.
-6. [ ] **"Default Orbit" removed**; "side-view diagram" relabelled **"Diagram"**. The diagram
+6. [x] **"Default Orbit" removed**; "side-view diagram" relabelled **"Diagram"**. The diagram
    itself derives from the live `orbit`/`cameraLive` pose v3 writes, so it already tracks
    the new behaviours (top-down flight, drift, focus); the Map-only Screen-Y/tilt gauges
    don't render for v3. Give it an eyeball with drift + T live (it's hidden in capture
    mode, so this one needs your eyes).
-7. [ ] **Idle drift re-anchored to the city** — wander default 0.45 → 0.8. *(The round-3
+7. [x] **Idle drift re-anchored to the city** — wander default 0.45 → 0.8. *(The round-3
    "wander around the centre" implementation caused the round-4 takeoff lerp and was
    reshaped again in rounds 4–5: the centre is now a BOUND, not an anchor — see Round 5.)*
 
 ## Round 4 fixes (2026-07-15, drift takeoff + clipping)
 
-1. [ ] **Big lerp at drift engage** — round 3's "wander around the city centre" was
+1. [x] **Big lerp at drift engage** — round 3's "wander around the city centre" was
    implemented as a blend toward the absolute wander position, which glided the focal up
    to kilometres at takeoff. The drift is now **velocity-shaped**: every rate (revolve,
    wander, bob, breathe) starts at ZERO at the current pose and builds to full speed
@@ -218,7 +220,7 @@ All landed and headless-verified; re-check live at leisure:
    Verified profile: first 2 s ≈ standstill (+0.1° az, +2 m focal), full speed by
    ~10 s, no jump at any sample. *(Round 4 also had a gentle pull toward the centre
    path; round 5 removed it — the centre is a bound, not an attractor.)*
-2. [ ] **Drift clipping through buildings** — the drifting eye now cruises above a
+2. [x] **Drift clipping through buildings** — the drifting eye now cruises above a
    **520 m altitude floor** (worst-case skyline across seeds ≈ 480 m: spire 220 × height
    jitter 1.22 × outlier 1.5 × silhouette multiplier), raised smoothly on the same ramp
    by lifting the elevation band's floor. At typical drift radii that is still a
@@ -228,14 +230,14 @@ All landed and headless-verified; re-check live at leisure:
 
 ## Round 5 fixes (2026-07-15, tap zoom + wander bound)
 
-1. [ ] **4.27 double-tap zoom snap** — the tap/click zoom-in is now a real glide in BOTH
+1. [x] **4.27 double-tap zoom snap** — the tap/click zoom-in is now a real glide in BOTH
    projections: perspective brackets the transition in a slower smoothTime; ortho hands
    the size change to a 0.7 s eased ramp instead of the instant `setOrthoSize` (verified:
    613 → 368 over ~750 ms, smooth curve, exact 0.6×). Also de-duped: the browser
    SYNTHESIZES a `dblclick` from a double-tap, which was firing the zoom a second time on
    top of the touch handler's — the pair read as a snap. Mouse double-click gets the same
    glide.
-2. [ ] **Wander bound, not centre focus** — clarified intent: the drift never seeks the
+2. [x] **Wander bound, not centre focus** — clarified intent: the drift never seeks the
    city centre; the centre only BOUNDS the roam (a disc of wanderRadius × city extent —
    the camera can't wander off the city). Round 4's gentle pull toward the centre path is
    removed; the focal rides the wander velocity freely inside the bound. Engaging outside
