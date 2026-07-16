@@ -29,7 +29,7 @@ export const CAMERA_MODELS: CameraModelMeta[] = [
     id: "snv3",
     label: "Starry Night Cam v3",
     character:
-      "v2's drone rig + T dives top-down in place, idle auto-drift, arc-aware inspect framing.",
+      "v2's drone rig + T dives top-down in place, drift transport (Space), arc-aware inspect framing.",
     blurb:
       "The v3 camera: everything v2 does (LMB move, Shift+LMB orbit, Ctrl/⌘+LMB look, wheel zoom, WASD/QE), plus: T sweeps to a top-down plan view WITHOUT leaving the camera — keep panning/zooming up there, T again returns to where you were (or re-squares the view if you tilted away). Leave it alone and it starts to drift around the city on its own (toggle + delay in Settings). Cone-view focus lands at the angle that shows the arcs broadside. Touch: 1-finger orbit, 2-finger pan + pinch, double-tap zoom.",
     startsPaused: true,

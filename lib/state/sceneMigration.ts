@@ -246,7 +246,14 @@ export function readSavedConfig(): SavedConfig | null {
     if (parsed.windowAA) parsed.windowAA = { ...DEFAULT_WINDOW_AA, ...parsed.windowAA };
     if (parsed.facade) parsed.facade = { ...DEFAULT_FACADE, ...parsed.facade };
     if (parsed.snv2) parsed.snv2 = { ...DEFAULT_SNV2, ...parsed.snv2 };
-    if (parsed.snv3) parsed.snv3 = { ...DEFAULT_SNV3, ...parsed.snv3 };
+    if (parsed.snv3) {
+      // 2026-07-16 rename: the persisted flag autoDrift became idleDrift when the
+      // manual drift MODE split off (runtime driftMode). Carry the old preference.
+      const legacy = parsed.snv3 as Snv3Config & { autoDrift?: boolean };
+      parsed.snv3 = { ...DEFAULT_SNV3, ...legacy };
+      if (legacy.autoDrift !== undefined && legacy.idleDrift === undefined)
+        parsed.snv3.idleDrift = legacy.autoDrift;
+    }
     if (parsed.fog) {
       // 2026-06-06 fog re-anchor: old saves carry absolute near/far metres —
       // drop them and fill the new fractional brackets so a stale save can't

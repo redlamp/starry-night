@@ -51,8 +51,28 @@ export function PoseSection({ flying }: { flying: boolean }) {
       <ProjectionRow />
       <FovOrSizeSlider />
       {flying ? <FlySpeedSlider /> : null}
+      <DiagramRow />
       <LiveViewLinkRow />
     </>
+  );
+}
+
+// The live side-view diagram toggle (bottom-left rig cross-section). Lived at the
+// bottom of the Orbit section until 2026-07-16 — it reads on the CAMERA, not the
+// orbit, so it sits with the camera rows now.
+export function DiagramRow() {
+  const show = useSceneStore((s) => s.showSideView);
+  const setShow = useSceneStore((s) => s.setShowSideView);
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <span
+        className="text-foreground/40 text-xs tracking-wide uppercase"
+        title="Live elevation cross-section of the camera rig, bottom-left"
+      >
+        diagram
+      </span>
+      <Switch checked={show} onCheckedChange={setShow} />
+    </div>
   );
 }
 

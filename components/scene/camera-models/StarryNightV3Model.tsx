@@ -26,11 +26,13 @@ import { writeOrbitPose } from "./orbitWriteback";
 //      `t` again returns to the exact pre-top-down pose, UNLESS the view was manually
 //      tilted away from overhead (past TD_STILL_ELEV_DEG), in which case `t` re-squares
 //      to top-down instead; the original return pose stays banked for the next `t`.
-//   2. IDLE DRIFT: leave the camera alone for snv3.idleDelaySec (slider) with
-//      snv3.autoDrift on (toggle) and it eases into the Drift model's motion — azimuth
-//      revolve + focal wander + a gentle elevation bob (the up/down deviation) — flying
-//      around the city from wherever it sits (current radius/elevation, not the Drift
-//      model's establishing distance). ANY input stops it and re-arms the timer.
+//   2. DRIFT (reworked 2026-07-16): the Drift model's motion — azimuth revolve + focal
+//      wander + a gentle elevation bob — flying from wherever the camera sits (current
+//      radius/elevation, not the Drift model's establishing distance). Two ways in:
+//      drift MODE (runtime store.driftMode; Space / helicopter button / Drift header
+//      switch) flies until told otherwise — manual adjustments pause it and it eases
+//      back in after release; IDLE drift (snv3.idleDrift + idleDelaySec) takes off by
+//      itself after the delay, and any input stops it until the timer runs down again.
 //      Feel knobs reuse the Drift sliders (store.drift): revolve/wander/bob/breathe.
 //   3. CONE-VIEW FRAMING: a focusRequest may carry viewAzimuthDeg (the arc-perpendicular
 //      bearing EntityColumns computes) — the focus glide rotates there the SHORT way, so
@@ -128,7 +130,9 @@ const DRIFT_WANDER_W = [0.013, 0.029, 0.047] as const; // rad/s, incommensurate 
 // wanderRadius × tier around CITY_CENTER — it is never pulled toward the centre, it
 // just can't wander off the city. (Engaging OUTSIDE that disc widens the bound to the
 // start distance so there's no clamp jump; the wander then works its way back in.)
-const DRIFT_RAMP_SEC = 10; // seconds to build from standstill to full drift speed
+const DRIFT_RAMP_SEC = 10; // seconds to build from standstill to full drift speed (idle takeoff)
+const DRIFT_RESUME_RAMP_SEC = 5; // quicker build for a commanded takeoff / post-adjust resume
+const DRIFT_RESUME_SEC = 1.6; // in drift MODE: seconds after the last input before easing back in
 const DRIFT_AIM_SETTLE = 0.1; // s⁻¹ — the aim height eases to ground level at this gentle rate
 const DRIFT_EL_MIN = 3; // deg — the bob band's floor (never grazes the ground)
 const DRIFT_EL_MAX = 55; // deg — cap the band centre so drift never reads as top-down
@@ -442,6 +446,8 @@ export function StarryNightV3Model() {
   const driftWt = useRef(0); // accumulated wander clock (s × wanderSpeed)
   const driftF = useRef({ x: 0, y: 0, z: 0 }); // the drifting focal (follows the wander path's velocity)
   const driftPrevW = useRef({ x: 0, z: 0 }); // last frame's wander-path position (for its velocity)
+  const driftRampSec = useRef(DRIFT_RAMP_SEC); // this flight's speed-ramp length (idle vs commanded)
+  const prevDriftMode = useRef(false); // edge detection for the manual drift mode
   const wasInspecting = useRef(false); // for the leave-inspect timer re-arm (2.14)
   // Every gesture / key / wheel / programmatic flight stamps this: it re-arms the idle
   // timer and cancels an in-flight drift (the drift hands the pose back wherever it is).
@@ -804,9 +810,27 @@ export function StarryNightV3Model() {
     // idle drift (which re-writes the pose per frame). Same #84 rule the Top-Down MODEL
     // gets from its cameraModel check — v3 signals it here instead (5.32).
     cameraCommand.projectionRadiusHold = () => tdReturn.current !== null || driftOn.current;
+    // The drift transport (Space / helicopter button / Orbit header): three-way.
+    // Drift mode ON → off, hold the pose. Mode OFF but an IDLE flight is up → stop
+    // that flight + restart the idle timer (pressing "stop" during an idle drift must
+    // not flip the mode on). Otherwise → mode ON (immediate ramped takeoff, handled by
+    // the useFrame edge).
+    cameraCommand.toggleDrift = () => {
+      const s = useSceneStore.getState();
+      if (s.driftMode) {
+        s.setDriftMode(false);
+      } else if (driftOn.current) {
+        driftOn.current = false;
+        lastInput.current = clockNow.current;
+        s.setDriftFlying(false);
+      } else {
+        s.setDriftMode(true);
+      }
+    };
     return () => {
       cameraCommand.toggleTopDownInModel = null;
       cameraCommand.projectionRadiusHold = null;
+      cameraCommand.toggleDrift = null;
     };
   }, [mode, gl, markInput]);
 
@@ -961,20 +985,13 @@ export function StarryNightV3Model() {
       ) {
         resetToDefault();
       }
-      // Space = the drift transport (user 2026-07-16, watchlist 6.5): OFF → enable AND
-      // take off NOW (lastInput is backdated past any delay, so the next frame engages —
-      // no waiting out the idle timer); ON → disable, camera stays where the drift left
-      // it. Same state as the Orbit header transport + the Idle Drift switch. NOTE: no
-      // markInput() here — that would re-arm the timer we're deliberately bypassing.
+      // Space = the drift transport (rounds 7–8): the shared three-way toggle — see
+      // cameraCommand.toggleDrift (registered above; the helicopter button and the
+      // Orbit header transport dispatch there too). NOTE: no markInput() here — a
+      // commanded takeoff must not re-arm the very timer it bypasses.
       if (e.code === "Space" && !e.repeat && !isTypingTarget(e)) {
         e.preventDefault(); // keep the page from scrolling
-        const st = useSceneStore.getState();
-        if (st.snv3.autoDrift) {
-          st.setSnv3({ autoDrift: false });
-        } else {
-          st.setSnv3({ autoDrift: true });
-          lastInput.current = -1e9; // "idle forever" — engage on the next frame
-        }
+        cameraCommand.toggleDrift?.();
       }
     };
     const onKeyUp = (e: KeyboardEvent) => {
@@ -1686,29 +1703,19 @@ export function StarryNightV3Model() {
       markCameraActivity("pan");
     }
 
-    // ---- Idle drift (behaviour 2): leave the camera alone for idleDelaySec (with the
-    // Auto Drift toggle on) and it eases into the Drift model's motion from the CURRENT
-    // pose — azimuth revolve + focal wander + elevation bob, at the current distance.
+    // ---- Drift (behaviour 2, reworked 2026-07-16): TWO ways into the same flight.
+    // Drift MODE (st.driftMode; Space / helicopter button / Drift header switch) —
+    // the camera flies until told otherwise: a manual adjustment pauses it and it
+    // eases back in DRIFT_RESUME_SEC after release. IDLE drift (snv3.idleDrift, the
+    // preference) — kicks in after idleDelaySec of no input; an intervention stops
+    // it and the full timer starts over.
     const v3 = st.snv3;
-    // Never drift out of: top-down (a deliberately parked plan view), or an open
-    // inspection (drill cards / a selected building) — the user is READING; the idle
-    // timer doesn't see reading, and flying away from the framed arcs mid-read would
-    // be jarring. Leaving the inspection RE-ARMS the timer (2.14): the idle countdown
-    // starts fresh from the close, instead of a long read counting as "idle" and the
-    // drift firing the moment the cards shut.
-    const inspecting = st.columnCursor >= 0 || st.selectedBuildingId !== null;
-    if (wasInspecting.current && !inspecting) lastInput.current = state.clock.elapsedTime;
-    wasInspecting.current = inspecting;
-    if (!v3.autoDrift || tdReturn.current !== null || inspecting) {
-      driftOn.current = false;
-    } else if (
-      !driftOn.current &&
-      state.clock.elapsedTime - lastInput.current >= Math.max(2, v3.idleDelaySec)
-    ) {
-      // Engage: anchor at the current pose so the motion starts CONTINUOUS — azimuth /
-      // radius / focal pick up exactly where the camera rests; only the elevation eases
-      // (over DRIFT_EASE_SEC) into its bob band.
+    // Engage a flight: anchor at the current pose so the motion starts CONTINUOUS —
+    // azimuth / radius / focal pick up exactly where the camera rests; only the
+    // elevation eases (over the flight's ramp) into its bob band.
+    const engage = (rampSec: number) => {
       driftOn.current = true;
+      driftRampSec.current = rampSec;
       driftT.current = 0;
       driftWt.current = 0;
       c.getPosition(_eye);
@@ -1736,6 +1743,31 @@ export function StarryNightV3Model() {
         x: CITY_CENTER.x + roam0 * driftWander1(0, ph0, 0),
         z: CITY_CENTER.z + roam0 * driftWander1(0, ph0, 2.1),
       };
+    };
+    // Drift-mode edges: ON (from wherever) backdates the idle stamp so takeoff is
+    // immediate; OFF holds the pose right where the flight left it.
+    if (st.driftMode !== prevDriftMode.current) {
+      prevDriftMode.current = st.driftMode;
+      if (st.driftMode) lastInput.current = -1e9;
+      else driftOn.current = false;
+    }
+    // Never drift during: top-down (a deliberately parked plan view), or an open
+    // inspection (drill cards / a selected building) — the user is READING, and flying
+    // away from the framed arcs mid-read would be jarring. Leaving the inspection
+    // re-arms the clock (2.14): drift MODE eases back in after the short resume beat;
+    // the idle path waits its full delay again.
+    const inspecting = st.columnCursor >= 0 || st.selectedBuildingId !== null;
+    if (wasInspecting.current && !inspecting) lastInput.current = state.clock.elapsedTime;
+    wasInspecting.current = inspecting;
+    if (tdReturn.current !== null || inspecting) {
+      driftOn.current = false;
+    } else if (!driftOn.current) {
+      const idleFor = state.clock.elapsedTime - lastInput.current;
+      if (st.driftMode) {
+        if (idleFor >= DRIFT_RESUME_SEC) engage(DRIFT_RESUME_RAMP_SEC);
+      } else if (v3.idleDrift && idleFor >= Math.max(2, v3.idleDelaySec)) {
+        engage(DRIFT_RAMP_SEC);
+      }
     }
     if (driftOn.current) {
       driftT.current += delta;
@@ -1743,9 +1775,10 @@ export function StarryNightV3Model() {
       const d = st.drift; // feel knobs shared with the Drift model's sliders
       const t = driftT.current;
       // Speed ramp: EVERY rate scales by this, so the drift starts at a standstill at
-      // the current pose and builds to full speed over DRIFT_RAMP_SEC — no pose lerp
-      // anywhere (user round 4: the old blend-to-the-wander-path read as a big glide).
-      const easeIn = Math.min(1, t / DRIFT_RAMP_SEC);
+      // the current pose and builds to full speed over this flight's ramp — no pose
+      // lerp anywhere (round 4: the old blend-to-the-wander-path read as a big glide).
+      // The ramp doubles as the "lerp back into drift" after a manual adjustment.
+      const easeIn = Math.min(1, t / driftRampSec.current);
       const ramp = easeIn * easeIn * (3 - 2 * easeIn); // smoothstep 0 → 1
       const tier = CITY_TIERS[st.citySize] + GROUND_APRON_M;
       // Azimuth: steady revolve from the resting bearing — INTEGRATED so a Revolve-
@@ -1801,6 +1834,8 @@ export function StarryNightV3Model() {
         false,
       );
     }
+    // Mirror the flying state for the helicopter button's icon (write-on-change only).
+    if (st.driftFlying !== driftOn.current) st.setDriftFlying(driftOn.current);
 
     const tt = state.clock.elapsedTime;
     if (tt - lastWrite.current >= 0.1) {

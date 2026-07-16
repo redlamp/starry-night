@@ -111,9 +111,10 @@ export const DEFAULT_SNV2: Snv2Config = {
 export const DEFAULT_SNV3: Snv3Config = {
   ...DEFAULT_SNV2,
   // OFF by default (user 2026-07-15, watchlist 6.4: a camera that moves by itself
-  // shouldn't be the out-of-box behaviour); the Orbit header transport or the Idle
-  // Drift switch turns it on.
-  autoDrift: false,
+  // shouldn't be the out-of-box behaviour). Renamed autoDrift → idleDrift 2026-07-16
+  // when the manual drift MODE (Space / helicopter button; runtime driftMode) split
+  // off from this idle PREFERENCE; old saves are mapped in sceneMigration.
+  idleDrift: false,
   idleDelaySec: 30, // 10 read as too eager (user, test round 2026-07-15)
 };
 

@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { useIdle } from "@/lib/useIdle";
 import { Switch } from "@/components/ui/switch";
 import { toggleProjection, toggleAllWireframe } from "@/lib/scene/cameraView";
+import { cameraCommand } from "@/lib/scene/cameraCommand";
 import { Eye, MapPin, Move } from "lucide-react";
 import { getCameraModelMeta } from "@/components/scene/camera-models/catalog";
 import type { CameraModelId } from "@/lib/state/sceneStore";
@@ -143,10 +144,11 @@ const MODEL_GUIDE: Record<CameraModelId, GuideSpec> = {
       { cap: "W A S D", label: "Move", action: "pan" },
       { cap: "Q / E", label: "Down / Up" },
       { cap: "T", label: "Top-Down / Back" },
-      { cap: "Space", label: "Drift On / Off" },
       { cap: "R", label: "Reset Camera", action: "reset" },
     ],
-    hotkeys: ["projection", "wireframe", "inspect", "settings"],
+    // "drift" leads the switches so the Space row sits at the bottom of the key block
+    // (user 2026-07-16) — a live switch, not just a keycap reference.
+    hotkeys: ["drift", "projection", "wireframe", "inspect", "settings"],
   },
   snv2: {
     mouse: [
@@ -227,15 +229,27 @@ const MODEL_GUIDE: Record<CameraModelId, GuideSpec> = {
 // Toggle rows under the gestures: the keyboard shortcut (desktop only) + label + a live Switch wired
 // to the SAME store state the key flips, so the card doubles as a control surface. On touch the keycap
 // is hidden (no keyboard) but the label + switch stay. Keys mirror the app's real shortcuts.
-type HotkeyId = "autoOrbit" | "projection" | "showPin" | "zoom" | "settings" | "wireframe" | "inspect";
+type HotkeyId =
+  | "autoOrbit"
+  | "drift"
+  | "projection"
+  | "showPin"
+  | "zoom"
+  | "settings"
+  | "wireframe"
+  | "inspect";
+// Row order here IS the render order (rows.filter preserves it): Space, P, I, H, F
+// for the SNC sheets (user 2026-07-16); the map-only rows (Show Pin / Z) slot before
+// Settings on the sheets that include them.
 const HOTKEYS: { k?: string; label: string; icon?: string; id: HotkeyId }[] = [
+  { k: "Space", label: "Drift", id: "drift" }, // v3: sits right under the keys group
   { k: "Space", label: "Auto-Orbit", id: "autoOrbit" },
   { k: "P", label: "Perspective / Ortho", id: "projection" },
-  { k: "F", label: "Wireframe", id: "wireframe" },
   { k: "I", label: "Inspect Buildings", id: "inspect" },
   { label: "Show Pin", icon: "pin", id: "showPin" }, // no keycap — `i` is now Inspect (global)
   { k: "Z", label: "Zoom", id: "zoom" },
   { k: "H", label: "Settings", id: "settings" },
+  { k: "F", label: "Wireframe", id: "wireframe" },
 ];
 
 function Glyph({
@@ -352,6 +366,9 @@ function KeyRows({ rows, active }: { rows: KeyRow[]; active: CameraAction | null
 function HotkeyToggles({ showKeys, ids }: { showKeys: boolean; ids: HotkeyId[] }) {
   const orbitPaused = useSceneStore((s) => s.orbitPaused);
   const setOrbitPaused = useSceneStore((s) => s.setOrbitPaused);
+  const driftMode = useSceneStore((s) => s.driftMode);
+  const setDriftMode = useSceneStore((s) => s.setDriftMode);
+  const driftFlying = useSceneStore((s) => s.driftFlying);
   const isOrtho = useSceneStore((s) => s.projection === "orthographic");
   const showPin = useSceneStore((s) => s.showFocalIndicator);
   const setShowPin = useSceneStore((s) => s.setShowFocalIndicator);
@@ -367,6 +384,12 @@ function HotkeyToggles({ showKeys, ids }: { showKeys: boolean; ids: HotkeyId[] }
 
   const state: Record<HotkeyId, { on: boolean; toggle: (v: boolean) => void }> = {
     autoOrbit: { on: !orbitPaused, toggle: (v) => setOrbitPaused(!v) },
+    // The v3 drift transport — same three-way as Space / the helicopter button (a
+    // "stop" during an idle-drift flight must not flip the mode on).
+    drift: {
+      on: driftMode || driftFlying,
+      toggle: () => (cameraCommand.toggleDrift ?? (() => setDriftMode(!driftMode)))(),
+    },
     projection: { on: isOrtho, toggle: () => toggleProjection() },
     wireframe: { on: allWireframe, toggle: () => toggleAllWireframe() },
     inspect: { on: inspectMode, toggle: (v) => setInspectMode(v) },
