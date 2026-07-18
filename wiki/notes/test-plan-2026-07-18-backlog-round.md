@@ -51,6 +51,14 @@ it doesn't hot-reload the panel):
    (school keeps the Education blue). Icons come from the resident-details
    glyph set, mapped per industry by its dominant profession.
 
+## Feedback round 2 - fixes to retest (commit `5fc8fe1`)
+
+1. [ ] Search results no longer crop at 50: a "Show more" row grows the list
+   by 50 (the browse tabs already paged; the crop was search-only)
+2. [ ] Companies - sort By Industry: an "All Industries" sub-menu appears,
+   items shown with each industry's icon + hue; picking one narrows the
+   list. Switching the sort away clears the filter (no invisible narrowing)
+
 ## 1. Full-capacity city framing (#96)
 
 Issue: https://github.com/redlamp/starry-night/issues/96 · Branch: `feat/full-city-framing`
