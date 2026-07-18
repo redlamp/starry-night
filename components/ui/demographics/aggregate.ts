@@ -146,7 +146,17 @@ export function aggregateDemographics(
       population: approxMagnitude(truePop),
       listed,
       households: approxMagnitude(truePop / avgHouseholdSize),
-      jobs: approxMagnitude(listed > 0 ? (working / listed) * truePop : 0),
+      // Whole-city jobs come from the canonical #96 figure (sum of full
+      // headcounts) so this header can't contradict the directory masthead;
+      // the employment-rate scale is only a fallback for district slices,
+      // where no canonical figure exists.
+      jobs: approxMagnitude(
+        districtId === "all"
+          ? directory.city.jobs
+          : listed > 0
+            ? (working / listed) * truePop
+            : 0,
+      ),
     },
     scope,
     scale,
