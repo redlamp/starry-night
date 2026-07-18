@@ -98,6 +98,26 @@ it doesn't hot-reload the panel):
 6. [ ] Masthead: city name in normal header styling (no all-caps), with the
    Demographics button on the same line
 
+## Feedback round 5 - scroll fix, VERIFIED LIVE (shipped, tag moved)
+
+The round-3/4 scroll work was wrong twice; this one was verified in a real
+browser before shipping (scratch/scrollProbe.ts, a reusable CDP probe that
+opens the directory, clicks tabs/buttons, and measures the DOM).
+
+Root cause: base-ui's ScrollArea viewport uses height:100%, which resolves as
+auto against a flex-shrunk root - the viewport grew to content height, never
+overflowed, never scrolled; Show More loaded rows into the clipped void. The
+root is now a flex column so the viewport takes its height from flex layout.
+
+Probe evidence: viewport 376px client vs 7,598px content, scrollTop 0 -> 400
+on demand, Show More 100 -> 200 rows with the new rows scroll-reachable, the
+pinned bar clear of the list (list bottom y=765, bar top y=784).
+
+1. [ ] Companies/People/Streets/Buildings/search lists scroll normally
+2. [ ] Show More (now an outline button, "Show More · N left") appends 100
+   rows you can actually scroll to
+3. [ ] Short lists still content-size the card (no stretched empty panel)
+
 ## 1. Full-capacity city framing (#96)
 
 Issue: https://github.com/redlamp/starry-night/issues/96 · Branch: `feat/full-city-framing`
