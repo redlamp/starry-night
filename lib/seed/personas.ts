@@ -135,6 +135,11 @@ export type Business = {
   kind: WorkplaceType;
   buildingId: number;
   employeeIds: PersonaId[];
+  // Full headcount (#96): the listed employees plus the unnamed staff the
+  // directory doesn't sample. Seeded by business id, floored at the listed
+  // count; filled after the employment weave (0 until then). Tenancy-layout
+  // sizing reads this too.
+  totalHeadcount: number;
   // Profession categories this business reads as belonging to ("Mendoza &
   // Partners" should employ paralegals, not bellhops). Employment prefers an
   // affine match; undefined = takes anyone with the right workplace kind.
@@ -166,7 +171,11 @@ export type PersonaDirectory = {
   byWorkBuilding: Map<number, Business[]>;
   names: CityNames;
   lore: CityLoreEntry[];
+  // Listed counts: what the directory actually samples and can browse.
   totals: { personas: number; households: number; businesses: number };
+  // Full-capacity scale (#96): the city the listed directory is a sample of,
+  // derived entirely from the built environment - no rng, recomputes per seed.
+  city: { population: number; households: number; jobs: number; establishments: number };
 };
 
 // --- Tuning ---------------------------------------------------------------------
@@ -182,8 +191,51 @@ const POP_PER_HOUSEHOLD = 22;
 const MAX_HOUSEHOLDS_PER_BUILDING = 8;
 const TARGET_MAX_PERSONAS = 42000;
 
+// Full-capacity scale (#96). The listed directory samples a much larger city;
+// these derive that city's census from the same buildings. PEOPLE_PER_HOUSEHOLD
+// is the census mean (the persona pass already assumes it when estimating).
+const PEOPLE_PER_HOUSEHOLD = 2.4;
+// The economy's jobs figure is the sum of every listed business's full
+// headcount — every work-hosting archetype gets listed businesses, so that
+// sum already IS the building-derived economy. At the 6 km tier it lands
+// near 1.1 jobs per resident: a core-city ratio (DC, Boston), staffed by
+// unlisted in-commuters. Unlisted establishments are smaller outfits, so
+// they average well under the listed businesses' headcounts.
+const MEAN_ESTABLISHMENT_HEADCOUNT = 16;
+
+// A company's staff is mostly unnamed - the directory lists only a few
+// (employeeIds). Estimate the full headcount by kind, hashed from the business
+// id (FNV-1a) so it's stable across passes, floored at the listed count.
+// Moved here from tenancyLayout (where it only sized units) when it became
+// display data (#96); the math must stay byte-identical so unit sizing
+// doesn't shift.
+const HEADCOUNT_RANGES: Partial<Record<WorkplaceType, [number, number]>> = {
+  office: [12, 140],
+  hospital: [40, 220],
+  civic: [10, 70],
+  lab: [8, 50],
+  studio: [4, 24],
+  school: [20, 90],
+  restaurant: [6, 34],
+  retail: [3, 20],
+  shop: [2, 14],
+  factory: [24, 140],
+  warehouse: [8, 44],
+};
+function fullHeadcount(biz: Business): number {
+  const [lo, hi] = HEADCOUNT_RANGES[biz.kind] ?? [4, 20];
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < biz.id.length; i++) {
+    h ^= biz.id.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  const t = (h >>> 0) / 4294967296;
+  return Math.max(biz.employeeIds.length, lo + Math.floor(t * (hi - lo)));
+}
+
 // Residential capacity by archetype — mirrors population.ts's occupancy story.
-const RESIDENTIAL_ARCHETYPES: ReadonlySet<Archetype> = new Set([
+// Exported for the UI's district/street capacity rollups (#96).
+export const RESIDENTIAL_ARCHETYPES: ReadonlySet<Archetype> = new Set([
   "residential-tower",
   "mid-rise",
   "low-rise",
@@ -581,15 +633,18 @@ function* buildDirectorySteps(
 
   // Global soft cap: estimate the featured count, derive one scale factor.
   let estimated = 0;
+  let cityPopulation = 0; // full residential capacity (#96), not the listed sample
   const rawHouseholds = new Map<number, number>();
   for (const b of buildings) {
     if (!RESIDENTIAL_ARCHETYPES.has(b.archetype)) continue;
+    const capacity = buildingPopulation(b);
+    cityPopulation += capacity;
     const n = Math.max(
       1,
-      Math.min(MAX_HOUSEHOLDS_PER_BUILDING, Math.round(buildingPopulation(b) / POP_PER_HOUSEHOLD)),
+      Math.min(MAX_HOUSEHOLDS_PER_BUILDING, Math.round(capacity / POP_PER_HOUSEHOLD)),
     );
     rawHouseholds.set(b.id, n);
-    estimated += n * 2.4;
+    estimated += n * PEOPLE_PER_HOUSEHOLD;
   }
   const hhScale = estimated > TARGET_MAX_PERSONAS ? TARGET_MAX_PERSONAS / estimated : 1;
 
@@ -1016,6 +1071,7 @@ function* buildDirectorySteps(
         kind,
         buildingId: b.id,
         employeeIds: [],
+        totalHeadcount: 0,
         affinity,
         titleAffinity,
       };
@@ -1085,6 +1141,7 @@ function* buildDirectorySteps(
         kind: "school",
         buildingId: site.id,
         employeeIds: [],
+        totalHeadcount: 0,
         studentIds: [],
         schoolTier,
         // Teachers/aides/admin route here via kind matching; no title gate.
@@ -1492,6 +1549,18 @@ function* buildDirectorySteps(
   }
   dirBuildProgress = 0.95;
 
+  // Full headcounts (#96): after the employment weave, so the floor at the
+  // listed count holds. Their sum is the economy-wide jobs figure.
+  let jobs = 0;
+  for (const biz of businesses.values()) {
+    biz.totalHeadcount = fullHeadcount(biz);
+    jobs += biz.totalHeadcount;
+  }
+  const establishments = Math.max(
+    businesses.size,
+    Math.round(jobs / MEAN_ESTABLISHMENT_HEADCOUNT),
+  );
+
   const directory: PersonaDirectory = {
     personas,
     households,
@@ -1504,6 +1573,12 @@ function* buildDirectorySteps(
       personas: personas.size,
       households: households.length,
       businesses: businesses.size,
+    },
+    city: {
+      population: Math.round(cityPopulation),
+      households: Math.round(cityPopulation / PEOPLE_PER_HOUSEHOLD),
+      jobs: Math.round(jobs),
+      establishments,
     },
   };
 

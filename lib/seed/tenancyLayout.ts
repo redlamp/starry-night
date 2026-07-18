@@ -98,33 +98,6 @@ function homeFloor(index: number, count: number, floors: number): number {
   return 1 + Math.floor((index / count) * (Math.max(2, floors) - 1));
 }
 
-// A company's staff is mostly unnamed — the directory only features a few
-// (employeeIds). For SIZING, estimate a full headcount by kind, seeded by the
-// business id so it's stable, floored at the featured count (user 24).
-function estHeadcount(biz: Business): number {
-  const RANGES: Partial<Record<WorkplaceType, [number, number]>> = {
-    office: [12, 140],
-    hospital: [40, 220],
-    civic: [10, 70],
-    lab: [8, 50],
-    studio: [4, 24],
-    school: [20, 90],
-    restaurant: [6, 34],
-    retail: [3, 20],
-    shop: [2, 14],
-    factory: [24, 140],
-    warehouse: [8, 44],
-  };
-  const [lo, hi] = RANGES[biz.kind] ?? [4, 20];
-  let h = 2166136261 >>> 0;
-  for (let i = 0; i < biz.id.length; i++) {
-    h ^= biz.id.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  const t = (h >>> 0) / 4294967296;
-  return Math.max(biz.employeeIds.length, lo + Math.floor(t * (hi - lo)));
-}
-
 // A bay-aligned unit on one face, extended inward by `depth`. Face ids match the
 // cityInstanced shader: 0=+X, 1=-X, 2=+Z, 3=-Z. Bays run along Z for X-faces and
 // along X for Z-faces (matching the shader's cell mapping).
@@ -216,7 +189,9 @@ export function tenancyLayout(
   // several), distributed up the building.
   const workStart = hasShops && retail.length > 0 ? 1 : 0;
   work.forEach((biz, i) => {
-    const emp = estHeadcount(biz);
+    // Full headcount comes from the directory build now (#96) — same seeded
+    // estimate this file used to own, so unit sizing is unchanged.
+    const emp = biz.totalHeadcount;
     const floor = Math.min(
       floors - 1,
       Math.max(workStart, Math.round(((i + 0.5) / Math.max(1, work.length)) * (floors - 1))),

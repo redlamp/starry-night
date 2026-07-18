@@ -7,11 +7,13 @@ import { generateCity, type Building } from "@/lib/seed/cityGen";
 import type { District } from "@/lib/seed/district";
 import {
   buildPersonaDirectory,
+  RESIDENTIAL_ARCHETYPES,
   type PersonaDirectory,
   type Persona,
   type Business,
   type Household,
 } from "@/lib/seed/personas";
+import { buildingPopulation } from "@/lib/seed/population";
 import type { CityShapeSetting } from "@/lib/seed/cityShape";
 import type { CityNames } from "@/lib/seed/naming";
 
@@ -31,7 +33,8 @@ export type RoadInfo = {
 export type DistrictAgg = {
   district: District;
   properName: string;
-  residentCount: number;
+  residentCount: number; // listed residents — the browsable sample
+  populationEst: number; // full residential capacity (#96)
   companyCount: number;
   // Streets serving this district's addressed buildings, busiest first.
   streets: Array<{ roadId: string; name: string; buildingCount: number }>;
@@ -44,7 +47,8 @@ export type StreetAgg = {
   road: RoadInfo;
   buildingIds: number[]; // in address order (a walk down the street)
   companies: Business[];
-  residentCount: number;
+  residentCount: number; // listed residents — the browsable sample
+  populationEst: number; // full residential capacity (#96)
   residentsSample: Persona[]; // capped — columns show "N residents · sample"
   districts: District[]; // districts the street's buildings sit in
 };
@@ -119,6 +123,15 @@ function buildEntityIndexes(
       (homeBuildingsByDistrict.get(b.districtId) ?? 0) + 1,
     );
   }
+  // Full residential capacity per district (#96) — building-derived, one pass.
+  const populationByDistrict = new Map<string, number>();
+  for (const b of city.buildings) {
+    if (!RESIDENTIAL_ARCHETYPES.has(b.archetype)) continue;
+    populationByDistrict.set(
+      b.districtId,
+      (populationByDistrict.get(b.districtId) ?? 0) + buildingPopulation(b),
+    );
+  }
   const companiesByDistrict = new Map<string, number>();
   for (const biz of directory.businesses.values()) {
     const b = buildingById.get(biz.buildingId);
@@ -148,6 +161,7 @@ function buildEntityIndexes(
       district,
       properName: names.districtNames.get(districtId) ?? district.displayName,
       residentCount: residentsByDistrict.get(districtId) ?? 0,
+      populationEst: Math.round(populationByDistrict.get(districtId) ?? 0),
       companyCount: companiesByDistrict.get(districtId) ?? 0,
       streets,
       namedBuildings: namedByDistrict.get(districtId) ?? [],
@@ -162,12 +176,14 @@ function buildEntityIndexes(
     const companies: Business[] = [];
     const residentsSample: Persona[] = [];
     let residentCount = 0;
+    let populationEst = 0;
     const districts = new Map<string, District>();
     for (const buildingId of buildingIds) {
       const b = buildingById.get(buildingId);
       if (b) {
         const d = districtById.get(b.districtId);
         if (d) districts.set(d.id, d);
+        if (RESIDENTIAL_ARCHETYPES.has(b.archetype)) populationEst += buildingPopulation(b);
       }
       for (const biz of directory.byWorkBuilding.get(buildingId) ?? []) companies.push(biz);
       for (const hh of directory.byHomeBuilding.get(buildingId) ?? []) {
@@ -185,6 +201,7 @@ function buildEntityIndexes(
       buildingIds,
       companies,
       residentCount,
+      populationEst: Math.round(populationEst),
       residentsSample,
       districts: [...districts.values()],
     };
