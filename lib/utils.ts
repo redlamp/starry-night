@@ -5,6 +5,17 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+// Round a count to a friendly, obviously-approximate magnitude (~2 significant
+// figures) — "~1,400" reads as an estimate, not a census. Used by the
+// demographics report's Full City scope, where listed distributions are scaled
+// up to the whole-city population.
+export function approxCount(n: number): number {
+  if (!Number.isFinite(n) || n <= 0) return 0
+  if (n < 100) return Math.round(n / 5) * 5
+  const mag = Math.pow(10, Math.floor(Math.log10(n)) - 1)
+  return Math.round(n / mag) * mag
+}
+
 // Inputs that never accept typed text. base-ui Slider thumbs carry a hidden
 // `<input type="range">` that keeps focus after a drag — treating any INPUT as
 // "typing" left every hotkey dead until the user clicked something focusable.
