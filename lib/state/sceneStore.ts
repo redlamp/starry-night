@@ -10,6 +10,10 @@ import {
   setDensityProfile as setDensityProfileModule,
   type DensityProfile,
 } from "@/lib/seed/density";
+import {
+  setNamingRegion as setNamingRegionModule,
+  type NamingRegion,
+} from "@/lib/seed/naming";
 import type { SketchTensorSource } from "@/lib/sketch/orientationField";
 import type { FlightClass } from "@/lib/seed/flights";
 
@@ -98,7 +102,9 @@ export {
   DEFAULT_ORTHO_SIZE,
   DEFAULT_PROJECTION,
   DEFAULT_PERSP_RADIUS,
+  DEFAULT_NAMING_REGION,
 } from "./sceneDefaults";
+export type { NamingRegion } from "@/lib/seed/naming";
 
 export { hasSavedQualityTier } from "./sceneMigration";
 
@@ -162,6 +168,7 @@ import {
   DEFAULT_ORTHO_SIZE,
   DEFAULT_PROJECTION,
   DEFAULT_DENSITY_PROFILE,
+  DEFAULT_NAMING_REGION,
 } from "./sceneDefaults";
 import {
   readSavedConfig,
@@ -262,6 +269,7 @@ type AnySettingEntry =
   | SettingEntry<"liveViewLink">
   | SettingEntry<"fieldDeviation">
   | SettingEntry<"densityProfile">
+  | SettingEntry<"namingRegion">
   | SettingEntry<"antialias">
   | SettingEntry<"dprCap">
   | SettingEntry<"adaptive">
@@ -350,6 +358,9 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "fieldDeviation", defaultValue: 1.5, persist: true },
   // Population profile (#49) — gen input, persisted.
   { key: "densityProfile", defaultValue: DEFAULT_DENSITY_PROFILE, persist: true },
+  // Regional street-naming pack (#90) — gen input (naming layer only, no
+  // layout regen), persisted. Default "us" reproduces the pre-#90 naming.
+  { key: "namingRegion", defaultValue: DEFAULT_NAMING_REGION, persist: true },
   // Perf overrides (user 2026-06-13): MSAA off by default; dpr cap null = auto (tier).
   { key: "antialias", defaultValue: false as const, persist: true },
   { key: "dprCap", defaultValue: null as SceneState["dprCap"], persist: true },
@@ -859,6 +870,11 @@ type SceneState = {
   // densityProfile). Transient — never persisted.
   densityProfileDraft: DensityProfile | null;
   setDensityProfileDraft: (draft: DensityProfile | null) => void;
+  // Regional street-naming pack (#90) — gen input for the naming layer only
+  // (buildCityNames/roadQueryFor; does not touch layout). Default "us" is
+  // byte-identical to the naming this project has always produced.
+  namingRegion: NamingRegion;
+  setNamingRegion: (namingRegion: NamingRegion) => void;
   // Ambient traffic (research D) — opt-in car head/tail-lights.
   traffic: typeof DEFAULT_TRAFFIC;
   setTraffic: (patch: Partial<typeof DEFAULT_TRAFFIC>) => void;
@@ -1152,6 +1168,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setDensityProfile: (patch) => set((s) => ({ densityProfile: { ...s.densityProfile, ...patch } })),
   densityProfileDraft: null,
   setDensityProfileDraft: (densityProfileDraft) => set({ densityProfileDraft }),
+  namingRegion: DEFAULT_NAMING_REGION,
+  setNamingRegion: (namingRegion) => set({ namingRegion }),
   traffic: DEFAULT_TRAFFIC,
   setTraffic: (patch) => set((s) => ({ traffic: { ...s.traffic, ...patch } })),
   flights: DEFAULT_FLIGHTS,
@@ -1508,4 +1526,11 @@ useSceneStore.subscribe((s, prev) => {
 setDensityProfileModule(useSceneStore.getState().densityProfile);
 useSceneStore.subscribe((s, prev) => {
   if (s.densityProfile !== prev.densityProfile) setDensityProfileModule(s.densityProfile);
+});
+
+// ...and the regional street-naming pack (#90) — naming caches key on
+// namingRegionKey().
+setNamingRegionModule(useSceneStore.getState().namingRegion);
+useSceneStore.subscribe((s, prev) => {
+  if (s.namingRegion !== prev.namingRegion) setNamingRegionModule(s.namingRegion);
 });

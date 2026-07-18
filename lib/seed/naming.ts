@@ -13,6 +13,34 @@ import { LAST_NAMES } from "./personaData";
 // of their own). Everything is derived from the master seed on its own rng
 // streams (`${seed}::names::*`) — generateCity's draw order is never touched,
 // so the city golden stays byte-identical.
+//
+// #90 regional naming packs: STREET naming (nameStreets) is the only region-
+// varying layer — city identity, district names, and building names stay
+// region-invariant (out of scope; the issue is specifically about street
+// names reading as "one US-flavored system"). The module-mirror pattern
+// mirrors setDensityProfile/setFieldDeviation (lib/seed/density.ts,
+// tensorField.ts): the store is the source of truth, gen reads
+// getNamingRegion()/currentPack() at call time, and every naming cache key
+// includes namingRegionKey(). The default "us" pack's pools/logic are
+// UNCHANGED from the pre-#90 hardcoded values and code path — every branch
+// that differs by pack is gated behind pack fields that are no-ops for "us"
+// (undefined `gateStyle` short-circuits before its rng() draw; `useOrdinalGrid`
+// / `guaranteedHighStreet` false for "uk" so "us" alone takes those branches),
+// so the "us" output is byte-identical to before this refactor.
+
+export type NamingRegion = "us" | "uk";
+export const DEFAULT_NAMING_REGION: NamingRegion = "us";
+
+let namingRegionMirror: NamingRegion = DEFAULT_NAMING_REGION;
+export function setNamingRegion(region: NamingRegion): void {
+  namingRegionMirror = region;
+}
+export function getNamingRegion(): NamingRegion {
+  return namingRegionMirror;
+}
+export function namingRegionKey(): string {
+  return namingRegionMirror;
+}
 
 // --- Name part pools ---------------------------------------------------------
 
@@ -60,6 +88,89 @@ const FOUNDER_NAMES = LAST_NAMES;
 
 export const ARTERIAL_SUFFIXES = ["Avenue", "Boulevard", "Road", "Drive", "Parkway"];
 export const MINOR_SUFFIXES = ["Street", "Lane", "Court", "Place", "Way", "Terrace", "Row", "Walk"];
+const US_MID_SUFFIXES = ["Street", "Street", "Way", "Terrace", "Row"];
+
+// --- UK street pack ------------------------------------------------------------
+// Research notes (not caricature): British suburban streets lean heavily on
+// Close/Crescent/Lane (cul-de-sacs and curved rows are the default postwar
+// suburban form) and Terrace/Mews for period housing; "High Street" is the
+// fixed name of the historic principal shopping street in nearly every English
+// town (one guaranteed per city here, not seed-varying — that's how the real
+// thing works). Arterials read as plain Road/Avenue/Drive/"High Road". Bigger
+// roads are M-numbered motorways (M1, M25…); "Bypass" is the genuine British
+// term for a town-skirting expressway (the A34 "Newbury Bypass" is real).
+// The "-gate" suffix (Micklegate, Stonegate, Swinegate, Fossgate…) is York's
+// Viking-derived street vocabulary — Old Norse "gata" ("street"), not the
+// gate-as-in-fence sense — attached directly to a historic root with no
+// space, so it gets its own generator branch rather than the base+suffix
+// pattern the rest of the pack uses.
+export const UK_ARTERIAL_SUFFIXES = ["Road", "Avenue", "Way", "Drive", "High Road"];
+export const UK_MINOR_SUFFIXES = [
+  "Close", "Crescent", "Lane", "Court", "Grove", "Gardens", "Mews", "Terrace",
+];
+const UK_MID_SUFFIXES = ["Street", "Street", "Terrace", "Row", "Walk"];
+export const GATE_ROOTS = [
+  "Mickle", "Goodram", "Foss", "Skelder", "Walm", "Copper", "Fisher", "Monk",
+  "Collier", "Girdler", "Spurrier", "Castle", "Stone", "Swine", "Peter", "Ness",
+];
+
+// A region's street-naming behaviour. `arterialSuffixes`/`minorSuffixes`/
+// `midSuffixes` are picked by the SAME length-aware logic as before (see
+// nameStreets) — only the pool contents vary by pack, so length-aware
+// selection keeps working. `highway` params feed the SAME three-way style
+// roll as the original US code; for the US pack they reproduce the original
+// literal strings exactly.
+export type NamingPack = {
+  region: NamingRegion;
+  arterialSuffixes: readonly string[];
+  minorSuffixes: readonly string[];
+  midSuffixes: readonly string[];
+  useOrdinalGrid: boolean;
+  highway: {
+    label: (n: number) => string;
+    expresswayWord: string;
+    loopWords: readonly string[];
+  };
+  // UK only: a per-road roll onto a dedicated root pool instead of the
+  // base-name + suffix pattern. Undefined for every other pack.
+  gateStyle?: { prob: number; roots: readonly string[] };
+  // UK only: the first non-highway road in a city is always named "High
+  // Street" (a fixed landmark name, not a pool draw).
+  guaranteedHighStreet?: boolean;
+};
+
+const US_PACK: NamingPack = {
+  region: "us",
+  arterialSuffixes: ARTERIAL_SUFFIXES,
+  minorSuffixes: MINOR_SUFFIXES,
+  midSuffixes: US_MID_SUFFIXES,
+  useOrdinalGrid: true,
+  highway: {
+    label: (n) => `Highway ${n}`,
+    expresswayWord: "Expressway",
+    loopWords: ["Loop", "Beltway", "Crosstown", "Bypass"],
+  },
+};
+
+const UK_PACK: NamingPack = {
+  region: "uk",
+  arterialSuffixes: UK_ARTERIAL_SUFFIXES,
+  minorSuffixes: UK_MINOR_SUFFIXES,
+  midSuffixes: UK_MID_SUFFIXES,
+  useOrdinalGrid: false,
+  highway: {
+    label: (n) => `M${n}`,
+    expresswayWord: "Bypass",
+    loopWords: ["Ring Road", "Orbital", "Loop", "Circular"],
+  },
+  gateStyle: { prob: 0.08, roots: GATE_ROOTS },
+  guaranteedHighStreet: true,
+};
+
+const NAMING_PACKS: Record<NamingRegion, NamingPack> = { us: US_PACK, uk: UK_PACK };
+function currentPack(): NamingPack {
+  return NAMING_PACKS[namingRegionMirror];
+}
 
 const ORDINALS = [
   "1st", "2nd", "3rd", "4th", "5th", "6th", "7th", "8th", "9th", "10th",
@@ -263,9 +374,12 @@ function nameStreets(masterSeed: string, roads: NamedRoad[]): Map<string, string
   const rng = seedrandom(`${masterSeed}::names::streets`);
   const used = new Set<string>();
   const out = new Map<string, string>();
+  const pack = currentPack();
 
   // A seeded per-city street "theme": which base-name pools this town leans on.
   // Trees are always in; the rest shuffles per seed so cities feel distinct.
+  // Shared across packs — tree/nature/founder/bird base names read fine for
+  // both regions (see the naming-pack note above the pool constants).
   const pools: string[][] = [TREE_NAMES, FOUNDER_NAMES, NATURE_NAMES, BIRD_NAMES];
   const poolWeights = [0.4, 0.25 + rng() * 0.2, 0.2, rng() < 0.5 ? 0.15 : 0];
 
@@ -282,10 +396,20 @@ function nameStreets(masterSeed: string, roads: NamedRoad[]): Map<string, string
   if (highwayNumber % 2 === 0) highwayNumber += 1;
 
   // Downtown ordinal grid: a run of minor streets gets numbered names instead,
-  // capped so ordinals stay a flavour, not the norm.
-  let ordinalsLeft = Math.floor(rng() * ORDINALS.length);
-  const ordinalSuffix = rng() < 0.5 ? "Street" : "Avenue";
+  // capped so ordinals stay a flavour, not the norm. UK: no numbered grid (not
+  // how British towns name streets) — `useOrdinalGrid` false skips both draws
+  // below, so ordinalsLeft stays 0 and the minor-tier branch never fires.
+  let ordinalsLeft = pack.useOrdinalGrid ? Math.floor(rng() * ORDINALS.length) : 0;
+  const ordinalSuffix = pack.useOrdinalGrid ? (rng() < 0.5 ? "Street" : "Avenue") : "";
   let nextOrdinal = 0;
+  // UK: the first non-highway road in the city is always "High Street" (a
+  // fixed landmark name, not a pool draw — see the naming-pack note above).
+  let highStreetAssigned = false;
+  // UK: cap "-gate" streets at one per GATE_ROOTS entry — real York has a
+  // couple dozen gate streets total in a small historic core, not one per N
+  // city blocks. Once every root has named a street, later rolls fall through
+  // to the ordinary suffix pool instead of stacking numbered duplicates.
+  let gateNamesUsed = 0;
 
   for (const road of roads) {
     let name: string;
@@ -293,14 +417,18 @@ function nameStreets(masterSeed: string, roads: NamedRoad[]): Map<string, string
       const style = rng();
       name =
         style < 0.45
-          ? `Highway ${highwayNumber}`
+          ? pack.highway.label(highwayNumber)
           : style < 0.75
-            ? `${baseName()} Expressway`
-            : `The ${pick(rng, ["Loop", "Beltway", "Crosstown", "Bypass"])}`;
+            ? `${baseName()} ${pack.highway.expresswayWord}`
+            : `The ${pick(rng, pack.highway.loopWords)}`;
       highwayNumber += 2 + 2 * Math.floor(rng() * 3);
       // Highways may share a display name across segments in reality, but our
       // ids are per-polyline; keep them unique for lookups.
       if (used.has(name)) name = `${name} North`;
+      used.add(name);
+    } else if (pack.guaranteedHighStreet && !highStreetAssigned) {
+      name = "High Street";
+      highStreetAssigned = true;
       used.add(name);
     } else if (road.tier === "minor" && ordinalsLeft > 0 && nextOrdinal < ORDINALS.length && rng() < 0.3) {
       name = `${ORDINALS[nextOrdinal++]} ${ordinalSuffix}`;
@@ -318,20 +446,43 @@ function nameStreets(masterSeed: string, roads: NamedRoad[]): Map<string, string
       }
       const suffixes =
         road.tier === "arterial" || length > 1200
-          ? ARTERIAL_SUFFIXES
+          ? pack.arterialSuffixes
           : length > 500
-            ? ["Street", "Street", "Way", "Terrace", "Row"]
-            : MINOR_SUFFIXES;
+            ? pack.midSuffixes
+            : pack.minorSuffixes;
+      // UK "-gate" streets (York-style): a per-road roll onto a dedicated root
+      // pool instead of the base-name + suffix pattern. `pack.gateStyle` is
+      // undefined for every other pack, so `&&` short-circuits before the
+      // rng() draw below — the US stream never sees this call.
+      const useGate =
+        pack.gateStyle !== undefined &&
+        gateNamesUsed < pack.gateStyle.roots.length &&
+        rng() < pack.gateStyle.prob;
+      if (useGate) gateNamesUsed++;
       for (let attempt = 0; ; attempt++) {
-        const candidate = `${baseName()} ${pick(rng, suffixes)}`;
+        const candidate = useGate
+          ? `${pick(rng, pack.gateStyle!.roots)}gate`
+          : `${baseName()} ${pick(rng, suffixes)}`;
         if (!used.has(candidate)) {
           name = candidate;
           used.add(candidate);
           break;
         }
         if (attempt >= 20) {
-          // Pools exhausted (huge cities): extend with a cardinal.
-          name = `${candidate.replace(/ /, " " + pick(rng, ["North", "South", "East", "West"]) + " ")}`;
+          if (useGate) {
+            // GATE_ROOTS is a small, deliberately real pool (16 roots) — a
+            // big city exhausts it fast, and a single cardinal-suffix retry
+            // (unlike the base+suffix branch's huge combinatorial space)
+            // collides often enough to matter. Guarantee uniqueness with a
+            // numbered fallback instead (same contract as uniqueFill above).
+            let n = 2;
+            let fallback = candidate;
+            while (used.has(fallback)) fallback = `${candidate} ${n++}`;
+            name = fallback;
+          } else {
+            // Pools exhausted (huge cities): extend with a cardinal.
+            name = `${candidate.replace(/ /, " " + pick(rng, ["North", "South", "East", "West"]) + " ")}`;
+          }
           used.add(name);
           break;
         }
@@ -550,7 +701,7 @@ export function roadQueryFor(
   shape: CityShapeSetting = "square",
   shapeScale = 1,
 ): RoadQuery {
-  const key = `${masterSeed}::${shape}::${shapeScale}::${maxHalfExtent()}::${sketchKey()}::${fieldDeviation()}::${densityProfileKey()}`;
+  const key = `${masterSeed}::${shape}::${shapeScale}::${maxHalfExtent()}::${sketchKey()}::${fieldDeviation()}::${densityProfileKey()}::${namingRegionKey()}`;
   const hit = roadQueryCache.get(key);
   if (hit) return hit;
   const roads = namedRoadsFor(masterSeed, shape, shapeScale);
@@ -587,7 +738,7 @@ export function buildCityNames(
   shape: CityShapeSetting = "square",
   shapeScale = 1,
 ): CityNames {
-  const key = `${masterSeed}::${shape}::${shapeScale}::${maxHalfExtent()}::${sketchKey()}::${fieldDeviation()}::${densityProfileKey()}`;
+  const key = `${masterSeed}::${shape}::${shapeScale}::${maxHalfExtent()}::${sketchKey()}::${fieldDeviation()}::${densityProfileKey()}::${namingRegionKey()}`;
   const hit = namesCache.get(key);
   if (hit) return hit;
   const result = buildCityNamesImpl(masterSeed, shape, shapeScale);
