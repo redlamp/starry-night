@@ -835,10 +835,26 @@ export function StarryNightV3Model() {
         s.setDriftMode(true);
       }
     };
+    // The compass rose's click affordance (#95): spin the azimuth to north-up (theta =
+    // 180deg, i.e. the eye south of target looking north — see TopDownCompassRose's
+    // bearing math), the shortest way round, keeping elevation/target/distance exactly
+    // where top-down parked them. A pure rotateTo, same decomposed-tween shape as the
+    // dive/return above (never setLookAt's numeric theta tween, which can go the long
+    // way after some orbiting).
+    cameraCommand.rotateNorthUp = () => {
+      const c2 = controls.current;
+      if (!c2) return;
+      markInput();
+      const TWO_PI = Math.PI * 2;
+      const theta0 = Math.PI; // azimuthDeg 180
+      const nearTheta = theta0 + Math.round((c2.azimuthAngle - theta0) / TWO_PI) * TWO_PI;
+      void c2.rotateTo(nearTheta, c2.polarAngle, true);
+    };
     return () => {
       cameraCommand.toggleTopDownInModel = null;
       cameraCommand.projectionRadiusHold = null;
       cameraCommand.toggleDrift = null;
+      cameraCommand.rotateNorthUp = null;
     };
   }, [mode, gl, markInput]);
 
@@ -1844,6 +1860,20 @@ export function StarryNightV3Model() {
     }
     // Mirror the flying state for the helicopter button's icon (write-on-change only).
     if (st.driftFlying !== driftOn.current) st.setDriftFlying(driftOn.current);
+
+    // ---- Top-down compass rose gate (#95): "parked" = banked in top-down (tdReturn
+    // set) AND actually near the overhead pose. A manual tilt-away (LMB-drag, no `t`)
+    // drops the live elevation below TD_STILL_ELEV_DEG even though the banked return
+    // pose stays put (the state machine keeps it so the NEXT `t` re-squares instead of
+    // returning — see the toggle above) — gate on live elevation too, so the rose fades
+    // out on that tilt-away, not just on a full return. Write-on-change, mirroring
+    // driftFlying just above.
+    c.getPosition(_eye);
+    c.getTarget(_tgt);
+    const parkR = _eye.distanceTo(_tgt) || 1e-3;
+    const parkElevDeg = Math.asin(THREE.MathUtils.clamp((_eye.y - _tgt.y) / parkR, -1, 1)) / DEG;
+    const parked = tdReturn.current !== null && parkElevDeg >= TD_STILL_ELEV_DEG;
+    if (st.topDownParked !== parked) st.setTopDownParked(parked);
 
     const tt = state.clock.elapsedTime;
     if (tt - lastWrite.current >= 0.1) {
