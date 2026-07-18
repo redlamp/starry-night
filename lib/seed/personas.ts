@@ -601,6 +601,101 @@ function progressWithin(start: number, end: number, frac: number): number {
   return start + (end - start) * Math.min(1, Math.max(0, frac));
 }
 
+// Least-staffed spread over a fixed pool of businesses, made incremental for
+// the #94 employment-weave fix. The old pass rescanned the whole pool for its
+// minimum staff count and re-filtered the least-staffed list once PER worker —
+// O(employed × pool), the superlinear pocket. This tracks, in pool order,
+// exactly the members at the current minimum count, advancing one "round" at a
+// time (every business fills to 1 before any reaches 2, and so on).
+//
+// Byte-identical draw contract: the pass draws ONE rng() per hire as
+// `leastStaffed[floor(rng() * leastStaffed.length)]`. leastCount() returns
+// that same length and pickLeast(k) the same k-th element in pool order, so the
+// identical business is chosen and every downstream draw is untouched. Counts
+// are read live from employeeIds.length on each round refresh, so a bump routed
+// here from the singleton path (a principal filling a school the teachers also
+// draw from) is reflected too.
+class StaffTracker {
+  private readonly members: Business[];
+  private readonly indexOf: Map<Business, number>;
+  private readonly inSet: boolean[];
+  // Fenwick / BIT over member presence (1-indexed), for O(log n) find-k-th.
+  private readonly tree: number[];
+  private readonly n: number;
+  private present = 0;
+
+  constructor(members: Business[]) {
+    this.members = members;
+    this.n = members.length;
+    this.indexOf = new Map();
+    for (let i = 0; i < this.n; i++) this.indexOf.set(members[i], i);
+    this.inSet = new Array(this.n).fill(false);
+    this.tree = new Array(this.n + 1).fill(0);
+    this.advance();
+  }
+
+  // Count of members currently at the minimum staff count.
+  leastCount(): number {
+    return this.present;
+  }
+
+  // The k-th (0-based) least-staffed member, in pool order.
+  pickLeast(k: number): Business {
+    return this.members[this.findKth(k)];
+  }
+
+  // Record that `biz` just gained a hire (caller already pushed to employeeIds).
+  bump(biz: Business): void {
+    const i = this.indexOf.get(biz);
+    if (i === undefined) return; // not a member of this pool
+    if (!this.inSet[i]) return; // was above the min; a later advance() re-reads it
+    this.inSet[i] = false;
+    this.bitAdd(i, -1);
+    this.present -= 1;
+    if (this.present === 0) this.advance();
+  }
+
+  // Re-seed the present-set to the current live minimum, in pool order.
+  private advance(): void {
+    let min = Infinity;
+    for (let i = 0; i < this.n; i++) {
+      const c = this.members[i].employeeIds.length;
+      if (c < min) min = c;
+    }
+    this.tree.fill(0);
+    this.inSet.fill(false);
+    this.present = 0;
+    for (let i = 0; i < this.n; i++) {
+      if (this.members[i].employeeIds.length === min) {
+        this.inSet[i] = true;
+        this.bitAdd(i, 1);
+        this.present += 1;
+      }
+    }
+  }
+
+  private bitAdd(i: number, delta: number): void {
+    for (let x = i + 1; x <= this.n; x += x & -x) this.tree[x] += delta;
+  }
+
+  // Smallest member index whose inclusive prefix count of present members is
+  // k+1 — the (k+1)-th present member. Binary-lifting on the BIT.
+  private findKth(k: number): number {
+    let target = k + 1;
+    let pos = 0;
+    let step = 1;
+    while (step << 1 <= this.n) step <<= 1;
+    for (; step > 0; step >>= 1) {
+      const next = pos + step;
+      if (next <= this.n && this.tree[next] < target) {
+        pos = next;
+        target -= this.tree[next];
+      }
+    }
+    return pos; // 0-based member index
+  }
+}
+
 // Resumable build (test plan 07-10 §7.5): the exact pass sequence as before,
 // restructured as a generator that yields at chunk boundaries so the idle
 // prewarmer can run it in ~5ms frame slices instead of one ~1.4s hit. Draw
@@ -1320,6 +1415,48 @@ function* buildDirectorySteps(
     const teacherFallback = PROFESSIONS.find(
       (x) => x.title === "High School Teacher" && x.workplaceType === "school",
     );
+    // The preference-ladder pool a worker draws from is a pure function of
+    // (workplaceType, title, category) — the businesses' affinity flags are
+    // static. Memoise it once per distinct signature instead of re-filtering
+    // the whole kind-list for every one of ~tens-of-thousands of workers (that
+    // per-worker triple filter over the kind-list was the #94 superlinear
+    // pocket: cost proportional to employed × businesses). ~201 professions
+    // give a handful of distinct pools, each built once. Pools are also
+    // interned by membership, so Legal- and Finance-office workers — who draw
+    // the SAME physical offices under different keys — share one array and so
+    // one StaffTracker. Draw order is untouched: the same `pool` array (same
+    // members, same order) meets the same single rng() draw as before.
+    const poolCache = new Map<string, Business[]>();
+    const poolIntern = new Map<string, Business[]>();
+    const poolFor = (
+      candidates: Business[],
+      wp: WorkplaceType,
+      title: string,
+      category: ProfessionCategory,
+    ): Business[] => {
+      const key = `${wp} ${title} ${category}`;
+      const cached = poolCache.get(key);
+      if (cached !== undefined) return cached;
+      // Preference ladder: exact title match ("{F} Dental" wants dentists) >
+      // category match (bellhops to the hotel, paralegals to the law firm) >
+      // unmarked businesses > anything with the right workplace kind.
+      const byTitle = candidates.filter((c) => c.titleAffinity?.includes(title));
+      const byCategory = candidates.filter((c) => c.affinity?.includes(category) && !c.titleAffinity);
+      const open = candidates.filter((c) => !c.affinity && !c.titleAffinity);
+      let pool =
+        byTitle.length > 0 ? byTitle : byCategory.length > 0 ? byCategory : open.length > 0 ? open : candidates;
+      // Intern by exact membership (ids in pool order): two filters of the same
+      // candidates in the same order selecting the same ids are byte-identical
+      // arrays; share one object so overlapping pools share one tracker.
+      const sig = `${pool.length}:${pool.map((b) => b.id).join(",")}`;
+      const interned = poolIntern.get(sig);
+      if (interned) pool = interned;
+      else poolIntern.set(sig, pool);
+      poolCache.set(key, pool);
+      return pool;
+    };
+    // One least-staffed tracker per (interned) pool array — see StaffTracker.
+    const trackers = new Map<Business[], StaffTracker>();
     // Stable worker order: persona insertion order is already building-ascending.
     sinceYield = 0;
     let employmentDone = 0;
@@ -1343,35 +1480,45 @@ function* buildDirectorySteps(
       ) {
         p.profession = teacherFallback;
       }
-      // Preference ladder: exact title match ("{F} Dental" wants dentists) >
-      // category match (bellhops to the hotel, paralegals to the law firm) >
-      // unmarked businesses > anything with the right workplace kind.
       const category = p.profession.category;
       const title = p.profession.title;
-      const singleton = SINGLETON_TITLES.has(title);
-      const slotOpen = (c: Business) => !singletonFilled.has(`${c.id}::${title}`);
-      const byTitle = candidates.filter((c) => c.titleAffinity?.includes(title));
-      const byCategory = candidates.filter((c) => c.affinity?.includes(category) && !c.titleAffinity);
-      const open = candidates.filter((c) => !c.affinity && !c.titleAffinity);
-      let pool =
-        byTitle.length > 0 ? byTitle : byCategory.length > 0 ? byCategory : open.length > 0 ? open : candidates;
-      if (singleton) {
-        const freeInPool = pool.filter(slotOpen);
+      const basePool = poolFor(candidates, p.profession.workplaceType, title, category);
+      if (SINGLETON_TITLES.has(title)) {
+        // Singleton titles ("School Principal", one per school) refine the pool
+        // by an evolving `singletonFilled` set, so they can't ride the static
+        // tracker — take the original O(pool) path (rare: ~one per school).
+        const slotOpen = (c: Business) => !singletonFilled.has(`${c.id}::${title}`);
+        const freeInPool = basePool.filter(slotOpen);
         const freeAnywhere = candidates.filter(slotOpen);
         // Every slot taken AND no teacher fallback — tolerate the duplicate
         // rather than crash on an empty pool.
-        pool = freeInPool.length > 0 ? freeInPool : freeAnywhere.length > 0 ? freeAnywhere : pool;
+        const pool = freeInPool.length > 0 ? freeInPool : freeAnywhere.length > 0 ? freeAnywhere : basePool;
+        let minStaff = Infinity;
+        for (const c of pool) minStaff = Math.min(minStaff, c.employeeIds.length);
+        const leastStaffed = pool.filter((c) => c.employeeIds.length === minStaff);
+        const biz = leastStaffed[Math.floor(rng() * leastStaffed.length)];
+        singletonFilled.add(`${biz.id}::${title}`);
+        p.businessId = biz.id;
+        biz.employeeIds.push(p.id);
+        // Keep the interned pool's tracker (built for the ordinary teachers who
+        // share these buildings) in step with this off-tracker bump.
+        trackers.get(basePool)?.bump(biz);
+        continue;
       }
       // Spread hires: within the chosen tier, staff the LEAST-staffed
       // businesses first (user 2026-07-08: "lots of companies have 0 staff")
       // — every business fills to 1 before any gets its 2nd, and so on.
-      let minStaff = Infinity;
-      for (const c of pool) minStaff = Math.min(minStaff, c.employeeIds.length);
-      const leastStaffed = pool.filter((c) => c.employeeIds.length === minStaff);
-      const biz = leastStaffed[Math.floor(rng() * leastStaffed.length)];
-      if (singleton) singletonFilled.add(`${biz.id}::${title}`);
+      let tracker = trackers.get(basePool);
+      if (!tracker) {
+        tracker = new StaffTracker(basePool);
+        trackers.set(basePool, tracker);
+      }
+      // Same draw as the old `leastStaffed[floor(rng()*len)]`: same count, same
+      // pool-order k-th element — but O(log pool) instead of O(pool) per hire.
+      const biz = tracker.pickLeast(Math.floor(rng() * tracker.leastCount()));
       p.businessId = biz.id;
       biz.employeeIds.push(p.id);
+      tracker.bump(biz);
     }
   }
   dirBuildProgress = 0.8;
