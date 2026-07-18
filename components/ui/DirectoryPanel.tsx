@@ -109,11 +109,12 @@ const DISTRICT_SORTS: Array<{ value: DistrictSort; label: string }> = [
 // sort since "who employs the most people" was the issue's motivating case.
 type CompanySort = "staff" | "name" | "kind" | "district";
 
+// Short labels so the three filter selects share one line (user 2026-07-18).
 const COMPANY_SORTS: Array<{ value: CompanySort; label: string }> = [
-  { value: "staff", label: "By Staff" },
-  { value: "name", label: "By Name" },
-  { value: "kind", label: "By Industry" },
-  { value: "district", label: "By District" },
+  { value: "staff", label: "Staff" },
+  { value: "name", label: "Name" },
+  { value: "kind", label: "Industry" },
+  { value: "district", label: "District" },
 ];
 
 // Initial page + per-click increment for every per-kind browse list (people
@@ -574,10 +575,22 @@ export function DirectorySection() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 pt-1 tabular-nums">
-      {/* Masthead: city name in caps, icon stats below (user 2026-07-08). */}
+      {/* Masthead: city name in normal header styling with the Demographics
+          affordance on the same line (user 2026-07-18); icon stats below. */}
       <div className="flex shrink-0 flex-col gap-1">
-        <div className="text-base font-semibold tracking-[0.14em] uppercase">
-          {directory.names.city.name}
+        <div className="flex items-center justify-between gap-2">
+          <div className="truncate text-base font-semibold">{directory.names.city.name}</div>
+          <IconTip label="Demographics">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setDemographicsOpen(true)}
+              className="h-7 shrink-0 gap-1.5 text-xs"
+            >
+              <BarChart3 className="size-3.5" aria-hidden />
+              Demographics
+            </Button>
+          </IconTip>
         </div>
         {/* Full-capacity city first, listed sample second (#96): the
             directory is a detailed slice of a much larger town. */}
@@ -599,17 +612,6 @@ export function DirectorySection() {
                 · {directory.totals.businesses.toLocaleString()} listed
               </span>
             </span>
-          </IconTip>
-          <IconTip label="Demographics">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setDemographicsOpen(true)}
-              className="ml-auto h-7 gap-1.5 text-xs"
-            >
-              <BarChart3 className="size-3.5" aria-hidden />
-              Demographics
-            </Button>
           </IconTip>
         </div>
       </div>
@@ -651,18 +653,18 @@ export function DirectorySection() {
         </Tabs>
       </div>
 
-      {/* Both lists cap the VIEWPORT's max-height directly (vh units are
-          always definite). The overlay is max-h-sized, so any height:100%
-          chain resolves to auto and nothing ever scrolls; capping the
-          viewport makes it the real scroll container and keeps the panel
-          content-sized when the list is short. */}
+      {/* Lists size by flex SHRINK against the dock card's max-h (min-h-0 on
+          the ScrollArea root, no grow): short lists keep the card content-
+          sized, long ones scroll inside the visible card. The old vh-math
+          viewport caps overestimated the space once the headers grew, which
+          cropped the last row and hid the pinned Show More (user 2026-07-18). */}
       {trimmedQuery ? (
         // -mr-3 bleeds through ControlDock's own p-3 pr-3 wrapper so the
         // scrollbar sits flush at the card's inner edge, same as the columns'
         // ScrollArea (which has no such outer padding to fight); pr-4 on the
         // content below is the columns' text-to-scrollbar gap (user
         // 2026-07-08: "scrollbar too close to text, and far from edge").
-        <ScrollArea className="-mr-3 **:data-[slot=scroll-area-viewport]:max-h-[calc(100vh-21rem)]">
+        <ScrollArea className="-mr-3 min-h-0 **:data-[slot=scroll-area-viewport]:max-h-full">
           <div className="flex flex-col gap-0.5 pr-4">
             {pagedMatches.total === 0 && (
               <div className="text-muted-foreground px-1 text-sm">
@@ -797,7 +799,7 @@ export function DirectorySection() {
           </div>
 
           {/* -mr-3/pr-4: same edge-and-gap fix as the search list above. */}
-          <ScrollArea className="-mr-3 **:data-[slot=scroll-area-viewport]:max-h-[calc(100vh-24rem)]">
+          <ScrollArea className="-mr-3 min-h-0 **:data-[slot=scroll-area-viewport]:max-h-full">
             <div className="flex flex-col pr-4">
               {[...districtList]
                 .sort((a, b) =>
@@ -1040,16 +1042,20 @@ function CompaniesView({
             {total.toLocaleString()} available
           </span>
         </div>
-        <div className="flex flex-wrap items-center gap-1">
+        {/* Three equal-width selects on one line — "Districts / Staff /
+            Industry" with short display values (user 2026-07-18). */}
+        <div className="flex items-center gap-1">
           {sortedDistricts.length > 1 && (
             <Select value={districtFilter} onValueChange={(v) => setDistrictFilter(v ?? "all")}>
-              <SelectTrigger size="sm" className="w-32">
+              <SelectTrigger size="sm" className="min-w-0 flex-1">
                 <SelectValue>
-                  {(v: string) =>
-                    v === "all"
-                      ? "All Districts"
-                      : (sortedDistricts.find((d) => d.id === v)?.properName ?? "All Districts")
-                  }
+                  {(v: string) => (
+                    <span className="truncate">
+                      {v === "all"
+                        ? "Districts"
+                        : (sortedDistricts.find((d) => d.id === v)?.properName ?? "Districts")}
+                    </span>
+                  )}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
@@ -1062,14 +1068,8 @@ function CompaniesView({
               </SelectContent>
             </Select>
           )}
-          <Select
-            value={sort}
-            onValueChange={(v) => {
-              setSort(v as CompanySort);
-              if (v !== "kind") setIndustryFilter("all");
-            }}
-          >
-            <SelectTrigger size="sm" className="w-28">
+          <Select value={sort} onValueChange={(v) => setSort(v as CompanySort)}>
+            <SelectTrigger size="sm" className="min-w-0 flex-1">
               <SelectValue>
                 {(v: CompanySort) => COMPANY_SORTS.find((o) => o.value === v)?.label ?? "Sort"}
               </SelectValue>
@@ -1082,50 +1082,51 @@ function CompaniesView({
               ))}
             </SelectContent>
           </Select>
-          {/* Industry sub-filter, offered while sorting By Industry (user
-              2026-07-18). Items carry the pill's own icon + hue. */}
-          {sort === "kind" && (
-            <Select
-              value={industryFilter}
-              onValueChange={(v) => setIndustryFilter((v as WorkplaceType | "all") ?? "all")}
-            >
-              <SelectTrigger size="sm" className="w-40">
-                <SelectValue>
-                  {(v: string) =>
-                    v === "all" ? (
-                      "All Industries"
-                    ) : (
-                      <span className="capitalize" style={{ color: WORKPLACE_KIND_COLOR[v as WorkplaceType] }}>
-                        {v}
-                      </span>
-                    )
-                  }
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Industries</SelectItem>
-                {industries.map((k) => {
-                  const Icon = WORKPLACE_KIND_ICON[k];
-                  return (
-                    <SelectItem key={k} value={k}>
-                      <span
-                        className="flex items-center gap-1.5 capitalize"
-                        style={{ color: WORKPLACE_KIND_COLOR[k] }}
-                      >
-                        <Icon aria-hidden className="size-3.5" />
-                        {k}
-                      </span>
-                    </SelectItem>
-                  );
-                })}
-              </SelectContent>
-            </Select>
-          )}
+          {/* Industry filter, always on the line (user 2026-07-18). Items
+              carry the pill's own icon + hue. */}
+          <Select
+            value={industryFilter}
+            onValueChange={(v) => setIndustryFilter((v as WorkplaceType | "all") ?? "all")}
+          >
+            <SelectTrigger size="sm" className="min-w-0 flex-1">
+              <SelectValue>
+                {(v: string) =>
+                  v === "all" ? (
+                    "Industry"
+                  ) : (
+                    <span
+                      className="truncate capitalize"
+                      style={{ color: WORKPLACE_KIND_COLOR[v as WorkplaceType] }}
+                    >
+                      {v}
+                    </span>
+                  )
+                }
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Industries</SelectItem>
+              {industries.map((k) => {
+                const Icon = WORKPLACE_KIND_ICON[k];
+                return (
+                  <SelectItem key={k} value={k}>
+                    <span
+                      className="flex items-center gap-1.5 capitalize"
+                      style={{ color: WORKPLACE_KIND_COLOR[k] }}
+                    >
+                      <Icon aria-hidden className="size-3.5" />
+                      {k}
+                    </span>
+                  </SelectItem>
+                );
+              })}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
       {/* -mr-3/pr-4: same edge-and-gap fix as the other lists in this panel. */}
-      <ScrollArea className="-mr-3 **:data-[slot=scroll-area-viewport]:max-h-[calc(100vh-24rem)]">
+      <ScrollArea className="-mr-3 min-h-0 **:data-[slot=scroll-area-viewport]:max-h-full">
         <div className="flex flex-col gap-0.5 pr-4">
           {total === 0 && (
             <div className="text-muted-foreground px-1 text-sm">No companies match the filters.</div>
@@ -1194,7 +1195,7 @@ function StreetsView({
         <span className="text-sm font-medium">Streets</span>
         <span className="text-muted-foreground text-xs">{total.toLocaleString()} streets</span>
       </div>
-      <ScrollArea className="-mr-3 **:data-[slot=scroll-area-viewport]:max-h-[calc(100vh-24rem)]">
+      <ScrollArea className="-mr-3 min-h-0 **:data-[slot=scroll-area-viewport]:max-h-full">
         <div className="flex flex-col gap-0.5 pr-4">
           {visible.map((row) => (
             <button
@@ -1245,7 +1246,7 @@ function BuildingsView({
         <span className="text-sm font-medium">Buildings</span>
         <span className="text-muted-foreground text-xs">{total.toLocaleString()} buildings</span>
       </div>
-      <ScrollArea className="-mr-3 **:data-[slot=scroll-area-viewport]:max-h-[calc(100vh-24rem)]">
+      <ScrollArea className="-mr-3 min-h-0 **:data-[slot=scroll-area-viewport]:max-h-full">
         <div className="flex flex-col gap-0.5 pr-4">
           {visible.map((row) => (
             <button
@@ -1301,7 +1302,7 @@ function PeopleView({
         <span className="text-sm font-medium">People</span>
         <span className="text-muted-foreground text-xs">{total.toLocaleString()} listed</span>
       </div>
-      <ScrollArea className="-mr-3 **:data-[slot=scroll-area-viewport]:max-h-[calc(100vh-24rem)]">
+      <ScrollArea className="-mr-3 min-h-0 **:data-[slot=scroll-area-viewport]:max-h-full">
         <div className="flex flex-col gap-0.5 pr-4">
           {visible.map((row) => (
             <button

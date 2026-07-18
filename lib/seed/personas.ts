@@ -1,7 +1,7 @@
 import { seededRng } from "./rng";
 import { generateCity, type Building, type Archetype } from "./cityGen";
 import type { DistrictCharacter } from "./district";
-import { buildingPopulation } from "./population";
+import { buildingPopulation, residentialCapacity } from "./population";
 import { buildCityNames, TREE_NAMES, namingRegionKey, type CityNames } from "./naming";
 import { firstNameForBirthYear } from "./nameCohorts";
 import { maxHalfExtent } from "./topology";
@@ -728,15 +728,17 @@ function* buildDirectorySteps(
 
   // Global soft cap: estimate the featured count, derive one scale factor.
   let estimated = 0;
-  let cityPopulation = 0; // full residential capacity (#96), not the listed sample
+  // Full census capacity (#96): every building's mixed-use residential share,
+  // NOT the household-derivation input below (that stays on the untouched
+  // people-equivalent so the featured set never re-rolls).
+  let cityPopulation = 0;
+  for (const b of buildings) cityPopulation += residentialCapacity(b);
   const rawHouseholds = new Map<number, number>();
   for (const b of buildings) {
     if (!RESIDENTIAL_ARCHETYPES.has(b.archetype)) continue;
-    const capacity = buildingPopulation(b);
-    cityPopulation += capacity;
     const n = Math.max(
       1,
-      Math.min(MAX_HOUSEHOLDS_PER_BUILDING, Math.round(capacity / POP_PER_HOUSEHOLD)),
+      Math.min(MAX_HOUSEHOLDS_PER_BUILDING, Math.round(buildingPopulation(b) / POP_PER_HOUSEHOLD)),
     );
     rawHouseholds.set(b.id, n);
     estimated += n * PEOPLE_PER_HOUSEHOLD;

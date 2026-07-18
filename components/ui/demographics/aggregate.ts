@@ -1,11 +1,6 @@
-import {
-  RESIDENTIAL_ARCHETYPES,
-  type PersonaDirectory,
-  type WorkStatus,
-  type CommuteMode,
-} from "@/lib/seed/personas";
+import type { PersonaDirectory, WorkStatus, CommuteMode } from "@/lib/seed/personas";
 import type { Building } from "@/lib/seed/cityGen";
-import { buildingPopulation } from "@/lib/seed/population";
+import { residentialCapacity } from "@/lib/seed/population";
 import { approxMagnitude } from "@/lib/utils";
 
 // Demographics aggregation (#97): one O(n) pass over the directory's personas
@@ -70,11 +65,10 @@ export type DemographicsData = {
 
 export type DistrictOption = { id: string; label: string };
 
-// Whole-city population estimate per district (and total). RESIDENTIAL
-// archetypes only — this must be the same sum as PersonaDirectory.city
-// .population (#96) or the panel contradicts the directory masthead (user
-// 2026-07-18: "way more than the directory's estimated total" — the first cut
-// summed offices/warehouses too).
+// Whole-city population estimate per district (and total). Must be the same
+// census-capacity sum as PersonaDirectory.city.population (#96) or the panel
+// contradicts the directory masthead (user 2026-07-18) — both now use
+// residentialCapacity(), the mixed-use-aware model.
 export function cityPopulationByDistrict(buildings: Building[]): {
   total: number;
   byDistrict: Map<string, number>;
@@ -82,8 +76,8 @@ export function cityPopulationByDistrict(buildings: Building[]): {
   const byDistrict = new Map<string, number>();
   let total = 0;
   for (const b of buildings) {
-    if (!RESIDENTIAL_ARCHETYPES.has(b.archetype)) continue;
-    const pop = buildingPopulation(b);
+    const pop = residentialCapacity(b);
+    if (pop === 0) continue;
     total += pop;
     byDistrict.set(b.districtId, (byDistrict.get(b.districtId) ?? 0) + pop);
   }

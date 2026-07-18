@@ -7,13 +7,12 @@ import { generateCity, type Building } from "@/lib/seed/cityGen";
 import type { District } from "@/lib/seed/district";
 import {
   buildPersonaDirectory,
-  RESIDENTIAL_ARCHETYPES,
   type PersonaDirectory,
   type Persona,
   type Business,
   type Household,
 } from "@/lib/seed/personas";
-import { buildingPopulation } from "@/lib/seed/population";
+import { residentialCapacity } from "@/lib/seed/population";
 import type { CityShapeSetting } from "@/lib/seed/cityShape";
 import type { CityNames } from "@/lib/seed/naming";
 
@@ -123,13 +122,15 @@ function buildEntityIndexes(
       (homeBuildingsByDistrict.get(b.districtId) ?? 0) + 1,
     );
   }
-  // Full residential capacity per district (#96) — building-derived, one pass.
+  // Full census capacity per district (#96) — building-derived, one pass,
+  // mixed-use towers included (recalibrated 2026-07-18).
   const populationByDistrict = new Map<string, number>();
   for (const b of city.buildings) {
-    if (!RESIDENTIAL_ARCHETYPES.has(b.archetype)) continue;
+    const capacity = residentialCapacity(b);
+    if (capacity === 0) continue;
     populationByDistrict.set(
       b.districtId,
-      (populationByDistrict.get(b.districtId) ?? 0) + buildingPopulation(b),
+      (populationByDistrict.get(b.districtId) ?? 0) + capacity,
     );
   }
   const companiesByDistrict = new Map<string, number>();
@@ -183,7 +184,7 @@ function buildEntityIndexes(
       if (b) {
         const d = districtById.get(b.districtId);
         if (d) districts.set(d.id, d);
-        if (RESIDENTIAL_ARCHETYPES.has(b.archetype)) populationEst += buildingPopulation(b);
+        populationEst += residentialCapacity(b);
       }
       for (const biz of directory.byWorkBuilding.get(buildingId) ?? []) companies.push(biz);
       for (const hh of directory.byHomeBuilding.get(buildingId) ?? []) {

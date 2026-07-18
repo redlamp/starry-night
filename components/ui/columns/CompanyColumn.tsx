@@ -44,16 +44,13 @@ export function CompanyColumn({ id, part }: { id: string; part: "pinned" | "rest
           {address ? `${address.number} ${address.street}` : `Building #${biz.buildingId}`}
         </button>
 
-        <div className="flex flex-col gap-1">
-          {/* "N of M", not "N listed of M" — brevity (user 2026-07-18). */}
-          <ColumnStat
-            label="Staff"
-            value={`${biz.employeeIds.length.toLocaleString()} of ${biz.totalHeadcount.toLocaleString()}`}
-          />
-          {biz.schoolTier && (
+        {/* Headcount moved onto the Employees section header (user
+            2026-07-18) — no Staff stat row here. */}
+        {biz.schoolTier && (
+          <div className="flex flex-col gap-1">
             <ColumnStat label="Students" value={students.length.toLocaleString()} />
-          )}
-        </div>
+          </div>
+        )}
       </>
     );
   }
@@ -63,8 +60,15 @@ export function CompanyColumn({ id, part }: { id: string; part: "pinned" | "rest
       {biz.employeeIds.length > 0 && (
         <>
           <div className="flex flex-col gap-0.5">
-            <div className="text-sm font-medium" style={{ color: CONNECTION_COLOR }}>
-              {biz.schoolTier ? "Staff" : "Employees"}
+            {/* "X of Y" rides the section header line — the listed sample of
+                the full headcount (user 2026-07-18). */}
+            <div className="flex items-baseline justify-between gap-2">
+              <div className="text-sm font-medium" style={{ color: CONNECTION_COLOR }}>
+                {biz.schoolTier ? "Staff" : "Employees"}
+              </div>
+              <span className="text-muted-foreground text-xs tabular-nums">
+                {biz.employeeIds.length.toLocaleString()} of {biz.totalHeadcount.toLocaleString()}
+              </span>
             </div>
             {biz.employeeIds.map((pid) => {
               const persona = indexes.directory.personas.get(pid);

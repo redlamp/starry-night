@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -134,15 +135,19 @@ export function FloatingPanel({
 
   if (!pos) return null;
 
-  return (
+  // Portalled to <body>: backdrop-filter only samples up to the nearest
+  // ancestor that itself has a filter/backdrop-filter, and the panel used to
+  // mount inside ControlDock's blurred card — which is why its own blur never
+  // showed (user 2026-07-18: "I'm not seeing the glassier effect").
+  return createPortal(
     <div
       data-camera-obstruction
       role="dialog"
       aria-label={typeof title === "string" ? title : undefined}
       className={cn(
-        // /75 + blur-xl: at /95 the backdrop blur was imperceptible and the
+        // /65 + blur-xl: at /95 the backdrop blur was imperceptible and the
         // panel read as a flat card over the scene (user 2026-07-18).
-        "pointer-events-auto fixed z-50 flex flex-col overflow-hidden rounded-xl border border-border bg-popover/75 text-popover-foreground shadow-2xl backdrop-blur-xl",
+        "pointer-events-auto fixed z-50 flex flex-col overflow-hidden rounded-xl border border-border bg-popover/65 text-popover-foreground shadow-2xl backdrop-blur-xl",
         className,
       )}
       style={{ left: pos.x, top: pos.y, width: size.w, height: size.h }}
@@ -172,6 +177,7 @@ export function FloatingPanel({
             "linear-gradient(135deg, transparent 0 50%, color-mix(in oklab, var(--muted-foreground) 55%, transparent) 50% 60%, transparent 60% 70%, color-mix(in oklab, var(--muted-foreground) 55%, transparent) 70% 80%, transparent 80%)",
         }}
       />
-    </div>
+    </div>,
+    document.body,
   );
 }

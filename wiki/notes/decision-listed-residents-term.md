@@ -30,9 +30,9 @@ Code comments may still say "featured"; user-visible copy says "listed".
 
 All in `PersonaDirectory.city` (lib/seed/personas.ts), derived per seed, no rng:
 
-- **population** - sum of `buildingPopulation()` over residential archetypes (full capacity, not the household-capped persona estimate).
+- **population** - sum of `residentialCapacity()` (lib/seed/population.ts): a census model where tall archetypes are mixed-use (spires 50% residential, narrow towers 70%, office blocks 20%) at a dense-metro housing rate (~25 m² per person). Recalibrated 2026-07-18 - the first cut counted only the three pure-residential archetypes and read far too low (~326k) against a spire-heavy skyline; it now lands ~777k at the 6 km tier. `buildingPopulation()` (the night-traffic people-equivalent) is untouched - traffic, the heat-map, and the featured-household derivation still use it, so nothing re-rolls.
 - **households** - population / 2.4 (same mean the persona pass assumes).
-- **jobs** - sum of every business's `totalHeadcount` (the seeded full-headcount estimate formerly private to tenancy-layout sizing, now first-class on `Business`). Lands near 1.1 jobs per resident - a core-city ratio (DC/Boston), staffed by unlisted in-commuters.
+- **jobs** - sum of every business's `totalHeadcount` (the seeded full-headcount estimate formerly private to tenancy-layout sizing, now first-class on `Business`). ~0.48 jobs per resident after the recalibration - the healthy-city band.
 - **establishments** - jobs / 16, floored at the listed business count; unlisted establishments read as smaller outfits.
 
 Display uses `approxCount()` (lib/utils.ts) - magnitude-scaled rounding so estimates read as census figures ("~325,500"), while listed counts stay exact.

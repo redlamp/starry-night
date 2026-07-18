@@ -31,21 +31,21 @@ it doesn't hot-reload the panel):
    summing offices/warehouses into the estimate (now residential-only) and
    rounding differently (now the same `approxCount` string as the masthead)
 2. [x] (1.2) Company card staff reads "9 of 90"
-3. [ ] (1.7) District/street stat label shortened to "Listed"
-4. [ ] (2.1-2.3) Compass rose: custom two-tone needle, red half = north
+3. [x] (1.7) District/street stat label shortened to "Listed"
+4. [x] (2.1-2.3) Compass rose: custom two-tone needle, red half = north
    (lucide's Compass icon draws its needle at a fixed 45 degrees - it could
    never read as pointing north). Re-run the Section 2 items with this
-5. [ ] (7.3) Pyramid: nonbinary now straddles the center line between men and
+5. [x] (7.3) Pyramid: nonbinary now straddles the center line between men and
    women (two half-bars, one tooltip entry)
-6. [ ] (7.6, 7.**) Chart + tooltip animations disabled - no cells jumping rows
+6. [x] (7.6, 7.**) Chart + tooltip animations disabled - no cells jumping rows
    on filter/scope change; tooltip snaps to the hovered bar instead of
    tweening from the left
-7. [ ] (7.7, 7.*) Floating panel is glassier (backdrop blur actually visible
+7. [x] (7.7, 7.*) Floating panel is glassier (backdrop blur actually visible
    now) and its close control is the shadcn Button
-8. [ ] (7.9) Resize lerp: bar re-layout animation was the lerp - disabled. If
+8. [x] (7.9) Resize lerp: bar re-layout animation was the lerp - disabled. If
    a residual one-frame lag on the chart edges still bothers, flag and I'll
    look at the ResponsiveContainer layer next
-9. [ ] (6, 6.*) LANDED - kind tabs rework merged; Section 6 below is rewritten
+9. [x] (6, 6.*) LANDED - kind tabs rework merged; Section 6 below is rewritten
    for the new design. One call I made over the agent: it kept pills in the
    two-tone work/school colors; I gave each industry its own oklch hue
    (school keeps the Education blue). Icons come from the resident-details
@@ -53,26 +53,50 @@ it doesn't hot-reload the panel):
 
 ## Feedback round 2 - fixes to retest (commit `5fc8fe1`)
 
-1. [ ] Search results no longer crop at 50: a "Show more" row grows the list
+1. [x] Search results no longer crop at 50: a "Show more" row grows the list
    by 50 (the browse tabs already paged; the crop was search-only)
-2. [ ] Companies - sort By Industry: an "All Industries" sub-menu appears,
+2. [x] Companies - sort By Industry: an "All Industries" sub-menu appears,
    items shown with each industry's icon + hue; picking one narrows the
    list. Switching the sort away clears the filter (no invisible narrowing)
 
 ## Feedback round 3 - fixes to retest (commits `a750fa8`, `394c85b`)
 
-1. [ ] Companies header: title + "N available" (updates with filters) on the
+1. [x] Companies header: title + "N available" (updates with filters) on the
    first line, all dropdowns (district / sort / industry) on a second line
 2. [ ] "Show more" is pinned BELOW every list's scroll area - search results,
    companies, streets, buildings, people - always visible at the bottom of
    the card when more rows exist (it was buried at the end of the scrolled
    content, which is why it never appeared)
-3. [ ] Compass rose is larger (56px button, bigger needle)
-4. [ ] Compass needle is tethered to the city orientation frame-by-frame: it
+3. [x] Compass rose is larger (56px button, bigger needle)
+4. [x] Compass needle is tethered to the city orientation frame-by-frame: it
    was reading a 10Hz store mirror smoothed by a 0.3s CSS tween (the awkward
    jump you saw); it now reads the camera's live azimuth every frame with no
    transition - orbiting should feel like the needle is bolted to the city.
    The click-to-north tween should also track smoothly now
+
+## Feedback round 4 - shipped with the round (see Shipped section)
+
+1. [ ] (1, 7.4) Population recalibrated ~326k -> ~777,500: a census-capacity
+   model where spires are 50% residential, narrow towers 70%, office blocks
+   20% (mixed-use, like real downtowns) at ~25 m²/person. Jobs ratio lands at
+   0.48/resident. Masthead, building/district/street cards, and the
+   demographics panel all read from the same model; warehouses now show no
+   population stat. Traffic/heat-map/persona derivation untouched (no re-rolls)
+2. [ ] (1.2) Company card: Staff stat row removed; "X of Y" rides the
+   Employees/Staff section header line
+3. [ ] (1.7) Companies filters: three short selects on ONE line - Districts /
+   Staff / Industry (industry filter now always available, not gated on the
+   sort)
+4. [ ] (7.7) Panel glass: the floating panel now portals to <body> - its
+   backdrop blur was being neutralized by mounting inside ControlDock's own
+   blurred card (backdrop-filter samples only up to the nearest filtered
+   ancestor); also more transparent (/65)
+5. [ ] (R2.1) List crop root-caused: the vh-math viewport caps overestimated
+   the available space once headers grew. All six lists now size by flex
+   shrink against the dock card - last row lands whole, pinned Show More
+   visible at the card bottom
+6. [ ] Masthead: city name in normal header styling (no all-caps), with the
+   Demographics button on the same line
 
 ## 1. Full-capacity city framing (#96)
 
@@ -156,14 +180,14 @@ data type - districts tree only under All. Query search behavior unchanged. All
 browse lists share one paged Show More mechanic (100 per page). At the default
 seed: 577 streets, 14,021 buildings, 7,181 companies, 41,613 people.
 
-1. [ ] All tab, empty search: districts tree (unchanged)
-2. [ ] Streets tab, empty search: every road by name, muted building count; click opens the street card
-3. [ ] Buildings tab, empty search: every addressed building by street + number, name badge on landmarks; click focuses + opens the building card
-4. [ ] People tab, empty search: all residents by family name, age right-aligned; click opens the persona card; paging holds up at 41k
-5. [ ] Companies tab: registry as before - By Staff default ("N" + "N listed" beneath), By Name / By Industry / By District sorts, district filter
-6. [ ] Industry pills: one hue per industry + the same glyph that industry uses in resident details (hospital=stethoscope red, school=grad-cap blue, restaurant=chef-hat orange...); CompanyColumn's pinned badge matches
-7. [ ] Typing a query on any tab switches to kind-filtered search results; clearing returns to that tab's browse
-8. [ ] Paging resets to top on sort/filter change; scroll performance fine
+1. [x] All tab, empty search: districts tree (unchanged)
+2. [x] Streets tab, empty search: every road by name, muted building count; click opens the street card
+3. [x] Buildings tab, empty search: every addressed building by street + number, name badge on landmarks; click focuses + opens the building card
+4. [x] People tab, empty search: all residents by family name, age right-aligned; click opens the persona card; paging holds up at 41k
+5. [x] Companies tab: registry as before - By Staff default ("N" + "N listed" beneath), By Name / By Industry / By District sorts, district filter
+6. [x] Industry pills: one hue per industry + the same glyph that industry uses in resident details (hospital=stethoscope red, school=grad-cap blue, restaurant=chef-hat orange...); CompanyColumn's pinned badge matches
+7. [x] Typing a query on any tab switches to kind-filtered search results; clearing returns to that tab's browse
+8. [x] Paging resets to top on sort/filter change; scroll performance fine
 
 ## 7. Demographics report panel, phase 1 (#97)
 
@@ -177,10 +201,10 @@ numeric rounding helper to `approxMagnitude`.
 
 1. [x] "Demographics" button in the directory masthead opens the floating panel
 2. [x] Drag by title bar; resize; viewport-clamped; min-size holds; Escape and the close button both close it
-3. [ ] Charts render: population pyramid (men left, women + nonbinary right), Work Status, Commute Mode, Commute Distance, Households by Size
-4. [ ] Header stats: Population ~, Listed exact, Households ~, Jobs ~ - Jobs matches the masthead's economy figure at All Districts (the reconciliation fix)
-5. [ ] Scope toggle: Full City (default, ~ values scaled to city population) vs Listed (exact counts); pyramid shape stays consistent between scopes
-6. [ ] District filter re-bins every chart + the header stats
+3. [x] Charts render: population pyramid (men left, women + nonbinary right), Work Status, Commute Mode, Commute Distance, Households by Size
+4. [x] Header stats: Population ~, Listed exact, Households ~, Jobs ~ - Jobs matches the masthead's economy figure at All Districts (the reconciliation fix)
+5. [x] Scope toggle: Full City (default, ~ values scaled to city population) vs Listed (exact counts); pyramid shape stays consistent between scopes
+6. [x] District filter re-bins every chart + the header stats
 7. [x] Panel sits above the docks; directory stays usable behind it
 8. [x] Light and dark themes: chart colors read on both
 9. [x] Drag/resize FEEL - synthetic tests can't judge this; your live pass is the gate
