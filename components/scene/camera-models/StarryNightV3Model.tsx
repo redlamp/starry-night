@@ -1874,6 +1874,9 @@ export function StarryNightV3Model() {
     const parkElevDeg = Math.asin(THREE.MathUtils.clamp((_eye.y - _tgt.y) / parkR, -1, 1)) / DEG;
     const parked = tdReturn.current !== null && parkElevDeg >= TD_STILL_ELEV_DEG;
     if (st.topDownParked !== parked) st.setTopDownParked(parked);
+    // Per-frame azimuth telemetry for the compass needle (same convention as
+    // orbitWriteback: atan2(offset.x, offset.z), 0 = eye due north of target).
+    cameraCommand.liveAzimuthDeg = Math.atan2(_eye.x - _tgt.x, _eye.z - _tgt.z) / DEG;
 
     const tt = state.clock.elapsedTime;
     if (tt - lastWrite.current >= 0.1) {

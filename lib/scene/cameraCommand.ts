@@ -30,10 +30,17 @@ export const cameraCommand: {
   // the top-down compass rose's click affordance (#95). Registered by Cam v3 while
   // parked in top-down; a no-op elsewhere (the rose only renders while parked).
   rotateNorthUp: (() => void) | null;
+  // Live camera azimuth (compass yaw of the eye around the target, degrees),
+  // written EVERY frame by the active model. Telemetry, not a command: the
+  // compass rose needle reads this via rAF so it tethers to the real camera
+  // instead of the 10Hz orbit store mirror, whose sampling made the needle
+  // step/tween out of sync with the city (user 2026-07-18).
+  liveAzimuthDeg: number;
 } = {
   setTiltDeg: null,
   toggleTopDownInModel: null,
   projectionRadiusHold: null,
   toggleDrift: null,
   rotateNorthUp: null,
+  liveAzimuthDeg: 0,
 };
