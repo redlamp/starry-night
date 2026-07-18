@@ -692,7 +692,7 @@ export function DirectorySection() {
         // ScrollArea (which has no such outer padding to fight); pr-4 on the
         // content below is the columns' text-to-scrollbar gap (user
         // 2026-07-08: "scrollbar too close to text, and far from edge").
-        <ScrollArea className="-mr-3 min-h-0 overflow-hidden **:data-[slot=scroll-area-viewport]:max-h-full">
+        <ScrollArea className="-mr-3 flex min-h-0 flex-col overflow-hidden **:data-[slot=scroll-area-viewport]:h-auto **:data-[slot=scroll-area-viewport]:min-h-0">
           <div className="flex flex-col gap-0.5 pr-4">
             {pagedMatches.total === 0 && (
               <div className="text-muted-foreground px-1 text-sm">
@@ -824,7 +824,7 @@ export function DirectorySection() {
           </div>
 
           {/* -mr-3/pr-4: same edge-and-gap fix as the search list above. */}
-          <ScrollArea className="-mr-3 min-h-0 overflow-hidden **:data-[slot=scroll-area-viewport]:max-h-full">
+          <ScrollArea className="-mr-3 flex min-h-0 flex-col overflow-hidden **:data-[slot=scroll-area-viewport]:h-auto **:data-[slot=scroll-area-viewport]:min-h-0">
             <div className="flex flex-col pr-4">
               {[...districtList]
                 .sort((a, b) =>
@@ -1151,7 +1151,7 @@ function CompaniesView({
       </div>
 
       {/* -mr-3/pr-4: same edge-and-gap fix as the other lists in this panel. */}
-      <ScrollArea className="-mr-3 min-h-0 overflow-hidden **:data-[slot=scroll-area-viewport]:max-h-full">
+      <ScrollArea className="-mr-3 flex min-h-0 flex-col overflow-hidden **:data-[slot=scroll-area-viewport]:h-auto **:data-[slot=scroll-area-viewport]:min-h-0">
         <div className="flex flex-col gap-0.5 pr-4">
           {total === 0 && (
             <div className="text-muted-foreground px-1 text-sm">No companies match the filters.</div>
@@ -1212,7 +1212,7 @@ function StreetsView({
         <span className="text-sm font-medium">Streets</span>
         <span className="text-muted-foreground text-xs">{total.toLocaleString()} streets</span>
       </div>
-      <ScrollArea className="-mr-3 min-h-0 overflow-hidden **:data-[slot=scroll-area-viewport]:max-h-full">
+      <ScrollArea className="-mr-3 flex min-h-0 flex-col overflow-hidden **:data-[slot=scroll-area-viewport]:h-auto **:data-[slot=scroll-area-viewport]:min-h-0">
         <div className="flex flex-col gap-0.5 pr-4">
           {visible.map((row) => (
             <button
@@ -1261,7 +1261,7 @@ function BuildingsView({
         <span className="text-sm font-medium">Buildings</span>
         <span className="text-muted-foreground text-xs">{total.toLocaleString()} buildings</span>
       </div>
-      <ScrollArea className="-mr-3 min-h-0 overflow-hidden **:data-[slot=scroll-area-viewport]:max-h-full">
+      <ScrollArea className="-mr-3 flex min-h-0 flex-col overflow-hidden **:data-[slot=scroll-area-viewport]:h-auto **:data-[slot=scroll-area-viewport]:min-h-0">
         <div className="flex flex-col gap-0.5 pr-4">
           {visible.map((row) => (
             <button
@@ -1315,7 +1315,7 @@ function PeopleView({
         <span className="text-sm font-medium">People</span>
         <span className="text-muted-foreground text-xs">{total.toLocaleString()} listed</span>
       </div>
-      <ScrollArea className="-mr-3 min-h-0 overflow-hidden **:data-[slot=scroll-area-viewport]:max-h-full">
+      <ScrollArea className="-mr-3 flex min-h-0 flex-col overflow-hidden **:data-[slot=scroll-area-viewport]:h-auto **:data-[slot=scroll-area-viewport]:min-h-0">
         <div className="flex flex-col gap-0.5 pr-4">
           {visible.map((row) => (
             <button
