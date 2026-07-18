@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  BarChart3,
   Briefcase,
   Building2,
   MapPin,
@@ -262,6 +263,7 @@ export function DirectorySection() {
   const setPinnedDistrictId = useSceneStore((s) => s.setPinnedDistrictId);
   const showDistrictBoundaries = useSceneStore((s) => s.showDistrictBoundaries);
   const setShowDistrictBoundaries = useSceneStore((s) => s.setShowDistrictBoundaries);
+  const setDemographicsOpen = useSceneStore((s) => s.setDemographicsOpen);
 
   const [query, setQuery] = useState("");
   const [kindFilter, setKindFilter] = useState<KindFilter>("all");
@@ -491,6 +493,17 @@ export function DirectorySection() {
                 · {directory.totals.businesses.toLocaleString()} listed
               </span>
             </span>
+          </IconTip>
+          <IconTip label="Demographics">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setDemographicsOpen(true)}
+              className="ml-auto h-7 gap-1.5 text-xs"
+            >
+              <BarChart3 className="size-3.5" aria-hidden />
+              Demographics
+            </Button>
           </IconTip>
         </div>
       </div>

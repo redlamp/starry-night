@@ -566,6 +566,11 @@ type SceneState = {
   // dock can shift to its right while it's open. Runtime tier.
   directoryOpen: boolean;
   setDirectoryOpen: (v: boolean) => void;
+  // Demographics report (#97): a floating, draggable window opened from the
+  // directory masthead. Runtime tier — never persisted/shared, same as
+  // directoryOpen.
+  demographicsOpen: boolean;
+  setDemographicsOpen: (v: boolean) => void;
   // District highlight from the directory (user 2026-07-08): hovering a
   // district header traces its border on the map (transient); the header's
   // pin button makes it stick + flies the camera. Outline renders
@@ -1299,6 +1304,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
           // Settings > Districts (user 2026-07-10), so it isn't orphaned.
           { directoryOpen, hoverDistrictId: null, pinnedDistrictId: null },
     ),
+  demographicsOpen: false,
+  setDemographicsOpen: (demographicsOpen) => set({ demographicsOpen }),
   hoverDistrictId: null,
   setHoverDistrictId: (hoverDistrictId) => set({ hoverDistrictId }),
   hoveredTenant: null,

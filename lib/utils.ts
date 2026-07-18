@@ -12,6 +12,16 @@ export function approxCount(n: number): string {
   return `~${(Math.round(n / step) * step).toLocaleString()}`
 }
 
+// Numeric sibling of approxCount for chart data (#97): rounds to ~2 significant
+// figures but stays a number, so scaled-up Full City bin counts plot cleanly
+// while still reading as estimates on the axis.
+export function approxMagnitude(n: number): number {
+  if (!Number.isFinite(n) || n <= 0) return 0
+  if (n < 100) return Math.round(n / 5) * 5
+  const mag = Math.pow(10, Math.floor(Math.log10(n)) - 1)
+  return Math.round(n / mag) * mag
+}
+
 // Inputs that never accept typed text. base-ui Slider thumbs carry a hidden
 // `<input type="range">` that keeps focus after a drag — treating any INPUT as
 // "typing" left every hotkey dead until the user clicked something focusable.
