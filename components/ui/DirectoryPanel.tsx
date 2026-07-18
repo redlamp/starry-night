@@ -23,7 +23,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { HoverCard, HoverCardTrigger, HoverCardContent } from "@/components/ui/hover-card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { IconTip, ShowMore } from "@/components/ui/columns/EntityColumns";
+import { IconTip } from "@/components/ui/columns/EntityColumns";
 import {
   WorkplaceKindBadge,
   WORKPLACE_KIND_ICON,
@@ -184,6 +184,34 @@ type PersonRow = {
   givenName: string;
   age: number;
 };
+
+// Pinned "load more" bar under the browse/search lists. A real outline
+// button — the muted "+N more" text link didn't read as clickable, and the
+// unclipped list painted over it (user 2026-07-18). Lists render 100 rows at
+// a time; each click loads the next page.
+function ShowMoreBar({
+  total,
+  cap,
+  onMore,
+  noun,
+}: {
+  total: number;
+  cap: number;
+  onMore: () => void;
+  noun: string;
+}) {
+  if (total <= cap) return null;
+  return (
+    <div className="border-border/40 shrink-0 border-t pt-1.5">
+      <Button variant="outline" size="sm" className="h-7 w-full gap-1.5 text-xs" onClick={onMore}>
+        Show More
+        <span className="text-muted-foreground font-normal">
+          {(total - cap).toLocaleString()} {noun} left
+        </span>
+      </Button>
+    </div>
+  );
+}
 
 const KIND_BADGE: Record<SearchKind, string> = {
   street: "Street",
@@ -664,7 +692,7 @@ export function DirectorySection() {
         // ScrollArea (which has no such outer padding to fight); pr-4 on the
         // content below is the columns' text-to-scrollbar gap (user
         // 2026-07-08: "scrollbar too close to text, and far from edge").
-        <ScrollArea className="-mr-3 min-h-0 **:data-[slot=scroll-area-viewport]:max-h-full">
+        <ScrollArea className="-mr-3 min-h-0 overflow-hidden **:data-[slot=scroll-area-viewport]:max-h-full">
           <div className="flex flex-col gap-0.5 pr-4">
             {pagedMatches.total === 0 && (
               <div className="text-muted-foreground px-1 text-sm">
@@ -708,15 +736,12 @@ export function DirectorySection() {
         </ScrollArea>
       ) : null}
       {trimmedQuery ? (
-        <div className="shrink-0">
-          <ShowMore
-            total={pagedMatches.total}
-            cap={pagedMatches.visibleCount}
-            expanded={false}
-            onToggle={pagedMatches.showMore}
-            noun="matches"
-          />
-        </div>
+        <ShowMoreBar
+          total={pagedMatches.total}
+          cap={pagedMatches.visibleCount}
+          onMore={pagedMatches.showMore}
+          noun="matches"
+        />
       ) : kindFilter === "company" ? (
         <>
           <Separator className="shrink-0" />
@@ -799,7 +824,7 @@ export function DirectorySection() {
           </div>
 
           {/* -mr-3/pr-4: same edge-and-gap fix as the search list above. */}
-          <ScrollArea className="-mr-3 min-h-0 **:data-[slot=scroll-area-viewport]:max-h-full">
+          <ScrollArea className="-mr-3 min-h-0 overflow-hidden **:data-[slot=scroll-area-viewport]:max-h-full">
             <div className="flex flex-col pr-4">
               {[...districtList]
                 .sort((a, b) =>
@@ -1126,7 +1151,7 @@ function CompaniesView({
       </div>
 
       {/* -mr-3/pr-4: same edge-and-gap fix as the other lists in this panel. */}
-      <ScrollArea className="-mr-3 min-h-0 **:data-[slot=scroll-area-viewport]:max-h-full">
+      <ScrollArea className="-mr-3 min-h-0 overflow-hidden **:data-[slot=scroll-area-viewport]:max-h-full">
         <div className="flex flex-col gap-0.5 pr-4">
           {total === 0 && (
             <div className="text-muted-foreground px-1 text-sm">No companies match the filters.</div>
@@ -1160,15 +1185,7 @@ function CompaniesView({
       </ScrollArea>
       {/* Pinned below the scroll, not buried at the end of the list — the
           user couldn't find it there (2026-07-18). Same for every browse. */}
-      <div className="shrink-0">
-        <ShowMore
-          total={total}
-          cap={visibleCount}
-          expanded={false}
-          onToggle={showMore}
-          noun="companies"
-        />
-      </div>
+      <ShowMoreBar total={total} cap={visibleCount} onMore={showMore} noun="companies" />
     </>
   );
 }
@@ -1195,7 +1212,7 @@ function StreetsView({
         <span className="text-sm font-medium">Streets</span>
         <span className="text-muted-foreground text-xs">{total.toLocaleString()} streets</span>
       </div>
-      <ScrollArea className="-mr-3 min-h-0 **:data-[slot=scroll-area-viewport]:max-h-full">
+      <ScrollArea className="-mr-3 min-h-0 overflow-hidden **:data-[slot=scroll-area-viewport]:max-h-full">
         <div className="flex flex-col gap-0.5 pr-4">
           {visible.map((row) => (
             <button
@@ -1215,9 +1232,7 @@ function StreetsView({
           ))}
         </div>
       </ScrollArea>
-      <div className="shrink-0">
-        <ShowMore total={total} cap={visibleCount} expanded={false} onToggle={showMore} noun="streets" />
-      </div>
+      <ShowMoreBar total={total} cap={visibleCount} onMore={showMore} noun="streets" />
     </>
   );
 }
@@ -1246,7 +1261,7 @@ function BuildingsView({
         <span className="text-sm font-medium">Buildings</span>
         <span className="text-muted-foreground text-xs">{total.toLocaleString()} buildings</span>
       </div>
-      <ScrollArea className="-mr-3 min-h-0 **:data-[slot=scroll-area-viewport]:max-h-full">
+      <ScrollArea className="-mr-3 min-h-0 overflow-hidden **:data-[slot=scroll-area-viewport]:max-h-full">
         <div className="flex flex-col gap-0.5 pr-4">
           {visible.map((row) => (
             <button
@@ -1276,9 +1291,7 @@ function BuildingsView({
           ))}
         </div>
       </ScrollArea>
-      <div className="shrink-0">
-        <ShowMore total={total} cap={visibleCount} expanded={false} onToggle={showMore} noun="buildings" />
-      </div>
+      <ShowMoreBar total={total} cap={visibleCount} onMore={showMore} noun="buildings" />
     </>
   );
 }
@@ -1302,7 +1315,7 @@ function PeopleView({
         <span className="text-sm font-medium">People</span>
         <span className="text-muted-foreground text-xs">{total.toLocaleString()} listed</span>
       </div>
-      <ScrollArea className="-mr-3 min-h-0 **:data-[slot=scroll-area-viewport]:max-h-full">
+      <ScrollArea className="-mr-3 min-h-0 overflow-hidden **:data-[slot=scroll-area-viewport]:max-h-full">
         <div className="flex flex-col gap-0.5 pr-4">
           {visible.map((row) => (
             <button
@@ -1320,9 +1333,7 @@ function PeopleView({
           ))}
         </div>
       </ScrollArea>
-      <div className="shrink-0">
-        <ShowMore total={total} cap={visibleCount} expanded={false} onToggle={showMore} noun="residents" />
-      </div>
+      <ShowMoreBar total={total} cap={visibleCount} onMore={showMore} noun="residents" />
     </>
   );
 }
