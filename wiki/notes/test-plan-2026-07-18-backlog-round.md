@@ -45,10 +45,11 @@ it doesn't hot-reload the panel):
 8. [ ] (7.9) Resize lerp: bar re-layout animation was the lerp - disabled. If
    a residual one-frame lag on the chart edges still bothers, flag and I'll
    look at the ResponsiveContainer layer next
-9. (6, 6.*) IN FLIGHT - agent reworking the kind tabs: each tab browses its own
-   data type when the search box is empty (districts only under All), plus
-   "By Industry" sort with color-coded industry pills matching the resident-
-   details icons. Section 6 items will be rewritten when it lands.
+9. [ ] (6, 6.*) LANDED - kind tabs rework merged; Section 6 below is rewritten
+   for the new design. One call I made over the agent: it kept pills in the
+   two-tone work/school colors; I gave each industry its own oklch hue
+   (school keeps the Education blue). Icons come from the resident-details
+   glyph set, mapped per industry by its dominant profession.
 
 ## 1. Full-capacity city framing (#96)
 
@@ -126,18 +127,20 @@ Output verified byte-identical: SHA-256 snapshot match over 2 seeds.
 
 ## 6. Companies registry view (#92)
 
-Issue: https://github.com/redlamp/starry-night/issues/92 · Branch: `feat/companies-view`
-(includes Section 1's commits - the agent merged them in as a dependency).
-Entry point: the existing Companies kind-filter tab with an EMPTY search box -
-previously a dead state, now the registry. No new chrome added.
+Issue: https://github.com/redlamp/starry-night/issues/92 · Reworked per feedback
+round 1 (item 6/6.*): with an EMPTY search box, each kind tab now browses its own
+data type - districts tree only under All. Query search behavior unchanged. All
+browse lists share one paged Show More mechanic (100 per page). At the default
+seed: 577 streets, 14,021 buildings, 7,181 companies, 41,613 people.
 
-1. [ ] Directory - Companies tab, empty search: full registry renders (7k+ rows, paged 100 at a time via Show More)
-2. [ ] Default sort By Staff: hospitals/factories/big offices at the top; numbers are full headcount with "N listed" muted beneath
-3. [ ] Sorts: By Name / By Kind / By District all behave; paging resets to top on sort change
-4. [ ] District filter Select narrows the list; "No companies in this district" empty state
-5. [ ] Clicking a row opens the company column (same drill as search results)
-6. [ ] Typing in search while on Companies tab switches to normal search results; clearing returns to the registry
-7. [ ] Scroll performance fine at the default tier
+1. [ ] All tab, empty search: districts tree (unchanged)
+2. [ ] Streets tab, empty search: every road by name, muted building count; click opens the street card
+3. [ ] Buildings tab, empty search: every addressed building by street + number, name badge on landmarks; click focuses + opens the building card
+4. [ ] People tab, empty search: all residents by family name, age right-aligned; click opens the persona card; paging holds up at 41k
+5. [ ] Companies tab: registry as before - By Staff default ("N" + "N listed" beneath), By Name / By Industry / By District sorts, district filter
+6. [ ] Industry pills: one hue per industry + the same glyph that industry uses in resident details (hospital=stethoscope red, school=grad-cap blue, restaurant=chef-hat orange...); CompanyColumn's pinned badge matches
+7. [ ] Typing a query on any tab switches to kind-filtered search results; clearing returns to that tab's browse
+8. [ ] Paging resets to top on sort/filter change; scroll performance fine
 
 ## 7. Demographics report panel, phase 1 (#97)
 
