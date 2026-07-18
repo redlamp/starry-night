@@ -24,6 +24,8 @@ import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "@/components/
 import { HoverCard, HoverCardTrigger, HoverCardContent } from "@/components/ui/hover-card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { IconTip, ShowMore } from "@/components/ui/columns/EntityColumns";
+import { WorkplaceKindBadge } from "@/components/ui/columns/workplaceIcons";
+import type { WorkplaceType } from "@/lib/seed/personaData";
 import {
   Select,
   SelectTrigger,
@@ -106,25 +108,76 @@ type CompanySort = "staff" | "name" | "kind" | "district";
 const COMPANY_SORTS: Array<{ value: CompanySort; label: string }> = [
   { value: "staff", label: "By Staff" },
   { value: "name", label: "By Name" },
-  { value: "kind", label: "By Kind" },
+  { value: "kind", label: "By Industry" },
   { value: "district", label: "By District" },
 ];
 
-// Initial page + per-click increment for the companies list. No virtualization
-// library in this repo (search results just hard-cap at MAX_SEARCH_RESULTS
-// with no way to see past it); this reuses the columns' ShowMore affordance
-// but increments the visible window instead of jumping straight to "all
-// 7,000 rows", which is what keeps the DOM small at any tier.
-const COMPANY_PAGE_SIZE = 100;
+// Initial page + per-click increment for every per-kind browse list (people
+// need this most — 41k+ personas — but streets/buildings/companies share it
+// too). No virtualization library in this repo (search results just hard-cap
+// at MAX_SEARCH_RESULTS with no way to see past it); this reuses the columns'
+// ShowMore affordance but increments the visible window instead of jumping
+// straight to "all 41,000 rows", which is what keeps the DOM small at any tier.
+const BROWSE_PAGE_SIZE = 100;
+
+// Shared page-window mechanics for the four kind-filter browse lists
+// (companies/streets/buildings/people): a visible-count cursor that grows via
+// ShowMore, reset to the first page whenever `resetKey` changes. The reset is
+// done during render (React's "adjusting state when a prop changes" idiom —
+// CompaniesView's own sort/filter reset used this before this hook existed),
+// not an effect, which would cost an extra render. Callers with no
+// sort/filter control of their own (streets/buildings/people) just pass a
+// constant resetKey — there's nothing to reset FOR, but the component still
+// gets a fresh page cursor on mount (kind-filter switches unmount these
+// views, so a stale cursor from a previous look never lingers).
+function usePagedRows<T>(rows: T[], pageSize: number, resetKey: string) {
+  const [visibleCount, setVisibleCount] = useState(pageSize);
+  const [pagingFor, setPagingFor] = useState(resetKey);
+  if (pagingFor !== resetKey) {
+    setPagingFor(resetKey);
+    setVisibleCount(pageSize);
+  }
+  return {
+    visible: rows.slice(0, visibleCount),
+    total: rows.length,
+    visibleCount,
+    showMore: () => setVisibleCount((c) => Math.min(rows.length, c + pageSize)),
+  };
+}
 
 type CompanyRow = {
   id: string;
   name: string;
+  kind: WorkplaceType;
   kindLabel: string;
   districtId: string;
   districtName: string;
   listed: number;
   total: number;
+};
+
+// Every named road, sorted by name (secondary: building count descending) —
+// the empty-query Streets browse (#92 feedback round 2).
+type StreetRow = { id: string; name: string; buildingCount: number };
+
+// Every addressed building, sorted by street then address number — the
+// empty-query Buildings browse. `name` only exists for the named subset.
+type BuildingRow = {
+  id: number;
+  number: number;
+  street: string;
+  name?: string;
+  districtName: string;
+};
+
+// Every listed persona (41k+), sorted by family name then given name — the
+// empty-query People browse. Paging is mandatory at this scale.
+type PersonRow = {
+  id: string;
+  fullName: string;
+  familyName: string;
+  givenName: string;
+  age: number;
 };
 
 const KIND_BADGE: Record<SearchKind, string> = {
@@ -285,9 +338,14 @@ export function DirectorySection() {
     const idToDistrict = new Map(districts.map((d) => [d.id, d]));
     const names = directory.names;
 
-    // One flat search index across every entity kind.
+    // One flat search index across every entity kind, plus the base rows for
+    // each kind's empty-query browse list (#92 feedback round 2) — built in
+    // the SAME passes so there's no second 41k/577-item walk. Sorted once
+    // here (fixed order, no user sort control on these three), so re-renders
+    // from typing in the unrelated search box never re-sort anything.
     const searchIndex: SearchEntry[] = [];
     const adults: Persona[] = [];
+    const personRows: PersonRow[] = [];
     for (const p of directory.personas.values()) {
       if (p.age >= 18) adults.push(p);
       searchIndex.push({
@@ -297,7 +355,19 @@ export function DirectorySection() {
         sub: `${p.age} · ${names.districtNames.get(p.homeDistrictId) ?? ""}`,
         lower: p.fullName.toLowerCase(),
       });
+      personRows.push({
+        id: p.id,
+        fullName: p.fullName,
+        familyName: p.familyName,
+        givenName: p.givenName,
+        age: p.age,
+      });
     }
+    personRows.sort(
+      (a, b) => a.familyName.localeCompare(b.familyName) || a.givenName.localeCompare(b.givenName),
+    );
+
+    const streetRows: StreetRow[] = [];
     for (const [roadId, name] of names.streetNames) {
       const count = names.buildingsByRoad.get(roadId)?.length ?? 0;
       searchIndex.push({
@@ -307,7 +377,9 @@ export function DirectorySection() {
         sub: `${count} building${count === 1 ? "" : "s"}`,
         lower: name.toLowerCase(),
       });
+      streetRows.push({ id: roadId, name, buildingCount: count });
     }
+    streetRows.sort((a, b) => a.name.localeCompare(b.name) || b.buildingCount - a.buildingCount);
     for (const [buildingId, name] of names.buildingNames) {
       const address = names.addresses.get(buildingId);
       searchIndex.push({
@@ -365,8 +437,16 @@ export function DirectorySection() {
         householdCount: households.length,
       });
     }
+    const buildingRows: BuildingRow[] = [];
     for (const [buildingId, address] of names.addresses) {
       const building = idToBuilding.get(buildingId);
+      buildingRows.push({
+        id: buildingId,
+        number: address.number,
+        street: address.street,
+        name: names.buildingNames.get(buildingId),
+        districtName: building ? (names.districtNames.get(building.districtId) ?? "") : "",
+      });
       if (!building) continue;
       let roads = districtRoads.get(building.districtId);
       if (!roads) {
@@ -375,6 +455,7 @@ export function DirectorySection() {
       }
       roads.add(address.roadId);
     }
+    buildingRows.sort((a, b) => a.street.localeCompare(b.street) || a.number - b.number);
     for (const biz of directory.businesses.values()) {
       const building = idToBuilding.get(biz.buildingId);
       if (building && byDistrict.has(building.districtId)) {
@@ -387,7 +468,15 @@ export function DirectorySection() {
     const districtList = [...byDistrict.values()].sort((a, b) => b.residentCount - a.residentCount);
     for (const d of districtList) d.buildings.sort((a, b) => b.householdCount - a.householdCount);
 
-    return { idToBuilding, adults, searchIndex, districtList };
+    return {
+      idToBuilding,
+      adults,
+      searchIndex,
+      districtList,
+      streetRows,
+      buildingRows,
+      personRows,
+    };
   }, [directory, masterSeed, cityShape, cityShapeScale, citySize, citySketch]);
 
   // Marquee cast: a seed-stable run of adults starting at the old spotlight
@@ -411,7 +500,7 @@ export function DirectorySection() {
   if (!directory || !bundle) {
     return <DirectorySkeleton />;
   }
-  const { idToBuilding, searchIndex, districtList } = bundle;
+  const { idToBuilding, searchIndex, districtList, streetRows, buildingRows, personRows } = bundle;
 
   const trimmedQuery = query.trim().toLowerCase();
   const allMatches = trimmedQuery
@@ -426,6 +515,12 @@ export function DirectorySection() {
     if (building) focusBuilding(building);
     resetColumns([{ kind: "building", id: buildingId }]);
   };
+
+  // Streets/People browse row opens (#92 feedback round 2) — same targets as
+  // the matching kind in search results (openResult below): a street resets
+  // the stack to just that street, a person pushes onto whatever's open.
+  const openStreet = (roadId: string) => resetColumns([{ kind: "street", id: roadId }]);
+  const openPersona = (id: string) => pushColumn({ kind: "persona", id });
 
   // Pin: sticky district highlight + a 45° glide framing the district bounds
   // (same focus mechanism as the columns' cone). Clicking the pinned pin
@@ -613,6 +708,26 @@ export function DirectorySection() {
             onOpen={(id) => pushColumn({ kind: "company", id })}
           />
         </>
+      ) : kindFilter === "street" ? (
+        <>
+          <Separator className="shrink-0" />
+          <StreetsView rows={streetRows} isSelected={isSelected} onOpen={openStreet} />
+        </>
+      ) : kindFilter === "building" ? (
+        <>
+          <Separator className="shrink-0" />
+          <BuildingsView
+            rows={buildingRows}
+            maxAddressDigits={directory.names.maxAddressDigits}
+            isSelected={isSelected}
+            onOpen={goToBuilding}
+          />
+        </>
+      ) : kindFilter === "person" ? (
+        <>
+          <Separator className="shrink-0" />
+          <PeopleView rows={personRows} isSelected={isSelected} onOpen={openPersona} />
+        </>
       ) : (
         <>
           <Separator className="shrink-0" />
@@ -640,10 +755,15 @@ export function DirectorySection() {
                   <SquareDashed className="size-3.5" />
                 </Button>
               </IconTip>
-              <Select value={districtSort} onValueChange={(v) => setDistrictSort(v as DistrictSort)}>
+              <Select
+                value={districtSort}
+                onValueChange={(v) => setDistrictSort(v as DistrictSort)}
+              >
                 <SelectTrigger size="sm" className="w-32">
                   <SelectValue>
-                    {(v: DistrictSort) => DISTRICT_SORTS.find((o) => o.value === v)?.label ?? "Sort"}
+                    {(v: DistrictSort) =>
+                      DISTRICT_SORTS.find((o) => o.value === v)?.label ?? "Sort"
+                    }
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
@@ -820,7 +940,6 @@ function CompaniesView({
 }) {
   const [sort, setSort] = useState<CompanySort>("staff");
   const [districtFilter, setDistrictFilter] = useState<string>("all");
-  const [visibleCount, setVisibleCount] = useState(COMPANY_PAGE_SIZE);
 
   // Base rows: one O(businesses) pass, independent of sort/filter so those
   // stay cheap to change. Stable as long as the directory/city bundle is
@@ -833,6 +952,7 @@ function CompaniesView({
       list.push({
         id: biz.id,
         name: biz.name,
+        kind: biz.kind,
         kindLabel: biz.schoolTier ? `${biz.schoolTier} school` : biz.kind,
         districtId,
         districtName: names.districtNames.get(districtId) ?? "",
@@ -866,15 +986,11 @@ function CompaniesView({
 
   // Re-page from the top whenever the sort or filter changes — the "next
   // 100" from the old ordering rarely means anything under the new one.
-  // Adjusted during render (React's "adjusting state when a prop changes"
-  // idiom), not an effect — an effect here would cascade an extra render.
-  const [pagingFor, setPagingFor] = useState({ sort, districtFilter });
-  if (pagingFor.sort !== sort || pagingFor.districtFilter !== districtFilter) {
-    setPagingFor({ sort, districtFilter });
-    setVisibleCount(COMPANY_PAGE_SIZE);
-  }
-
-  const visible = sortedFiltered.slice(0, visibleCount);
+  const { visible, total, visibleCount, showMore } = usePagedRows(
+    sortedFiltered,
+    BROWSE_PAGE_SIZE,
+    `${sort}:${districtFilter}`,
+  );
   const sortedDistricts = useMemo(
     () => [...districtList].sort((a, b) => a.properName.localeCompare(b.properName)),
     [districtList],
@@ -926,7 +1042,7 @@ function CompaniesView({
       {/* -mr-3/pr-4: same edge-and-gap fix as the other lists in this panel. */}
       <ScrollArea className="-mr-3 **:data-[slot=scroll-area-viewport]:max-h-[calc(100vh-24rem)]">
         <div className="flex flex-col gap-0.5 pr-4">
-          {sortedFiltered.length === 0 && (
+          {total === 0 && (
             <div className="text-muted-foreground px-1 text-sm">No companies in this district.</div>
           )}
           {visible.map((row) => (
@@ -945,9 +1061,7 @@ function CompaniesView({
                   {row.districtName}
                 </span>
               </span>
-              <Badge variant="outline" className="shrink-0 capitalize">
-                {row.kindLabel}
-              </Badge>
+              <WorkplaceKindBadge kind={row.kind} label={row.kindLabel} />
               <span className="flex shrink-0 flex-col items-end tabular-nums">
                 <span>{row.total.toLocaleString()}</span>
                 <span className="text-muted-foreground text-xs">
@@ -957,13 +1071,177 @@ function CompaniesView({
             </button>
           ))}
           <ShowMore
-            total={sortedFiltered.length}
+            total={total}
             cap={visibleCount}
             expanded={false}
-            onToggle={() =>
-              setVisibleCount((c) => Math.min(sortedFiltered.length, c + COMPANY_PAGE_SIZE))
-            }
+            onToggle={showMore}
             noun="companies"
+          />
+        </div>
+      </ScrollArea>
+    </>
+  );
+}
+
+// Every named road, sorted by name (secondary: building count descending) —
+// the Streets kind-filter tab's empty-query browse (#92 feedback round 2).
+function StreetsView({
+  rows,
+  isSelected,
+  onOpen,
+}: {
+  rows: StreetRow[];
+  isSelected: (kind: SearchKind, id: string) => boolean;
+  onOpen: (id: string) => void;
+}) {
+  const { visible, total, visibleCount, showMore } = usePagedRows(
+    rows,
+    BROWSE_PAGE_SIZE,
+    "streets",
+  );
+  return (
+    <>
+      <div className="flex shrink-0 items-center justify-between gap-2">
+        <span className="text-sm font-medium">Streets</span>
+        <span className="text-muted-foreground text-xs">{total.toLocaleString()} streets</span>
+      </div>
+      <ScrollArea className="-mr-3 **:data-[slot=scroll-area-viewport]:max-h-[calc(100vh-24rem)]">
+        <div className="flex flex-col gap-0.5 pr-4">
+          {visible.map((row) => (
+            <button
+              key={row.id}
+              type="button"
+              onClick={() => onOpen(row.id)}
+              className={cn(
+                "hover:bg-foreground/10 -mx-1 flex items-center justify-between gap-2 rounded px-1 text-left text-sm",
+                isSelected("street", row.id) && "bg-primary/15",
+              )}
+            >
+              <span className="min-w-0 truncate">{row.name}</span>
+              <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
+                {row.buildingCount} building{row.buildingCount === 1 ? "" : "s"}
+              </span>
+            </button>
+          ))}
+          <ShowMore
+            total={total}
+            cap={visibleCount}
+            expanded={false}
+            onToggle={showMore}
+            noun="streets"
+          />
+        </div>
+      </ScrollArea>
+    </>
+  );
+}
+
+// Every addressed building, sorted by street then address number — the
+// Buildings kind-filter tab's empty-query browse (#92 feedback round 2).
+function BuildingsView({
+  rows,
+  maxAddressDigits,
+  isSelected,
+  onOpen,
+}: {
+  rows: BuildingRow[];
+  maxAddressDigits: number;
+  isSelected: (kind: SearchKind, id: string) => boolean;
+  onOpen: (id: number) => void;
+}) {
+  const { visible, total, visibleCount, showMore } = usePagedRows(
+    rows,
+    BROWSE_PAGE_SIZE,
+    "buildings",
+  );
+  return (
+    <>
+      <div className="flex shrink-0 items-center justify-between gap-2">
+        <span className="text-sm font-medium">Buildings</span>
+        <span className="text-muted-foreground text-xs">{total.toLocaleString()} buildings</span>
+      </div>
+      <ScrollArea className="-mr-3 **:data-[slot=scroll-area-viewport]:max-h-[calc(100vh-24rem)]">
+        <div className="flex flex-col gap-0.5 pr-4">
+          {visible.map((row) => (
+            <button
+              key={row.id}
+              type="button"
+              onClick={() => onOpen(row.id)}
+              className={cn(
+                "hover:bg-foreground/10 -mx-1 flex items-center justify-between gap-2 rounded px-1 text-left text-sm",
+                isSelected("building", String(row.id)) && "bg-primary/15",
+              )}
+            >
+              <span className="min-w-0">
+                <span className="flex items-baseline gap-1.5">
+                  <AddrNum n={row.number} width={maxAddressDigits} />
+                  <span className="truncate">{row.street}</span>
+                </span>
+                <span className="text-muted-foreground block truncate text-xs">
+                  {row.districtName}
+                </span>
+              </span>
+              {row.name && (
+                <Badge variant="outline" className="max-w-[7rem] shrink-0 truncate">
+                  {row.name}
+                </Badge>
+              )}
+            </button>
+          ))}
+          <ShowMore
+            total={total}
+            cap={visibleCount}
+            expanded={false}
+            onToggle={showMore}
+            noun="buildings"
+          />
+        </div>
+      </ScrollArea>
+    </>
+  );
+}
+
+// Every listed persona (41k+), sorted by family name then given name — the
+// People kind-filter tab's empty-query browse (#92 feedback round 2). Paging
+// is mandatory at this scale, not just a nicety.
+function PeopleView({
+  rows,
+  isSelected,
+  onOpen,
+}: {
+  rows: PersonRow[];
+  isSelected: (kind: SearchKind, id: string) => boolean;
+  onOpen: (id: string) => void;
+}) {
+  const { visible, total, visibleCount, showMore } = usePagedRows(rows, BROWSE_PAGE_SIZE, "people");
+  return (
+    <>
+      <div className="flex shrink-0 items-center justify-between gap-2">
+        <span className="text-sm font-medium">People</span>
+        <span className="text-muted-foreground text-xs">{total.toLocaleString()} listed</span>
+      </div>
+      <ScrollArea className="-mr-3 **:data-[slot=scroll-area-viewport]:max-h-[calc(100vh-24rem)]">
+        <div className="flex flex-col gap-0.5 pr-4">
+          {visible.map((row) => (
+            <button
+              key={row.id}
+              type="button"
+              onClick={() => onOpen(row.id)}
+              className={cn(
+                "hover:bg-foreground/10 -mx-1 flex items-baseline justify-between gap-2 rounded px-1 text-left text-sm",
+                isSelected("person", row.id) && "bg-primary/15",
+              )}
+            >
+              <span className="min-w-0 truncate">{row.fullName}</span>
+              <span className="text-muted-foreground shrink-0 tabular-nums">{row.age}</span>
+            </button>
+          ))}
+          <ShowMore
+            total={total}
+            cap={visibleCount}
+            expanded={false}
+            onToggle={showMore}
+            noun="residents"
           />
         </div>
       </ScrollArea>
