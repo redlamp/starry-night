@@ -12,6 +12,7 @@ import type { CityTier } from "@/lib/seed/topology";
 import type { CityShapeSetting } from "@/lib/seed/cityShape";
 import type { Archetype } from "@/lib/seed/cityGen";
 import { DEFAULT_DENSITY_PROFILE } from "@/lib/seed/density";
+import { DEFAULT_NAMING_REGION } from "@/lib/seed/naming";
 
 import type {
   QualityTier,
@@ -502,3 +503,4 @@ export const DEFAULT_PROJECTION = "perspective" as "perspective" | "orthographic
 export const DEFAULT_PERSP_RADIUS = 1500 * CITY_SCALE;
 
 export { DEFAULT_DENSITY_PROFILE };
+export { DEFAULT_NAMING_REGION };

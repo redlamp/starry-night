@@ -5,6 +5,23 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+// A capacity estimate displayed without fake precision (#96): "~185,500".
+// Step scales with magnitude so the number reads as a census figure, not a count.
+export function approxCount(n: number): string {
+  const step = n >= 100_000 ? 5000 : n >= 10_000 ? 500 : n >= 1_000 ? 100 : 10
+  return `~${(Math.round(n / step) * step).toLocaleString()}`
+}
+
+// Numeric sibling of approxCount for chart data (#97): rounds to ~2 significant
+// figures but stays a number, so scaled-up Full City bin counts plot cleanly
+// while still reading as estimates on the axis.
+export function approxMagnitude(n: number): number {
+  if (!Number.isFinite(n) || n <= 0) return 0
+  if (n < 100) return Math.round(n / 5) * 5
+  const mag = Math.pow(10, Math.floor(Math.log10(n)) - 1)
+  return Math.round(n / mag) * mag
+}
+
 // Inputs that never accept typed text. base-ui Slider thumbs carry a hidden
 // `<input type="range">` that keeps focus after a drag — treating any INPUT as
 // "typing" left every hotkey dead until the user clicked something focusable.

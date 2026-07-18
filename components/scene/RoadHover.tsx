@@ -38,6 +38,7 @@ export function RoadHover({ masterSeed }: { masterSeed: string }) {
   const cityShapeScale = useSceneStore((s) => s.cityShapeScale);
   const citySize = useSceneStore((s) => s.citySize);
   const citySketch = useSceneStore((s) => s.citySketch);
+  const namingRegion = useSceneStore((s) => s.namingRegion);
   const resetColumns = useSceneStore((s) => s.resetColumns);
   // While a building is focused, its units own hover — don't also hover roads
   // behind it (user 5.13).
@@ -99,11 +100,12 @@ export function RoadHover({ masterSeed }: { masterSeed: string }) {
   const { query, names } = useMemo(() => {
     void citySize;
     void citySketch;
+    void namingRegion; // #90: a different pack is different names, same layout
     return {
       query: roadQueryFor(masterSeed, cityShape, cityShapeScale),
       names: buildCityNames(masterSeed, cityShape, cityShapeScale),
     };
-  }, [masterSeed, cityShape, cityShapeScale, citySize, citySketch]);
+  }, [masterSeed, cityShape, cityShapeScale, citySize, citySketch, namingRegion]);
 
   // ~10 Hz is plenty for a hover; the grid query itself is microseconds but
   // setState churn at 60 Hz would re-render the chip needlessly.

@@ -54,3 +54,8 @@ Map of Content for architectural and product decisions. Each decision is an atom
 - [[plan-drei-camera-migration]] — **planned:** unify `/` + `/intro` camera controls on drei `<CameraControls>` (camera-controls); fly via a small custom drag-look controller (desktop-only, no stock drei fits); auto-revolution + projection + north-up roll stay thin custom; phased behind the Zustand store; `gate1` unaffected
 - [[camera-controls-feature-matrix]] — **living reference:** behavior-by-behavior matrix (old `/` custom vs drei out-of-the-box vs our thin layer) for the camera migration; single source of truth, kept current before/during implementation
 - [[camera-tuning-notes]] — **open:** running tuning issues for the drei camera bridge (Focal Y = focal height, ortho parity, touch refinements) + done-this-session log; on `feat/drei-camera-tuning`
+
+## Personas & directory (2026-07-18 round)
+
+- [[decision-listed-residents-term]] — **"listed" residents:** the directory's detailed personas are the *listed* sample of a full-capacity city derived from the buildings (~326k pop at 6 km); company `totalHeadcount` promoted to display data; `approxCount` display rounding
+- [[design-bus-routes]] — **design, no code:** recovered road graph → seeded per-line routes → ribbon overlay → `lineServing(home, work)` commuter assignment; 3 phases, 6 open questions pending user answers

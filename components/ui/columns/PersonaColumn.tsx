@@ -3,38 +3,20 @@
 import type { ReactNode } from "react";
 import {
   Armchair,
-  BadgeDollarSign,
   Bike,
   BookOpen,
   BriefcaseBusiness,
   Bus,
   Car,
-  ChefHat,
-  ClipboardList,
-  ConciergeBell,
-  Factory,
-  FlaskConical,
   Flower2,
   Footprints,
   GraduationCap,
-  Hammer,
   Heart,
   HeartCrack,
   HeartHandshake,
   Home,
-  Landmark,
-  Laptop,
-  Palette,
-  Scale,
-  Scissors,
-  Shield,
-  ShoppingBag,
-  Stethoscope,
   TrainFront,
-  Truck,
   User,
-  UserCog,
-  Wheat,
   type LucideIcon,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -55,7 +37,7 @@ import {
   MBTI_DESCRIPTIONS,
   EDUCATION_LABELS,
 } from "@/lib/seed/personaData";
-import type { EducationTier, ProfessionCategory } from "@/lib/seed/personaData";
+import type { EducationTier } from "@/lib/seed/personaData";
 import {
   personaFlavor,
   type CommuteMode,
@@ -68,6 +50,12 @@ import { useEntityIndexes } from "./entityData";
 import { FamilyTree } from "./FamilyTree";
 import { GenderIcon } from "./genderIcon";
 import { IconTip } from "./EntityColumns";
+import {
+  PROFESSION_ICONS,
+  HOME_ICON_COLOR,
+  WORK_ICON_COLOR,
+  EDUCATION_ICON_COLOR,
+} from "./workplaceIcons";
 
 // Column port of the old PersonaPanel. Ordering is a hard design rule
 // (re-cut 2026-07-10): badges → whyAwake → stats → family →
@@ -104,30 +92,6 @@ const RELATIONSHIP_ICONS: Record<RelationshipStatus, LucideIcon> = {
   divorced: HeartCrack,
 };
 
-// Profession-row glyph by industry (user 2026-07-10); statuses cover the
-// professionless. Anything unmapped falls back to the generic briefcase.
-const PROFESSION_ICONS: Partial<Record<ProfessionCategory, LucideIcon>> = {
-  Healthcare: Stethoscope,
-  "Food Service": ChefHat,
-  Technology: Laptop,
-  Finance: Landmark,
-  Legal: Scale,
-  "Office & Admin": ClipboardList,
-  Management: UserCog,
-  Sales: BadgeDollarSign,
-  Science: FlaskConical,
-  "Construction & Trades": Hammer,
-  Manufacturing: Factory,
-  Agriculture: Wheat,
-  Transportation: Truck,
-  "Arts & Media": Palette,
-  Retail: ShoppingBag,
-  "Personal Care": Scissors,
-  Hospitality: ConciergeBell,
-  Education: BookOpen,
-  "Public Safety": Shield,
-};
-
 function professionIconFor(p: Persona): LucideIcon {
   if (p.profession) return PROFESSION_ICONS[p.profession.category] ?? BriefcaseBusiness;
   if (p.workStatus === "student") return BookOpen;
@@ -135,16 +99,7 @@ function professionIconFor(p: Persona): LucideIcon {
   return BriefcaseBusiness;
 }
 
-// Row-icon colour coding (re-cut 2026-07-11): work is GREEN (money), home is
-// ORANGE (hearth), education keeps the transit blue.
-const HOME_ICON_COLOR = "#f2a24a";
-const WORK_ICON_COLOR = "#3fa87e";
-const EDUCATION_ICON_COLOR = "#6fa8ff";
-
-const MONTHS = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 function formatHeight(cm: number): string {
   const totalIn = Math.round(cm / 2.54);
@@ -215,7 +170,11 @@ function StatRow({
 }) {
   const Icon = icon;
   const glyph = Icon && (
-    <Icon className="size-4 shrink-0" style={iconTint ? { color: iconTint } : undefined} aria-hidden />
+    <Icon
+      className="size-4 shrink-0"
+      style={iconTint ? { color: iconTint } : undefined}
+      aria-hidden
+    />
   );
   return (
     <div className="flex flex-col gap-0.5 text-base">
@@ -223,7 +182,7 @@ function StatRow({
           it can't share the row with the label (user 2026-07-11) — never a
           mid-phrase wrap beside the label. */}
       <div className="flex flex-wrap items-baseline justify-between gap-x-3">
-        <span className="flex shrink-0 items-center gap-2 text-muted-foreground">
+        <span className="text-muted-foreground flex shrink-0 items-center gap-2">
           <span className="flex w-5 shrink-0 items-center justify-center">
             {glyph &&
               (iconAction ? (
@@ -231,7 +190,7 @@ function StatRow({
                   <Button
                     variant="ghost"
                     size="icon-xs"
-                    className="size-5 text-muted-foreground hover:text-foreground [&_svg]:size-4"
+                    className="text-muted-foreground hover:text-foreground size-5 [&_svg]:size-4"
                     onClick={iconAction}
                     aria-label={iconLabel ?? label}
                   >
@@ -246,12 +205,12 @@ function StatRow({
         </span>
         {/* [&_button]:text-right — button UA style centers wrapped text,
             which read as centre-aligned values (user 2026-07-10). */}
-        <span className="ml-auto min-w-0 max-w-full break-words text-right font-medium [&_button]:text-right">
+        <span className="ml-auto max-w-full min-w-0 text-right font-medium break-words [&_button]:text-right">
           {top}
         </span>
       </div>
       {bottom && (
-        <span className="min-w-0 break-words pl-7 text-right font-medium [&_button]:text-right">
+        <span className="min-w-0 pl-7 text-right font-medium break-words [&_button]:text-right">
           {bottom}
         </span>
       )}
@@ -282,7 +241,7 @@ export function PersonaColumn({
   const persona = indexes.directory.personas.get(id);
   if (!persona) {
     return part === "pinned" ? null : (
-      <div className="text-sm text-muted-foreground">Resident not found.</div>
+      <div className="text-muted-foreground text-sm">Resident not found.</div>
     );
   }
 
@@ -301,9 +260,7 @@ export function PersonaColumn({
   const isStudent = !!school && !business;
   const homeAddress = indexes.names.addresses.get(persona.homeBuildingId);
   const homeDistrictName = indexes.names.districtNames.get(persona.homeDistrictId);
-  const partner = persona.partnerId
-    ? indexes.directory.personas.get(persona.partnerId)
-    : undefined;
+  const partner = persona.partnerId ? indexes.directory.personas.get(persona.partnerId) : undefined;
 
   // Home/Work rows are two lines (user 2026-07-10): district beside the
   // label (its own click target → district column), street address on the
@@ -319,15 +276,11 @@ export function PersonaColumn({
   const workAddress =
     workBuildingId !== undefined ? indexes.names.addresses.get(workBuildingId) : undefined;
   const workDistrictId =
-    workBuildingId !== undefined
-      ? indexes.buildingById.get(workBuildingId)?.districtId
-      : undefined;
+    workBuildingId !== undefined ? indexes.buildingById.get(workBuildingId)?.districtId : undefined;
   const workDistrictName = workDistrictId
     ? indexes.names.districtNames.get(workDistrictId)
     : undefined;
-  const workAddressLine = workAddress
-    ? `${workAddress.number} ${workAddress.street}`
-    : undefined;
+  const workAddressLine = workAddress ? `${workAddress.number} ${workAddress.street}` : undefined;
 
   // Camera-only (user 2026-07-10): the row buttons FLY to the building
   // without selecting it — the address text beside them is the click target
@@ -395,10 +348,8 @@ export function PersonaColumn({
         break;
       }
     }
-    const inCityThroughTeens =
-      persona.bornHere || persona.yearsInCity >= persona.age - 17;
-    const inCityThroughCollege =
-      persona.bornHere || persona.yearsInCity >= persona.age - 22;
+    const inCityThroughTeens = persona.bornHere || persona.yearsInCity >= persona.age - 17;
+    const inCityThroughCollege = persona.bornHere || persona.yearsInCity >= persona.age - 22;
     if (attainedTier !== undefined && attainedTier >= 2) {
       const matched = campusByName(eduInstitution);
       if (matched) {
@@ -406,7 +357,7 @@ export function PersonaColumn({
       } else if (inCityThroughCollege) {
         const uni = campusByName(indexes.names.city.university);
         const col = campusByName(indexes.names.city.college);
-        almaMater = attainedTier >= 3 ? uni ?? col : col ?? uni;
+        almaMater = attainedTier >= 3 ? (uni ?? col) : (col ?? uni);
       } else if (inCityThroughTeens) {
         almaMater = nearestHighSchool();
       }
@@ -420,178 +371,177 @@ export function PersonaColumn({
   if (part === "pinned") {
     const born = `${MONTHS[persona.birthday.month - 1]} ${persona.birthday.day}, ${persona.birthday.year}`;
     return (
-    <>
-      {/* Header (user 2026-07-11): epithet, then the details in this exact
+      <>
+        {/* Header (user 2026-07-11): epithet, then the details in this exact
           order — gender line, DOB + birth time with age in parens, Height +
           Build side by side, ID. Minor-only fields (height/build) drop out;
           née rides the card title. The whole block is selectable (spans, not
           buttons, so select-none doesn't apply — set it explicitly for
           drag-select). */}
-      <div className="flex min-w-0 cursor-text flex-col gap-0.5 select-text">
-        {story.epithet && (
-          <span className="truncate text-base italic text-muted-foreground">{story.epithet}</span>
-        )}
-        {/* Two-column fact grid (user 2026-07-11): Gender|Age, DOB|Time,
+        <div className="flex min-w-0 cursor-text flex-col gap-0.5 select-text">
+          {story.epithet && (
+            <span className="text-muted-foreground truncate text-base italic">{story.epithet}</span>
+          )}
+          {/* Two-column fact grid (user 2026-07-11): Gender|Age, DOB|Time,
             Height|T-Shirt, ID|In City. Each cell spreads label left / value
             right (justify-between + nowrap) so no fact ever wraps; the
             gender icon + pronouns are their own label. In City lives HERE,
             not in the Details rows. */}
-        {/* 1.25fr/1fr (user 2026-07-11): the left column carries the longer
+          {/* 1.25fr/1fr (user 2026-07-11): the left column carries the longer
             values (DOB, ID) — a hair more width keeps them on one line. */}
-        <div className="grid grid-cols-[1.25fr_1fr] gap-x-4 gap-y-0.5 text-base">
-          <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-            <GenderIcon identity={persona.genderIdentity} className="size-5 shrink-0" />
-            {persona.pronouns}
-          </span>
-          <span className="flex items-baseline justify-between gap-2">
-            <span className="text-muted-foreground">Age</span>
-            <span>{persona.age}</span>
-          </span>
-          {/* DOB and Time as two neat fields (user 2026-07-11, round 3) —
+          <div className="grid grid-cols-[1.25fr_1fr] gap-x-4 gap-y-0.5 text-base">
+            <span className="text-muted-foreground inline-flex items-center gap-1.5">
+              <GenderIcon identity={persona.genderIdentity} className="size-5 shrink-0" />
+              {persona.pronouns}
+            </span>
+            <span className="flex items-baseline justify-between gap-2">
+              <span className="text-muted-foreground">Age</span>
+              <span>{persona.age}</span>
+            </span>
+            {/* DOB and Time as two neat fields (user 2026-07-11, round 3) —
               they stay separate seeded numbers rather than a Date object
               (a real Date would drag timezone semantics into the fiction);
               the formatter composes what display needs. */}
-          <span className="flex items-baseline justify-between gap-2">
-            <span className="text-muted-foreground">DOB</span>
-            <span className="whitespace-nowrap">{born}</span>
-          </span>
-          <span className="flex items-baseline justify-between gap-2">
-            <span className="text-muted-foreground">Time</span>
-            <span className="whitespace-nowrap">
-              {formatTime(flavor.birthHour, flavor.birthMinute)}
-            </span>
-          </span>
-          {flavor.heightCm && (
             <span className="flex items-baseline justify-between gap-2">
-              <span className="text-muted-foreground">Height</span>
-              <span className="whitespace-nowrap">{formatHeight(flavor.heightCm)}</span>
+              <span className="text-muted-foreground">DOB</span>
+              <span className="whitespace-nowrap">{born}</span>
             </span>
-          )}
-          {flavor.build && (
             <span className="flex items-baseline justify-between gap-2">
-              <span className="text-muted-foreground">T-Shirt</span>
-              <span>{flavor.build}</span>
+              <span className="text-muted-foreground">Time</span>
+              <span className="whitespace-nowrap">
+                {formatTime(flavor.birthHour, flavor.birthMinute)}
+              </span>
             </span>
-          )}
-          <span className="flex items-baseline justify-between gap-2">
-            <span className="text-muted-foreground">ID</span>
-            <span className="font-mono">{flavor.civicId}</span>
-          </span>
-          <span className="flex items-baseline justify-between gap-2">
-            <span className="text-muted-foreground">In City</span>
-            <span className="whitespace-nowrap">
-              {persona.bornHere ? "Born here" : `${persona.yearsInCity} yrs`}
+            {flavor.heightCm && (
+              <span className="flex items-baseline justify-between gap-2">
+                <span className="text-muted-foreground">Height</span>
+                <span className="whitespace-nowrap">{formatHeight(flavor.heightCm)}</span>
+              </span>
+            )}
+            {flavor.build && (
+              <span className="flex items-baseline justify-between gap-2">
+                <span className="text-muted-foreground">T-Shirt</span>
+                <span>{flavor.build}</span>
+              </span>
+            )}
+            <span className="flex items-baseline justify-between gap-2">
+              <span className="text-muted-foreground">ID</span>
+              <span className="font-mono">{flavor.civicId}</span>
             </span>
-          </span>
+            <span className="flex items-baseline justify-between gap-2">
+              <span className="text-muted-foreground">In City</span>
+              <span className="whitespace-nowrap">
+                {persona.bornHere ? "Born here" : `${persona.yearsInCity} yrs`}
+              </span>
+            </span>
+          </div>
         </div>
-      </div>
 
-      <div className="flex flex-wrap items-center gap-1.5">
-        {/* Trait badges explain themselves on hover (shadcn hover cards,
+        <div className="flex flex-wrap items-center gap-1.5">
+          {/* Trait badges explain themselves on hover (shadcn hover cards,
             user 2026-07-08) — birthday context on the sun sign, animal +
             element on the Chinese sign, nickname + read on the MBTI type. */}
-        {/* Badge anatomy (user 2026-07-11): astrology glyphs at emoji size
+          {/* Badge anatomy (user 2026-07-11): astrology glyphs at emoji size
             (text-base + emoji presentation), sign names as 2-letter
             abbreviations. Hover cards read at text-base with the big three
             (Sun/Moon/Rising) each carrying their sign emoji. */}
-        <HoverCard>
-          <HoverCardTrigger
-            render={
-              <Badge variant="outline" className="cursor-help text-sm">
-                <span className="text-base leading-none">
-                  {signEmoji(persona.westernSign.name)}
-                </span>{" "}
-                {persona.westernSign.name.slice(0, 2)}
-              </Badge>
-            }
-          />
-          <HoverCardContent className="w-72 text-base">
-            {/* The big three each read as emoji-marked headings (☀️/🌙/🌅 +
+          <HoverCard>
+            <HoverCardTrigger
+              render={
+                <Badge variant="outline" className="cursor-help text-sm">
+                  <span className="text-base leading-none">
+                    {signEmoji(persona.westernSign.name)}
+                  </span>{" "}
+                  {persona.westernSign.name.slice(0, 2)}
+                </Badge>
+              }
+            />
+            <HoverCardContent className="w-72 text-base">
+              {/* The big three each read as emoji-marked headings (☀️/🌙/🌅 +
                 sign emoji) with their DETAILS on the line below (user
                 2026-07-11) — no trailing "· descriptor" on the heading. */}
-            <div className="font-medium">
-              <span className="text-lg leading-none">
-                ☀️ {signEmoji(persona.westernSign.name)}
-              </span>{" "}
-              {persona.westernSign.name} Sun
-            </div>
-            <div className="text-sm text-muted-foreground">
-              {persona.westernSign.element} · {persona.westernSign.modality} · born{" "}
-              {persona.birthday.month}/{persona.birthday.day}
-            </div>
-            <p className="mt-1.5">{WESTERN_SIGN_TRAITS[persona.westernSign.name]}</p>
-            <div className="mt-2 border-t border-border pt-2">
-              {/* Sub head on its OWN line under each of the big three (user
-                  2026-07-11) — never continued off the heading. */}
               <div className="font-medium">
-                <span className="text-base leading-none">🌙 {signEmoji(flavor.moonSign)}</span>{" "}
-                {flavor.moonSign} Moon
+                <span className="text-lg leading-none">
+                  ☀️ {signEmoji(persona.westernSign.name)}
+                </span>{" "}
+                {persona.westernSign.name} Sun
               </div>
-              <div className="text-sm text-muted-foreground">the inner weather</div>
-              <div>{MOON_SIGN_TRAITS[flavor.moonSign]}</div>
-              <div className="mt-1.5 font-medium">
-                <span className="text-base leading-none">🌅 {signEmoji(flavor.risingSign)}</span>{" "}
-                {flavor.risingSign} Rising
+              <div className="text-muted-foreground text-sm">
+                {persona.westernSign.element} · {persona.westernSign.modality} · born{" "}
+                {persona.birthday.month}/{persona.birthday.day}
               </div>
-              <div className="text-sm text-muted-foreground">the first impression</div>
-              <div>{RISING_SIGN_TRAITS[flavor.risingSign]}</div>
-            </div>
-          </HoverCardContent>
-        </HoverCard>
-        <HoverCard>
-          <HoverCardTrigger
-            render={
-              <Badge variant="outline" className="cursor-help text-sm">
-                <span className="text-base leading-none">
-                  {ELEMENT_EMOJI[persona.chineseSign.element]}{" "}
-                  {CHINESE_ANIMAL_GLYPHS[persona.chineseSign.animal]}
-                </span>
-              </Badge>
-            }
-          />
-          <HoverCardContent className="w-72 text-base">
-            {/* Layout (user 2026-07-11): header, born year, then two glyph-led
+              <p className="mt-1.5">{WESTERN_SIGN_TRAITS[persona.westernSign.name]}</p>
+              <div className="border-border mt-2 border-t pt-2">
+                {/* Sub head on its OWN line under each of the big three (user
+                  2026-07-11) — never continued off the heading. */}
+                <div className="font-medium">
+                  <span className="text-base leading-none">🌙 {signEmoji(flavor.moonSign)}</span>{" "}
+                  {flavor.moonSign} Moon
+                </div>
+                <div className="text-muted-foreground text-sm">the inner weather</div>
+                <div>{MOON_SIGN_TRAITS[flavor.moonSign]}</div>
+                <div className="mt-1.5 font-medium">
+                  <span className="text-base leading-none">🌅 {signEmoji(flavor.risingSign)}</span>{" "}
+                  {flavor.risingSign} Rising
+                </div>
+                <div className="text-muted-foreground text-sm">the first impression</div>
+                <div>{RISING_SIGN_TRAITS[flavor.risingSign]}</div>
+              </div>
+            </HoverCardContent>
+          </HoverCard>
+          <HoverCard>
+            <HoverCardTrigger
+              render={
+                <Badge variant="outline" className="cursor-help text-sm">
+                  <span className="text-base leading-none">
+                    {ELEMENT_EMOJI[persona.chineseSign.element]}{" "}
+                    {CHINESE_ANIMAL_GLYPHS[persona.chineseSign.animal]}
+                  </span>
+                </Badge>
+              }
+            />
+            <HoverCardContent className="w-72 text-base">
+              {/* Layout (user 2026-07-11): header, born year, then two glyph-led
                 lines — animal-year description (without renaming the animal)
                 and element description. */}
-            <div className="font-medium">
-              <span className="text-lg leading-none">
-                {CHINESE_ANIMAL_GLYPHS[persona.chineseSign.animal]}
-              </span>{" "}
-              Year of the {persona.chineseSign.animal}
-            </div>
-            <div className="text-sm text-muted-foreground">born {persona.birthday.year}</div>
-            <p className="mt-1.5">
-              <span className="text-base leading-none">
-                {CHINESE_ANIMAL_GLYPHS[persona.chineseSign.animal]}
-              </span>{" "}
-              {capitalize(CHINESE_ANIMAL_TRAITS[persona.chineseSign.animal])}.
-            </p>
-            <p className="mt-1">
-              <span className="text-base leading-none">
-                {ELEMENT_EMOJI[persona.chineseSign.element]}
-              </span>{" "}
-              {capitalize(CHINESE_ELEMENT_TRAITS[persona.chineseSign.element])}.
-            </p>
-          </HoverCardContent>
-        </HoverCard>
-        <HoverCard>
-          <HoverCardTrigger
-            render={
-              <Badge variant="outline" className="cursor-help text-sm">
-                {flavor.mbtiNickname.replace(/^The /, "")}
-              </Badge>
-            }
-          />
-          <HoverCardContent className="w-72 text-base">
-            <div className="font-medium">
-              {flavor.mbti} · {flavor.mbtiNickname}
-            </div>
-            <p className="mt-1.5">{MBTI_DESCRIPTIONS[flavor.mbti]}</p>
-          </HoverCardContent>
-        </HoverCard>
-      </div>
-
-    </>
+              <div className="font-medium">
+                <span className="text-lg leading-none">
+                  {CHINESE_ANIMAL_GLYPHS[persona.chineseSign.animal]}
+                </span>{" "}
+                Year of the {persona.chineseSign.animal}
+              </div>
+              <div className="text-muted-foreground text-sm">born {persona.birthday.year}</div>
+              <p className="mt-1.5">
+                <span className="text-base leading-none">
+                  {CHINESE_ANIMAL_GLYPHS[persona.chineseSign.animal]}
+                </span>{" "}
+                {capitalize(CHINESE_ANIMAL_TRAITS[persona.chineseSign.animal])}.
+              </p>
+              <p className="mt-1">
+                <span className="text-base leading-none">
+                  {ELEMENT_EMOJI[persona.chineseSign.element]}
+                </span>{" "}
+                {capitalize(CHINESE_ELEMENT_TRAITS[persona.chineseSign.element])}.
+              </p>
+            </HoverCardContent>
+          </HoverCard>
+          <HoverCard>
+            <HoverCardTrigger
+              render={
+                <Badge variant="outline" className="cursor-help text-sm">
+                  {flavor.mbtiNickname.replace(/^The /, "")}
+                </Badge>
+              }
+            />
+            <HoverCardContent className="w-72 text-base">
+              <div className="font-medium">
+                {flavor.mbti} · {flavor.mbtiNickname}
+              </div>
+              <p className="mt-1.5">{MBTI_DESCRIPTIONS[flavor.mbti]}</p>
+            </HoverCardContent>
+          </HoverCard>
+        </div>
+      </>
     );
   }
 
@@ -629,7 +579,7 @@ export function PersonaColumn({
           moved into the pinned header's fact grid. The whole stack lives
           under a "Details" disclosure. */}
       <Collapsible open={cardDetailsOpen} onOpenChange={setCardDetailsOpen}>
-        <CollapsibleTrigger className="text-base font-medium text-muted-foreground">
+        <CollapsibleTrigger className="text-muted-foreground text-base font-medium">
           Details
         </CollapsibleTrigger>
         <CollapsiblePanel>
@@ -672,14 +622,10 @@ export function PersonaColumn({
               <StatRow
                 icon={professionIconFor(persona)}
                 iconTint={WORK_ICON_COLOR}
-                iconAction={
-                  workBuildingId !== undefined ? () => flyTo(workBuildingId) : undefined
-                }
+                iconAction={workBuildingId !== undefined ? () => flyTo(workBuildingId) : undefined}
                 iconLabel="Fly to Work"
                 label="Work"
-                top={
-                  persona.profession ? persona.profession.title : capitalize(persona.workStatus)
-                }
+                top={persona.profession ? persona.profession.title : capitalize(persona.workStatus)}
                 bottom={
                   (workPlace || (workDistrictName && workDistrictId) || workAddressLine) && (
                     <span className="flex flex-col items-end gap-0.5">
@@ -806,39 +752,39 @@ export function PersonaColumn({
                 family role already reads in the Family section. The partner
                 guard keeps the row if data ever paired a minor. */}
             {(persona.age >= 18 || partner) && (
-            <StatRow
-              icon={RELATIONSHIP_ICONS[persona.relationshipStatus]}
-              // Hearts read pink (user 2026-07-10 🩷); single/widowed stay muted.
-              iconTint={
-                persona.relationshipStatus === "married" ||
-                persona.relationshipStatus === "dating" ||
-                persona.relationshipStatus === "divorced"
-                  ? "#f472b6"
-                  : undefined
-              }
-              iconAction={
-                partner
-                  ? () => {
-                      const home = indexes.buildingById.get(partner.homeBuildingId);
-                      if (home) flyToBuilding(home);
-                    }
-                  : undefined
-              }
-              iconLabel="Fly to Partner"
-              label="Relationship"
-              top={capitalize(persona.relationshipStatus)}
-              bottom={
-                partner && (
-                  <button
-                    type="button"
-                    onClick={() => push({ kind: "persona", id: partner.id })}
-                    className="hover:underline"
-                  >
-                    {partner.fullName}
-                  </button>
-                )
-              }
-            />
+              <StatRow
+                icon={RELATIONSHIP_ICONS[persona.relationshipStatus]}
+                // Hearts read pink (user 2026-07-10 🩷); single/widowed stay muted.
+                iconTint={
+                  persona.relationshipStatus === "married" ||
+                  persona.relationshipStatus === "dating" ||
+                  persona.relationshipStatus === "divorced"
+                    ? "#f472b6"
+                    : undefined
+                }
+                iconAction={
+                  partner
+                    ? () => {
+                        const home = indexes.buildingById.get(partner.homeBuildingId);
+                        if (home) flyToBuilding(home);
+                      }
+                    : undefined
+                }
+                iconLabel="Fly to Partner"
+                label="Relationship"
+                top={capitalize(persona.relationshipStatus)}
+                bottom={
+                  partner && (
+                    <button
+                      type="button"
+                      onClick={() => push({ kind: "persona", id: partner.id })}
+                      className="hover:underline"
+                    >
+                      {partner.fullName}
+                    </button>
+                  )
+                }
+              />
             )}
           </div>
         </CollapsiblePanel>
@@ -874,10 +820,10 @@ export function PersonaColumn({
                       key={link.personaId}
                       type="button"
                       onClick={() => push({ kind: "persona", id: link.personaId })}
-                      className="-mx-1 flex flex-wrap items-baseline justify-between gap-x-4 rounded px-1 text-left text-base hover:bg-foreground/10"
+                      className="hover:bg-foreground/10 -mx-1 flex flex-wrap items-baseline justify-between gap-x-4 rounded px-1 text-left text-base"
                     >
-                      <span className="shrink-0 capitalize text-muted-foreground">{link.role}</span>
-                      <span className="ml-auto min-w-0 max-w-full break-words text-right">
+                      <span className="text-muted-foreground shrink-0 capitalize">{link.role}</span>
+                      <span className="ml-auto max-w-full min-w-0 text-right break-words">
                         {relative.fullName}
                       </span>
                     </button>
@@ -886,10 +832,10 @@ export function PersonaColumn({
                 {persona.offstage.map((rel, i) => (
                   <div
                     key={`${rel.role}:${rel.name}:${i}`}
-                    className="flex flex-wrap items-baseline justify-between gap-x-4 text-base text-muted-foreground"
+                    className="text-muted-foreground flex flex-wrap items-baseline justify-between gap-x-4 text-base"
                   >
                     <span className="shrink-0 capitalize">{rel.role}</span>
-                    <span className="ml-auto min-w-0 max-w-full break-words text-right">
+                    <span className="ml-auto max-w-full min-w-0 text-right break-words">
                       {rel.name}, lives elsewhere
                     </span>
                   </div>
@@ -903,11 +849,9 @@ export function PersonaColumn({
       {/* whyAwake moves below Details + Family (user 2026-07-11): facts first,
           then the line that explains the lit window, then the rest of the
           flavour, ending on the hook. */}
-      {(story.whyAwake ||
-        story.wasIs ||
-        story.detail ||
-        story.refusal ||
-        story.relation) && <Separator />}
+      {(story.whyAwake || story.wasIs || story.detail || story.refusal || story.relation) && (
+        <Separator />
+      )}
       {story.whyAwake && <p className="text-base">{story.whyAwake}</p>}
 
       {(story.wasIs || story.detail || story.refusal || story.relation) && (

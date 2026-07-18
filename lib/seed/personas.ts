@@ -1,8 +1,8 @@
 import { seededRng } from "./rng";
 import { generateCity, type Building, type Archetype } from "./cityGen";
 import type { DistrictCharacter } from "./district";
-import { buildingPopulation } from "./population";
-import { buildCityNames, TREE_NAMES, type CityNames } from "./naming";
+import { buildingPopulation, residentialCapacity } from "./population";
+import { buildCityNames, TREE_NAMES, namingRegionKey, type CityNames } from "./naming";
 import { firstNameForBirthYear } from "./nameCohorts";
 import { maxHalfExtent } from "./topology";
 import { sketchKey } from "./citySketch";
@@ -135,6 +135,11 @@ export type Business = {
   kind: WorkplaceType;
   buildingId: number;
   employeeIds: PersonaId[];
+  // Full headcount (#96): the listed employees plus the unnamed staff the
+  // directory doesn't sample. Seeded by business id, floored at the listed
+  // count; filled after the employment weave (0 until then). Tenancy-layout
+  // sizing reads this too.
+  totalHeadcount: number;
   // Profession categories this business reads as belonging to ("Mendoza &
   // Partners" should employ paralegals, not bellhops). Employment prefers an
   // affine match; undefined = takes anyone with the right workplace kind.
@@ -166,7 +171,11 @@ export type PersonaDirectory = {
   byWorkBuilding: Map<number, Business[]>;
   names: CityNames;
   lore: CityLoreEntry[];
+  // Listed counts: what the directory actually samples and can browse.
   totals: { personas: number; households: number; businesses: number };
+  // Full-capacity scale (#96): the city the listed directory is a sample of,
+  // derived entirely from the built environment - no rng, recomputes per seed.
+  city: { population: number; households: number; jobs: number; establishments: number };
 };
 
 // --- Tuning ---------------------------------------------------------------------
@@ -182,8 +191,51 @@ const POP_PER_HOUSEHOLD = 22;
 const MAX_HOUSEHOLDS_PER_BUILDING = 8;
 const TARGET_MAX_PERSONAS = 42000;
 
+// Full-capacity scale (#96). The listed directory samples a much larger city;
+// these derive that city's census from the same buildings. PEOPLE_PER_HOUSEHOLD
+// is the census mean (the persona pass already assumes it when estimating).
+const PEOPLE_PER_HOUSEHOLD = 2.4;
+// The economy's jobs figure is the sum of every listed business's full
+// headcount — every work-hosting archetype gets listed businesses, so that
+// sum already IS the building-derived economy. At the 6 km tier it lands
+// near 1.1 jobs per resident: a core-city ratio (DC, Boston), staffed by
+// unlisted in-commuters. Unlisted establishments are smaller outfits, so
+// they average well under the listed businesses' headcounts.
+const MEAN_ESTABLISHMENT_HEADCOUNT = 16;
+
+// A company's staff is mostly unnamed - the directory lists only a few
+// (employeeIds). Estimate the full headcount by kind, hashed from the business
+// id (FNV-1a) so it's stable across passes, floored at the listed count.
+// Moved here from tenancyLayout (where it only sized units) when it became
+// display data (#96); the math must stay byte-identical so unit sizing
+// doesn't shift.
+const HEADCOUNT_RANGES: Partial<Record<WorkplaceType, [number, number]>> = {
+  office: [12, 140],
+  hospital: [40, 220],
+  civic: [10, 70],
+  lab: [8, 50],
+  studio: [4, 24],
+  school: [20, 90],
+  restaurant: [6, 34],
+  retail: [3, 20],
+  shop: [2, 14],
+  factory: [24, 140],
+  warehouse: [8, 44],
+};
+function fullHeadcount(biz: Business): number {
+  const [lo, hi] = HEADCOUNT_RANGES[biz.kind] ?? [4, 20];
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < biz.id.length; i++) {
+    h ^= biz.id.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  const t = (h >>> 0) / 4294967296;
+  return Math.max(biz.employeeIds.length, lo + Math.floor(t * (hi - lo)));
+}
+
 // Residential capacity by archetype — mirrors population.ts's occupancy story.
-const RESIDENTIAL_ARCHETYPES: ReadonlySet<Archetype> = new Set([
+// Exported for the UI's district/street capacity rollups (#96).
+export const RESIDENTIAL_ARCHETYPES: ReadonlySet<Archetype> = new Set([
   "residential-tower",
   "mid-rise",
   "low-rise",
@@ -549,6 +601,101 @@ function progressWithin(start: number, end: number, frac: number): number {
   return start + (end - start) * Math.min(1, Math.max(0, frac));
 }
 
+// Least-staffed spread over a fixed pool of businesses, made incremental for
+// the #94 employment-weave fix. The old pass rescanned the whole pool for its
+// minimum staff count and re-filtered the least-staffed list once PER worker —
+// O(employed × pool), the superlinear pocket. This tracks, in pool order,
+// exactly the members at the current minimum count, advancing one "round" at a
+// time (every business fills to 1 before any reaches 2, and so on).
+//
+// Byte-identical draw contract: the pass draws ONE rng() per hire as
+// `leastStaffed[floor(rng() * leastStaffed.length)]`. leastCount() returns
+// that same length and pickLeast(k) the same k-th element in pool order, so the
+// identical business is chosen and every downstream draw is untouched. Counts
+// are read live from employeeIds.length on each round refresh, so a bump routed
+// here from the singleton path (a principal filling a school the teachers also
+// draw from) is reflected too.
+class StaffTracker {
+  private readonly members: Business[];
+  private readonly indexOf: Map<Business, number>;
+  private readonly inSet: boolean[];
+  // Fenwick / BIT over member presence (1-indexed), for O(log n) find-k-th.
+  private readonly tree: number[];
+  private readonly n: number;
+  private present = 0;
+
+  constructor(members: Business[]) {
+    this.members = members;
+    this.n = members.length;
+    this.indexOf = new Map();
+    for (let i = 0; i < this.n; i++) this.indexOf.set(members[i], i);
+    this.inSet = new Array(this.n).fill(false);
+    this.tree = new Array(this.n + 1).fill(0);
+    this.advance();
+  }
+
+  // Count of members currently at the minimum staff count.
+  leastCount(): number {
+    return this.present;
+  }
+
+  // The k-th (0-based) least-staffed member, in pool order.
+  pickLeast(k: number): Business {
+    return this.members[this.findKth(k)];
+  }
+
+  // Record that `biz` just gained a hire (caller already pushed to employeeIds).
+  bump(biz: Business): void {
+    const i = this.indexOf.get(biz);
+    if (i === undefined) return; // not a member of this pool
+    if (!this.inSet[i]) return; // was above the min; a later advance() re-reads it
+    this.inSet[i] = false;
+    this.bitAdd(i, -1);
+    this.present -= 1;
+    if (this.present === 0) this.advance();
+  }
+
+  // Re-seed the present-set to the current live minimum, in pool order.
+  private advance(): void {
+    let min = Infinity;
+    for (let i = 0; i < this.n; i++) {
+      const c = this.members[i].employeeIds.length;
+      if (c < min) min = c;
+    }
+    this.tree.fill(0);
+    this.inSet.fill(false);
+    this.present = 0;
+    for (let i = 0; i < this.n; i++) {
+      if (this.members[i].employeeIds.length === min) {
+        this.inSet[i] = true;
+        this.bitAdd(i, 1);
+        this.present += 1;
+      }
+    }
+  }
+
+  private bitAdd(i: number, delta: number): void {
+    for (let x = i + 1; x <= this.n; x += x & -x) this.tree[x] += delta;
+  }
+
+  // Smallest member index whose inclusive prefix count of present members is
+  // k+1 — the (k+1)-th present member. Binary-lifting on the BIT.
+  private findKth(k: number): number {
+    let target = k + 1;
+    let pos = 0;
+    let step = 1;
+    while (step << 1 <= this.n) step <<= 1;
+    for (; step > 0; step >>= 1) {
+      const next = pos + step;
+      if (next <= this.n && this.tree[next] < target) {
+        pos = next;
+        target -= this.tree[next];
+      }
+    }
+    return pos; // 0-based member index
+  }
+}
+
 // Resumable build (test plan 07-10 §7.5): the exact pass sequence as before,
 // restructured as a generator that yields at chunk boundaries so the idle
 // prewarmer can run it in ~5ms frame slices instead of one ~1.4s hit. Draw
@@ -581,6 +728,11 @@ function* buildDirectorySteps(
 
   // Global soft cap: estimate the featured count, derive one scale factor.
   let estimated = 0;
+  // Full census capacity (#96): every building's mixed-use residential share,
+  // NOT the household-derivation input below (that stays on the untouched
+  // people-equivalent so the featured set never re-rolls).
+  let cityPopulation = 0;
+  for (const b of buildings) cityPopulation += residentialCapacity(b);
   const rawHouseholds = new Map<number, number>();
   for (const b of buildings) {
     if (!RESIDENTIAL_ARCHETYPES.has(b.archetype)) continue;
@@ -589,7 +741,7 @@ function* buildDirectorySteps(
       Math.min(MAX_HOUSEHOLDS_PER_BUILDING, Math.round(buildingPopulation(b) / POP_PER_HOUSEHOLD)),
     );
     rawHouseholds.set(b.id, n);
-    estimated += n * 2.4;
+    estimated += n * PEOPLE_PER_HOUSEHOLD;
   }
   const hhScale = estimated > TARGET_MAX_PERSONAS ? TARGET_MAX_PERSONAS / estimated : 1;
 
@@ -1016,6 +1168,7 @@ function* buildDirectorySteps(
         kind,
         buildingId: b.id,
         employeeIds: [],
+        totalHeadcount: 0,
         affinity,
         titleAffinity,
       };
@@ -1085,6 +1238,7 @@ function* buildDirectorySteps(
         kind: "school",
         buildingId: site.id,
         employeeIds: [],
+        totalHeadcount: 0,
         studentIds: [],
         schoolTier,
         // Teachers/aides/admin route here via kind matching; no title gate.
@@ -1263,6 +1417,48 @@ function* buildDirectorySteps(
     const teacherFallback = PROFESSIONS.find(
       (x) => x.title === "High School Teacher" && x.workplaceType === "school",
     );
+    // The preference-ladder pool a worker draws from is a pure function of
+    // (workplaceType, title, category) — the businesses' affinity flags are
+    // static. Memoise it once per distinct signature instead of re-filtering
+    // the whole kind-list for every one of ~tens-of-thousands of workers (that
+    // per-worker triple filter over the kind-list was the #94 superlinear
+    // pocket: cost proportional to employed × businesses). ~201 professions
+    // give a handful of distinct pools, each built once. Pools are also
+    // interned by membership, so Legal- and Finance-office workers — who draw
+    // the SAME physical offices under different keys — share one array and so
+    // one StaffTracker. Draw order is untouched: the same `pool` array (same
+    // members, same order) meets the same single rng() draw as before.
+    const poolCache = new Map<string, Business[]>();
+    const poolIntern = new Map<string, Business[]>();
+    const poolFor = (
+      candidates: Business[],
+      wp: WorkplaceType,
+      title: string,
+      category: ProfessionCategory,
+    ): Business[] => {
+      const key = `${wp} ${title} ${category}`;
+      const cached = poolCache.get(key);
+      if (cached !== undefined) return cached;
+      // Preference ladder: exact title match ("{F} Dental" wants dentists) >
+      // category match (bellhops to the hotel, paralegals to the law firm) >
+      // unmarked businesses > anything with the right workplace kind.
+      const byTitle = candidates.filter((c) => c.titleAffinity?.includes(title));
+      const byCategory = candidates.filter((c) => c.affinity?.includes(category) && !c.titleAffinity);
+      const open = candidates.filter((c) => !c.affinity && !c.titleAffinity);
+      let pool =
+        byTitle.length > 0 ? byTitle : byCategory.length > 0 ? byCategory : open.length > 0 ? open : candidates;
+      // Intern by exact membership (ids in pool order): two filters of the same
+      // candidates in the same order selecting the same ids are byte-identical
+      // arrays; share one object so overlapping pools share one tracker.
+      const sig = `${pool.length}:${pool.map((b) => b.id).join(",")}`;
+      const interned = poolIntern.get(sig);
+      if (interned) pool = interned;
+      else poolIntern.set(sig, pool);
+      poolCache.set(key, pool);
+      return pool;
+    };
+    // One least-staffed tracker per (interned) pool array — see StaffTracker.
+    const trackers = new Map<Business[], StaffTracker>();
     // Stable worker order: persona insertion order is already building-ascending.
     sinceYield = 0;
     let employmentDone = 0;
@@ -1286,35 +1482,45 @@ function* buildDirectorySteps(
       ) {
         p.profession = teacherFallback;
       }
-      // Preference ladder: exact title match ("{F} Dental" wants dentists) >
-      // category match (bellhops to the hotel, paralegals to the law firm) >
-      // unmarked businesses > anything with the right workplace kind.
       const category = p.profession.category;
       const title = p.profession.title;
-      const singleton = SINGLETON_TITLES.has(title);
-      const slotOpen = (c: Business) => !singletonFilled.has(`${c.id}::${title}`);
-      const byTitle = candidates.filter((c) => c.titleAffinity?.includes(title));
-      const byCategory = candidates.filter((c) => c.affinity?.includes(category) && !c.titleAffinity);
-      const open = candidates.filter((c) => !c.affinity && !c.titleAffinity);
-      let pool =
-        byTitle.length > 0 ? byTitle : byCategory.length > 0 ? byCategory : open.length > 0 ? open : candidates;
-      if (singleton) {
-        const freeInPool = pool.filter(slotOpen);
+      const basePool = poolFor(candidates, p.profession.workplaceType, title, category);
+      if (SINGLETON_TITLES.has(title)) {
+        // Singleton titles ("School Principal", one per school) refine the pool
+        // by an evolving `singletonFilled` set, so they can't ride the static
+        // tracker — take the original O(pool) path (rare: ~one per school).
+        const slotOpen = (c: Business) => !singletonFilled.has(`${c.id}::${title}`);
+        const freeInPool = basePool.filter(slotOpen);
         const freeAnywhere = candidates.filter(slotOpen);
         // Every slot taken AND no teacher fallback — tolerate the duplicate
         // rather than crash on an empty pool.
-        pool = freeInPool.length > 0 ? freeInPool : freeAnywhere.length > 0 ? freeAnywhere : pool;
+        const pool = freeInPool.length > 0 ? freeInPool : freeAnywhere.length > 0 ? freeAnywhere : basePool;
+        let minStaff = Infinity;
+        for (const c of pool) minStaff = Math.min(minStaff, c.employeeIds.length);
+        const leastStaffed = pool.filter((c) => c.employeeIds.length === minStaff);
+        const biz = leastStaffed[Math.floor(rng() * leastStaffed.length)];
+        singletonFilled.add(`${biz.id}::${title}`);
+        p.businessId = biz.id;
+        biz.employeeIds.push(p.id);
+        // Keep the interned pool's tracker (built for the ordinary teachers who
+        // share these buildings) in step with this off-tracker bump.
+        trackers.get(basePool)?.bump(biz);
+        continue;
       }
       // Spread hires: within the chosen tier, staff the LEAST-staffed
       // businesses first (user 2026-07-08: "lots of companies have 0 staff")
       // — every business fills to 1 before any gets its 2nd, and so on.
-      let minStaff = Infinity;
-      for (const c of pool) minStaff = Math.min(minStaff, c.employeeIds.length);
-      const leastStaffed = pool.filter((c) => c.employeeIds.length === minStaff);
-      const biz = leastStaffed[Math.floor(rng() * leastStaffed.length)];
-      if (singleton) singletonFilled.add(`${biz.id}::${title}`);
+      let tracker = trackers.get(basePool);
+      if (!tracker) {
+        tracker = new StaffTracker(basePool);
+        trackers.set(basePool, tracker);
+      }
+      // Same draw as the old `leastStaffed[floor(rng()*len)]`: same count, same
+      // pool-order k-th element — but O(log pool) instead of O(pool) per hire.
+      const biz = tracker.pickLeast(Math.floor(rng() * tracker.leastCount()));
       p.businessId = biz.id;
       biz.employeeIds.push(p.id);
+      tracker.bump(biz);
     }
   }
   dirBuildProgress = 0.8;
@@ -1492,6 +1698,18 @@ function* buildDirectorySteps(
   }
   dirBuildProgress = 0.95;
 
+  // Full headcounts (#96): after the employment weave, so the floor at the
+  // listed count holds. Their sum is the economy-wide jobs figure.
+  let jobs = 0;
+  for (const biz of businesses.values()) {
+    biz.totalHeadcount = fullHeadcount(biz);
+    jobs += biz.totalHeadcount;
+  }
+  const establishments = Math.max(
+    businesses.size,
+    Math.round(jobs / MEAN_ESTABLISHMENT_HEADCOUNT),
+  );
+
   const directory: PersonaDirectory = {
     personas,
     households,
@@ -1504,6 +1722,12 @@ function* buildDirectorySteps(
       personas: personas.size,
       households: households.length,
       businesses: businesses.size,
+    },
+    city: {
+      population: Math.round(cityPopulation),
+      households: Math.round(cityPopulation / PEOPLE_PER_HOUSEHOLD),
+      jobs: Math.round(jobs),
+      establishments,
     },
   };
 
@@ -1523,7 +1747,9 @@ function* buildDirectorySteps(
 const dirCache = new Map<string, PersonaDirectory>();
 
 function dirCacheKey(masterSeed: string, shape: CityShapeSetting, shapeScale: number): string {
-  return `${masterSeed}::${shape}::${shapeScale}::${maxHalfExtent()}::${sketchKey()}::${fieldDeviation()}::${densityProfileKey()}`;
+  // #90: the directory embeds street/building names (buildCityNames), so a
+  // naming-pack switch must miss this cache too, not just naming.ts's own.
+  return `${masterSeed}::${shape}::${shapeScale}::${maxHalfExtent()}::${sketchKey()}::${fieldDeviation()}::${densityProfileKey()}::${namingRegionKey()}`;
 }
 
 // Cache probe for the deferred UI hooks: reports whether the cold build has

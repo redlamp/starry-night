@@ -12,6 +12,7 @@ import {
   type Business,
   type Household,
 } from "@/lib/seed/personas";
+import { residentialCapacity } from "@/lib/seed/population";
 import type { CityShapeSetting } from "@/lib/seed/cityShape";
 import type { CityNames } from "@/lib/seed/naming";
 
@@ -31,7 +32,8 @@ export type RoadInfo = {
 export type DistrictAgg = {
   district: District;
   properName: string;
-  residentCount: number;
+  residentCount: number; // listed residents — the browsable sample
+  populationEst: number; // full residential capacity (#96)
   companyCount: number;
   // Streets serving this district's addressed buildings, busiest first.
   streets: Array<{ roadId: string; name: string; buildingCount: number }>;
@@ -44,7 +46,8 @@ export type StreetAgg = {
   road: RoadInfo;
   buildingIds: number[]; // in address order (a walk down the street)
   companies: Business[];
-  residentCount: number;
+  residentCount: number; // listed residents — the browsable sample
+  populationEst: number; // full residential capacity (#96)
   residentsSample: Persona[]; // capped — columns show "N residents · sample"
   districts: District[]; // districts the street's buildings sit in
 };
@@ -119,6 +122,17 @@ function buildEntityIndexes(
       (homeBuildingsByDistrict.get(b.districtId) ?? 0) + 1,
     );
   }
+  // Full census capacity per district (#96) — building-derived, one pass,
+  // mixed-use towers included (recalibrated 2026-07-18).
+  const populationByDistrict = new Map<string, number>();
+  for (const b of city.buildings) {
+    const capacity = residentialCapacity(b);
+    if (capacity === 0) continue;
+    populationByDistrict.set(
+      b.districtId,
+      (populationByDistrict.get(b.districtId) ?? 0) + capacity,
+    );
+  }
   const companiesByDistrict = new Map<string, number>();
   for (const biz of directory.businesses.values()) {
     const b = buildingById.get(biz.buildingId);
@@ -148,6 +162,7 @@ function buildEntityIndexes(
       district,
       properName: names.districtNames.get(districtId) ?? district.displayName,
       residentCount: residentsByDistrict.get(districtId) ?? 0,
+      populationEst: Math.round(populationByDistrict.get(districtId) ?? 0),
       companyCount: companiesByDistrict.get(districtId) ?? 0,
       streets,
       namedBuildings: namedByDistrict.get(districtId) ?? [],
@@ -162,12 +177,14 @@ function buildEntityIndexes(
     const companies: Business[] = [];
     const residentsSample: Persona[] = [];
     let residentCount = 0;
+    let populationEst = 0;
     const districts = new Map<string, District>();
     for (const buildingId of buildingIds) {
       const b = buildingById.get(buildingId);
       if (b) {
         const d = districtById.get(b.districtId);
         if (d) districts.set(d.id, d);
+        populationEst += residentialCapacity(b);
       }
       for (const biz of directory.byWorkBuilding.get(buildingId) ?? []) companies.push(biz);
       for (const hh of directory.byHomeBuilding.get(buildingId) ?? []) {
@@ -185,6 +202,7 @@ function buildEntityIndexes(
       buildingIds,
       companies,
       residentCount,
+      populationEst: Math.round(populationEst),
       residentsSample,
       districts: [...districts.values()],
     };
@@ -211,12 +229,15 @@ export function useEntityIndexes(): EntityIndexes {
   // module-level gen state the generators' own cache keys account for.
   const citySize = useSceneStore((s) => s.citySize);
   const citySketch = useSceneStore((s) => s.citySketch);
+  // #90: naming pack is the same kind of module-level gen-state dependency.
+  const namingRegion = useSceneStore((s) => s.namingRegion);
 
   return useMemo(() => {
     void citySize;
     void citySketch;
+    void namingRegion;
     return buildEntityIndexes(masterSeed, cityShape, cityShapeScale);
-  }, [masterSeed, cityShape, cityShapeScale, citySize, citySketch]);
+  }, [masterSeed, cityShape, cityShapeScale, citySize, citySketch, namingRegion]);
 }
 
 // Deferred sibling: shares usePersonaDirectoryDeferred's gate (always
@@ -231,11 +252,13 @@ export function useEntityIndexesDeferred(): EntityIndexes | null {
   const cityShapeScale = useSceneStore((s) => s.cityShapeScale);
   const citySize = useSceneStore((s) => s.citySize);
   const citySketch = useSceneStore((s) => s.citySketch);
+  const namingRegion = useSceneStore((s) => s.namingRegion);
   const dir = usePersonaDirectoryDeferred(true);
 
   return useMemo(() => {
     void citySize;
     void citySketch;
+    void namingRegion;
     return dir ? buildEntityIndexes(masterSeed, cityShape, cityShapeScale) : null;
-  }, [dir, masterSeed, cityShape, cityShapeScale, citySize, citySketch]);
+  }, [dir, masterSeed, cityShape, cityShapeScale, citySize, citySketch, namingRegion]);
 }

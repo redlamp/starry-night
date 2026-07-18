@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useSceneStore } from "@/lib/state/sceneStore";
 import { CONNECTION_COLOR } from "@/components/scene/CommuteArc";
 import { useEntityIndexes } from "./entityData";
 import { ColumnStat, ShowMore } from "./EntityColumns";
+import { WorkplaceKindBadge } from "./workplaceIcons";
 
 const STUDENT_CAP = 10;
 
@@ -17,7 +17,7 @@ export function CompanyColumn({ id, part }: { id: string; part: "pinned" | "rest
   const biz = indexes.directory.businesses.get(id);
   if (!biz) {
     return part === "pinned" ? null : (
-      <div className="text-sm text-muted-foreground">Company not found.</div>
+      <div className="text-muted-foreground text-sm">Company not found.</div>
     );
   }
 
@@ -27,27 +27,31 @@ export function CompanyColumn({ id, part }: { id: string; part: "pinned" | "rest
 
   if (part === "pinned") {
     return (
-    <>
-      <div className="flex flex-wrap items-center gap-1.5">
-        <Badge variant="outline" className="capitalize">
-          {biz.schoolTier ? `${biz.schoolTier} school` : biz.kind}
-        </Badge>
-      </div>
+      <>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <WorkplaceKindBadge
+            kind={biz.kind}
+            label={biz.schoolTier ? `${biz.schoolTier} school` : biz.kind}
+          />
+        </div>
 
-      <button
-        type="button"
-        onClick={() => push({ kind: "building", id: biz.buildingId })}
-        className="text-left text-sm text-muted-foreground hover:underline"
-      >
-        {buildingName ? `${buildingName} · ` : ""}
-        {address ? `${address.number} ${address.street}` : `Building #${biz.buildingId}`}
-      </button>
+        <button
+          type="button"
+          onClick={() => push({ kind: "building", id: biz.buildingId })}
+          className="text-muted-foreground text-left text-sm hover:underline"
+        >
+          {buildingName ? `${buildingName} · ` : ""}
+          {address ? `${address.number} ${address.street}` : `Building #${biz.buildingId}`}
+        </button>
 
-      <div className="flex flex-col gap-1">
-        <ColumnStat label="Staff" value={biz.employeeIds.length.toLocaleString()} />
-        {biz.schoolTier && <ColumnStat label="Students" value={students.length.toLocaleString()} />}
-      </div>
-    </>
+        {/* Headcount moved onto the Employees section header (user
+            2026-07-18) — no Staff stat row here. */}
+        {biz.schoolTier && (
+          <div className="flex flex-col gap-1">
+            <ColumnStat label="Students" value={students.length.toLocaleString()} />
+          </div>
+        )}
+      </>
     );
   }
 
@@ -56,8 +60,15 @@ export function CompanyColumn({ id, part }: { id: string; part: "pinned" | "rest
       {biz.employeeIds.length > 0 && (
         <>
           <div className="flex flex-col gap-0.5">
-            <div className="text-sm font-medium" style={{ color: CONNECTION_COLOR }}>
-              {biz.schoolTier ? "Staff" : "Employees"}
+            {/* "X of Y" rides the section header line — the listed sample of
+                the full headcount (user 2026-07-18). */}
+            <div className="flex items-baseline justify-between gap-2">
+              <div className="text-sm font-medium" style={{ color: CONNECTION_COLOR }}>
+                {biz.schoolTier ? "Staff" : "Employees"}
+              </div>
+              <span className="text-muted-foreground text-xs tabular-nums">
+                {biz.employeeIds.length.toLocaleString()} of {biz.totalHeadcount.toLocaleString()}
+              </span>
             </div>
             {biz.employeeIds.map((pid) => {
               const persona = indexes.directory.personas.get(pid);
@@ -71,10 +82,12 @@ export function CompanyColumn({ id, part }: { id: string; part: "pinned" | "rest
                     key={pid}
                     type="button"
                     onClick={() => push({ kind: "persona", id: pid })}
-                    className="-mx-1 flex flex-col rounded px-1 text-left text-sm hover:bg-foreground/10"
+                    className="hover:bg-foreground/10 -mx-1 flex flex-col rounded px-1 text-left text-sm"
                   >
                     <span className="truncate">{persona.fullName}</span>
-                    <span className="text-muted-foreground truncate text-right text-xs">{title}</span>
+                    <span className="text-muted-foreground truncate text-right text-xs">
+                      {title}
+                    </span>
                   </button>
                 );
               }
@@ -83,10 +96,10 @@ export function CompanyColumn({ id, part }: { id: string; part: "pinned" | "rest
                   key={pid}
                   type="button"
                   onClick={() => push({ kind: "persona", id: pid })}
-                  className="-mx-1 flex items-baseline justify-between gap-2 rounded px-1 text-left text-sm hover:bg-foreground/10"
+                  className="hover:bg-foreground/10 -mx-1 flex items-baseline justify-between gap-2 rounded px-1 text-left text-sm"
                 >
                   <span className="truncate">{persona.fullName}</span>
-                  <span className="max-w-[9rem] shrink-0 truncate text-right text-muted-foreground">
+                  <span className="text-muted-foreground max-w-[9rem] shrink-0 truncate text-right">
                     {title}
                   </span>
                 </button>
@@ -112,12 +125,12 @@ export function CompanyColumn({ id, part }: { id: string; part: "pinned" | "rest
                   key={pid}
                   type="button"
                   onClick={() => push({ kind: "persona", id: pid })}
-                  className="-mx-1 flex items-baseline justify-between gap-2 rounded px-1 text-left text-sm hover:bg-foreground/10"
+                  className="hover:bg-foreground/10 -mx-1 flex items-baseline justify-between gap-2 rounded px-1 text-left text-sm"
                 >
                   <span className="truncate">
                     {persona.givenName} {persona.familyName}
                   </span>
-                  <span className="shrink-0 tabular-nums text-muted-foreground">{persona.age}</span>
+                  <span className="text-muted-foreground shrink-0 tabular-nums">{persona.age}</span>
                 </button>
               );
             })}

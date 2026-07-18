@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { useIdle } from "@/lib/useIdle";
 import { useSceneStore } from "@/lib/state/sceneStore";
 import { DirectorySection, DirectoryBuildRing } from "@/components/ui/DirectoryPanel";
+import { DemographicsPanel } from "@/components/ui/demographics/DemographicsPanel";
 import { IconTip } from "@/components/ui/columns/EntityColumns";
 
 // Top-left control dock (user 2026-07-08): [City Directory] [Inspect]
@@ -121,6 +122,10 @@ export function ControlDock() {
           </div>
         </div>
       )}
+
+      {/* Floating, independent of the directory dock — self-gates on the
+          demographicsOpen store flag (#97). */}
+      <DemographicsPanel />
     </>
   );
 }

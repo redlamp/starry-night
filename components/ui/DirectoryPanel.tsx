@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  BarChart3,
   Briefcase,
   Building2,
   MapPin,
@@ -22,7 +23,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { HoverCard, HoverCardTrigger, HoverCardContent } from "@/components/ui/hover-card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { IconTip } from "@/components/ui/columns/EntityColumns";
+import { IconTip, ShowMore } from "@/components/ui/columns/EntityColumns";
+import {
+  WorkplaceKindBadge,
+  WORKPLACE_KIND_ICON,
+  WORKPLACE_KIND_COLOR,
+} from "@/components/ui/columns/workplaceIcons";
+import type { WorkplaceType } from "@/lib/seed/personaData";
 import {
   Select,
   SelectTrigger,
@@ -30,10 +37,10 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
-import { cn } from "@/lib/utils";
+import { cn, approxCount } from "@/lib/utils";
 import { generateCity, type Building } from "@/lib/seed/cityGen";
-import type { Address } from "@/lib/seed/naming";
-import type { Persona } from "@/lib/seed/personas";
+import type { Address, CityNames } from "@/lib/seed/naming";
+import type { Persona, Business } from "@/lib/seed/personas";
 import { personaDirectoryBuildProgress } from "@/lib/seed/personas";
 import { ensureBuildingStories } from "@/lib/seed/personaStory";
 import { focusBuilding } from "@/lib/scene/focusBuilding";
@@ -94,6 +101,89 @@ const DISTRICT_SORTS: Array<{ value: DistrictSort; label: string }> = [
   { value: "businesses", label: "By Businesses" },
   { value: "name", label: "By Name" },
 ];
+
+// Companies registry (#92): browsable list over EVERY business (7k+ at the
+// default tier), reached via the existing Companies kind-filter tab when the
+// search box is empty — that combination was previously a dead end (kind
+// filter only ever gated search results). Staff-descending is the default
+// sort since "who employs the most people" was the issue's motivating case.
+type CompanySort = "staff" | "name" | "kind" | "district";
+
+// Short labels so the three filter selects share one line (user 2026-07-18).
+const COMPANY_SORTS: Array<{ value: CompanySort; label: string }> = [
+  { value: "staff", label: "Staff" },
+  { value: "name", label: "Name" },
+  { value: "kind", label: "Industry" },
+  { value: "district", label: "District" },
+];
+
+// Initial page + per-click increment for every per-kind browse list (people
+// need this most — 41k+ personas — but streets/buildings/companies share it
+// too). No virtualization library in this repo (search results just hard-cap
+// at MAX_SEARCH_RESULTS with no way to see past it); this reuses the columns'
+// ShowMore affordance but increments the visible window instead of jumping
+// straight to "all 41,000 rows", which is what keeps the DOM small at any tier.
+const BROWSE_PAGE_SIZE = 100;
+
+// Shared page-window mechanics for the four kind-filter browse lists
+// (companies/streets/buildings/people): a visible-count cursor that grows via
+// ShowMore, reset to the first page whenever `resetKey` changes. The reset is
+// done during render (React's "adjusting state when a prop changes" idiom —
+// CompaniesView's own sort/filter reset used this before this hook existed),
+// not an effect, which would cost an extra render. Callers with no
+// sort/filter control of their own (streets/buildings/people) just pass a
+// constant resetKey — there's nothing to reset FOR, but the component still
+// gets a fresh page cursor on mount (kind-filter switches unmount these
+// views, so a stale cursor from a previous look never lingers).
+function usePagedRows<T>(rows: T[], pageSize: number, resetKey: string) {
+  const [visibleCount, setVisibleCount] = useState(pageSize);
+  const [pagingFor, setPagingFor] = useState(resetKey);
+  if (pagingFor !== resetKey) {
+    setPagingFor(resetKey);
+    setVisibleCount(pageSize);
+  }
+  return {
+    visible: rows.slice(0, visibleCount),
+    total: rows.length,
+    visibleCount,
+    showMore: () => setVisibleCount((c) => Math.min(rows.length, c + pageSize)),
+  };
+}
+
+type CompanyRow = {
+  id: string;
+  name: string;
+  kind: WorkplaceType;
+  kindLabel: string;
+  districtId: string;
+  districtName: string;
+  listed: number;
+  total: number;
+};
+
+// Every named road, sorted by name (secondary: building count descending) —
+// the empty-query Streets browse (#92 feedback round 2).
+type StreetRow = { id: string; name: string; buildingCount: number };
+
+// Every addressed building, sorted by street then address number — the
+// empty-query Buildings browse. `name` only exists for the named subset.
+type BuildingRow = {
+  id: number;
+  number: number;
+  street: string;
+  name?: string;
+  districtName: string;
+};
+
+// Every listed persona (41k+), sorted by family name then given name — the
+// empty-query People browse. Paging is mandatory at this scale.
+type PersonRow = {
+  id: string;
+  fullName: string;
+  familyName: string;
+  givenName: string;
+  age: number;
+};
 
 const KIND_BADGE: Record<SearchKind, string> = {
   street: "Street",
@@ -231,6 +321,7 @@ export function DirectorySection() {
   const setPinnedDistrictId = useSceneStore((s) => s.setPinnedDistrictId);
   const showDistrictBoundaries = useSceneStore((s) => s.showDistrictBoundaries);
   const setShowDistrictBoundaries = useSceneStore((s) => s.setShowDistrictBoundaries);
+  const setDemographicsOpen = useSceneStore((s) => s.setDemographicsOpen);
 
   const [query, setQuery] = useState("");
   const [kindFilter, setKindFilter] = useState<KindFilter>("all");
@@ -252,9 +343,14 @@ export function DirectorySection() {
     const idToDistrict = new Map(districts.map((d) => [d.id, d]));
     const names = directory.names;
 
-    // One flat search index across every entity kind.
+    // One flat search index across every entity kind, plus the base rows for
+    // each kind's empty-query browse list (#92 feedback round 2) — built in
+    // the SAME passes so there's no second 41k/577-item walk. Sorted once
+    // here (fixed order, no user sort control on these three), so re-renders
+    // from typing in the unrelated search box never re-sort anything.
     const searchIndex: SearchEntry[] = [];
     const adults: Persona[] = [];
+    const personRows: PersonRow[] = [];
     for (const p of directory.personas.values()) {
       if (p.age >= 18) adults.push(p);
       searchIndex.push({
@@ -264,7 +360,19 @@ export function DirectorySection() {
         sub: `${p.age} · ${names.districtNames.get(p.homeDistrictId) ?? ""}`,
         lower: p.fullName.toLowerCase(),
       });
+      personRows.push({
+        id: p.id,
+        fullName: p.fullName,
+        familyName: p.familyName,
+        givenName: p.givenName,
+        age: p.age,
+      });
     }
+    personRows.sort(
+      (a, b) => a.familyName.localeCompare(b.familyName) || a.givenName.localeCompare(b.givenName),
+    );
+
+    const streetRows: StreetRow[] = [];
     for (const [roadId, name] of names.streetNames) {
       const count = names.buildingsByRoad.get(roadId)?.length ?? 0;
       searchIndex.push({
@@ -274,7 +382,9 @@ export function DirectorySection() {
         sub: `${count} building${count === 1 ? "" : "s"}`,
         lower: name.toLowerCase(),
       });
+      streetRows.push({ id: roadId, name, buildingCount: count });
     }
+    streetRows.sort((a, b) => a.name.localeCompare(b.name) || b.buildingCount - a.buildingCount);
     for (const [buildingId, name] of names.buildingNames) {
       const address = names.addresses.get(buildingId);
       searchIndex.push({
@@ -332,8 +442,16 @@ export function DirectorySection() {
         householdCount: households.length,
       });
     }
+    const buildingRows: BuildingRow[] = [];
     for (const [buildingId, address] of names.addresses) {
       const building = idToBuilding.get(buildingId);
+      buildingRows.push({
+        id: buildingId,
+        number: address.number,
+        street: address.street,
+        name: names.buildingNames.get(buildingId),
+        districtName: building ? (names.districtNames.get(building.districtId) ?? "") : "",
+      });
       if (!building) continue;
       let roads = districtRoads.get(building.districtId);
       if (!roads) {
@@ -342,6 +460,7 @@ export function DirectorySection() {
       }
       roads.add(address.roadId);
     }
+    buildingRows.sort((a, b) => a.street.localeCompare(b.street) || a.number - b.number);
     for (const biz of directory.businesses.values()) {
       const building = idToBuilding.get(biz.buildingId);
       if (building && byDistrict.has(building.districtId)) {
@@ -354,7 +473,15 @@ export function DirectorySection() {
     const districtList = [...byDistrict.values()].sort((a, b) => b.residentCount - a.residentCount);
     for (const d of districtList) d.buildings.sort((a, b) => b.householdCount - a.householdCount);
 
-    return { idToBuilding, adults, searchIndex, districtList };
+    return {
+      idToBuilding,
+      adults,
+      searchIndex,
+      districtList,
+      streetRows,
+      buildingRows,
+      personRows,
+    };
   }, [directory, masterSeed, cityShape, cityShapeScale, citySize, citySketch]);
 
   // Marquee cast: a seed-stable run of adults starting at the old spotlight
@@ -373,26 +500,39 @@ export function DirectorySection() {
     return cast;
   }, [bundle, directory, masterSeed]);
 
+  // Search matches + their paging sit ABOVE the early return (hook rules).
+  // Growable Show More window instead of the old hard 50-row crop with no way
+  // past it (user 2026-07-18: "the directory list gets cropped").
+  const trimmedQuery = query.trim().toLowerCase();
+  const allMatches = useMemo(
+    () =>
+      bundle && trimmedQuery
+        ? bundle.searchIndex.filter(
+            (n) => (kindFilter === "all" || n.kind === kindFilter) && n.lower.includes(trimmedQuery),
+          )
+        : [],
+    [bundle, trimmedQuery, kindFilter],
+  );
+  const pagedMatches = usePagedRows(allMatches, MAX_SEARCH_RESULTS, `${trimmedQuery}::${kindFilter}`);
+
   // After the directory build lands the bundle derivation above is warm;
   // until then render the masthead skeleton below instead of blocking.
   if (!directory || !bundle) {
     return <DirectorySkeleton />;
   }
-  const { idToBuilding, searchIndex, districtList } = bundle;
-
-  const trimmedQuery = query.trim().toLowerCase();
-  const allMatches = trimmedQuery
-    ? searchIndex.filter(
-        (n) => (kindFilter === "all" || n.kind === kindFilter) && n.lower.includes(trimmedQuery),
-      )
-    : [];
-  const shownMatches = allMatches.slice(0, MAX_SEARCH_RESULTS);
+  const { idToBuilding, districtList, streetRows, buildingRows, personRows } = bundle;
 
   const goToBuilding = (buildingId: number) => {
     const building = idToBuilding.get(buildingId);
     if (building) focusBuilding(building);
     resetColumns([{ kind: "building", id: buildingId }]);
   };
+
+  // Streets/People browse row opens (#92 feedback round 2) — same targets as
+  // the matching kind in search results (openResult below): a street resets
+  // the stack to just that street, a person pushes onto whatever's open.
+  const openStreet = (roadId: string) => resetColumns([{ kind: "street", id: roadId }]);
+  const openPersona = (id: string) => pushColumn({ kind: "persona", id });
 
   // Pin: sticky district highlight + a 45° glide framing the district bounds
   // (same focus mechanism as the columns' cone). Clicking the pinned pin
@@ -435,22 +575,42 @@ export function DirectorySection() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 pt-1 tabular-nums">
-      {/* Masthead: city name in caps, icon stats below (user 2026-07-08). */}
+      {/* Masthead: city name in normal header styling with the Demographics
+          affordance on the same line (user 2026-07-18); icon stats below. */}
       <div className="flex shrink-0 flex-col gap-1">
-        <div className="text-base font-semibold tracking-[0.14em] uppercase">
-          {directory.names.city.name}
+        <div className="flex items-center justify-between gap-2">
+          <div className="truncate text-base font-semibold">{directory.names.city.name}</div>
+          <IconTip label="Demographics">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setDemographicsOpen(true)}
+              className="h-7 shrink-0 gap-1.5 text-xs"
+            >
+              <BarChart3 className="size-3.5" aria-hidden />
+              Demographics
+            </Button>
+          </IconTip>
         </div>
-        <div className="text-muted-foreground flex items-center gap-3 text-xs">
-          <IconTip label="Residents">
+        {/* Full-capacity city first, listed sample second (#96): the
+            directory is a detailed slice of a much larger town. */}
+        <div className="text-muted-foreground flex flex-col gap-0.5 text-xs">
+          <IconTip label="Population">
             <span className="flex items-center gap-1 tabular-nums">
               <Users className="size-3.5" aria-hidden />
-              {directory.totals.personas.toLocaleString()}
+              {approxCount(directory.city.population)}
+              <span className="opacity-75">
+                · {directory.totals.personas.toLocaleString()} listed
+              </span>
             </span>
           </IconTip>
           <IconTip label="Businesses">
             <span className="flex items-center gap-1 tabular-nums">
               <Briefcase className="size-3.5" aria-hidden />
-              {directory.totals.businesses.toLocaleString()}
+              {approxCount(directory.city.establishments)}
+              <span className="opacity-75">
+                · {directory.totals.businesses.toLocaleString()} listed
+              </span>
             </span>
           </IconTip>
         </div>
@@ -493,28 +653,25 @@ export function DirectorySection() {
         </Tabs>
       </div>
 
-      {/* Both lists cap the VIEWPORT's max-height directly (vh units are
-          always definite). The overlay is max-h-sized, so any height:100%
-          chain resolves to auto and nothing ever scrolls; capping the
-          viewport makes it the real scroll container and keeps the panel
-          content-sized when the list is short. */}
+      {/* Lists size by flex SHRINK against the dock card's max-h (min-h-0 on
+          the ScrollArea root, no grow): short lists keep the card content-
+          sized, long ones scroll inside the visible card. The old vh-math
+          viewport caps overestimated the space once the headers grew, which
+          cropped the last row and hid the pinned Show More (user 2026-07-18). */}
       {trimmedQuery ? (
         // -mr-3 bleeds through ControlDock's own p-3 pr-3 wrapper so the
         // scrollbar sits flush at the card's inner edge, same as the columns'
         // ScrollArea (which has no such outer padding to fight); pr-4 on the
         // content below is the columns' text-to-scrollbar gap (user
         // 2026-07-08: "scrollbar too close to text, and far from edge").
-        <ScrollArea className="-mr-3 **:data-[slot=scroll-area-viewport]:max-h-[calc(100vh-21rem)]">
+        <ScrollArea className="-mr-3 min-h-0 **:data-[slot=scroll-area-viewport]:max-h-full">
           <div className="flex flex-col gap-0.5 pr-4">
-            {allMatches.length > MAX_SEARCH_RESULTS && (
-              <div className="text-muted-foreground px-1 text-sm">{allMatches.length} matches</div>
-            )}
-            {allMatches.length === 0 && (
+            {pagedMatches.total === 0 && (
               <div className="text-muted-foreground px-1 text-sm">
                 Nothing matches &quot;{query.trim()}&quot;.
               </div>
             )}
-            {shownMatches.map((entry) => (
+            {pagedMatches.visible.map((entry) => (
               <button
                 key={`${entry.kind}:${entry.id}`}
                 type="button"
@@ -549,6 +706,49 @@ export function DirectorySection() {
             ))}
           </div>
         </ScrollArea>
+      ) : null}
+      {trimmedQuery ? (
+        <div className="shrink-0">
+          <ShowMore
+            total={pagedMatches.total}
+            cap={pagedMatches.visibleCount}
+            expanded={false}
+            onToggle={pagedMatches.showMore}
+            noun="matches"
+          />
+        </div>
+      ) : kindFilter === "company" ? (
+        <>
+          <Separator className="shrink-0" />
+          <CompaniesView
+            businesses={directory.businesses}
+            idToBuilding={idToBuilding}
+            names={directory.names}
+            districtList={districtList}
+            isSelected={isSelected}
+            onOpen={(id) => pushColumn({ kind: "company", id })}
+          />
+        </>
+      ) : kindFilter === "street" ? (
+        <>
+          <Separator className="shrink-0" />
+          <StreetsView rows={streetRows} isSelected={isSelected} onOpen={openStreet} />
+        </>
+      ) : kindFilter === "building" ? (
+        <>
+          <Separator className="shrink-0" />
+          <BuildingsView
+            rows={buildingRows}
+            maxAddressDigits={directory.names.maxAddressDigits}
+            isSelected={isSelected}
+            onOpen={goToBuilding}
+          />
+        </>
+      ) : kindFilter === "person" ? (
+        <>
+          <Separator className="shrink-0" />
+          <PeopleView rows={personRows} isSelected={isSelected} onOpen={openPersona} />
+        </>
       ) : (
         <>
           <Separator className="shrink-0" />
@@ -576,10 +776,15 @@ export function DirectorySection() {
                   <SquareDashed className="size-3.5" />
                 </Button>
               </IconTip>
-              <Select value={districtSort} onValueChange={(v) => setDistrictSort(v as DistrictSort)}>
+              <Select
+                value={districtSort}
+                onValueChange={(v) => setDistrictSort(v as DistrictSort)}
+              >
                 <SelectTrigger size="sm" className="w-32">
                   <SelectValue>
-                    {(v: DistrictSort) => DISTRICT_SORTS.find((o) => o.value === v)?.label ?? "Sort"}
+                    {(v: DistrictSort) =>
+                      DISTRICT_SORTS.find((o) => o.value === v)?.label ?? "Sort"
+                    }
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
@@ -594,7 +799,7 @@ export function DirectorySection() {
           </div>
 
           {/* -mr-3/pr-4: same edge-and-gap fix as the search list above. */}
-          <ScrollArea className="-mr-3 **:data-[slot=scroll-area-viewport]:max-h-[calc(100vh-24rem)]">
+          <ScrollArea className="-mr-3 min-h-0 **:data-[slot=scroll-area-viewport]:max-h-full">
             <div className="flex flex-col pr-4">
               {[...districtList]
                 .sort((a, b) =>
@@ -730,6 +935,395 @@ export function DirectorySection() {
         </>
       )}
     </div>
+  );
+}
+
+// The companies registry (#92): every business in the directory, sortable by
+// staff/name/kind/district with an optional district filter. Rows show the
+// FULL headcount (`totalHeadcount`, #96) as the primary number — that's what
+// answers "who has the most employees" — with the listed sample as a muted
+// footnote, matching the "listed of total" vocabulary
+// (wiki/notes/decision-listed-residents-term.md).
+function CompaniesView({
+  businesses,
+  idToBuilding,
+  names,
+  districtList,
+  isSelected,
+  onOpen,
+}: {
+  businesses: Map<string, Business>;
+  idToBuilding: Map<number, Building>;
+  names: CityNames;
+  districtList: DistrictAgg[];
+  isSelected: (kind: SearchKind, id: string) => boolean;
+  onOpen: (id: string) => void;
+}) {
+  const [sort, setSort] = useState<CompanySort>("staff");
+  const [districtFilter, setDistrictFilter] = useState<string>("all");
+  // Industry sub-filter (user 2026-07-18): only offered while sorting By
+  // Industry, and cleared when the sort moves away so no invisible filter
+  // keeps narrowing the list.
+  const [industryFilter, setIndustryFilter] = useState<WorkplaceType | "all">("all");
+
+  // Base rows: one O(businesses) pass, independent of sort/filter so those
+  // stay cheap to change. Stable as long as the directory/city bundle is
+  // (i.e. only rebuilds on a seed/shape change, never per keystroke).
+  const rows = useMemo(() => {
+    const list: CompanyRow[] = [];
+    for (const biz of businesses.values()) {
+      const building = idToBuilding.get(biz.buildingId);
+      const districtId = building?.districtId ?? "";
+      list.push({
+        id: biz.id,
+        name: biz.name,
+        kind: biz.kind,
+        kindLabel: biz.schoolTier ? `${biz.schoolTier} school` : biz.kind,
+        districtId,
+        districtName: names.districtNames.get(districtId) ?? "",
+        listed: biz.employeeIds.length,
+        total: biz.totalHeadcount,
+      });
+    }
+    return list;
+  }, [businesses, idToBuilding, names]);
+
+  // Sorting 7k rows only recomputes on a sort/filter change, not on every
+  // render.
+  const sortedFiltered = useMemo(() => {
+    const filtered = rows.filter(
+      (r) =>
+        (districtFilter === "all" || r.districtId === districtFilter) &&
+        (industryFilter === "all" || r.kind === industryFilter),
+    );
+    const sorted = [...filtered];
+    sorted.sort((a, b) => {
+      switch (sort) {
+        case "name":
+          return a.name.localeCompare(b.name);
+        case "kind":
+          return a.kindLabel.localeCompare(b.kindLabel) || a.name.localeCompare(b.name);
+        case "district":
+          return a.districtName.localeCompare(b.districtName) || a.name.localeCompare(b.name);
+        default:
+          return b.total - a.total || a.name.localeCompare(b.name);
+      }
+    });
+    return sorted;
+  }, [rows, sort, districtFilter, industryFilter]);
+
+  // Re-page from the top whenever the sort or filter changes — the "next
+  // 100" from the old ordering rarely means anything under the new one.
+  const { visible, total, visibleCount, showMore } = usePagedRows(
+    sortedFiltered,
+    BROWSE_PAGE_SIZE,
+    `${sort}:${districtFilter}:${industryFilter}`,
+  );
+  const sortedDistricts = useMemo(
+    () => [...districtList].sort((a, b) => a.properName.localeCompare(b.properName)),
+    [districtList],
+  );
+  // Industries actually present in this city, for the sub-filter menu.
+  const industries = useMemo(() => {
+    const present = new Set<WorkplaceType>();
+    for (const r of rows) present.add(r.kind);
+    return [...present].sort();
+  }, [rows]);
+
+  return (
+    <>
+      {/* Title + available count on the first line, every dropdown on the
+          second (user 2026-07-18). flex-wrap lets the industry sub-filter
+          spill to a third line on narrow panels instead of clipping. */}
+      <div className="flex shrink-0 flex-col gap-1.5">
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="text-sm font-medium">Companies</span>
+          <span className="text-muted-foreground text-xs tabular-nums">
+            {total.toLocaleString()} available
+          </span>
+        </div>
+        {/* Three equal-width selects on one line — "Districts / Staff /
+            Industry" with short display values (user 2026-07-18). */}
+        <div className="flex items-center gap-1">
+          {sortedDistricts.length > 1 && (
+            <Select value={districtFilter} onValueChange={(v) => setDistrictFilter(v ?? "all")}>
+              <SelectTrigger size="sm" className="min-w-0 flex-1">
+                <SelectValue>
+                  {(v: string) => (
+                    <span className="truncate">
+                      {v === "all"
+                        ? "Districts"
+                        : (sortedDistricts.find((d) => d.id === v)?.properName ?? "Districts")}
+                    </span>
+                  )}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Districts</SelectItem>
+                {sortedDistricts.map((d) => (
+                  <SelectItem key={d.id} value={d.id}>
+                    {d.properName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          <Select value={sort} onValueChange={(v) => setSort(v as CompanySort)}>
+            <SelectTrigger size="sm" className="min-w-0 flex-1">
+              <SelectValue>
+                {(v: CompanySort) => COMPANY_SORTS.find((o) => o.value === v)?.label ?? "Sort"}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {COMPANY_SORTS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {/* Industry filter, always on the line (user 2026-07-18). Items
+              carry the pill's own icon + hue. */}
+          <Select
+            value={industryFilter}
+            onValueChange={(v) => setIndustryFilter((v as WorkplaceType | "all") ?? "all")}
+          >
+            <SelectTrigger size="sm" className="min-w-0 flex-1">
+              <SelectValue>
+                {(v: string) =>
+                  v === "all" ? (
+                    "Industry"
+                  ) : (
+                    <span
+                      className="truncate capitalize"
+                      style={{ color: WORKPLACE_KIND_COLOR[v as WorkplaceType] }}
+                    >
+                      {v}
+                    </span>
+                  )
+                }
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Industries</SelectItem>
+              {industries.map((k) => {
+                const Icon = WORKPLACE_KIND_ICON[k];
+                return (
+                  <SelectItem key={k} value={k}>
+                    <span
+                      className="flex items-center gap-1.5 capitalize"
+                      style={{ color: WORKPLACE_KIND_COLOR[k] }}
+                    >
+                      <Icon aria-hidden className="size-3.5" />
+                      {k}
+                    </span>
+                  </SelectItem>
+                );
+              })}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {/* -mr-3/pr-4: same edge-and-gap fix as the other lists in this panel. */}
+      <ScrollArea className="-mr-3 min-h-0 **:data-[slot=scroll-area-viewport]:max-h-full">
+        <div className="flex flex-col gap-0.5 pr-4">
+          {total === 0 && (
+            <div className="text-muted-foreground px-1 text-sm">No companies match the filters.</div>
+          )}
+          {visible.map((row) => (
+            <button
+              key={row.id}
+              type="button"
+              onClick={() => onOpen(row.id)}
+              className={cn(
+                "hover:bg-foreground/10 -mx-1 flex items-center justify-between gap-2 rounded px-1 text-left text-sm",
+                isSelected("company", row.id) && "bg-primary/15",
+              )}
+            >
+              <span className="min-w-0 flex-1">
+                <span className="block truncate">{row.name}</span>
+                <span className="text-muted-foreground block truncate text-xs">
+                  {row.districtName}
+                </span>
+              </span>
+              <WorkplaceKindBadge kind={row.kind} label={row.kindLabel} />
+              <span className="flex shrink-0 flex-col items-end tabular-nums">
+                <span>{row.total.toLocaleString()}</span>
+                <span className="text-muted-foreground text-xs">
+                  {row.listed.toLocaleString()} listed
+                </span>
+              </span>
+            </button>
+          ))}
+        </div>
+      </ScrollArea>
+      {/* Pinned below the scroll, not buried at the end of the list — the
+          user couldn't find it there (2026-07-18). Same for every browse. */}
+      <div className="shrink-0">
+        <ShowMore
+          total={total}
+          cap={visibleCount}
+          expanded={false}
+          onToggle={showMore}
+          noun="companies"
+        />
+      </div>
+    </>
+  );
+}
+
+// Every named road, sorted by name (secondary: building count descending) —
+// the Streets kind-filter tab's empty-query browse (#92 feedback round 2).
+function StreetsView({
+  rows,
+  isSelected,
+  onOpen,
+}: {
+  rows: StreetRow[];
+  isSelected: (kind: SearchKind, id: string) => boolean;
+  onOpen: (id: string) => void;
+}) {
+  const { visible, total, visibleCount, showMore } = usePagedRows(
+    rows,
+    BROWSE_PAGE_SIZE,
+    "streets",
+  );
+  return (
+    <>
+      <div className="flex shrink-0 items-center justify-between gap-2">
+        <span className="text-sm font-medium">Streets</span>
+        <span className="text-muted-foreground text-xs">{total.toLocaleString()} streets</span>
+      </div>
+      <ScrollArea className="-mr-3 min-h-0 **:data-[slot=scroll-area-viewport]:max-h-full">
+        <div className="flex flex-col gap-0.5 pr-4">
+          {visible.map((row) => (
+            <button
+              key={row.id}
+              type="button"
+              onClick={() => onOpen(row.id)}
+              className={cn(
+                "hover:bg-foreground/10 -mx-1 flex items-center justify-between gap-2 rounded px-1 text-left text-sm",
+                isSelected("street", row.id) && "bg-primary/15",
+              )}
+            >
+              <span className="min-w-0 truncate">{row.name}</span>
+              <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
+                {row.buildingCount} building{row.buildingCount === 1 ? "" : "s"}
+              </span>
+            </button>
+          ))}
+        </div>
+      </ScrollArea>
+      <div className="shrink-0">
+        <ShowMore total={total} cap={visibleCount} expanded={false} onToggle={showMore} noun="streets" />
+      </div>
+    </>
+  );
+}
+
+// Every addressed building, sorted by street then address number — the
+// Buildings kind-filter tab's empty-query browse (#92 feedback round 2).
+function BuildingsView({
+  rows,
+  maxAddressDigits,
+  isSelected,
+  onOpen,
+}: {
+  rows: BuildingRow[];
+  maxAddressDigits: number;
+  isSelected: (kind: SearchKind, id: string) => boolean;
+  onOpen: (id: number) => void;
+}) {
+  const { visible, total, visibleCount, showMore } = usePagedRows(
+    rows,
+    BROWSE_PAGE_SIZE,
+    "buildings",
+  );
+  return (
+    <>
+      <div className="flex shrink-0 items-center justify-between gap-2">
+        <span className="text-sm font-medium">Buildings</span>
+        <span className="text-muted-foreground text-xs">{total.toLocaleString()} buildings</span>
+      </div>
+      <ScrollArea className="-mr-3 min-h-0 **:data-[slot=scroll-area-viewport]:max-h-full">
+        <div className="flex flex-col gap-0.5 pr-4">
+          {visible.map((row) => (
+            <button
+              key={row.id}
+              type="button"
+              onClick={() => onOpen(row.id)}
+              className={cn(
+                "hover:bg-foreground/10 -mx-1 flex items-center justify-between gap-2 rounded px-1 text-left text-sm",
+                isSelected("building", String(row.id)) && "bg-primary/15",
+              )}
+            >
+              <span className="min-w-0">
+                <span className="flex items-baseline gap-1.5">
+                  <AddrNum n={row.number} width={maxAddressDigits} />
+                  <span className="truncate">{row.street}</span>
+                </span>
+                <span className="text-muted-foreground block truncate text-xs">
+                  {row.districtName}
+                </span>
+              </span>
+              {row.name && (
+                <Badge variant="outline" className="max-w-[7rem] shrink-0 truncate">
+                  {row.name}
+                </Badge>
+              )}
+            </button>
+          ))}
+        </div>
+      </ScrollArea>
+      <div className="shrink-0">
+        <ShowMore total={total} cap={visibleCount} expanded={false} onToggle={showMore} noun="buildings" />
+      </div>
+    </>
+  );
+}
+
+// Every listed persona (41k+), sorted by family name then given name — the
+// People kind-filter tab's empty-query browse (#92 feedback round 2). Paging
+// is mandatory at this scale, not just a nicety.
+function PeopleView({
+  rows,
+  isSelected,
+  onOpen,
+}: {
+  rows: PersonRow[];
+  isSelected: (kind: SearchKind, id: string) => boolean;
+  onOpen: (id: string) => void;
+}) {
+  const { visible, total, visibleCount, showMore } = usePagedRows(rows, BROWSE_PAGE_SIZE, "people");
+  return (
+    <>
+      <div className="flex shrink-0 items-center justify-between gap-2">
+        <span className="text-sm font-medium">People</span>
+        <span className="text-muted-foreground text-xs">{total.toLocaleString()} listed</span>
+      </div>
+      <ScrollArea className="-mr-3 min-h-0 **:data-[slot=scroll-area-viewport]:max-h-full">
+        <div className="flex flex-col gap-0.5 pr-4">
+          {visible.map((row) => (
+            <button
+              key={row.id}
+              type="button"
+              onClick={() => onOpen(row.id)}
+              className={cn(
+                "hover:bg-foreground/10 -mx-1 flex items-baseline justify-between gap-2 rounded px-1 text-left text-sm",
+                isSelected("person", row.id) && "bg-primary/15",
+              )}
+            >
+              <span className="min-w-0 truncate">{row.fullName}</span>
+              <span className="text-muted-foreground shrink-0 tabular-nums">{row.age}</span>
+            </button>
+          ))}
+        </div>
+      </ScrollArea>
+      <div className="shrink-0">
+        <ShowMore total={total} cap={visibleCount} expanded={false} onToggle={showMore} noun="residents" />
+      </div>
+    </>
   );
 }
 
