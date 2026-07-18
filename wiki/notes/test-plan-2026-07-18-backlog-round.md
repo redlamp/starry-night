@@ -27,10 +27,10 @@ test a stream in isolation.
 Your feedback mapped to fixes, all on `test/2026-07-18-round` (restart `bun dev` if
 it doesn't hot-reload the panel):
 
-1. [ ] (1, 7.4) Panel population = masthead population exactly - the panel was
+1. [x] (1, 7.4) Panel population = masthead population exactly - the panel was
    summing offices/warehouses into the estimate (now residential-only) and
    rounding differently (now the same `approxCount` string as the masthead)
-2. [ ] (1.2) Company card staff reads "9 of 90"
+2. [x] (1.2) Company card staff reads "9 of 90"
 3. [ ] (1.7) District/street stat label shortened to "Listed"
 4. [ ] (2.1-2.3) Compass rose: custom two-tone needle, red half = north
    (lucide's Compass icon draws its needle at a fixed 45 degrees - it could
@@ -58,6 +58,21 @@ it doesn't hot-reload the panel):
 2. [ ] Companies - sort By Industry: an "All Industries" sub-menu appears,
    items shown with each industry's icon + hue; picking one narrows the
    list. Switching the sort away clears the filter (no invisible narrowing)
+
+## Feedback round 3 - fixes to retest (commits `a750fa8`, `394c85b`)
+
+1. [ ] Companies header: title + "N available" (updates with filters) on the
+   first line, all dropdowns (district / sort / industry) on a second line
+2. [ ] "Show more" is pinned BELOW every list's scroll area - search results,
+   companies, streets, buildings, people - always visible at the bottom of
+   the card when more rows exist (it was buried at the end of the scrolled
+   content, which is why it never appeared)
+3. [ ] Compass rose is larger (56px button, bigger needle)
+4. [ ] Compass needle is tethered to the city orientation frame-by-frame: it
+   was reading a 10Hz store mirror smoothed by a 0.3s CSS tween (the awkward
+   jump you saw); it now reads the camera's live azimuth every frame with no
+   transition - orbiting should feel like the needle is bolted to the city.
+   The click-to-north tween should also track smoothly now
 
 ## 1. Full-capacity city framing (#96)
 
