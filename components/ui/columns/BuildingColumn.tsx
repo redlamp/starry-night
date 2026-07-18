@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { useSceneStore } from "@/lib/state/sceneStore";
 import { focusBuilding, unfocusBuilding } from "@/lib/scene/focusBuilding";
-import { buildingPopulation } from "@/lib/seed/population";
+import { residentialCapacity } from "@/lib/seed/population";
 import { siftBuilding } from "@/lib/seed/personaStory";
 import { ARCHETYPE_LABELS } from "@/components/ui/panels/WindowsPanel";
 import { useEntityIndexes } from "./entityData";
@@ -34,7 +34,9 @@ export function BuildingColumn({ id, part }: { id: number; part: "pinned" | "res
   const households = indexes.householdsInBuilding(id);
   // Self-materializes this building's stories (lazy since 2026-07-10).
   const siftLine = siftBuilding(masterSeed, indexes.directory, id);
-  const population = Math.round(buildingPopulation(building));
+  // Census capacity (mixed-use aware, #96 recalibration) — 0 for archetypes
+  // nobody lives in, which hides the stat below.
+  const population = Math.round(residentialCapacity(building));
   const isFocused = focusedBuildingId === id;
 
   if (part === "pinned") {
@@ -79,7 +81,15 @@ export function BuildingColumn({ id, part }: { id: number; part: "pinned" | "res
       )}
 
       <div className="flex flex-col gap-1">
-        <ColumnStat label="Est. Population" value={`~${population.toLocaleString()}`} />
+        {population > 0 && (
+          <ColumnStat label="Est. Population" value={`~${population.toLocaleString()}`} />
+        )}
+        {households.length > 0 && (
+          <ColumnStat
+            label="Listed"
+            value={`${households.reduce((sum, hh) => sum + hh.memberIds.length, 0)} residents · ${households.length} ${households.length === 1 ? "household" : "households"}`}
+          />
+        )}
         <ColumnStat label="Height" value={`${Math.round(building.height)} m · ${building.floors} floors`} />
         <ColumnStat
           label="Footprint"

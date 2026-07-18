@@ -1,8 +1,15 @@
 "use client";
 
-import { useSceneStore } from "@/lib/state/sceneStore";
+import { useSceneStore, type NamingRegion } from "@/lib/state/sceneStore";
 import { Switch } from "@/components/ui/switch";
 import { ValueSlider } from "@/components/ui/value-slider";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
 const TOPOLOGY_LABELS: Record<string, string> = {
@@ -146,6 +153,37 @@ export function StreetlightControls() {
 
 // ValueSlider now shared from components/ui/value-slider.tsx (base-ui
 // number-field stepper + label scrubbing).
+
+const NAMING_REGION_LABELS: Record<NamingRegion, string> = { us: "US", uk: "UK" };
+
+// #90 regional street-naming pack. Naming-only gen input (no layout regen) —
+// switching pools just re-derives buildCityNames/roadQueryFor's cached names.
+// Default "us" reproduces the pre-#90 naming exactly.
+export function NamingRegionRow() {
+  const namingRegion = useSceneStore((s) => s.namingRegion);
+  const setNamingRegion = useSceneStore((s) => s.setNamingRegion);
+  return (
+    <div className="flex items-center justify-between gap-2 text-xs">
+      <span className="text-foreground/70">Naming Region</span>
+      <Select
+        value={namingRegion}
+        onValueChange={(v) => v && setNamingRegion(v as NamingRegion)}
+      >
+        <SelectTrigger
+          size="sm"
+          aria-label="Naming Region"
+          className="bg-background/50 text-foreground hover:bg-background/60 w-24"
+        >
+          <SelectValue>{NAMING_REGION_LABELS[namingRegion]}</SelectValue>
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="us">US</SelectItem>
+          <SelectItem value="uk">UK</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
 
 // Read-only per-seed readouts — topology + tier counts.
 export function CityDetailsSection() {

@@ -10,6 +10,7 @@ import { CameraSideView } from "@/components/scene/CameraSideView";
 import { ControlsGuide } from "@/components/ui/ControlsGuide";
 import { ControlDock } from "@/components/ui/ControlDock";
 import { DirectoryPrewarm } from "@/components/ui/DirectoryPrewarm";
+import { TopDownCompassRose } from "@/components/ui/TopDownCompassRose";
 
 export default function Page() {
   return (
@@ -32,6 +33,7 @@ export default function Page() {
         <ControlsGuide />
         {/* Top-left control dock: City Directory, Inspect, Resume. */}
         <ControlDock />
+        <TopDownCompassRose />
       </div>
     </main>
   );

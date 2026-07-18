@@ -49,6 +49,37 @@ export function buildingPopulation(b: {
   return b.width * b.depth * b.floors * ARCHETYPE_OCCUPANCY[b.archetype] * CLASS_USE[b.district];
 }
 
+// --- Census capacity (#96, recalibrated 2026-07-18) -------------------------
+// The people-equivalent above is tuned for NIGHT TRAFFIC, and only the three
+// pure-residential archetypes counted toward the city's census — which read
+// far too low against a skyline full of spires (user: "seems very low
+// considering the size and density"). The census model instead treats the
+// tall archetypes as mixed-use (a share of their floors is apartments, like
+// real downtown towers) at a dense-metro housing rate. This is DISPLAY data
+// (masthead, cards, demographics) — traffic, the heat-map, and the persona
+// derivation keep buildingPopulation() untouched so nothing re-rolls.
+const RESIDENTIAL_MIX: Partial<Record<Archetype, number>> = {
+  "residential-tower": 1,
+  "mid-rise": 1,
+  "low-rise": 1,
+  "narrow-tower": 0.7,
+  spire: 0.5,
+  "office-block": 0.2,
+  // warehouse: nobody lives in one.
+};
+const HOUSING_DENSITY = 0.04; // people per m² of residential floor area (~25 m²/person)
+
+// One building's census-capacity contribution; 0 for archetypes nobody lives in.
+export function residentialCapacity(b: {
+  width: number;
+  depth: number;
+  floors: number;
+  archetype: Archetype;
+}): number {
+  const mix = RESIDENTIAL_MIX[b.archetype];
+  return mix ? b.width * b.depth * b.floors * mix * HOUSING_DENSITY : 0;
+}
+
 export type PopulationField = {
   n: number; // grid is n×n
   cell: number; // metres per cell

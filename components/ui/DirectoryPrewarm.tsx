@@ -28,11 +28,14 @@ export function DirectoryPrewarm() {
   // sketch changes re-key the module caches, so restart the prewarm on them.
   const citySize = useSceneStore((s) => s.citySize);
   const citySketch = useSceneStore((s) => s.citySketch);
+  // #90: naming pack is the same kind of module-cache recipe input.
+  const namingRegion = useSceneStore((s) => s.namingRegion);
   const { ready } = useGeneratedCity(masterSeed, cityShape);
 
   useEffect(() => {
     void citySize;
     void citySketch;
+    void namingRegion;
     if (!ready) return;
     let cancelled = false;
     let raf = 0;
@@ -69,7 +72,7 @@ export function DirectoryPrewarm() {
       cancelled = true;
       cancelAnimationFrame(raf);
     };
-  }, [ready, masterSeed, cityShape, cityShapeScale, citySize, citySketch]);
+  }, [ready, masterSeed, cityShape, cityShapeScale, citySize, citySketch, namingRegion]);
 
   return null;
 }

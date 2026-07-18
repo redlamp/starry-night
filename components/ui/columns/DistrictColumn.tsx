@@ -5,6 +5,7 @@ import { Building2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useSceneStore } from "@/lib/state/sceneStore";
+import { approxCount } from "@/lib/utils";
 import { useEntityIndexes } from "./entityData";
 import { ColumnStat, ShowMore } from "./EntityColumns";
 
@@ -35,7 +36,8 @@ export function DistrictColumn({ id, part }: { id: string; part: "pinned" | "res
       </div>
 
       <div className="flex flex-col gap-1">
-        <ColumnStat label="Residents" value={agg.residentCount.toLocaleString()} />
+        <ColumnStat label="Population" value={approxCount(agg.populationEst)} />
+        <ColumnStat label="Listed" value={agg.residentCount.toLocaleString()} />
         <ColumnStat label="Companies" value={agg.companyCount.toLocaleString()} />
         <ColumnStat label="Homes" value={agg.homeBuildingCount.toLocaleString()} />
         <ColumnStat label="Area" value={`${(agg.district.area / 1e6).toFixed(2)} km²`} muted />
