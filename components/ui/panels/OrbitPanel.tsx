@@ -7,9 +7,11 @@ import { cn } from "@/lib/utils";
 import { MapPin, MousePointer2, Pause, Play, Pointer, ScanSearch } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RangeSlider, ValueSlider } from "@/components/ui/value-slider";
 import { HelpHint } from "@/components/ui/tooltip";
 import { SubGroup } from "./shared";
+import type { CompassMode } from "@/lib/state/sceneStore";
 
 // True when the primary pointer is coarse (touch). Client-only; defaults to false
 // (desktop / cursor) on first paint, then resolves after mount — avoids a hydration
@@ -50,6 +52,10 @@ export function OrbitSection() {
   const setSnv2 = useSceneStore((s) => s.setSnv2);
   const snv3 = useSceneStore((s) => s.snv3);
   const setSnv3 = useSceneStore((s) => s.setSnv3);
+  const compassMode = useSceneStore((s) => s.compassMode);
+  const setCompassMode = useSceneStore((s) => s.setCompassMode);
+  const projection = useSceneStore((s) => s.projection);
+  const orthoSize = useSceneStore((s) => s.orthoSize);
   const driftMode = useSceneStore((s) => s.driftMode);
   const setDriftMode = useSceneStore((s) => s.setDriftMode);
   const isDrift = cameraModel === "drift";
@@ -82,6 +88,43 @@ export function OrbitSection() {
   );
   return (
     <>
+      {/* Model-independent pose detail + compass setting (user 2026-07-18). */}
+      <div className="flex items-baseline justify-between gap-2 px-1 text-sm">
+        <span className="flex items-center gap-1">
+          Distance
+          <HelpHint>
+            The camera&apos;s current distance from its focal point (usually the ground), in world
+            metres. In ortho the view size drives zoom instead, so both show.
+          </HelpHint>
+        </span>
+        <span className="text-muted-foreground tabular-nums">
+          {orbit.radius.toLocaleString()} m
+          {projection === "orthographic" ? ` · view ${Math.round(orthoSize)}` : ""}
+        </span>
+      </div>
+      <div className="flex items-center justify-between gap-2 px-1">
+        <span className="flex items-center gap-1 text-sm">
+          Compass
+          <HelpHint>
+            The north needle over the city. Auto shows it while parked in top-down or zoomed far
+            out (ortho view size past 720, or camera past 3,200 m); On keeps it always; clicking
+            it rotates north-up.
+          </HelpHint>
+        </span>
+        <Tabs value={compassMode} onValueChange={(v) => setCompassMode(v as CompassMode)}>
+          <TabsList className="h-7">
+            <TabsTrigger value="off" className="px-2.5 text-xs">
+              Off
+            </TabsTrigger>
+            <TabsTrigger value="auto" className="px-2.5 text-xs">
+              Auto
+            </TabsTrigger>
+            <TabsTrigger value="on" className="px-2.5 text-xs">
+              On
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
       {/* Drift model controls — its motion is auto-driven, so the Map pose sliders
           (Speed/Distance/Compass/Focal) are hidden while Drift is active; the framing
           controls below (Screen Y / ground pull) still apply to both. */}

@@ -28,6 +28,7 @@ import {
   WorkplaceKindBadge,
   WORKPLACE_KIND_ICON,
   WORKPLACE_KIND_COLOR,
+  WORKPLACE_KIND_LABEL,
 } from "@/components/ui/columns/workplaceIcons";
 import type { WorkplaceType } from "@/lib/seed/personaData";
 import {
@@ -1003,7 +1004,7 @@ function CompaniesView({
         id: biz.id,
         name: biz.name,
         kind: biz.kind,
-        kindLabel: biz.schoolTier ? `${biz.schoolTier} school` : biz.kind,
+        kindLabel: biz.schoolTier ? `${biz.schoolTier} school` : WORKPLACE_KIND_LABEL[biz.kind],
         districtId,
         districtName: names.districtNames.get(districtId) ?? "",
         listed: biz.employeeIds.length,
@@ -1120,10 +1121,10 @@ function CompaniesView({
                     "Industry"
                   ) : (
                     <span
-                      className="truncate capitalize"
+                      className="truncate"
                       style={{ color: WORKPLACE_KIND_COLOR[v as WorkplaceType] }}
                     >
-                      {v}
+                      {WORKPLACE_KIND_LABEL[v as WorkplaceType]}
                     </span>
                   )
                 }
@@ -1136,11 +1137,11 @@ function CompaniesView({
                 return (
                   <SelectItem key={k} value={k}>
                     <span
-                      className="flex items-center gap-1.5 capitalize"
+                      className="flex items-center gap-1.5"
                       style={{ color: WORKPLACE_KIND_COLOR[k] }}
                     >
                       <Icon aria-hidden className="size-3.5" />
-                      {k}
+                      {WORKPLACE_KIND_LABEL[k]}
                     </span>
                   </SelectItem>
                 );

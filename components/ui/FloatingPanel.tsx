@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { X } from "lucide-react";
+import { Maximize2, Minimize2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { IconTip } from "@/components/ui/columns/EntityColumns";
 import { cn } from "@/lib/utils";
 
 // Reusable floating window (#97): title-bar drag + corner resize, no external
@@ -55,6 +56,28 @@ export function FloatingPanel({
   // null until the first client layout effect places it (needs window dims).
   const [pos, setPos] = useState<Point | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
+  // Vertical maximize (user 2026-07-18): expanded fills top-to-bottom at the
+  // current width/x; restore returns to the size/y remembered at expand time.
+  // A manual resize while expanded hands control back (clears the flag).
+  const [expanded, setExpanded] = useState(false);
+  const restoreRef = useRef<{ h: number; y: number } | null>(null);
+
+  const toggleExpand = () => {
+    if (!pos) return;
+    const vh = window.innerHeight;
+    if (!expanded) {
+      restoreRef.current = { h: size.h, y: pos.y };
+      setSize((s) => ({ ...s, h: vh - MARGIN * 2 }));
+      setPos((p) => (p ? { ...p, y: MARGIN } : p));
+      setExpanded(true);
+    } else {
+      const prev = restoreRef.current ?? { h: defaultHeight, y: MARGIN };
+      const h = Math.min(prev.h, vh - MARGIN * 2);
+      setSize((s) => ({ ...s, h }));
+      setPos((p) => (p ? { ...p, y: clamp(prev.y, MARGIN, Math.max(MARGIN, vh - h - MARGIN)) } : p));
+      setExpanded(false);
+    }
+  };
 
   // Initial placement + clamp to the current viewport. Runs once on mount and
   // again on resize so the window can't strand itself off-screen.
@@ -107,6 +130,7 @@ export function FloatingPanel({
           y: clamp(drag.startPos.y + dy, MARGIN, Math.max(MARGIN, vh - drag.startSize.h - MARGIN)),
         });
       } else {
+        setExpanded(false); // manual resize takes over from the expand toggle
         setSize({
           w: clamp(drag.startSize.w + dx, minWidth, vw - drag.startPos.x - MARGIN),
           h: clamp(drag.startSize.h + dy, minHeight, vh - drag.startPos.y - MARGIN),
@@ -159,6 +183,16 @@ export function FloatingPanel({
         <span className="truncate text-sm font-medium">{title}</span>
         <span className="flex shrink-0 items-center gap-1">
           {headerRight}
+          <IconTip label={expanded ? "Restore" : "Expand"}>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={toggleExpand}
+              aria-label={expanded ? "Restore" : "Expand"}
+            >
+              {expanded ? <Minimize2 /> : <Maximize2 />}
+            </Button>
+          </IconTip>
           <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Close">
             <X />
           </Button>

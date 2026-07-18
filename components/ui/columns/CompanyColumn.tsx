@@ -6,7 +6,7 @@ import { useSceneStore } from "@/lib/state/sceneStore";
 import { CONNECTION_COLOR } from "@/components/scene/CommuteArc";
 import { useEntityIndexes } from "./entityData";
 import { ColumnStat, ShowMore } from "./EntityColumns";
-import { WorkplaceKindBadge } from "./workplaceIcons";
+import { WorkplaceKindBadge, WORKPLACE_KIND_LABEL } from "./workplaceIcons";
 
 const STUDENT_CAP = 10;
 
@@ -31,7 +31,7 @@ export function CompanyColumn({ id, part }: { id: string; part: "pinned" | "rest
         <div className="flex flex-wrap items-center gap-1.5">
           <WorkplaceKindBadge
             kind={biz.kind}
-            label={biz.schoolTier ? `${biz.schoolTier} school` : biz.kind}
+            label={biz.schoolTier ? `${biz.schoolTier} school` : WORKPLACE_KIND_LABEL[biz.kind]}
           />
         </div>
 

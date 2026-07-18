@@ -89,6 +89,27 @@ export const WORKPLACE_KIND_ICON: Record<WorkplaceType, LucideIcon> = {
   shop: PROFESSION_ICONS["Personal Care"]!,
 };
 
+// Display names for the industry pills (user 2026-07-18: "Medical" over
+// "Hospital"). Only Medical diverges from the raw kind for now — a broader
+// research-based taxonomy is proposed in wiki/research/industry-taxonomy.md
+// and lands as one pass once the category set is picked.
+export const WORKPLACE_KIND_LABEL: Record<WorkplaceType, string> = {
+  office: "Office",
+  hospital: "Medical",
+  school: "School",
+  retail: "Retail",
+  restaurant: "Restaurant",
+  factory: "Factory",
+  warehouse: "Warehouse",
+  civic: "Civic",
+  home: "Home",
+  outdoor: "Outdoor",
+  transit: "Transit",
+  studio: "Studio",
+  lab: "Lab",
+  shop: "Shop",
+};
+
 // One hue per industry (user 2026-07-18: "color code the industry pills") at
 // a shared oklch lightness/chroma band so every pill carries equal weight on
 // both themes. School keeps the Education row's exact blue; resident-details

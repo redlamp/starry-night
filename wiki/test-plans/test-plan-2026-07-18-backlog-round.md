@@ -22,6 +22,30 @@ test a stream in isolation.
 | 6 | #92 companies registry view | `feat/companies-view` | ready to test |
 | 7 | #97 demographics panel, phase 1 | `feat/demographics-panel` | ready to test |
 
+## Feedback round 6 - shipped (everything now lives on main, tag v2026.07.18)
+
+1. [ ] Compass setting in Settings - Orbit: Off / Auto / On. Auto = top-down
+   park OR zoomed out past ortho view size 720 / perspective distance 3,200 m.
+   On shows it in every camera model (non-v3 models drive the needle from the
+   10Hz orbit mirror). Persisted via Save Settings
+2. [ ] Orbit section: read-only Distance detail - camera distance from its
+   focal point in metres; in ortho it also shows the view size (the actual
+   zoom driver there)
+3. [ ] City Directory card has the settings-drawer glass (bg-popover/70 +
+   blur); inspection cards (entity columns) unchanged. VERIFIED LIVE via
+   probe (12px backdrop blur, 0.7 alpha)
+4. [ ] Demographics header: Expand/Restore button left of Close - fills
+   top-to-bottom at current width, restores to remembered size; a manual
+   resize while expanded takes over. VERIFIED LIVE (620px -> 833px -> 620px)
+5. [ ] Industry pill: "Medical" replaces "Hospital" everywhere (registry rows,
+   filter menu, company cards)
+6. [ ] Entity inspection starts with cone-follow ON (toggle still works)
+7. Industry taxonomy proposal to review: [[industry-taxonomy]] - 12
+   research-based categories (NAICS/GICS/Yelp survey) splitting the 3,046
+   "office" bucket by existing subtype affinity; 3 open questions at the end
+8. Test plans moved to `wiki/test-plans/` (this file included); conventions
+   updated in wiki/CLAUDE.md
+
 ## Feedback round 1 - fixes to retest (commit `263ef80` + one agent in flight)
 
 Your feedback mapped to fixes, all on `test/2026-07-18-round` (restart `bun dev` if
@@ -87,7 +111,7 @@ it doesn't hot-reload the panel):
 3. [ ] (1.7) Companies filters: three short selects on ONE line - Districts /
    Staff / Industry (industry filter now always available, not gated on the
    sort)
-4. [ ] (7.7) Panel glass: the floating panel now portals to <body> - its
+4. [ ] (7.7) Panel glass: the floating panel now portals to `body` - its
    backdrop blur was being neutralized by mounting inside ControlDock's own
    blurred card (backdrop-filter samples only up to the nearest filtered
    ancestor); also more transparent (/65)
@@ -97,6 +121,26 @@ it doesn't hot-reload the panel):
    visible at the card bottom
 6. [ ] Masthead: city name in normal header styling (no all-caps), with the
    Demographics button on the same line
+
+## Feedback round 5 - scroll fix, VERIFIED LIVE (shipped, tag moved)
+
+The round-3/4 scroll work was wrong twice; this one was verified in a real
+browser before shipping (scratch/scrollProbe.ts, a reusable CDP probe that
+opens the directory, clicks tabs/buttons, and measures the DOM).
+
+Root cause: base-ui's ScrollArea viewport uses height:100%, which resolves as
+auto against a flex-shrunk root - the viewport grew to content height, never
+overflowed, never scrolled; Show More loaded rows into the clipped void. The
+root is now a flex column so the viewport takes its height from flex layout.
+
+Probe evidence: viewport 376px client vs 7,598px content, scrollTop 0 -> 400
+on demand, Show More 100 -> 200 rows with the new rows scroll-reachable, the
+pinned bar clear of the list (list bottom y=765, bar top y=784).
+
+1. [ ] Companies/People/Streets/Buildings/search lists scroll normally
+2. [ ] Show More (now an outline button, "Show More · N left") appends 100
+   rows you can actually scroll to
+3. [ ] Short lists still content-size the card (no stretched empty panel)
 
 ## 1. Full-capacity city framing (#96)
 

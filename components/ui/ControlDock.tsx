@@ -101,7 +101,9 @@ export function ControlDock() {
         <div
           // Fly-to framing avoids the space this panel covers (user 2026-07-11).
           data-camera-obstruction
-          className="pointer-events-auto fixed top-16 left-3 z-40 flex max-h-[calc(100vh-5.5rem)] w-[21rem] max-w-[calc(100vw-1.5rem)] flex-col rounded-xl border border-border bg-popover/95 text-popover-foreground shadow-lg backdrop-blur-md"
+          // Same glass recipe as the settings drawer (user 2026-07-18) — the
+          // inspection cards (entity columns) keep their own solid chrome.
+          className="border-foreground/10 bg-popover/70 pointer-events-auto fixed top-16 left-3 z-40 flex max-h-[calc(100vh-5.5rem)] w-[21rem] max-w-[calc(100vw-1.5rem)] flex-col rounded-xl border text-popover-foreground shadow-lg backdrop-blur-md"
         >
           <DirectoryBuildRing />
           <div className="flex items-center justify-between border-b border-border/60 px-3 py-2">

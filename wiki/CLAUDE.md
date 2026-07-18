@@ -15,6 +15,7 @@ If you (Claude) are unsure where info belongs, prefer `wiki/` for: project state
 | `wiki/` (root) | `index.md` only | `index.md` |
 | `wiki/daily/` | One file per day, free-form log | `YYYY-MM-DD.md` |
 | `wiki/notes/` | Evergreen atomic notes — one concept per file | `kebab-case-title.md` |
+| `wiki/test-plans/` | Session test plans the user works through | `test-plan-YYYY-MM-DD-topic.md` |
 | `wiki/research/` | External references, articles, videos, papers — each summarised with source link | `kebab-case-slug.md` |
 | `wiki/people/` | Person profile per file | `firstname-lastname.md` or handle |
 | `wiki/projects/` | Sub-project / experiment trackers | `kebab-case-name.md` |
@@ -98,7 +99,7 @@ Inline `#tag` in body also works — Obsidian indexes both. Always use the names
 
 ## Test plans
 
-- `notes/test-plan-[date]-[topic].md` (user 2026-07-10): date = the session the plan targets, topic = the feature stream. Example: `notes/test-plan-2026-07-10-personas.md`.
+- `test-plans/test-plan-[date]-[topic].md` (own folder since 2026-07-19, user: "more than notes now"; naming per user 2026-07-10): date = the session the plan targets, topic = the feature stream. Example: `test-plans/test-plan-2026-07-10-personas.md`.
 - Numbered `## N.` sections; testable items as numbered check boxes (`1. [ ]` — Obsidian renders numbered task lists) so the user ticks what's tested AND references results as `section.item` ("7.4").
 - Info-only sections get plain bullets/numbers, no boxes. End with a "Known / Parked" section so resolved items don't get re-reported; when more than one dev server is live, open with a section→server table.
 
