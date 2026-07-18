@@ -106,6 +106,9 @@ export {
 } from "./sceneDefaults";
 export type { NamingRegion } from "@/lib/seed/naming";
 
+// Compass rose visibility (user 2026-07-18).
+export type CompassMode = "off" | "auto" | "on";
+
 export { hasSavedQualityTier } from "./sceneMigration";
 
 // ---------------------------------------------------------------------------
@@ -270,6 +273,7 @@ type AnySettingEntry =
   | SettingEntry<"fieldDeviation">
   | SettingEntry<"densityProfile">
   | SettingEntry<"namingRegion">
+  | SettingEntry<"compassMode">
   | SettingEntry<"antialias">
   | SettingEntry<"dprCap">
   | SettingEntry<"adaptive">
@@ -361,6 +365,9 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   // Regional street-naming pack (#90) — gen input (naming layer only, no
   // layout regen), persisted. Default "us" reproduces the pre-#90 naming.
   { key: "namingRegion", defaultValue: DEFAULT_NAMING_REGION, persist: true },
+  // Compass rose visibility (user 2026-07-18): auto = top-down park OR zoomed
+  // far out (ortho size > 720 / perspective distance > 3200 m).
+  { key: "compassMode", defaultValue: "auto" as CompassMode, persist: true },
   // Perf overrides (user 2026-06-13): MSAA off by default; dpr cap null = auto (tier).
   { key: "antialias", defaultValue: false as const, persist: true },
   { key: "dprCap", defaultValue: null as SceneState["dprCap"], persist: true },
@@ -886,6 +893,10 @@ type SceneState = {
   // byte-identical to the naming this project has always produced.
   namingRegion: NamingRegion;
   setNamingRegion: (namingRegion: NamingRegion) => void;
+  // Compass rose: off / auto / on (user 2026-07-18). Auto shows it while
+  // parked in top-down or zoomed far out. Persisted.
+  compassMode: CompassMode;
+  setCompassMode: (compassMode: CompassMode) => void;
   // Ambient traffic (research D) — opt-in car head/tail-lights.
   traffic: typeof DEFAULT_TRAFFIC;
   setTraffic: (patch: Partial<typeof DEFAULT_TRAFFIC>) => void;
@@ -1181,6 +1192,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setDensityProfileDraft: (densityProfileDraft) => set({ densityProfileDraft }),
   namingRegion: DEFAULT_NAMING_REGION,
   setNamingRegion: (namingRegion) => set({ namingRegion }),
+  compassMode: "auto",
+  setCompassMode: (compassMode) => set({ compassMode }),
   traffic: DEFAULT_TRAFFIC,
   setTraffic: (patch) => set((s) => ({ traffic: { ...s.traffic, ...patch } })),
   flights: DEFAULT_FLIGHTS,
@@ -1325,7 +1338,9 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setColumnsView: (columnsView) => set({ columnsView }),
   settingsPanelWidth: 448,
   setSettingsPanelWidth: (settingsPanelWidth) => set({ settingsPanelWidth }),
-  coneFollow: false,
+  // Default ON (user 2026-07-18): inspecting starts in cone mode; the toggle
+  // still turns it off per session. Runtime tier, not persisted.
+  coneFollow: true,
   setConeFollow: (coneFollow) => set({ coneFollow }),
   inspectMode: false,
   setInspectMode: (on) =>

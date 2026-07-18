@@ -177,6 +177,10 @@ export type SavedConfig = {
   // existed still load — the reader falls back to DEFAULT_NAMING_REGION ("us"),
   // which reproduces the pre-#90 naming exactly.
   namingRegion?: NamingRegion;
+  // Compass rose off/auto/on; optional for configs saved before it existed
+  // (falls back to "auto"). Literal union, not the store's CompassMode type -
+  // this file must not import from sceneStore (cycle).
+  compassMode?: "off" | "auto" | "on";
   antialias?: boolean;
   dprCap?: number | null;
   adaptive?: boolean;

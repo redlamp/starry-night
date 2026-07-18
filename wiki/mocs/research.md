@@ -46,3 +46,5 @@ Map of Content for external references that shape direction.
 ## Colour references
 
 - [[color-usage-night-skyline]] — kelvin distribution per source kind, what real night-skyline windows actually look like, where current palette skews wrong, recalibration plan
+
+- [[industry-taxonomy]] — survey of NAICS/GICS/Yelp classification systems + a 12-category proposal for the companies directory (2026-07-18, status/open)

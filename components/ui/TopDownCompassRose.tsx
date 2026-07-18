@@ -31,28 +31,41 @@ export function TopDownCompassRose() {
   const captureMode = useSceneStore((s) => s.captureMode);
   const isV3 = useSceneStore((s) => s.cameraModel === "snv3");
   const parked = useSceneStore((s) => s.topDownParked);
+  const mode = useSceneStore((s) => s.compassMode);
+  const projection = useSceneStore((s) => s.projection);
+  const orthoSize = useSceneStore((s) => s.orthoSize);
+  const radius = useSceneStore((s) => s.orbit.radius);
   const needleRef = useRef<SVGSVGElement | null>(null);
-  const visible = isV3 && parked;
+
+  // Off / Auto / On (user 2026-07-18). Auto = the original top-down park,
+  // OR zoomed far enough out that the city reads as a map: ortho view size
+  // past 720, or perspective camera more than 3,200 m from its focal point.
+  const zoomedOut = projection === "orthographic" ? orthoSize > 720 : radius > 3200;
+  const visible =
+    mode === "on" ? true : mode === "off" ? false : (isV3 && parked) || zoomedOut;
 
   // The needle tethers to the camera's per-frame azimuth (cameraCommand
   // .liveAzimuthDeg) via rAF and a direct style write — NOT the orbit store
   // mirror, whose 10Hz sampling plus a CSS tween made the needle step and
   // drift out of sync with the city (user 2026-07-18). No transition: the
-  // needle IS the city orientation, every frame.
+  // needle IS the city orientation, every frame. Only Cam v3 publishes the
+  // per-frame value; other models fall back to the 10Hz orbit mirror.
   useEffect(() => {
     if (!visible) return;
     let raf = 0;
     const tick = () => {
       const el = needleRef.current;
       if (el) {
-        const bearingDeg = (cameraCommand.liveAzimuthDeg + 180) % 360;
-        el.style.transform = `rotate(${bearingDeg}deg)`;
+        const az = isV3
+          ? cameraCommand.liveAzimuthDeg
+          : useSceneStore.getState().orbit.azimuthDeg;
+        el.style.transform = `rotate(${(az + 180) % 360}deg)`;
       }
       raf = requestAnimationFrame(tick);
     };
     tick();
     return () => cancelAnimationFrame(raf);
-  }, [visible]);
+  }, [visible, isV3]);
 
   if (captureMode) return null;
 
