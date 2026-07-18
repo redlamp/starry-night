@@ -468,6 +468,12 @@ type SceneState = {
   setDriftMode: (on: boolean) => void;
   driftFlying: boolean;
   setDriftFlying: (on: boolean) => void;
+  // True while Cam v3 is parked in its in-model top-down flight AND actually near the
+  // overhead pose (written per-frame from tdReturn + live elevation — a manual tilt-away
+  // clears it even though the banked return pose stays for the next `t`, #95). Runtime
+  // only, never persisted; drives the compass rose overlay's visibility.
+  topDownParked: boolean;
+  setTopDownParked: (on: boolean) => void;
   turntable: TurntableConfig;
   setTurntable: (patch: Partial<TurntableConfig>) => void;
   cameraIntent: CameraIntent;
@@ -1202,6 +1208,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setDriftMode: (driftMode) => set({ driftMode }),
   driftFlying: false,
   setDriftFlying: (driftFlying) => set({ driftFlying }),
+  topDownParked: false,
+  setTopDownParked: (topDownParked) => set({ topDownParked }),
   setTurntable: (patch) => set((s) => ({ turntable: { ...s.turntable, ...patch } })),
   setCameraIntent: (intent) =>
     set((s) => ({

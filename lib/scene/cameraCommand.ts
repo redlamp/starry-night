@@ -26,9 +26,14 @@ export const cameraCommand: {
   // flight + restart the idle timer (do NOT flip the mode on); otherwise → mode ON
   // (immediate ramped takeoff). Registered by Cam v3.
   toggleDrift: (() => void) | null;
+  // Spin the azimuth to north-up (shortest way), keeping elevation/target/distance —
+  // the top-down compass rose's click affordance (#95). Registered by Cam v3 while
+  // parked in top-down; a no-op elsewhere (the rose only renders while parked).
+  rotateNorthUp: (() => void) | null;
 } = {
   setTiltDeg: null,
   toggleTopDownInModel: null,
   projectionRadiusHold: null,
   toggleDrift: null,
+  rotateNorthUp: null,
 };
