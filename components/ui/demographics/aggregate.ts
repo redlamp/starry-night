@@ -1,4 +1,9 @@
-import type { PersonaDirectory, WorkStatus, CommuteMode } from "@/lib/seed/personas";
+import {
+  RESIDENTIAL_ARCHETYPES,
+  type PersonaDirectory,
+  type WorkStatus,
+  type CommuteMode,
+} from "@/lib/seed/personas";
 import type { Building } from "@/lib/seed/cityGen";
 import { buildingPopulation } from "@/lib/seed/population";
 import { approxMagnitude } from "@/lib/utils";
@@ -65,8 +70,11 @@ export type DemographicsData = {
 
 export type DistrictOption = { id: string; label: string };
 
-// Whole-city population estimate per district (and total), from the same
-// people-equivalent model the population heat-map uses. Deterministic.
+// Whole-city population estimate per district (and total). RESIDENTIAL
+// archetypes only — this must be the same sum as PersonaDirectory.city
+// .population (#96) or the panel contradicts the directory masthead (user
+// 2026-07-18: "way more than the directory's estimated total" — the first cut
+// summed offices/warehouses too).
 export function cityPopulationByDistrict(buildings: Building[]): {
   total: number;
   byDistrict: Map<string, number>;
@@ -74,6 +82,7 @@ export function cityPopulationByDistrict(buildings: Building[]): {
   const byDistrict = new Map<string, number>();
   let total = 0;
   for (const b of buildings) {
+    if (!RESIDENTIAL_ARCHETYPES.has(b.archetype)) continue;
     const pop = buildingPopulation(b);
     total += pop;
     byDistrict.set(b.districtId, (byDistrict.get(b.districtId) ?? 0) + pop);
@@ -142,15 +151,18 @@ export function aggregateDemographics(
   const avgHouseholdSize = listedHouseholds > 0 ? listed / listedHouseholds : 1;
 
   return {
+    // Header values stay RAW; the panel formats them with the same
+    // approxCount() the directory masthead uses, so the two surfaces can never
+    // disagree on rounding (user 2026-07-18).
     header: {
-      population: approxMagnitude(truePop),
+      population: Math.round(truePop),
       listed,
-      households: approxMagnitude(truePop / avgHouseholdSize),
+      households: Math.round(truePop / avgHouseholdSize),
       // Whole-city jobs come from the canonical #96 figure (sum of full
       // headcounts) so this header can't contradict the directory masthead;
       // the employment-rate scale is only a fallback for district slices,
       // where no canonical figure exists.
-      jobs: approxMagnitude(
+      jobs: Math.round(
         districtId === "all"
           ? directory.city.jobs
           : listed > 0

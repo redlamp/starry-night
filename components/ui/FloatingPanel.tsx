@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 // Reusable floating window (#97): title-bar drag + corner resize, no external
@@ -139,7 +140,9 @@ export function FloatingPanel({
       role="dialog"
       aria-label={typeof title === "string" ? title : undefined}
       className={cn(
-        "pointer-events-auto fixed z-50 flex flex-col overflow-hidden rounded-xl border border-border bg-popover/95 text-popover-foreground shadow-2xl backdrop-blur-md",
+        // /75 + blur-xl: at /95 the backdrop blur was imperceptible and the
+        // panel read as a flat card over the scene (user 2026-07-18).
+        "pointer-events-auto fixed z-50 flex flex-col overflow-hidden rounded-xl border border-border bg-popover/75 text-popover-foreground shadow-2xl backdrop-blur-xl",
         className,
       )}
       style={{ left: pos.x, top: pos.y, width: size.w, height: size.h }}
@@ -151,14 +154,9 @@ export function FloatingPanel({
         <span className="truncate text-sm font-medium">{title}</span>
         <span className="flex shrink-0 items-center gap-1">
           {headerRight}
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="text-muted-foreground hover:bg-muted hover:text-foreground rounded p-1"
-          >
-            <X className="size-4" />
-          </button>
+          <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Close">
+            <X />
+          </Button>
         </span>
       </div>
 

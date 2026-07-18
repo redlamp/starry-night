@@ -49,7 +49,7 @@ export function StreetColumn({ id, part }: { id: string; part: "pinned" | "rest"
         {agg.populationEst > 0 && (
           <ColumnStat label="Population" value={approxCount(agg.populationEst)} />
         )}
-        <ColumnStat label="Listed Residents" value={agg.residentCount.toLocaleString()} />
+        <ColumnStat label="Listed" value={agg.residentCount.toLocaleString()} />
         </div>
       </>
     );

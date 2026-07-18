@@ -4,7 +4,6 @@ import { useSceneStore } from "@/lib/state/sceneStore";
 import { cameraCommand } from "@/lib/scene/cameraCommand";
 import { cn } from "@/lib/utils";
 import { IconTip } from "@/components/ui/columns/EntityColumns";
-import { Compass } from "lucide-react";
 
 // Google-Maps-style compass rose (#95). Cam v3's in-model top-down keeps the camera's
 // current compass heading through the dive instead of rolling north-up like a real map
@@ -50,12 +49,19 @@ export function TopDownCompassRose() {
           )}
         >
           {/* Only the needle rotates — the round base (border/background) stays put,
-              same as a real map app's compass button. */}
-          <Compass
+              same as a real map app's compass button. Custom two-tone needle
+              (red = north) rather than lucide's Compass: that icon's needle is
+              drawn at 45°, so it never read as pointing north (user 2026-07-18). */}
+          <svg
+            viewBox="0 0 24 24"
             aria-hidden="true"
             className="size-5"
             style={{ transform: `rotate(${bearingDeg}deg)`, transition: "transform 0.3s linear" }}
-          />
+          >
+            <path d="M12 2.5 L15 12 L9 12 Z" fill="#e5484d" />
+            <path d="M12 21.5 L9 12 L15 12 Z" fill="currentColor" opacity={0.5} />
+            <circle cx="12" cy="12" r="1.1" fill="currentColor" opacity={0.7} />
+          </svg>
         </button>
       </IconTip>
     </div>

@@ -34,6 +34,7 @@ import {
   type DemographicsData,
   type Scope,
 } from "@/components/ui/demographics/aggregate";
+import { approxCount } from "@/lib/utils";
 
 // Demographics report (#97, phase 1): a floating census-style data profile over
 // the persona directory. One lazy aggregation pass feeds a population pyramid,
@@ -116,10 +117,12 @@ function DemographicsReport({ onClose }: { onClose: () => void }) {
             <Skeleton className="h-12 w-full" />
           ) : (
             <div className="grid grid-cols-4 gap-2 text-center">
-              <Stat label="Population" value={`~${data.header.population.toLocaleString()}`} />
+              {/* approxCount, not approxMagnitude: identical strings to the
+                  directory masthead (user 2026-07-18: the two disagreed). */}
+              <Stat label="Population" value={approxCount(data.header.population)} />
               <Stat label="Listed" value={data.header.listed.toLocaleString()} />
-              <Stat label="Households" value={`~${data.header.households.toLocaleString()}`} />
-              <Stat label="Jobs" value={`~${data.header.jobs.toLocaleString()}`} />
+              <Stat label="Households" value={approxCount(data.header.households)} />
+              <Stat label="Jobs" value={approxCount(data.header.jobs)} />
             </div>
           )}
           <div className="flex items-center gap-2">
@@ -233,23 +236,77 @@ const PYRAMID_CONFIG: ChartConfig = {
   nonbinary: { label: "Nonbinary", color: C.nonbinary },
 };
 
+// Custom tooltip for the pyramid: the nonbinary bar is drawn as two half-bars
+// straddling the axis (see AgePyramid), so the stock per-series rows would
+// list it twice at half value. Read the row once and present the three real
+// counts, left-to-right in visual order.
+function PyramidTooltip({
+  active,
+  payload,
+  label,
+  approx,
+}: {
+  active?: boolean;
+  payload?: Array<{ payload?: { men: number; women: number; nonbinary: number } }>;
+  label?: React.ReactNode;
+  approx: boolean;
+}) {
+  const row = payload?.[0]?.payload;
+  if (!active || !row) return null;
+  const fmt = (v: number) => `${approx ? "~" : ""}${Math.round(v).toLocaleString()}`;
+  const entries: Array<[string, string, number]> = [
+    ["Men", C.men, row.men],
+    ["Nonbinary", C.nonbinary, row.nonbinary],
+    ["Women", C.women, row.women],
+  ];
+  return (
+    <div className="border-border/60 bg-popover text-popover-foreground grid min-w-[8rem] gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs shadow-xl">
+      <div className="font-medium">Age {label}</div>
+      <div className="grid gap-1">
+        {entries.map(([name, color, value]) => (
+          <div key={name} className="flex items-center justify-between gap-3">
+            <span className="flex items-center gap-1.5">
+              <span aria-hidden className="size-2.5 shrink-0 rounded-[2px]" style={{ backgroundColor: color }} />
+              <span className="text-muted-foreground">{name}</span>
+            </span>
+            <span className="text-foreground font-medium tabular-nums">{fmt(value)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function AgePyramid({ data, approx }: { data: DemographicsData; approx: boolean }) {
-  // Mirror men to the left (negative) around zero; women + nonbinary stack
-  // right. Oldest band on top → reverse the youngest-first bins.
-  const rows = data.agePyramid.map((a) => ({ ...a, menNeg: -a.men })).reverse();
-  const fmtVal = (v: number) => `${approx ? "~" : ""}${Math.abs(v).toLocaleString()}`;
+  // Men extend left (negative), women right, and nonbinary straddles the axis
+  // as two same-colour half-bars so it reads as centred BETWEEN men and women
+  // (user 2026-07-18). Stack order from the axis outward: nb-half, then the
+  // gendered bar. Oldest band on top → reverse the youngest-first bins.
+  const rows = data.agePyramid
+    .map((a) => ({
+      band: a.band,
+      men: a.men,
+      women: a.women,
+      nonbinary: a.nonbinary,
+      menNeg: -a.men,
+      nbL: -(a.nonbinary / 2),
+      nbR: a.nonbinary / 2,
+    }))
+    .reverse();
   return (
     <ChartContainer config={PYRAMID_CONFIG} className="aspect-auto h-[280px] w-full">
       <BarChart data={rows} layout="vertical" stackOffset="sign" margin={{ left: 4, right: 4 }}>
         <CartesianGrid horizontal={false} strokeDasharray="3 3" />
         <XAxis type="number" tickFormatter={(v) => compact(Math.abs(v))} tickLine={false} axisLine={false} />
         <YAxis type="category" dataKey="band" width={34} tickLine={false} axisLine={false} />
-        <ChartTooltip
-          content={<ChartTooltipContent labelFormatter={(l) => `Age ${l}`} formatter={fmtVal} />}
-        />
-        <Bar dataKey="menNeg" stackId="a" fill="var(--color-menNeg)" radius={2} />
-        <Bar dataKey="women" stackId="a" fill="var(--color-women)" radius={2} />
-        <Bar dataKey="nonbinary" stackId="a" fill="var(--color-nonbinary)" radius={2} />
+        {/* isAnimationActive=false everywhere: bar-morph tweens read as cells
+            jumping between rows on filter/scope changes, and the animated
+            tooltip lags the cursor (user 2026-07-18). */}
+        <ChartTooltip isAnimationActive={false} content={<PyramidTooltip approx={approx} />} />
+        <Bar dataKey="nbL" stackId="a" fill="var(--color-nonbinary)" isAnimationActive={false} />
+        <Bar dataKey="menNeg" stackId="a" fill="var(--color-menNeg)" radius={2} isAnimationActive={false} />
+        <Bar dataKey="nbR" stackId="a" fill="var(--color-nonbinary)" isAnimationActive={false} />
+        <Bar dataKey="women" stackId="a" fill="var(--color-women)" radius={2} isAnimationActive={false} />
       </BarChart>
     </ChartContainer>
   );
@@ -293,8 +350,8 @@ function CategoryBars({
             <YAxis type="number" tickFormatter={compact} tickLine={false} axisLine={false} width={36} />
           </>
         )}
-        <ChartTooltip content={<ChartTooltipContent formatter={fmtVal} />} />
-        <Bar dataKey="count" fill="var(--color-count)" radius={3} />
+        <ChartTooltip isAnimationActive={false} content={<ChartTooltipContent formatter={fmtVal} />} />
+        <Bar dataKey="count" fill="var(--color-count)" radius={3} isAnimationActive={false} />
       </BarChart>
     </ChartContainer>
   );

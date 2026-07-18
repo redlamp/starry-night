@@ -37,7 +37,7 @@ export function DistrictColumn({ id, part }: { id: string; part: "pinned" | "res
 
       <div className="flex flex-col gap-1">
         <ColumnStat label="Population" value={approxCount(agg.populationEst)} />
-        <ColumnStat label="Listed Residents" value={agg.residentCount.toLocaleString()} />
+        <ColumnStat label="Listed" value={agg.residentCount.toLocaleString()} />
         <ColumnStat label="Companies" value={agg.companyCount.toLocaleString()} />
         <ColumnStat label="Homes" value={agg.homeBuildingCount.toLocaleString()} />
         <ColumnStat label="Area" value={`${(agg.district.area / 1e6).toFixed(2)} km²`} muted />

@@ -44,9 +44,10 @@ export function CompanyColumn({ id, part }: { id: string; part: "pinned" | "rest
       </button>
 
       <div className="flex flex-col gap-1">
+        {/* "N of M", not "N listed of M" — brevity (user 2026-07-18). */}
         <ColumnStat
           label="Staff"
-          value={`${biz.employeeIds.length.toLocaleString()} listed of ${biz.totalHeadcount.toLocaleString()}`}
+          value={`${biz.employeeIds.length.toLocaleString()} of ${biz.totalHeadcount.toLocaleString()}`}
         />
         {biz.schoolTier && <ColumnStat label="Students" value={students.length.toLocaleString()} />}
       </div>
