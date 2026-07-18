@@ -24,7 +24,11 @@ import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "@/components/
 import { HoverCard, HoverCardTrigger, HoverCardContent } from "@/components/ui/hover-card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { IconTip, ShowMore } from "@/components/ui/columns/EntityColumns";
-import { WorkplaceKindBadge } from "@/components/ui/columns/workplaceIcons";
+import {
+  WorkplaceKindBadge,
+  WORKPLACE_KIND_ICON,
+  WORKPLACE_KIND_COLOR,
+} from "@/components/ui/columns/workplaceIcons";
 import type { WorkplaceType } from "@/lib/seed/personaData";
 import {
   Select,
@@ -495,20 +499,27 @@ export function DirectorySection() {
     return cast;
   }, [bundle, directory, masterSeed]);
 
+  // Search matches + their paging sit ABOVE the early return (hook rules).
+  // Growable Show More window instead of the old hard 50-row crop with no way
+  // past it (user 2026-07-18: "the directory list gets cropped").
+  const trimmedQuery = query.trim().toLowerCase();
+  const allMatches = useMemo(
+    () =>
+      bundle && trimmedQuery
+        ? bundle.searchIndex.filter(
+            (n) => (kindFilter === "all" || n.kind === kindFilter) && n.lower.includes(trimmedQuery),
+          )
+        : [],
+    [bundle, trimmedQuery, kindFilter],
+  );
+  const pagedMatches = usePagedRows(allMatches, MAX_SEARCH_RESULTS, `${trimmedQuery}::${kindFilter}`);
+
   // After the directory build lands the bundle derivation above is warm;
   // until then render the masthead skeleton below instead of blocking.
   if (!directory || !bundle) {
     return <DirectorySkeleton />;
   }
-  const { idToBuilding, searchIndex, districtList, streetRows, buildingRows, personRows } = bundle;
-
-  const trimmedQuery = query.trim().toLowerCase();
-  const allMatches = trimmedQuery
-    ? searchIndex.filter(
-        (n) => (kindFilter === "all" || n.kind === kindFilter) && n.lower.includes(trimmedQuery),
-      )
-    : [];
-  const shownMatches = allMatches.slice(0, MAX_SEARCH_RESULTS);
+  const { idToBuilding, districtList, streetRows, buildingRows, personRows } = bundle;
 
   const goToBuilding = (buildingId: number) => {
     const building = idToBuilding.get(buildingId);
@@ -653,15 +664,12 @@ export function DirectorySection() {
         // 2026-07-08: "scrollbar too close to text, and far from edge").
         <ScrollArea className="-mr-3 **:data-[slot=scroll-area-viewport]:max-h-[calc(100vh-21rem)]">
           <div className="flex flex-col gap-0.5 pr-4">
-            {allMatches.length > MAX_SEARCH_RESULTS && (
-              <div className="text-muted-foreground px-1 text-sm">{allMatches.length} matches</div>
-            )}
-            {allMatches.length === 0 && (
+            {pagedMatches.total === 0 && (
               <div className="text-muted-foreground px-1 text-sm">
                 Nothing matches &quot;{query.trim()}&quot;.
               </div>
             )}
-            {shownMatches.map((entry) => (
+            {pagedMatches.visible.map((entry) => (
               <button
                 key={`${entry.kind}:${entry.id}`}
                 type="button"
@@ -694,6 +702,13 @@ export function DirectorySection() {
                 </Badge>
               </button>
             ))}
+            <ShowMore
+              total={pagedMatches.total}
+              cap={pagedMatches.visibleCount}
+              expanded={false}
+              onToggle={pagedMatches.showMore}
+              noun="matches"
+            />
           </div>
         </ScrollArea>
       ) : kindFilter === "company" ? (
@@ -940,6 +955,10 @@ function CompaniesView({
 }) {
   const [sort, setSort] = useState<CompanySort>("staff");
   const [districtFilter, setDistrictFilter] = useState<string>("all");
+  // Industry sub-filter (user 2026-07-18): only offered while sorting By
+  // Industry, and cleared when the sort moves away so no invisible filter
+  // keeps narrowing the list.
+  const [industryFilter, setIndustryFilter] = useState<WorkplaceType | "all">("all");
 
   // Base rows: one O(businesses) pass, independent of sort/filter so those
   // stay cheap to change. Stable as long as the directory/city bundle is
@@ -963,11 +982,14 @@ function CompaniesView({
     return list;
   }, [businesses, idToBuilding, names]);
 
-  // Sorting 7k rows only recomputes on a (sort, districtFilter) change, not
-  // on every render.
+  // Sorting 7k rows only recomputes on a sort/filter change, not on every
+  // render.
   const sortedFiltered = useMemo(() => {
-    const filtered =
-      districtFilter === "all" ? rows : rows.filter((r) => r.districtId === districtFilter);
+    const filtered = rows.filter(
+      (r) =>
+        (districtFilter === "all" || r.districtId === districtFilter) &&
+        (industryFilter === "all" || r.kind === industryFilter),
+    );
     const sorted = [...filtered];
     sorted.sort((a, b) => {
       switch (sort) {
@@ -982,19 +1004,25 @@ function CompaniesView({
       }
     });
     return sorted;
-  }, [rows, sort, districtFilter]);
+  }, [rows, sort, districtFilter, industryFilter]);
 
   // Re-page from the top whenever the sort or filter changes — the "next
   // 100" from the old ordering rarely means anything under the new one.
   const { visible, total, visibleCount, showMore } = usePagedRows(
     sortedFiltered,
     BROWSE_PAGE_SIZE,
-    `${sort}:${districtFilter}`,
+    `${sort}:${districtFilter}:${industryFilter}`,
   );
   const sortedDistricts = useMemo(
     () => [...districtList].sort((a, b) => a.properName.localeCompare(b.properName)),
     [districtList],
   );
+  // Industries actually present in this city, for the sub-filter menu.
+  const industries = useMemo(() => {
+    const present = new Set<WorkplaceType>();
+    for (const r of rows) present.add(r.kind);
+    return [...present].sort();
+  }, [rows]);
 
   return (
     <>
@@ -1022,7 +1050,13 @@ function CompaniesView({
               </SelectContent>
             </Select>
           )}
-          <Select value={sort} onValueChange={(v) => setSort(v as CompanySort)}>
+          <Select
+            value={sort}
+            onValueChange={(v) => {
+              setSort(v as CompanySort);
+              if (v !== "kind") setIndustryFilter("all");
+            }}
+          >
             <SelectTrigger size="sm" className="w-28">
               <SelectValue>
                 {(v: CompanySort) => COMPANY_SORTS.find((o) => o.value === v)?.label ?? "Sort"}
@@ -1039,11 +1073,53 @@ function CompaniesView({
         </div>
       </div>
 
+      {/* Industry sub-filter, offered while sorting By Industry (user
+          2026-07-18). Items carry the pill's own icon + hue. */}
+      {sort === "kind" && (
+        <div className="flex shrink-0 items-center justify-end">
+          <Select
+            value={industryFilter}
+            onValueChange={(v) => setIndustryFilter((v as WorkplaceType | "all") ?? "all")}
+          >
+            <SelectTrigger size="sm" className="w-40">
+              <SelectValue>
+                {(v: string) =>
+                  v === "all" ? (
+                    "All Industries"
+                  ) : (
+                    <span className="capitalize" style={{ color: WORKPLACE_KIND_COLOR[v as WorkplaceType] }}>
+                      {v}
+                    </span>
+                  )
+                }
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Industries</SelectItem>
+              {industries.map((k) => {
+                const Icon = WORKPLACE_KIND_ICON[k];
+                return (
+                  <SelectItem key={k} value={k}>
+                    <span
+                      className="flex items-center gap-1.5 capitalize"
+                      style={{ color: WORKPLACE_KIND_COLOR[k] }}
+                    >
+                      <Icon aria-hidden className="size-3.5" />
+                      {k}
+                    </span>
+                  </SelectItem>
+                );
+              })}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
       {/* -mr-3/pr-4: same edge-and-gap fix as the other lists in this panel. */}
       <ScrollArea className="-mr-3 **:data-[slot=scroll-area-viewport]:max-h-[calc(100vh-24rem)]">
         <div className="flex flex-col gap-0.5 pr-4">
           {total === 0 && (
-            <div className="text-muted-foreground px-1 text-sm">No companies in this district.</div>
+            <div className="text-muted-foreground px-1 text-sm">No companies match the filters.</div>
           )}
           {visible.map((row) => (
             <button
