@@ -702,15 +702,19 @@ export function DirectorySection() {
                 </Badge>
               </button>
             ))}
-            <ShowMore
-              total={pagedMatches.total}
-              cap={pagedMatches.visibleCount}
-              expanded={false}
-              onToggle={pagedMatches.showMore}
-              noun="matches"
-            />
           </div>
         </ScrollArea>
+      ) : null}
+      {trimmedQuery ? (
+        <div className="shrink-0">
+          <ShowMore
+            total={pagedMatches.total}
+            cap={pagedMatches.visibleCount}
+            expanded={false}
+            onToggle={pagedMatches.showMore}
+            noun="matches"
+          />
+        </div>
       ) : kindFilter === "company" ? (
         <>
           <Separator className="shrink-0" />
@@ -1026,9 +1030,17 @@ function CompaniesView({
 
   return (
     <>
-      <div className="flex shrink-0 items-center justify-between gap-2">
-        <span className="text-sm font-medium">Companies</span>
-        <div className="flex items-center gap-1">
+      {/* Title + available count on the first line, every dropdown on the
+          second (user 2026-07-18). flex-wrap lets the industry sub-filter
+          spill to a third line on narrow panels instead of clipping. */}
+      <div className="flex shrink-0 flex-col gap-1.5">
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="text-sm font-medium">Companies</span>
+          <span className="text-muted-foreground text-xs tabular-nums">
+            {total.toLocaleString()} available
+          </span>
+        </div>
+        <div className="flex flex-wrap items-center gap-1">
           {sortedDistricts.length > 1 && (
             <Select value={districtFilter} onValueChange={(v) => setDistrictFilter(v ?? "all")}>
               <SelectTrigger size="sm" className="w-32">
@@ -1070,50 +1082,47 @@ function CompaniesView({
               ))}
             </SelectContent>
           </Select>
+          {/* Industry sub-filter, offered while sorting By Industry (user
+              2026-07-18). Items carry the pill's own icon + hue. */}
+          {sort === "kind" && (
+            <Select
+              value={industryFilter}
+              onValueChange={(v) => setIndustryFilter((v as WorkplaceType | "all") ?? "all")}
+            >
+              <SelectTrigger size="sm" className="w-40">
+                <SelectValue>
+                  {(v: string) =>
+                    v === "all" ? (
+                      "All Industries"
+                    ) : (
+                      <span className="capitalize" style={{ color: WORKPLACE_KIND_COLOR[v as WorkplaceType] }}>
+                        {v}
+                      </span>
+                    )
+                  }
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Industries</SelectItem>
+                {industries.map((k) => {
+                  const Icon = WORKPLACE_KIND_ICON[k];
+                  return (
+                    <SelectItem key={k} value={k}>
+                      <span
+                        className="flex items-center gap-1.5 capitalize"
+                        style={{ color: WORKPLACE_KIND_COLOR[k] }}
+                      >
+                        <Icon aria-hidden className="size-3.5" />
+                        {k}
+                      </span>
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
+          )}
         </div>
       </div>
-
-      {/* Industry sub-filter, offered while sorting By Industry (user
-          2026-07-18). Items carry the pill's own icon + hue. */}
-      {sort === "kind" && (
-        <div className="flex shrink-0 items-center justify-end">
-          <Select
-            value={industryFilter}
-            onValueChange={(v) => setIndustryFilter((v as WorkplaceType | "all") ?? "all")}
-          >
-            <SelectTrigger size="sm" className="w-40">
-              <SelectValue>
-                {(v: string) =>
-                  v === "all" ? (
-                    "All Industries"
-                  ) : (
-                    <span className="capitalize" style={{ color: WORKPLACE_KIND_COLOR[v as WorkplaceType] }}>
-                      {v}
-                    </span>
-                  )
-                }
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Industries</SelectItem>
-              {industries.map((k) => {
-                const Icon = WORKPLACE_KIND_ICON[k];
-                return (
-                  <SelectItem key={k} value={k}>
-                    <span
-                      className="flex items-center gap-1.5 capitalize"
-                      style={{ color: WORKPLACE_KIND_COLOR[k] }}
-                    >
-                      <Icon aria-hidden className="size-3.5" />
-                      {k}
-                    </span>
-                  </SelectItem>
-                );
-              })}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
 
       {/* -mr-3/pr-4: same edge-and-gap fix as the other lists in this panel. */}
       <ScrollArea className="-mr-3 **:data-[slot=scroll-area-viewport]:max-h-[calc(100vh-24rem)]">
@@ -1146,15 +1155,19 @@ function CompaniesView({
               </span>
             </button>
           ))}
-          <ShowMore
-            total={total}
-            cap={visibleCount}
-            expanded={false}
-            onToggle={showMore}
-            noun="companies"
-          />
         </div>
       </ScrollArea>
+      {/* Pinned below the scroll, not buried at the end of the list — the
+          user couldn't find it there (2026-07-18). Same for every browse. */}
+      <div className="shrink-0">
+        <ShowMore
+          total={total}
+          cap={visibleCount}
+          expanded={false}
+          onToggle={showMore}
+          noun="companies"
+        />
+      </div>
     </>
   );
 }
@@ -1199,15 +1212,11 @@ function StreetsView({
               </span>
             </button>
           ))}
-          <ShowMore
-            total={total}
-            cap={visibleCount}
-            expanded={false}
-            onToggle={showMore}
-            noun="streets"
-          />
         </div>
       </ScrollArea>
+      <div className="shrink-0">
+        <ShowMore total={total} cap={visibleCount} expanded={false} onToggle={showMore} noun="streets" />
+      </div>
     </>
   );
 }
@@ -1264,15 +1273,11 @@ function BuildingsView({
               )}
             </button>
           ))}
-          <ShowMore
-            total={total}
-            cap={visibleCount}
-            expanded={false}
-            onToggle={showMore}
-            noun="buildings"
-          />
         </div>
       </ScrollArea>
+      <div className="shrink-0">
+        <ShowMore total={total} cap={visibleCount} expanded={false} onToggle={showMore} noun="buildings" />
+      </div>
     </>
   );
 }
@@ -1312,15 +1317,11 @@ function PeopleView({
               <span className="text-muted-foreground shrink-0 tabular-nums">{row.age}</span>
             </button>
           ))}
-          <ShowMore
-            total={total}
-            cap={visibleCount}
-            expanded={false}
-            onToggle={showMore}
-            noun="residents"
-          />
         </div>
       </ScrollArea>
+      <div className="shrink-0">
+        <ShowMore total={total} cap={visibleCount} expanded={false} onToggle={showMore} noun="residents" />
+      </div>
     </>
   );
 }
