@@ -39,15 +39,22 @@ async function httpJson(path: string): Promise<unknown> {
   throw new Error(`no CDP endpoint ${path}`);
 }
 
+type CdpResult = { exceptionDetails?: unknown; result?: { value?: unknown } };
+
 let seq = 0;
-function call(ws: WebSocket, method: string, params: Record<string, unknown> = {}): Promise<any> {
+function call(
+  ws: WebSocket,
+  method: string,
+  params: Record<string, unknown> = {},
+): Promise<CdpResult> {
   const id = ++seq;
   return new Promise((resolve, reject) => {
     const onMsg = (ev: MessageEvent) => {
       const m = JSON.parse(String(ev.data));
       if (m.id === id) {
         ws.removeEventListener("message", onMsg);
-        m.error ? reject(new Error(JSON.stringify(m.error))) : resolve(m.result);
+        if (m.error) reject(new Error(JSON.stringify(m.error)));
+        else resolve(m.result as CdpResult);
       }
     };
     ws.addEventListener("message", onMsg);
@@ -55,7 +62,7 @@ function call(ws: WebSocket, method: string, params: Record<string, unknown> = {
   });
 }
 
-async function evalJs(ws: WebSocket, expression: string): Promise<any> {
+async function evalJs(ws: WebSocket, expression: string): Promise<unknown> {
   const r = await call(ws, "Runtime.evaluate", {
     expression,
     awaitPromise: true,
