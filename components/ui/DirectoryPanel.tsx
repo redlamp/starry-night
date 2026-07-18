@@ -30,7 +30,7 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
-import { cn } from "@/lib/utils";
+import { cn, approxCount } from "@/lib/utils";
 import { generateCity, type Building } from "@/lib/seed/cityGen";
 import type { Address } from "@/lib/seed/naming";
 import type { Persona } from "@/lib/seed/personas";
@@ -440,17 +440,25 @@ export function DirectorySection() {
         <div className="text-base font-semibold tracking-[0.14em] uppercase">
           {directory.names.city.name}
         </div>
-        <div className="text-muted-foreground flex items-center gap-3 text-xs">
-          <IconTip label="Residents">
+        {/* Full-capacity city first, listed sample second (#96): the
+            directory is a detailed slice of a much larger town. */}
+        <div className="text-muted-foreground flex flex-col gap-0.5 text-xs">
+          <IconTip label="Population">
             <span className="flex items-center gap-1 tabular-nums">
               <Users className="size-3.5" aria-hidden />
-              {directory.totals.personas.toLocaleString()}
+              {approxCount(directory.city.population)}
+              <span className="opacity-75">
+                · {directory.totals.personas.toLocaleString()} listed
+              </span>
             </span>
           </IconTip>
           <IconTip label="Businesses">
             <span className="flex items-center gap-1 tabular-nums">
               <Briefcase className="size-3.5" aria-hidden />
-              {directory.totals.businesses.toLocaleString()}
+              {approxCount(directory.city.establishments)}
+              <span className="opacity-75">
+                · {directory.totals.businesses.toLocaleString()} listed
+              </span>
             </span>
           </IconTip>
         </div>
