@@ -63,6 +63,7 @@ import {
   RoadHighlightTiers,
   CityDetailsSection,
   RoadHighlightAction,
+  NamingRegionRow,
 } from "@/components/ui/RoadsPanel";
 import { fmt, RAD2DEG, Section, SubGroup } from "@/components/ui/panels/shared";
 import {
@@ -182,7 +183,7 @@ const SETTINGS_SECTIONS: { value: string; label: string; keywords: string }[] = 
     value: "city-details",
     label: "City Details",
     keywords:
-      "shape circle square scale size buildings count footprint seed reroll random refresh regenerate",
+      "shape circle square scale size buildings count footprint seed reroll random refresh regenerate naming region street names us uk high street gate",
   },
   {
     value: "stars",
@@ -657,6 +658,7 @@ export function CameraPanel() {
               hidden={!show("city-details")}
             >
               <SeedRow />
+              <NamingRegionRow />
               <CityDetailsSection />
             </Section>
 

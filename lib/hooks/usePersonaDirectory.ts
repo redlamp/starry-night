@@ -26,6 +26,9 @@ export function usePersonaDirectoryDeferred(enabled: boolean): PersonaDirectory 
   // stale, mirroring the citySize/citySketch idiom in entityData.ts.
   const citySize = useSceneStore((s) => s.citySize);
   const citySketch = useSceneStore((s) => s.citySketch);
+  // #90: a naming-pack switch (dirCacheKey folds in namingRegionKey()) is the
+  // same kind of stale-cache-entry case as a tier/sketch switch above.
+  const namingRegion = useSceneStore((s) => s.namingRegion);
 
   const dir = enabled ? peekPersonaDirectory(masterSeed, cityShape, cityShapeScale) : null;
 
@@ -54,7 +57,7 @@ export function usePersonaDirectoryDeferred(enabled: boolean): PersonaDirectory 
       cancelAnimationFrame(rafId);
       if (timeoutId !== null) clearTimeout(timeoutId);
     };
-  }, [enabled, dir, masterSeed, cityShape, cityShapeScale, citySize, citySketch]);
+  }, [enabled, dir, masterSeed, cityShape, cityShapeScale, citySize, citySketch, namingRegion]);
 
   return dir;
 }

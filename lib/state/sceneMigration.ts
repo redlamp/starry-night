@@ -7,6 +7,7 @@ import type { CityTier } from "@/lib/seed/topology";
 import type { CityShapeSetting } from "@/lib/seed/cityShape";
 import type { Archetype } from "@/lib/seed/cityGen";
 import type { DensityProfile } from "@/lib/seed/density";
+import type { NamingRegion } from "@/lib/seed/naming";
 
 import type {
   QualityTier,
@@ -172,6 +173,10 @@ export type SavedConfig = {
   liveViewLink?: boolean;
   fieldDeviation?: number;
   densityProfile?: DensityProfile;
+  // #90 regional street-naming pack. Optional so configs saved before it
+  // existed still load — the reader falls back to DEFAULT_NAMING_REGION ("us"),
+  // which reproduces the pre-#90 naming exactly.
+  namingRegion?: NamingRegion;
   antialias?: boolean;
   dprCap?: number | null;
   adaptive?: boolean;

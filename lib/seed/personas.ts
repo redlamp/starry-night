@@ -2,7 +2,7 @@ import { seededRng } from "./rng";
 import { generateCity, type Building, type Archetype } from "./cityGen";
 import type { DistrictCharacter } from "./district";
 import { buildingPopulation } from "./population";
-import { buildCityNames, TREE_NAMES, type CityNames } from "./naming";
+import { buildCityNames, TREE_NAMES, namingRegionKey, type CityNames } from "./naming";
 import { firstNameForBirthYear } from "./nameCohorts";
 import { maxHalfExtent } from "./topology";
 import { sketchKey } from "./citySketch";
@@ -1523,7 +1523,9 @@ function* buildDirectorySteps(
 const dirCache = new Map<string, PersonaDirectory>();
 
 function dirCacheKey(masterSeed: string, shape: CityShapeSetting, shapeScale: number): string {
-  return `${masterSeed}::${shape}::${shapeScale}::${maxHalfExtent()}::${sketchKey()}::${fieldDeviation()}::${densityProfileKey()}`;
+  // #90: the directory embeds street/building names (buildCityNames), so a
+  // naming-pack switch must miss this cache too, not just naming.ts's own.
+  return `${masterSeed}::${shape}::${shapeScale}::${maxHalfExtent()}::${sketchKey()}::${fieldDeviation()}::${densityProfileKey()}::${namingRegionKey()}`;
 }
 
 // Cache probe for the deferred UI hooks: reports whether the cold build has

@@ -211,12 +211,15 @@ export function useEntityIndexes(): EntityIndexes {
   // module-level gen state the generators' own cache keys account for.
   const citySize = useSceneStore((s) => s.citySize);
   const citySketch = useSceneStore((s) => s.citySketch);
+  // #90: naming pack is the same kind of module-level gen-state dependency.
+  const namingRegion = useSceneStore((s) => s.namingRegion);
 
   return useMemo(() => {
     void citySize;
     void citySketch;
+    void namingRegion;
     return buildEntityIndexes(masterSeed, cityShape, cityShapeScale);
-  }, [masterSeed, cityShape, cityShapeScale, citySize, citySketch]);
+  }, [masterSeed, cityShape, cityShapeScale, citySize, citySketch, namingRegion]);
 }
 
 // Deferred sibling: shares usePersonaDirectoryDeferred's gate (always
@@ -231,11 +234,13 @@ export function useEntityIndexesDeferred(): EntityIndexes | null {
   const cityShapeScale = useSceneStore((s) => s.cityShapeScale);
   const citySize = useSceneStore((s) => s.citySize);
   const citySketch = useSceneStore((s) => s.citySketch);
+  const namingRegion = useSceneStore((s) => s.namingRegion);
   const dir = usePersonaDirectoryDeferred(true);
 
   return useMemo(() => {
     void citySize;
     void citySketch;
+    void namingRegion;
     return dir ? buildEntityIndexes(masterSeed, cityShape, cityShapeScale) : null;
-  }, [dir, masterSeed, cityShape, cityShapeScale, citySize, citySketch]);
+  }, [dir, masterSeed, cityShape, cityShapeScale, citySize, citySketch, namingRegion]);
 }
