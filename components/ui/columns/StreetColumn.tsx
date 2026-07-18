@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useSceneStore } from "@/lib/state/sceneStore";
+import { approxCount } from "@/lib/utils";
 import { useEntityIndexes } from "./entityData";
 import { ColumnStat, ShowMore } from "./EntityColumns";
 
@@ -45,7 +46,10 @@ export function StreetColumn({ id, part }: { id: string; part: "pinned" | "rest"
       <div className="flex flex-col gap-1">
         <ColumnStat label="Buildings" value={agg.buildingIds.length.toLocaleString()} />
         <ColumnStat label="Companies" value={agg.companies.length.toLocaleString()} />
-        <ColumnStat label="Residents" value={agg.residentCount.toLocaleString()} />
+        {agg.populationEst > 0 && (
+          <ColumnStat label="Population" value={approxCount(agg.populationEst)} />
+        )}
+        <ColumnStat label="Listed Residents" value={agg.residentCount.toLocaleString()} />
         </div>
       </>
     );

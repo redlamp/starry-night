@@ -5,6 +5,13 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+// A capacity estimate displayed without fake precision (#96): "~185,500".
+// Step scales with magnitude so the number reads as a census figure, not a count.
+export function approxCount(n: number): string {
+  const step = n >= 100_000 ? 5000 : n >= 10_000 ? 500 : n >= 1_000 ? 100 : 10
+  return `~${(Math.round(n / step) * step).toLocaleString()}`
+}
+
 // Inputs that never accept typed text. base-ui Slider thumbs carry a hidden
 // `<input type="range">` that keeps focus after a drag — treating any INPUT as
 // "typing" left every hotkey dead until the user clicked something focusable.

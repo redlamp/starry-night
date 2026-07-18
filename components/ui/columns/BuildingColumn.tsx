@@ -80,6 +80,12 @@ export function BuildingColumn({ id, part }: { id: number; part: "pinned" | "res
 
       <div className="flex flex-col gap-1">
         <ColumnStat label="Est. Population" value={`~${population.toLocaleString()}`} />
+        {households.length > 0 && (
+          <ColumnStat
+            label="Listed"
+            value={`${households.reduce((sum, hh) => sum + hh.memberIds.length, 0)} residents · ${households.length} ${households.length === 1 ? "household" : "households"}`}
+          />
+        )}
         <ColumnStat label="Height" value={`${Math.round(building.height)} m · ${building.floors} floors`} />
         <ColumnStat
           label="Footprint"

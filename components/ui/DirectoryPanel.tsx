@@ -22,7 +22,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { HoverCard, HoverCardTrigger, HoverCardContent } from "@/components/ui/hover-card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { IconTip } from "@/components/ui/columns/EntityColumns";
+import { IconTip, ShowMore } from "@/components/ui/columns/EntityColumns";
 import {
   Select,
   SelectTrigger,
@@ -30,10 +30,10 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
-import { cn } from "@/lib/utils";
+import { cn, approxCount } from "@/lib/utils";
 import { generateCity, type Building } from "@/lib/seed/cityGen";
-import type { Address } from "@/lib/seed/naming";
-import type { Persona } from "@/lib/seed/personas";
+import type { Address, CityNames } from "@/lib/seed/naming";
+import type { Persona, Business } from "@/lib/seed/personas";
 import { personaDirectoryBuildProgress } from "@/lib/seed/personas";
 import { ensureBuildingStories } from "@/lib/seed/personaStory";
 import { focusBuilding } from "@/lib/scene/focusBuilding";
@@ -94,6 +94,37 @@ const DISTRICT_SORTS: Array<{ value: DistrictSort; label: string }> = [
   { value: "businesses", label: "By Businesses" },
   { value: "name", label: "By Name" },
 ];
+
+// Companies registry (#92): browsable list over EVERY business (7k+ at the
+// default tier), reached via the existing Companies kind-filter tab when the
+// search box is empty — that combination was previously a dead end (kind
+// filter only ever gated search results). Staff-descending is the default
+// sort since "who employs the most people" was the issue's motivating case.
+type CompanySort = "staff" | "name" | "kind" | "district";
+
+const COMPANY_SORTS: Array<{ value: CompanySort; label: string }> = [
+  { value: "staff", label: "By Staff" },
+  { value: "name", label: "By Name" },
+  { value: "kind", label: "By Kind" },
+  { value: "district", label: "By District" },
+];
+
+// Initial page + per-click increment for the companies list. No virtualization
+// library in this repo (search results just hard-cap at MAX_SEARCH_RESULTS
+// with no way to see past it); this reuses the columns' ShowMore affordance
+// but increments the visible window instead of jumping straight to "all
+// 7,000 rows", which is what keeps the DOM small at any tier.
+const COMPANY_PAGE_SIZE = 100;
+
+type CompanyRow = {
+  id: string;
+  name: string;
+  kindLabel: string;
+  districtId: string;
+  districtName: string;
+  listed: number;
+  total: number;
+};
 
 const KIND_BADGE: Record<SearchKind, string> = {
   street: "Street",
@@ -440,17 +471,25 @@ export function DirectorySection() {
         <div className="text-base font-semibold tracking-[0.14em] uppercase">
           {directory.names.city.name}
         </div>
-        <div className="text-muted-foreground flex items-center gap-3 text-xs">
-          <IconTip label="Residents">
+        {/* Full-capacity city first, listed sample second (#96): the
+            directory is a detailed slice of a much larger town. */}
+        <div className="text-muted-foreground flex flex-col gap-0.5 text-xs">
+          <IconTip label="Population">
             <span className="flex items-center gap-1 tabular-nums">
               <Users className="size-3.5" aria-hidden />
-              {directory.totals.personas.toLocaleString()}
+              {approxCount(directory.city.population)}
+              <span className="opacity-75">
+                · {directory.totals.personas.toLocaleString()} listed
+              </span>
             </span>
           </IconTip>
           <IconTip label="Businesses">
             <span className="flex items-center gap-1 tabular-nums">
               <Briefcase className="size-3.5" aria-hidden />
-              {directory.totals.businesses.toLocaleString()}
+              {approxCount(directory.city.establishments)}
+              <span className="opacity-75">
+                · {directory.totals.businesses.toLocaleString()} listed
+              </span>
             </span>
           </IconTip>
         </div>
@@ -549,6 +588,18 @@ export function DirectorySection() {
             ))}
           </div>
         </ScrollArea>
+      ) : kindFilter === "company" ? (
+        <>
+          <Separator className="shrink-0" />
+          <CompaniesView
+            businesses={directory.businesses}
+            idToBuilding={idToBuilding}
+            names={directory.names}
+            districtList={districtList}
+            isSelected={isSelected}
+            onOpen={(id) => pushColumn({ kind: "company", id })}
+          />
+        </>
       ) : (
         <>
           <Separator className="shrink-0" />
@@ -730,6 +781,180 @@ export function DirectorySection() {
         </>
       )}
     </div>
+  );
+}
+
+// The companies registry (#92): every business in the directory, sortable by
+// staff/name/kind/district with an optional district filter. Rows show the
+// FULL headcount (`totalHeadcount`, #96) as the primary number — that's what
+// answers "who has the most employees" — with the listed sample as a muted
+// footnote, matching the "listed of total" vocabulary
+// (wiki/notes/decision-listed-residents-term.md).
+function CompaniesView({
+  businesses,
+  idToBuilding,
+  names,
+  districtList,
+  isSelected,
+  onOpen,
+}: {
+  businesses: Map<string, Business>;
+  idToBuilding: Map<number, Building>;
+  names: CityNames;
+  districtList: DistrictAgg[];
+  isSelected: (kind: SearchKind, id: string) => boolean;
+  onOpen: (id: string) => void;
+}) {
+  const [sort, setSort] = useState<CompanySort>("staff");
+  const [districtFilter, setDistrictFilter] = useState<string>("all");
+  const [visibleCount, setVisibleCount] = useState(COMPANY_PAGE_SIZE);
+
+  // Base rows: one O(businesses) pass, independent of sort/filter so those
+  // stay cheap to change. Stable as long as the directory/city bundle is
+  // (i.e. only rebuilds on a seed/shape change, never per keystroke).
+  const rows = useMemo(() => {
+    const list: CompanyRow[] = [];
+    for (const biz of businesses.values()) {
+      const building = idToBuilding.get(biz.buildingId);
+      const districtId = building?.districtId ?? "";
+      list.push({
+        id: biz.id,
+        name: biz.name,
+        kindLabel: biz.schoolTier ? `${biz.schoolTier} school` : biz.kind,
+        districtId,
+        districtName: names.districtNames.get(districtId) ?? "",
+        listed: biz.employeeIds.length,
+        total: biz.totalHeadcount,
+      });
+    }
+    return list;
+  }, [businesses, idToBuilding, names]);
+
+  // Sorting 7k rows only recomputes on a (sort, districtFilter) change, not
+  // on every render.
+  const sortedFiltered = useMemo(() => {
+    const filtered =
+      districtFilter === "all" ? rows : rows.filter((r) => r.districtId === districtFilter);
+    const sorted = [...filtered];
+    sorted.sort((a, b) => {
+      switch (sort) {
+        case "name":
+          return a.name.localeCompare(b.name);
+        case "kind":
+          return a.kindLabel.localeCompare(b.kindLabel) || a.name.localeCompare(b.name);
+        case "district":
+          return a.districtName.localeCompare(b.districtName) || a.name.localeCompare(b.name);
+        default:
+          return b.total - a.total || a.name.localeCompare(b.name);
+      }
+    });
+    return sorted;
+  }, [rows, sort, districtFilter]);
+
+  // Re-page from the top whenever the sort or filter changes — the "next
+  // 100" from the old ordering rarely means anything under the new one.
+  // Adjusted during render (React's "adjusting state when a prop changes"
+  // idiom), not an effect — an effect here would cascade an extra render.
+  const [pagingFor, setPagingFor] = useState({ sort, districtFilter });
+  if (pagingFor.sort !== sort || pagingFor.districtFilter !== districtFilter) {
+    setPagingFor({ sort, districtFilter });
+    setVisibleCount(COMPANY_PAGE_SIZE);
+  }
+
+  const visible = sortedFiltered.slice(0, visibleCount);
+  const sortedDistricts = useMemo(
+    () => [...districtList].sort((a, b) => a.properName.localeCompare(b.properName)),
+    [districtList],
+  );
+
+  return (
+    <>
+      <div className="flex shrink-0 items-center justify-between gap-2">
+        <span className="text-sm font-medium">Companies</span>
+        <div className="flex items-center gap-1">
+          {sortedDistricts.length > 1 && (
+            <Select value={districtFilter} onValueChange={(v) => setDistrictFilter(v ?? "all")}>
+              <SelectTrigger size="sm" className="w-32">
+                <SelectValue>
+                  {(v: string) =>
+                    v === "all"
+                      ? "All Districts"
+                      : (sortedDistricts.find((d) => d.id === v)?.properName ?? "All Districts")
+                  }
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Districts</SelectItem>
+                {sortedDistricts.map((d) => (
+                  <SelectItem key={d.id} value={d.id}>
+                    {d.properName}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          <Select value={sort} onValueChange={(v) => setSort(v as CompanySort)}>
+            <SelectTrigger size="sm" className="w-28">
+              <SelectValue>
+                {(v: CompanySort) => COMPANY_SORTS.find((o) => o.value === v)?.label ?? "Sort"}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {COMPANY_SORTS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {/* -mr-3/pr-4: same edge-and-gap fix as the other lists in this panel. */}
+      <ScrollArea className="-mr-3 **:data-[slot=scroll-area-viewport]:max-h-[calc(100vh-24rem)]">
+        <div className="flex flex-col gap-0.5 pr-4">
+          {sortedFiltered.length === 0 && (
+            <div className="text-muted-foreground px-1 text-sm">No companies in this district.</div>
+          )}
+          {visible.map((row) => (
+            <button
+              key={row.id}
+              type="button"
+              onClick={() => onOpen(row.id)}
+              className={cn(
+                "hover:bg-foreground/10 -mx-1 flex items-center justify-between gap-2 rounded px-1 text-left text-sm",
+                isSelected("company", row.id) && "bg-primary/15",
+              )}
+            >
+              <span className="min-w-0 flex-1">
+                <span className="block truncate">{row.name}</span>
+                <span className="text-muted-foreground block truncate text-xs">
+                  {row.districtName}
+                </span>
+              </span>
+              <Badge variant="outline" className="shrink-0 capitalize">
+                {row.kindLabel}
+              </Badge>
+              <span className="flex shrink-0 flex-col items-end tabular-nums">
+                <span>{row.total.toLocaleString()}</span>
+                <span className="text-muted-foreground text-xs">
+                  {row.listed.toLocaleString()} listed
+                </span>
+              </span>
+            </button>
+          ))}
+          <ShowMore
+            total={sortedFiltered.length}
+            cap={visibleCount}
+            expanded={false}
+            onToggle={() =>
+              setVisibleCount((c) => Math.min(sortedFiltered.length, c + COMPANY_PAGE_SIZE))
+            }
+            noun="companies"
+          />
+        </div>
+      </ScrollArea>
+    </>
   );
 }
 
