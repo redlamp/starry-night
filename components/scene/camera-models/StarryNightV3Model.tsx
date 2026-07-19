@@ -413,6 +413,8 @@ function clampToCity(x: number, z: number): { x: number; z: number } {
 const _panFocal = { x: 0, z: 0 };
 const _panEye = { x: 0, z: 0 };
 const _driftClamp = { x: 0, z: 0 }; // idle drift's roam-bound clamp output
+const _northView = new THREE.Vector3(); // compass telemetry temps
+const _qNorthInv = new THREE.Quaternion();
 
 // Skyline Mode = looking at the city near edge-on, in EITHER projection. The vertical-pan
 // reframe, the per-frame focal offset, and groundHit's synthesized pick all key off this —
@@ -1957,6 +1959,11 @@ export function StarryNightV3Model() {
     cameraCommand.liveAzimuthDeg = Math.atan2(_eye.x - _tgt.x, _eye.z - _tgt.z) / DEG;
     cameraCommand.liveElevationDeg = parkElevDeg;
     cameraCommand.liveSkyline = isSkylineMode(cam);
+    // North's SCREEN bearing from the live camera quaternion — includes roll,
+    // which is how the top-down park animates heading (its azimuth stamps
+    // instantly); the needle must track the pixels, not the spherical state.
+    _northView.set(0, 0, 1).applyQuaternion(_qNorthInv.copy(cam.quaternion).invert());
+    cameraCommand.liveNorthScreenDeg = Math.atan2(_northView.x, _northView.y) / DEG;
 
     const tt = state.clock.elapsedTime;
     if (tt - lastWrite.current >= 0.1) {
