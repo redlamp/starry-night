@@ -41,6 +41,12 @@ export const cameraCommand: {
   // in skyline mode (user 2026-07-19).
   liveElevationDeg: number;
   liveSkyline: boolean;
+  // SCREEN-SPACE bearing of world-north (degrees clockwise from screen-up),
+  // projected through the camera's live quaternion. This is what the needle
+  // must track: in the top-down park the visible heading animates as camera
+  // ROLL while the spherical azimuth is stamped instantly, so an
+  // azimuth-derived needle snapped ahead of the city (user 2026-07-19).
+  liveNorthScreenDeg: number;
 } = {
   setTiltDeg: null,
   toggleTopDownInModel: null,
@@ -50,4 +56,5 @@ export const cameraCommand: {
   liveAzimuthDeg: 0,
   liveElevationDeg: 90,
   liveSkyline: false,
+  liveNorthScreenDeg: 0,
 };

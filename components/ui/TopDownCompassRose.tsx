@@ -63,16 +63,21 @@ export function TopDownCompassRose() {
     const tick = () => {
       const el = needleRef.current;
       if (el) {
-        const az = isV3
-          ? cameraCommand.liveAzimuthDeg
-          : useSceneStore.getState().orbit.azimuthDeg;
+        // v3 publishes north's SCREEN bearing (projected through the live
+        // camera quaternion) — this includes the top-down park's ROLL, which
+        // is how that pose animates heading; the old azimuth-derived bearing
+        // snapped ahead of the visible city (user 2026-07-19). Other models
+        // fall back to the 10Hz azimuth mirror.
+        const bearing = isV3
+          ? cameraCommand.liveNorthScreenDeg
+          : (useSceneStore.getState().orbit.azimuthDeg + 180) % 360;
         const elev = isV3
           ? cameraCommand.liveElevationDeg
           : useSceneStore.getState().orbit.elevationDeg;
         const skyline = isV3 && cameraCommand.liveSkyline;
         const targetTilt = skyline ? 0 : Math.min(68, Math.max(0, 90 - elev));
         tiltRef.current += (targetTilt - tiltRef.current) * 0.12; // ~200ms settle
-        el.style.transform = `perspective(160px) rotateX(${tiltRef.current}deg) rotateZ(${(az + 180) % 360}deg)`;
+        el.style.transform = `perspective(160px) rotateX(${tiltRef.current}deg) rotateZ(${bearing}deg)`;
       }
       raf = requestAnimationFrame(tick);
     };
