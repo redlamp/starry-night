@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useSceneStore, QUALITY_TIERS, type QualityTier } from "@/lib/state/sceneStore";
 import { CITY_SHAPES, type CityShapeSetting } from "@/lib/seed/cityShape";
 import { readTileCull } from "@/lib/scene/tileCullDebug";
+import { cameraCommand } from "@/lib/scene/cameraCommand";
 import { sharedTime } from "@/lib/shaders/sharedTime";
 import { applyDeviceFit } from "@/lib/perf/applyDeviceFit";
 import { buildPersonaDirectory, personaFlavor } from "@/lib/seed/personas";
@@ -59,6 +60,9 @@ export function CaptureBoot() {
     // scene state by itself.
     if (params.get("probe") === "1") {
       (window as unknown as Record<string, unknown>).__sceneStore = useSceneStore;
+      // Imperative camera channel too (setTiltDeg etc.) — gesture probes need
+      // exact poses that synthetic drags can only approximate.
+      (window as unknown as Record<string, unknown>).__cameraCommand = cameraCommand;
     }
     if (capture) {
       state.setCaptureMode(true);

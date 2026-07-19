@@ -98,3 +98,11 @@ Three themes:
 
 Issue candidates: see the session summary in the daily note and the issues
 filed with label `playtest-andy` once agreed.
+
+## Work spawned from this session
+
+- [[test-plan-2026-07-19-camera-feel]] - Tier 1 camera items: LMB/RMB swap,
+  pivot pin on press, double-click pan-to-focus (+ Shift+dbl / double-RMB
+  zoom), context-menu suppression. Branch `feat/camera-feel`.
+- [[test-plan-2026-07-19-skyline-band]] - skyline regime lowered below the
+  default pose with hysteresis, pan-anywhere fix, compass 3D tilt. Same branch.

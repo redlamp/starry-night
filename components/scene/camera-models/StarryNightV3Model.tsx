@@ -101,7 +101,12 @@ const ORTHO_SIZE_MAX = 2000 * CITY_SCALE;
 // reframes the city vertically: ORTHO shifts a focal-offset lens (the eye is invisible there, so it
 // reads as a pure frame shift); PERSPECTIVE pedestals the coupled eye + focal (a real altitude move,
 // floored at MIN_EYE_Y) — "reframing the camera". Both push the empty ground off the bottom, no re-tilt.
-const SKYLINE_TILT_SIN = Math.sin(2 * DEG);
+// Hysteresis pair (2026-07-19 skyline-band plan): the old single 2° threshold
+// sat exactly ON the default pose (DEFAULT_ORBIT.elevationDeg = 2), so the
+// regime flickered at rest and every band entry felt ragged. Enter below 1°,
+// exit above 1.5° — both safely under the 2° default.
+const SKYLINE_ENTER_SIN = Math.sin(1.0 * DEG);
+const SKYLINE_EXIT_SIN = Math.sin(1.5 * DEG);
 const SKYLINE_SCREEN_Y_MIN = 0.05; // v3-local Skyline framing (fraction of the city's rest point up from bottom)
 const SKYLINE_SCREEN_Y_MAX = 0.95;
 
@@ -201,6 +206,7 @@ function groundHit(
   clientX: number,
   clientY: number,
   out: THREE.Vector3,
+  synthFallback = false,
 ): boolean {
   const r = dom.getBoundingClientRect();
   const nx = ((clientX - r.left) / r.width) * 2 - 1;
@@ -210,14 +216,14 @@ function groundHit(
   const aspect = r.width / Math.max(1, r.height);
   cam.updateMatrixWorld();
   cam.getWorldDirection(_fwd);
-  // SKYLINE MODE (flat aim, EITHER projection): the cursor ray grazes the ground, so a true hit is far
-  // and unstable — the pivot flings around near the horizon (and in perspective the pan ray misses
-  // entirely). The cursor carries no depth signal when flat (screen-vertical maps to world height, not
-  // ground depth), so synthesize the pick: CITY_CENTER's forward depth (the "midway point of the ground"),
-  // slid along the horizontal right-axis to stay under the cursor. Lateral scale differs by projection —
-  // ortho uses the fixed frustum half-width; perspective uses the half-width at that depth (f·tan(fov/2)).
+  // SYNTHESIZED pick: the cursor ray grazes (or misses) the ground, so a true hit is far, unstable, or
+  // absent — the pivot flings around near the horizon (and in perspective the pan ray misses entirely).
+  // The cursor carries no depth signal when flat (screen-vertical maps to world height, not ground
+  // depth), so synthesize: CITY_CENTER's forward depth (the "midway point of the ground"), slid along
+  // the horizontal right-axis to stay under the cursor. Lateral scale differs by projection — ortho
+  // uses the fixed frustum half-width; perspective uses the half-width at that depth (f·tan(fov/2)).
   // Callers' clampToCity keeps it on the disc.
-  if (Math.abs(_fwd.y) <= SKYLINE_TILT_SIN) {
+  const synthesize = () => {
     _right.setFromMatrixColumn(cam.matrixWorld, 0);
     cam.getWorldPosition(_camWorld);
     const fhLen = Math.hypot(_fwd.x, _fwd.z) || 1e-6;
@@ -232,6 +238,11 @@ function groundHit(
       : Math.max(0, f) * Math.tan(((cam as THREE.PerspectiveCamera).fov * DEG) / 2) * aspect;
     const lat = nx * halfW; // lateral offset under the cursor
     out.set(_camWorld.x + fhx * f + rhx * lat, 0, _camWorld.z + fhz * f + rhz * lat);
+  };
+  // Skyline regime: always synthesized (shares the LATCHED isSkylineMode so the pick model and the
+  // gesture semantics flip together).
+  if (isSkylineMode(cam)) {
+    synthesize();
     return true;
   }
   if (ortho) {
@@ -248,7 +259,14 @@ function groundHit(
     _ndc.set(nx, ny);
     _ray.setFromCamera(_ndc, cam);
   }
-  return _ray.ray.intersectPlane(_plane, out) !== null;
+  if (_ray.ray.intersectPlane(_plane, out) !== null) return true;
+  // PAN must never dead-zone the screen (user 2026-07-19: unclickable regions in ortho) — when the
+  // true ray misses (sky pixels, mid-blend approximations), fall back to the synthesized pick.
+  if (synthFallback) {
+    synthesize();
+    return true;
+  }
+  return false;
 }
 
 // Zoom by uniformly scaling eye + target about a world pivot by `k` (k < 1 = closer, > 1 = farther).
@@ -396,12 +414,21 @@ const _panFocal = { x: 0, z: 0 };
 const _panEye = { x: 0, z: 0 };
 const _driftClamp = { x: 0, z: 0 }; // idle drift's roam-bound clamp output
 
-// Skyline Mode = the aim within 2° of flat (looking at the city edge-on), in EITHER projection. The
-// RMB-vertical reframe and the per-frame focal offset key off this; the synthesized ground pick in
-// groundHit shares the same flat test. Single source of truth for the threshold.
+// Skyline Mode = looking at the city near edge-on, in EITHER projection. The vertical-pan
+// reframe, the per-frame focal offset, and groundHit's synthesized pick all key off this —
+// single source of truth, now LATCHED with hysteresis (enter < 1°, exit > 1.5°) so the
+// regime can't flicker at the boundary the way the old single 2° threshold did right at
+// the default pose. The latch self-corrects from the live aim on every call.
+let skylineLatch = false;
 function isSkylineMode(camera: THREE.Camera): boolean {
   camera.getWorldDirection(_fwd);
-  return Math.abs(_fwd.y) <= SKYLINE_TILT_SIN;
+  const a = Math.abs(_fwd.y);
+  if (skylineLatch) {
+    if (a > SKYLINE_EXIT_SIN) skylineLatch = false;
+  } else if (a <= SKYLINE_ENTER_SIN) {
+    skylineLatch = true;
+  }
+  return skylineLatch;
 }
 
 export function StarryNightV3Model() {
@@ -1282,7 +1309,8 @@ export function StarryNightV3Model() {
         // double-click never flashes it — the same courtesy the orbit pin used to need.
         drag = "pan";
         setPin(null);
-        if (!groundHit(cam, dom, e.clientX, e.clientY, _grab)) drag = null;
+        // synthFallback: pan engages from EVERY pixel — no dead zones (2026-07-19).
+        if (!groundHit(cam, dom, e.clientX, e.clientY, _grab, true)) drag = null;
       }
       if (drag) capturePointer(e.pointerId);
       applyCursor();
@@ -1386,8 +1414,8 @@ export function StarryNightV3Model() {
         // (vs a fixed grab anchor) so the disc clamps engage gracefully at the boundary — no accumulated
         // dead-zone where the cursor moves but the rig sticks.
         if (
-          !groundHit(cam, dom, e.clientX - dx, e.clientY - dy, _grab) ||
-          !groundHit(cam, dom, e.clientX, e.clientY, _cur)
+          !groundHit(cam, dom, e.clientX - dx, e.clientY - dy, _grab, true) ||
+          !groundHit(cam, dom, e.clientX, e.clientY, _cur, true)
         )
           return;
         _delta.subVectors(_grab, _cur); // prev→curr ground delta (horizontal)
@@ -1923,9 +1951,12 @@ export function StarryNightV3Model() {
     const parkElevDeg = Math.asin(THREE.MathUtils.clamp((_eye.y - _tgt.y) / parkR, -1, 1)) / DEG;
     const parked = tdReturn.current !== null && parkElevDeg >= TD_STILL_ELEV_DEG;
     if (st.topDownParked !== parked) st.setTopDownParked(parked);
-    // Per-frame azimuth telemetry for the compass needle (same convention as
-    // orbitWriteback: atan2(offset.x, offset.z), 0 = eye due north of target).
+    // Per-frame pose telemetry for the compass (same conventions as
+    // orbitWriteback). Calling isSkylineMode here also keeps the regime latch
+    // live in perspective (the projectionBlend site only runs it in ortho).
     cameraCommand.liveAzimuthDeg = Math.atan2(_eye.x - _tgt.x, _eye.z - _tgt.z) / DEG;
+    cameraCommand.liveElevationDeg = parkElevDeg;
+    cameraCommand.liveSkyline = isSkylineMode(cam);
 
     const tt = state.clock.elapsedTime;
     if (tt - lastWrite.current >= 0.1) {

@@ -44,12 +44,15 @@ export function TopDownCompassRose() {
   const visible =
     mode === "on" ? true : mode === "off" ? false : (isV3 && parked) || zoomedOut;
 
-  // The needle tethers to the camera's per-frame azimuth (cameraCommand
-  // .liveAzimuthDeg) via rAF and a direct style write — NOT the orbit store
-  // mirror, whose 10Hz sampling plus a CSS tween made the needle step and
-  // drift out of sync with the city (user 2026-07-18). No transition: the
-  // needle IS the city orientation, every frame. Only Cam v3 publishes the
-  // per-frame value; other models fall back to the 10Hz orbit mirror.
+  // The needle tethers to the camera's per-frame pose (cameraCommand.live*)
+  // via rAF and a direct style write — NOT the orbit store mirror, whose 10Hz
+  // sampling plus a CSS tween made the needle step and drift out of sync with
+  // the city (user 2026-07-18). No transition: the needle IS the city
+  // orientation, every frame. Outside skyline mode the rose 3D-TILTS to lie
+  // on the city's ground plane (user 2026-07-19) — rotateX foreshortens the
+  // disc to the camera's look-down angle (clamped so it stays legible at low
+  // elevations), rotateZ spins the needle within that plane. Only Cam v3
+  // publishes per-frame values; other models fall back to the 10Hz mirror.
   useEffect(() => {
     if (!visible) return;
     let raf = 0;
@@ -59,7 +62,12 @@ export function TopDownCompassRose() {
         const az = isV3
           ? cameraCommand.liveAzimuthDeg
           : useSceneStore.getState().orbit.azimuthDeg;
-        el.style.transform = `rotate(${(az + 180) % 360}deg)`;
+        const elev = isV3
+          ? cameraCommand.liveElevationDeg
+          : useSceneStore.getState().orbit.elevationDeg;
+        const skyline = isV3 && cameraCommand.liveSkyline;
+        const tiltDeg = skyline ? 0 : Math.min(68, Math.max(0, 90 - elev));
+        el.style.transform = `perspective(160px) rotateX(${tiltDeg}deg) rotateZ(${(az + 180) % 360}deg)`;
       }
       raf = requestAnimationFrame(tick);
     };
