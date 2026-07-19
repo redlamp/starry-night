@@ -181,6 +181,9 @@ export type SavedConfig = {
   // (falls back to "auto"). Literal union, not the store's CompassMode type -
   // this file must not import from sceneStore (cycle).
   compassMode?: "off" | "auto" | "on";
+  // Sticky opt-out from the directory auto-showing district boundaries;
+  // optional for configs saved before it existed (falls back to false).
+  boundariesOptOut?: boolean;
   antialias?: boolean;
   dprCap?: number | null;
   adaptive?: boolean;

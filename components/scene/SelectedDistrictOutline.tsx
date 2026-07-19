@@ -202,7 +202,7 @@ export function SelectedDistrictOutline({ masterSeed }: { masterSeed: string }) 
   }, [showBoundaries, masterSeed, citySize, citySketch]);
 
   // Hovering a district (directory list or Settings > Districts list) always
-  // fills it at ~22% alpha, independent of the showDistrictBoundaries toggle
+  // fills it at 20% alpha, independent of the showDistrictBoundaries toggle
   // (user 2026-07-11 — previously gated behind the toggle). Hover only: the
   // pinned district and the selected building's district get the thick
   // outline above but no fill.
@@ -217,11 +217,12 @@ export function SelectedDistrictOutline({ masterSeed }: { masterSeed: string }) 
     // The depth-tested under-the-buildings fill didn't read in practice
     // (user 2026-07-11: "I'm not seeing the fill below the buildings") —
     // fall back to the stated alternative: an overlay fill in the border's
-    // own colour at 40%, drawn like the other GIS layers.
+    // own colour, drawn like the other GIS layers. 40% → 20% (user
+    // 2026-07-19) once the ungated planning re-fill stopped stacking on top.
     const mat = new THREE.MeshBasicMaterial({
       color: new THREE.Color(target.color),
       transparent: true,
-      opacity: 0.4,
+      opacity: 0.2,
       depthTest: false,
       depthWrite: false,
       fog: false,

@@ -274,6 +274,7 @@ type AnySettingEntry =
   | SettingEntry<"densityProfile">
   | SettingEntry<"namingRegion">
   | SettingEntry<"compassMode">
+  | SettingEntry<"boundariesOptOut">
   | SettingEntry<"antialias">
   | SettingEntry<"dprCap">
   | SettingEntry<"adaptive">
@@ -368,6 +369,9 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   // Compass rose visibility (user 2026-07-18): auto = top-down park OR zoomed
   // far out (ortho size > 720 / perspective distance > 3200 m).
   { key: "compassMode", defaultValue: "auto" as CompassMode, persist: true },
+  // Sticky opt-out from the directory auto-showing district boundaries
+  // (user 2026-07-19): a manual OFF holds until a manual ON.
+  { key: "boundariesOptOut", defaultValue: false, persist: true },
   // Perf overrides (user 2026-06-13): MSAA off by default; dpr cap null = auto (tier).
   { key: "antialias", defaultValue: false as const, persist: true },
   { key: "dprCap", defaultValue: null as SceneState["dprCap"], persist: true },
@@ -591,9 +595,17 @@ type SceneState = {
   setPinnedDistrictId: (id: string | null) => void;
   // Directory "Districts" header toggle (user 2026-07-10): outline EVERY
   // district in its colour on the map; hovering a district header adds a
-  // 20%-alpha fill of that colour. Runtime tier.
+  // fill of that colour. Runtime tier — but since 2026-07-19 the directory
+  // AUTO-shows boundaries while open (and drops them on close), unless the
+  // user has manually turned them off (the sticky boundariesOptOut below).
   showDistrictBoundaries: boolean;
   setShowDistrictBoundaries: (on: boolean) => void;
+  // Sticky manual opt-out (persisted): any manual OFF sets it, any manual ON
+  // clears it; while set, opening the directory does not auto-show.
+  boundariesOptOut: boolean;
+  // True while the CURRENT boundaries-on state was applied by the directory
+  // auto-show (runtime only) — closing the directory then turns them back off.
+  boundariesAutoOn: boolean;
   setColumnsView: (v: "side" | "deck" | "collapsed") => void;
   // Inspect mode (user-facing, toggled by the Info button). When on, buildings
   // highlight on hover and a click selects one (info panel + outline + pin);
@@ -1309,13 +1321,28 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   lastColumnPath: [],
   directoryOpen: false,
   setDirectoryOpen: (directoryOpen) =>
-    set(
+    set((s) =>
       directoryOpen
-        ? { directoryOpen }
-        : // Closing the directory drops both district highlights with it.
-          // showDistrictBoundaries survives — it also has a home in
-          // Settings > Districts (user 2026-07-10), so it isn't orphaned.
-          { directoryOpen, hoverDistrictId: null, pinnedDistrictId: null },
+        ? {
+            directoryOpen,
+            // Boundaries match directory visibility (user 2026-07-19):
+            // auto-show on open unless the user manually opted out. Applied
+            // directly (not via the setter) so it never touches the opt-out.
+            ...(!s.boundariesOptOut && !s.showDistrictBoundaries
+              ? { showDistrictBoundaries: true, boundariesAutoOn: true }
+              : {}),
+          }
+        : {
+            directoryOpen,
+            // Closing the directory drops both district highlights with it,
+            // and turns boundaries back off IF this open auto-showed them —
+            // a manual Settings > Districts enable still survives.
+            hoverDistrictId: null,
+            pinnedDistrictId: null,
+            ...(s.boundariesAutoOn
+              ? { showDistrictBoundaries: false, boundariesAutoOn: false }
+              : {}),
+          },
     ),
   demographicsOpen: false,
   setDemographicsOpen: (demographicsOpen) => set({ demographicsOpen }),
@@ -1326,7 +1353,13 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   pinnedDistrictId: null,
   setPinnedDistrictId: (pinnedDistrictId) => set({ pinnedDistrictId }),
   showDistrictBoundaries: false,
-  setShowDistrictBoundaries: (showDistrictBoundaries) => set({ showDistrictBoundaries }),
+  // The MANUAL toggle (directory header + Settings > Districts): an OFF is a
+  // sticky opt-out from the directory auto-show, an ON clears it (user
+  // 2026-07-19). Either way the user has taken over — drop the auto flag.
+  setShowDistrictBoundaries: (showDistrictBoundaries) =>
+    set({ showDistrictBoundaries, boundariesOptOut: !showDistrictBoundaries, boundariesAutoOn: false }),
+  boundariesOptOut: false,
+  boundariesAutoOn: false,
   resumeColumns: () => {
     const last = get().lastColumnPath;
     if (last.length > 0) get().resetColumns(last);
