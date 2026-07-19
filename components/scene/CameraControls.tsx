@@ -101,18 +101,6 @@ export function CameraControls() {
   const setCameraLive = useSceneStore((s) => s.setCameraLive);
   const setCameraIntent = useSceneStore((s) => s.setCameraIntent);
 
-  // Canvas-wide context-menu suppression, MODEL-INDEPENDENT (user 2026-07-19:
-  // the menu appeared on RMB click). The per-model handler only exists while
-  // that model's listener effect is mounted — mode swaps and dev hot-reloads
-  // leave gaps. This one lives with the always-mounted controls host, so
-  // right-click on the map never opens the browser menu in any state.
-  useEffect(() => {
-    const dom = gl.domElement;
-    const onCtx = (e: Event) => e.preventDefault();
-    dom.addEventListener("contextmenu", onCtx);
-    return () => dom.removeEventListener("contextmenu", onCtx);
-  }, [gl]);
-
   const keys = useRef<KeyState>({ ...initialKeys });
   const forward = useRef(new THREE.Vector3());
   const right = useRef(new THREE.Vector3());

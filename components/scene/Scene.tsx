@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import * as THREE from "three";
 import { useSceneStore, QUALITY_TIERS } from "@/lib/state/sceneStore";
@@ -94,6 +94,22 @@ export function Scene() {
   // (see useGeneratedCity's MAX_SCALE comment), so InstancedCity and its
   // siblings below stay mounted (and the intro cascade doesn't replay) across one.
   const { ready: cityReady } = useGeneratedCity(masterSeed, cityShape);
+
+  // Right-click on the city must never open the browser menu, in ANY camera
+  // model or mode (user 2026-07-19: it appeared in real Chrome). The active
+  // model's own canvas handler only exists while its listener effect is
+  // mounted (gaps across model swaps / HMR), and the previous host for a
+  // global handler (<CameraControls />) only mounts for the legacy controller.
+  // Window capture-phase + elementFromPoint: the canvas gets suppressed, UI
+  // overlays above it keep their native menu.
+  useEffect(() => {
+    const onCtx = (e: MouseEvent) => {
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      if (el instanceof HTMLCanvasElement) e.preventDefault();
+    };
+    window.addEventListener("contextmenu", onCtx, true);
+    return () => window.removeEventListener("contextmenu", onCtx, true);
+  }, []);
 
   // Boot-time-only camera position (#56 crop-follow): StarryNightV2Model's mount
   // effect immediately re-poses the live camera to this same scaled hero shot, so
