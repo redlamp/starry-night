@@ -39,6 +39,12 @@ position in both projections. Feel is your gate.
 2. [ ] In top-down it reads face-on (flat), as before
 3. [ ] In skyline mode it stays flat (no tilt), per spec
 4. [ ] Off/Auto/On setting still behaves (Settings - Orbit)
+5. [ ] No snap while tilting: the rose's 3D tilt EASES (~200ms) through the
+   skyline flip and everywhere else; the heading itself stays frame-locked
+6. [ ] Position: parked left of the drift/settings buttons at top-right; when
+   the settings drawer opens it slides to the drawer's left edge
+7. [ ] The ring border tilts with the needle as one disc - the foreshortened
+   ellipse is what sells the plane orientation
 
 ## Known / Parked
 
