@@ -300,9 +300,9 @@ export const DEFAULT_HAZE = {
   enabled: true,
   color: "#1b2641",
   // Vertical extents are absolute (heights don't scale with city width — #47).
-  topY: 240,
-  bottomY: -30,
-  intensity: 0.5, // "strength" slider — softer default horizon haze (user 2026-06-28)
+  topY: 120, // 240 → 120 (user 2026-07-19)
+  bottomY: 0, // -30 → 0 (user 2026-07-19)
+  intensity: 1, // "strength" slider — full strength (user 2026-07-19; was 0.5)
   radius: 1500 * CITY_SCALE, // 3000 at City
 };
 
