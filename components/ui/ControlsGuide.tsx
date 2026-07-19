@@ -134,8 +134,14 @@ const MODEL_GUIDE: Record<CameraModelId, GuideSpec> = {
         action: "look",
       },
       { icon: "mouse-wheel", motion: "ud", label: "Zoom", action: "zoom" },
-      { icon: "mouse-left", badge: "×2", label: "Zoom In", sub: "double-click", action: "zoomIn" },
-      { icon: "mouse-left", badge: "×2", label: "Pan To", sub: "Shift + double-click", action: "pan" },
+      { icon: "mouse-left", badge: "×2", label: "Pan To", sub: "double-click", action: "pan" },
+      {
+        icon: "mouse-right",
+        badge: "×2",
+        label: "Zoom In",
+        sub: "or Shift + double-click",
+        action: "zoomIn",
+      },
     ],
     touch: [
       { icon: "finger-1", motion: "all", label: "Rotate & Tilt", action: "rotate" },

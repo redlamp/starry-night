@@ -14,14 +14,16 @@ orbit store); FEEL is your gate.
    movement); disappears on release
 4. [ ] Plain click / double-click never flashes the pan hand glyph (it's
    deferred to a real drag, like the old pin deferral)
-5. [ ] Double-click = zoom in toward the point (unchanged)
-6. [ ] Shift+double-click = camera keeps its orientation and distance and
-   tweens over so the clicked point becomes the focus
-7. [ ] Controls guide (bottom overlay) reads correctly: LMB Move, RMB
-   Rotate & Tilt ("or Shift + LMB"), new "Pan To - Shift + double-click" row
-8. [ ] Touch unchanged: 1-finger rotate, 2-finger pan/pinch, double-tap zoom
-9. [ ] Inspect mode: double-click still focuses buildings (no zoom fight);
-   cone/inspect orbit pivot behavior unchanged
+5. [ ] Double-click = pan-to-focus: camera keeps orientation and distance,
+   tweens over so the clicked point becomes the focus (remapped round 2)
+6. [ ] Shift+double-click AND double-RMB = zoom-in glide toward the point
+7. [ ] Right-click on the map never opens the browser context menu
+8. [ ] Controls guide reads correctly: LMB Move; RMB Rotate & Tilt ("or
+   Shift + LMB"); "Pan To - double-click"; "Zoom In - RMB x2 / Shift +
+   double-click"
+9. [ ] Touch unchanged: 1-finger rotate, 2-finger pan/pinch, double-tap zoom
+10. [ ] Inspect mode: double-click still focuses buildings (no camera-gesture
+    fight); cone/inspect orbit pivot behavior unchanged
 
 ## Known / Parked
 

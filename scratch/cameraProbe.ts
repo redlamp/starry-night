@@ -185,10 +185,10 @@ try {
     Math.hypot(p2.cx - p1.cx, p2.cz - p1.cz).toFixed(0),
   );
 
-  await dblClick(ws, 700, 400, SHIFT);
+  await dblClick(ws, 700, 400, 0);
   const p3 = await pose();
   console.log(
-    "after Shift+dblclick (expect focus pan: center moves, az/el/r ~hold):",
+    "after plain dblclick (expect focus pan: center moves, az/el/r ~hold):",
     JSON.stringify(p3),
     "| azDelta:",
     Math.abs(p3.az - p2.az).toFixed(1),
@@ -200,15 +200,32 @@ try {
     Math.hypot(p3.cx - p2.cx, p3.cz - p2.cz).toFixed(0),
   );
 
-  await dblClick(ws, 800, 450, 0);
+  await dblClick(ws, 800, 450, SHIFT);
   const p4 = await pose();
   console.log(
-    "after plain dblclick (expect zoom-in: radius shrinks):",
+    "after Shift+dblclick (expect zoom-in: radius shrinks):",
     JSON.stringify(p4),
     "| rBefore:",
     p3.r,
     "rAfter:",
     p4.r,
+  );
+
+  // Double-RMB: two stationary right-clicks within 400ms → zoom-in glide.
+  for (const cc of [1, 2]) {
+    await mouse(ws, "mousePressed", 820, 470, "right", { clickCount: cc, buttons: 2 });
+    await mouse(ws, "mouseReleased", 820, 470, "right", { clickCount: cc });
+    await new Promise((r) => setTimeout(r, 80));
+  }
+  await new Promise((r) => setTimeout(r, 1600));
+  const p5 = await pose();
+  console.log(
+    "after double-RMB (expect zoom-in: radius shrinks):",
+    JSON.stringify(p5),
+    "| rBefore:",
+    p4.r,
+    "rAfter:",
+    p5.r,
   );
 } finally {
   proc.kill();

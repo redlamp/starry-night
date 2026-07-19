@@ -1520,6 +1520,23 @@ export function StarryNightV3Model() {
         return;
       }
       markInput();
+      // Double-RMB = zoom-in glide (2026-07-19), mirroring Shift+double-click.
+      // Browsers only synthesize dblclick for the primary button, so the RMB
+      // double-click is tracked by hand: two stationary RMB ups within 400ms.
+      if (e.button === 2 && !dragMoved) {
+        if (
+          e.timeStamp - lastRmbUpT < 400 &&
+          Math.abs(e.clientX - lastRmbUpX) + Math.abs(e.clientY - lastRmbUpY) < 6 &&
+          !useSceneStore.getState().inspectMode
+        ) {
+          lastRmbUpT = 0;
+          glideZoomIn(e.clientX, e.clientY, e.timeStamp);
+        } else {
+          lastRmbUpT = e.timeStamp;
+          lastRmbUpX = e.clientX;
+          lastRmbUpY = e.clientY;
+        }
+      }
       if (drag === "orbit") setPin(null); // pin only lives for the duration of the orbit drag
       orbitPinPending = null;
       dragMoved = false;
@@ -1534,6 +1551,10 @@ export function StarryNightV3Model() {
     // set — a tween in both projections. Also stamps lastTapZoomT so the browser's
     // SYNTHESIZED dblclick after a touch double-tap can't fire the zoom a second time.
     let lastTapZoomT = 0;
+    // Hand-rolled RMB double-click tracking (see onUp).
+    let lastRmbUpT = 0;
+    let lastRmbUpX = 0;
+    let lastRmbUpY = 0;
     const glideZoomIn = (x: number, y: number, stamp: number) => {
       const c = controls.current;
       if (!c) return;
@@ -1553,30 +1574,34 @@ export function StarryNightV3Model() {
       });
     };
 
-    // Double-click = zoom in toward the clicked point (~40% closer). Perspective: position-only (keeps
-    // orientation, holds the point under the cursor). Ortho: scales orthoSize + re-pins. See zoomAtCursor.
+    // Keep the current orientation and distance; tween the whole rig so the ground point
+    // under (x, y) becomes the focus. moveTo carries the eye by the same offset — a pure
+    // pan-over (playtest 2026-07-18 d; promoted to the PLAIN double-click 2026-07-19).
+    const panToFocus = (x: number, y: number) => {
+      const c = controls.current;
+      if (!c) return;
+      if (!groundHit(cam, dom, x, y, _cur)) return;
+      const cl = clampToCity(_cur.x, _cur.z);
+      markInput();
+      markCameraActivity("pan");
+      void c.moveTo(cl.x, 0, cl.z, true);
+    };
+
+    // Double-click = pan-to-focus (the explore-first gesture, 2026-07-19).
+    // Shift+double-click (and double-RMB, see onUp) = the zoom-in glide.
     const onDbl = (e: MouseEvent) => {
       const c = controls.current;
       if (!c) return;
       if (e.timeStamp - lastTapZoomT < 700) return; // synthesized from a handled touch double-tap
       // In inspect mode a double-click is the building FOCUS gesture (InstancedCity handles it), so
-      // the default zoom-to-cursor must NOT also fire — two camera tweens on one double-click fought
-      // and read as a harsh snap. Outside inspect mode, double-click zooms as before.
+      // no camera gesture must also fire — two camera tweens on one double-click fought
+      // and read as a harsh snap.
       if (useSceneStore.getState().inspectMode) return;
       if (e.shiftKey) {
-        // Shift+double-click (playtest 2026-07-18 d, user variant): keep the current
-        // orientation and distance, tween the whole rig so the clicked ground point
-        // becomes the focus. moveTo carries the eye by the same offset — a pure pan-over.
-        if (groundHit(cam, dom, e.clientX, e.clientY, _cur)) {
-          const cl = clampToCity(_cur.x, _cur.z);
-          markInput();
-          markCameraActivity("pan");
-          void c.moveTo(cl.x, 0, cl.z, true);
-        }
-        setPin(null);
-        return;
+        glideZoomIn(e.clientX, e.clientY, e.timeStamp);
+      } else {
+        panToFocus(e.clientX, e.clientY);
       }
-      glideZoomIn(e.clientX, e.clientY, e.timeStamp);
       setPin(null);
     };
 
