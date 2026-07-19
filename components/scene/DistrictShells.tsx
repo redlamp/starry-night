@@ -112,7 +112,11 @@ export function DistrictShells({ masterSeed }: { masterSeed: string }) {
   return (
     <>
       {show && <primitive object={group} />}
-      {highlight && <primitive object={highlight} />}
+      {/* Hover highlight only WITH the planning overlay (user 2026-07-19): it
+          used to render ungated from when it was the app's only district
+          hover, so every directory hover stacked this 0.8-alpha re-fill on
+          top of SelectedDistrictOutline's 0.4 fill. */}
+      {show && highlight && <primitive object={highlight} />}
     </>
   );
 }
