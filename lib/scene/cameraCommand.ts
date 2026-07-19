@@ -36,6 +36,11 @@ export const cameraCommand: {
   // instead of the 10Hz orbit store mirror, whose sampling made the needle
   // step/tween out of sync with the city (user 2026-07-18).
   liveAzimuthDeg: number;
+  // Live elevation (look-down angle) + the latched skyline regime, same
+  // cadence and consumer: the rose 3D-tilts to lie on the city plane except
+  // in skyline mode (user 2026-07-19).
+  liveElevationDeg: number;
+  liveSkyline: boolean;
 } = {
   setTiltDeg: null,
   toggleTopDownInModel: null,
@@ -43,4 +48,6 @@ export const cameraCommand: {
   toggleDrift: null,
   rotateNorthUp: null,
   liveAzimuthDeg: 0,
+  liveElevationDeg: 90,
+  liveSkyline: false,
 };
