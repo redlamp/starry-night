@@ -113,15 +113,17 @@ const MODEL_GUIDE: Record<CameraModelId, GuideSpec> = {
     hotkeys: ["settings"],
   },
   snv3: {
+    // LMB/RMB swapped 2026-07-19 (playtest [[andrzej-zawadzki]]): pan leads on
+    // LMB, Google-Earth-style; rotate rides RMB or Shift+LMB.
     mouse: [
-      { icon: "mouse-left", motion: "all", label: "Rotate & Tilt", affordance: "pin", action: "rotate" },
+      { icon: "mouse-left", motion: "all", label: "Move", affordance: "move", action: "pan" },
       {
         icon: "mouse-right",
         motion: "all",
-        label: "Move",
+        label: "Rotate & Tilt",
         sub: "or Shift + LMB",
-        affordance: "move",
-        action: "pan",
+        affordance: "pin",
+        action: "rotate",
       },
       {
         icon: "mouse-both",
@@ -133,6 +135,7 @@ const MODEL_GUIDE: Record<CameraModelId, GuideSpec> = {
       },
       { icon: "mouse-wheel", motion: "ud", label: "Zoom", action: "zoom" },
       { icon: "mouse-left", badge: "×2", label: "Zoom In", sub: "double-click", action: "zoomIn" },
+      { icon: "mouse-left", badge: "×2", label: "Pan To", sub: "Shift + double-click", action: "pan" },
     ],
     touch: [
       { icon: "finger-1", motion: "all", label: "Rotate & Tilt", action: "rotate" },

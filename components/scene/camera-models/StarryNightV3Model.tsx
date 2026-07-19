@@ -1048,9 +1048,11 @@ export function StarryNightV3Model() {
     };
 
     // Arm an orbit + tilt gesture around the point under (clientX, clientY) — shared by
-    // bare-LMB (mouse) and the 1-finger touch gesture. Sets the pivot (_grab), the
-    // deferred pivot pin, and seeds the carried tilt axis.
-    const armOrbit = (clientX: number, clientY: number) => {
+    // the mouse gesture (RMB / Shift+LMB) and the 1-finger touch gesture. Sets the pivot
+    // (_grab), the pivot pin, and seeds the carried tilt axis. `immediatePin` (mouse)
+    // shows the pin on press (playtest 2026-07-18 b); touch keeps the deferred reveal so
+    // a double-tap zoom never flashes it.
+    const armOrbit = (clientX: number, clientY: number, immediatePin = false) => {
       const c = controls.current;
       if (!c) return;
       drag = "orbit";
@@ -1083,7 +1085,12 @@ export function StarryNightV3Model() {
         _grab.set(cl.x, _grab.y, cl.z);
         orbitPinPending = null;
       }
-      setPin(null); // no pin until the drag begins
+      if (immediatePin && orbitPinPending) {
+        setPin(orbitPinPending);
+        orbitPinPending = null;
+      } else {
+        setPin(null); // deferred: shown once the drag begins (see onMove)
+      }
       // Seed the carried tilt axis from the current view heading (kept valid through the pole).
       c.getPosition(_eye);
       c.getTarget(_tgt);
@@ -1264,17 +1271,18 @@ export function StarryNightV3Model() {
       if ((e.button === 0 && (e.ctrlKey || e.metaKey)) || (e.buttons & 0b11) === 0b11) {
         // Free-look: Ctrl/⌘ + LMB, OR the LMB+RMB chord (both buttons down).
         engageLook(e.clientX, e.clientY);
-      } else if (e.button === 2 || e.shiftKey) {
-        // Move (RMB or Shift+LMB): grab the ground point under the cursor; keep it under the cursor.
+      } else if (e.button === 2 || (e.button === 0 && e.shiftKey)) {
+        // Orbit + tilt (RMB, or Shift+LMB as the keyboard mirror) around the clicked ground
+        // point — swapped from bare-LMB per the 2026-07-18 playtest ([[andrzej-zawadzki]]):
+        // pan leads on LMB, Google-Earth-style. The pivot pin shows on PRESS for mouse.
+        armOrbit(e.clientX, e.clientY, true);
+      } else {
+        // Move (bare LMB): grab the ground point under the cursor; keep it under the cursor.
+        // The hand glyph is deferred to the first real move (see onMove) so a plain click or
+        // double-click never flashes it — the same courtesy the orbit pin used to need.
         drag = "pan";
         setPin(null);
         if (!groundHit(cam, dom, e.clientX, e.clientY, _grab)) drag = null;
-        else showGlyph(isSkylineMode(cam) ? "pan-v" : "pan", e.clientX, e.clientY);
-      } else {
-        // Orbit + tilt (bare LMB) around the clicked ground point. The pin marking the pivot is
-        // DEFERRED: captured here, revealed in onMove only once the drag actually moves — so a single
-        // click or a double-click (zoom-in) never flashes it. The view rotates around it, no re-centre.
-        armOrbit(e.clientX, e.clientY);
       }
       if (drag) capturePointer(e.pointerId);
       applyCursor();
@@ -1305,6 +1313,9 @@ export function StarryNightV3Model() {
       if (!dragMoved && Math.abs(e.clientX - dragDownX) + Math.abs(e.clientY - dragDownY) > 3) {
         dragMoved = true;
         applyCursor();
+        // Deferred pan glyph: LMB leads with pan now, so only a REAL drag shows the hand —
+        // a plain click / double-click stays clean (mirrors the old orbit-pin deferral).
+        if (drag === "pan") showGlyph(isSkylineMode(cam) ? "pan-v" : "pan", e.clientX, e.clientY);
       }
       if (drag === "look" || drag === "pan") moveGlyph(e.clientX, e.clientY);
       markCameraActivity(drag === "orbit" ? "rotate" : drag === "pan" ? "pan" : "look");
@@ -1552,6 +1563,19 @@ export function StarryNightV3Model() {
       // the default zoom-to-cursor must NOT also fire — two camera tweens on one double-click fought
       // and read as a harsh snap. Outside inspect mode, double-click zooms as before.
       if (useSceneStore.getState().inspectMode) return;
+      if (e.shiftKey) {
+        // Shift+double-click (playtest 2026-07-18 d, user variant): keep the current
+        // orientation and distance, tween the whole rig so the clicked ground point
+        // becomes the focus. moveTo carries the eye by the same offset — a pure pan-over.
+        if (groundHit(cam, dom, e.clientX, e.clientY, _cur)) {
+          const cl = clampToCity(_cur.x, _cur.z);
+          markInput();
+          markCameraActivity("pan");
+          void c.moveTo(cl.x, 0, cl.z, true);
+        }
+        setPin(null);
+        return;
+      }
       glideZoomIn(e.clientX, e.clientY, e.timeStamp);
       setPin(null);
     };
