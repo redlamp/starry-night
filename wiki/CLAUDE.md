@@ -16,6 +16,7 @@ If you (Claude) are unsure where info belongs, prefer `wiki/` for: project state
 | `wiki/daily/` | One file per day, free-form log | `YYYY-MM-DD.md` |
 | `wiki/notes/` | Evergreen atomic notes — one concept per file | `kebab-case-title.md` |
 | `wiki/test-plans/` | Session test plans the user works through | `test-plan-YYYY-MM-DD-topic.md` |
+| `wiki/user-research/` | External playtest/feedback session logs, dated, verbatim + synthesis | `YYYY-MM-DD-person-context.md` |
 | `wiki/research/` | External references, articles, videos, papers — each summarised with source link | `kebab-case-slug.md` |
 | `wiki/people/` | Person profile per file | `firstname-lastname.md` or handle |
 | `wiki/projects/` | Sub-project / experiment trackers | `kebab-case-name.md` |
