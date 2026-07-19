@@ -46,6 +46,22 @@ position in both projections. Feel is your gate.
 7. [ ] The ring border tilts with the needle as one disc - the foreshortened
    ellipse is what sells the plane orientation
 
+## 4. Evening round (shipped with the day's final push)
+
+1. [ ] Compass north-up press: needle and city arrive TOGETHER (the park
+   animates heading as camera roll; the needle now tracks screen-projected
+   north - probe: eased -27 to -0.1 deg over ~700ms in lockstep)
+2. [ ] Opening the directory shows district boundaries; closing hides them;
+   manually turning them off sticks (persisted) until manually re-enabled;
+   a manual ON survives directory close (probe-verified state machine)
+3. [ ] Directory district hover: clean own-colour fill at 0.2 alpha - the
+   bright white-shifted re-fill (0.8) appears ONLY with the Settings
+   planning overlay on (it used to stack ungated on every hover)
+4. [ ] Ground Haze defaults: bottom 0 / top 120 / strength 1 (Reset or
+   re-Save the fog section if a saved config carries old values)
+5. [ ] Company card employee rows: name + occupation on one line for nearly
+   all pairs (occupation a size down, threshold 46); extremes still stack
+
 ## Known / Parked
 
 - Sky-pixel pan sensitivity scales with the synthesized pick's city-center
