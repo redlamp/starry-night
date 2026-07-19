@@ -75,11 +75,11 @@ export function CompanyColumn({ id, part }: { id: string; part: "pinned" | "rest
               if (!persona) return null;
               const title = persona.profession?.title ?? persona.workStatus;
               // Long name+title pairs stack to two lines instead of
-              // truncating against each other (user 2026-07-08). Threshold 40
-              // + a wider title column (user 2026-07-19: pairs like
-              // "Matthew Allen · Occupational Therapist" fit one line at the
-              // card's real width; 32 stacked them needlessly).
-              if (persona.fullName.length + title.length > 40) {
+              // truncating against each other (user 2026-07-08). Threshold 46
+              // with the occupation a size down (user 2026-07-19: "okay to
+              // reduce the size of the occupation") — almost every pair now
+              // rides one line; the stack survives only for the extremes.
+              if (persona.fullName.length + title.length > 46) {
                 return (
                   <button
                     key={pid}
@@ -102,7 +102,7 @@ export function CompanyColumn({ id, part }: { id: string; part: "pinned" | "rest
                   className="hover:bg-foreground/10 -mx-1 flex items-baseline justify-between gap-1.5 rounded px-1 text-left text-sm"
                 >
                   <span className="truncate">{persona.fullName}</span>
-                  <span className="text-muted-foreground max-w-[12rem] shrink-0 truncate text-right">
+                  <span className="text-muted-foreground max-w-[12rem] shrink-0 truncate text-right text-xs">
                     {title}
                   </span>
                 </button>
