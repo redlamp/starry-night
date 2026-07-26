@@ -7,6 +7,7 @@ import { useSceneStore, DEFAULT_HELICOPTERS } from "@/lib/state/sceneStore";
 import { buildHelicopters } from "@/lib/seed/helicopters";
 import { sharedTime } from "@/lib/shaders/sharedTime";
 import { sharedIntroProgress } from "@/lib/shaders/sharedIntro";
+import { lightSizeUniforms } from "@/lib/shaders/lightSize";
 import { helicoptersVertexShader, helicoptersFragmentShader } from "@/lib/shaders/helicopters";
 
 // Third air-transit class (#89) — lights-only Points cloud, no fuselage mesh,
@@ -214,6 +215,8 @@ export function Helicopters({ masterSeed }: { masterSeed: string }) {
         uPixelRatio: {
           value: typeof window !== "undefined" ? Math.min(window.devicePixelRatio, 2) : 1,
         },
+        // #99 shared light sizing (written per frame by ProjectionBlender).
+        ...lightSizeUniforms(),
       },
       transparent: true,
       depthWrite: false,

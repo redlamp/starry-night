@@ -5,6 +5,7 @@ import * as THREE from "three";
 import { generateAviationBeacons } from "@/lib/seed/cityGen";
 import { sharedTime } from "@/lib/shaders/sharedTime";
 import { sharedIntroProgress } from "@/lib/shaders/sharedIntro";
+import { lightSizeChunk, lightSizeUniforms } from "@/lib/shaders/lightSize";
 import { useSceneStore } from "@/lib/state/sceneStore";
 
 // Blinking red aviation obstruction lights on skyscraper tops. One additive
@@ -13,19 +14,24 @@ import { useSceneStore } from "@/lib/state/sceneStore";
 // it needs no separate projection pass.
 
 const vertexShader = /* glsl */ `
+${lightSizeChunk}
 uniform float uPixelRatio;
 uniform float uBaseSize;
 attribute float aPhase;
 varying float vDist;
 varying float vPhase;
+varying float vBright;
 void main() {
   vec4 mv = modelViewMatrix * vec4(position, 1.0);
   vDist = -mv.z;
   vPhase = aPhase;
   gl_Position = projectionMatrix * mv;
-  // Floor of 3px so a distant beacon still reads from orbit range; cap so a
-  // close fly-by doesn't balloon into a blob.
-  gl_PointSize = clamp(uBaseSize * uPixelRatio * (180.0 / vDist), 10.0, 28.0);
+  // #99: shared projection-derived sizing (replaces the hand-tuned 180/vDist, whose 10px
+  // floor engaged by ~150 m — beacons were effectively constant). ~0.25 m of glow per
+  // uBaseSize unit (8 -> 2 m obstruction-light bloom) shrinks 28 -> 10 px over roughly
+  // 150-900 m, then the floor keeps far spotting; ortho-correct via the live projection.
+  gl_PointSize = lightSizePx(0.25 * uBaseSize, gl_Position, 10.0 * uPixelRatio, 28.0 * uPixelRatio);
+  vBright = lightSizeBright; // Settings → Lights: brightness may follow the drop-off
 }
 `;
 
@@ -35,6 +41,7 @@ uniform float uPeriod;
 uniform float uIntroProgress;
 varying float vDist;
 varying float vPhase;
+varying float vBright;
 void main() {
   vec2 c = gl_PointCoord - 0.5;
   float d = length(c);
@@ -52,9 +59,9 @@ void main() {
   float wake = smoothstep(0.1, 0.4, uIntroProgress);
 
   // Emissive > 1 so the red blooms under ACES.
-  float intensity = pow(core, 1.3) * 4.5 * level * wake;
+  float intensity = pow(core, 1.3) * 4.5 * level * wake * vBright;
   vec3 red = vec3(1.0, 0.1, 0.06);
-  gl_FragColor = vec4(red * intensity, core * level * wake);
+  gl_FragColor = vec4(red * intensity, core * level * wake * vBright);
 }
 `;
 
@@ -89,6 +96,8 @@ export function Beacons({ masterSeed }: { masterSeed: string }) {
         },
         uTime: sharedTime,
         uIntroProgress: sharedIntroProgress,
+        // #99 shared light sizing (written per frame by ProjectionBlender).
+        ...lightSizeUniforms(),
       },
       transparent: true,
       depthWrite: false,

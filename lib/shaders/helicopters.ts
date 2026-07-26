@@ -38,7 +38,10 @@
 // changing any hue. hash11 offsets each helicopter's flash phase (keyed off
 // its own clock phase) so multiple helicopters don't blink in lockstep.
 
+import { lightSizeChunk } from "./lightSize";
+
 export const helicoptersVertexShader = /* glsl */ `
+${lightSizeChunk}
 uniform float uTime;
 uniform float uPixelRatio;
 uniform float uIntroProgress;
@@ -148,10 +151,10 @@ void main() {
   }
   vLevel = level;
 
-  float d = -mv.z;
-  float sizePx = aLight.z * uPixelRatio * (3600.0 / max(d, 1.0));
-  sizePx = max(sizePx, MIN_PX * uPixelRatio); // screen-size floor — never sub-pixel, at any range
-  gl_PointSize = min(sizePx, MAX_PX * uPixelRatio);
+  // #99: shared projection-derived sizing (see flights.ts — this was its byte-identical
+  // twin). ~1.6 m of glow per size unit; MIN_PX floor keeps far spotting; ortho-correct.
+  gl_PointSize = lightSizePx(1.6 * aLight.z, gl_Position, MIN_PX * uPixelRatio, MAX_PX * uPixelRatio);
+  vAlpha *= lightSizeBright; // Settings → Lights: brightness may follow the drop-off
 }
 `;
 

@@ -44,6 +44,7 @@ Map of Content for external references that shape direction.
 - [[camera-architecture-and-perf]] — the architecture/perf/library-internals companion to the above (2026-06-27): camera-controls + drei internals (update/rest/SmoothDamp, the #2005 demand bug, ortho ZOOM≠DOLLY), R3F render-loop levers (StarPass FPS throttle, dirty-flag projection, static-city matrices, adaptive DPR), receding-eye morph theory, and 2024–26 interaction/a11y deltas (DragControls now auto-disables; `@use-gesture` already installed; reduced-motion). Feeds [[plan-camera-refactor-optimization]]
 - [[camera-movement-terminology]] — the six film camera moves (dolly / truck / pedestal / pan / tilt / roll) with Taylor's visual guide image; shared vocabulary for camera-feel feedback (2026-07-25) + the "pan means truck in map apps" gotcha
 - [[skyline-seam-handling]] — how Google Earth / Cesium / Mapbox / game cameras handle the overhead→ground-level transition + mode-error UX principles; five candidate designs for our standard↔skyline seam, recommendation: an explicit Skyline mode (2026-07-26, status/open, decision on #98)
+- [[light-size-vs-distance]] — perceptual glare model (Spencer/Jensen: fixed-angle PSF, slower-than-1/d shrink), point-sprite sizing techniques (Three.js sizeAttenuation, X-Plane light billboards), ortho precedent, and the projection-matrix-derived sizing recipe implemented for #99 (2026-07-26)
 
 ## Colour references
 

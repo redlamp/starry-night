@@ -32,6 +32,7 @@ import {
   Save,
   Search,
   Settings,
+  Lightbulb,
   Sparkles,
   Stars,
   Trash2,
@@ -80,6 +81,7 @@ import {
   DriftSection,
   DriftHeaderActions,
 } from "@/components/ui/panels/OrbitPanel";
+import { LightsSection, LightsHeaderActions } from "@/components/ui/panels/LightsPanel";
 import { StarsSection } from "@/components/ui/panels/StarsPanel";
 import { BuildingsSection } from "@/components/ui/panels/BuildingsPanel";
 import { MoonSection } from "@/components/ui/panels/MoonPanel";
@@ -171,6 +173,12 @@ const SETTINGS_SECTIONS: { value: string; label: string; keywords: string }[] = 
     value: "drift",
     label: "Drift",
     keywords: "wander speed revolve breathe bob elevation idle delay auto flight helicopter space",
+  },
+  {
+    value: "lights",
+    label: "Lights",
+    keywords:
+      "light size glow gamma falloff drop off curve bezier brightness distance sprite point floor ceiling attenuation",
   },
   {
     value: "roads",
@@ -641,6 +649,17 @@ export function CameraPanel() {
                 Traffic, Flights (#67) — all collapsed by default. (Distance LOD
                 moved to Performance → Level of Detail, user 2026-06-13.) Internal
                 section key stays "roads" — only the visible label changed. */}
+            {/* Lights (#99): shared point-light sizing/brightness over distance. */}
+            <Section
+              value="lights"
+              icon={Lightbulb}
+              label="Lights"
+              hidden={!show("lights")}
+              action={<LightsHeaderActions />}
+            >
+              <LightsSection />
+            </Section>
+
             <Section value="roads" icon={Route} label="Transport" hidden={!show("roads")}>
               <SubGroup label="Highlight" action={<RoadHighlightAction />}>
                 <RoadHighlightTiers />

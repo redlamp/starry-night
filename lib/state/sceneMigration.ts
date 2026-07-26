@@ -16,6 +16,7 @@ import type {
   CameraMode,
   CameraModelId,
   DriftConfig,
+  LightSizeConfig,
   Snv2Config,
   Snv3Config,
   TurntableConfig,
@@ -122,6 +123,7 @@ export type SavedConfig = {
   // Optional so configs saved before the camera-model selector still load.
   cameraModel?: CameraModelId;
   drift?: DriftConfig;
+  lightSize?: LightSizeConfig; // #99 light-sprite sizing (optional — older saves lack it)
   snv2?: Snv2Config;
   snv3?: Snv3Config;
   turntable?: TurntableConfig;

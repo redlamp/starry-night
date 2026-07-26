@@ -5,6 +5,9 @@ import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { useSceneStore } from "@/lib/state/sceneStore";
 import { orbitFramingFactor } from "@/lib/scene/aspectFraming";
+import { sharedLightSize, sampleLightCurve } from "@/lib/shaders/lightSize";
+
+let lastCurveSig = ""; // resample the drop-off lookup only when the bezier changes
 
 // Keeps a single PerspectiveCamera under the hood but overrides its projection
 // matrix each frame when projectionBlend > 0. The swap is driven by a RECEDING
@@ -45,8 +48,22 @@ export function ProjectionBlender() {
     (window as unknown as Record<string, unknown>).__projectionDebug = { camera };
   }, [camera]);
 
-  useFrame(() => {
+  useFrame(({ gl }) => {
     if (!(camera as THREE.Camera & { isPerspectiveCamera?: boolean }).isPerspectiveCamera) return;
+    // #99 shared light sizing: one write per frame feeds every light material (they all
+    // reference these same uniform objects). The bezier drop-off is only resampled when
+    // its control points actually change.
+    const ls = useSceneStore.getState().lightSize;
+    sharedLightSize.uViewH.value = gl.domElement.height;
+    sharedLightSize.uGlowScale.value = ls.glowScale;
+    sharedLightSize.uSizeMinScale.value = ls.minScale;
+    sharedLightSize.uSizeMaxScale.value = ls.maxScale;
+    sharedLightSize.uBrightFollow.value = ls.brightFollow;
+    const curveSig = ls.curve.join(",");
+    if (curveSig !== lastCurveSig) {
+      lastCurveSig = curveSig;
+      sampleLightCurve(sharedLightSize.uSizeCurve.value, ls.curve);
+    }
     // Narrow screens widen the framing so the skyline sits low with starry sky above — a portrait
     // frame otherwise shows only the city's tall centre. 1× landscape, up to ~1.5× at a phone;
     // still/orbit only (top-down/fly self-frame). f drives BOTH the ortho half-height (oeff) and the
