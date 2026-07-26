@@ -41,11 +41,13 @@ export const cameraCommand: {
   // in skyline mode (user 2026-07-19).
   liveElevationDeg: number;
   liveSkyline: boolean;
-  // SCREEN-SPACE bearing of world-north (degrees clockwise from screen-up),
-  // projected through the camera's live quaternion. This is what the needle
-  // must track: in the top-down park the visible heading animates as camera
-  // ROLL while the spherical azimuth is stamped instantly, so an
-  // azimuth-derived needle snapped ahead of the city (user 2026-07-19).
+  // Bearing of world-north for the compass rose (degrees clockwise from the
+  // view's "up" direction), measured in the GROUND plane against the camera's
+  // right / (forward + up) horizontals. Tracks the top-down park's ROLL (there
+  // the visible heading animates as roll while the spherical azimuth stamps
+  // instantly — user 2026-07-19) AND stays stable at near-flat elevations,
+  // where the old screen-space quaternion projection degenerated and the
+  // needle spun on pose noise (review 2026-07-25).
   liveNorthScreenDeg: number;
 } = {
   setTiltDeg: null,

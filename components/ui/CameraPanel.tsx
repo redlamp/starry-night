@@ -7,6 +7,7 @@ import { cn, isTypingTarget } from "@/lib/utils";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { useIdle } from "@/lib/useIdle";
 import { IconTip } from "@/components/ui/columns/EntityColumns";
+import { CompassHudSlot } from "@/components/ui/TopDownCompassRose";
 import {
   Bug,
   Building2,
@@ -31,6 +32,7 @@ import {
   Save,
   Search,
   Settings,
+  Lightbulb,
   Sparkles,
   Stars,
   Trash2,
@@ -73,7 +75,13 @@ import {
   focalLengthMm,
   lensName,
 } from "@/components/ui/panels/PosePanel";
-import { OrbitSection, OrbitHeaderActions } from "@/components/ui/panels/OrbitPanel";
+import {
+  OrbitSection,
+  OrbitHeaderActions,
+  DriftSection,
+  DriftHeaderActions,
+} from "@/components/ui/panels/OrbitPanel";
+import { LightsSection, LightsHeaderActions } from "@/components/ui/panels/LightsPanel";
 import { StarsSection } from "@/components/ui/panels/StarsPanel";
 import { BuildingsSection } from "@/components/ui/panels/BuildingsPanel";
 import { MoonSection } from "@/components/ui/panels/MoonPanel";
@@ -159,7 +167,18 @@ const SETTINGS_SECTIONS: { value: string; label: string; keywords: string }[] = 
     value: "orbit",
     label: "Orbit",
     keywords:
-      "elevation azimuth compass radius distance spin speed pause center focal auto rotate drift idle wander delay",
+      "elevation azimuth compass radius distance spin speed pause center focal auto rotate",
+  },
+  {
+    value: "drift",
+    label: "Drift",
+    keywords: "wander speed revolve breathe bob elevation idle delay auto flight helicopter space",
+  },
+  {
+    value: "lights",
+    label: "Lights",
+    keywords:
+      "light size glow gamma falloff drop off curve bezier brightness distance sprite point floor ceiling attenuation",
   },
   {
     value: "roads",
@@ -362,6 +381,9 @@ export function CameraPanel() {
     return (
       <div className="fixed top-3 right-3 z-20 flex items-center gap-1.5">
         <DriftTransportButton idle={idle} />
+        {/* Compass rose between drift + settings (user 2026-07-26); its Off/Auto/On
+            visibility lives in the slot (Auto rides this row's idle fade). */}
+        <CompassHudSlot idle={idle} />
         <IconTip label="Show Settings">
           <button
             onClick={() => setHidden(false)}
@@ -588,6 +610,17 @@ export function CameraPanel() {
               <OrbitSection />
             </Section>
 
+            {/* Drift: own section since 2026-07-26 (was a SubGroup under Orbit). */}
+            <Section
+              value="drift"
+              icon={Helicopter}
+              label="Drift"
+              hidden={!show("drift")}
+              action={<DriftHeaderActions />}
+            >
+              <DriftSection />
+            </Section>
+
             {/* Intro moved below Camera + Orbit (user 2026-06-28). */}
             <Section
               value="intro"
@@ -616,6 +649,17 @@ export function CameraPanel() {
                 Traffic, Flights (#67) — all collapsed by default. (Distance LOD
                 moved to Performance → Level of Detail, user 2026-06-13.) Internal
                 section key stays "roads" — only the visible label changed. */}
+            {/* Lights (#99): shared point-light sizing/brightness over distance. */}
+            <Section
+              value="lights"
+              icon={Lightbulb}
+              label="Lights"
+              hidden={!show("lights")}
+              action={<LightsHeaderActions />}
+            >
+              <LightsSection />
+            </Section>
+
             <Section value="roads" icon={Route} label="Transport" hidden={!show("roads")}>
               <SubGroup label="Highlight" action={<RoadHighlightAction />}>
                 <RoadHighlightTiers />

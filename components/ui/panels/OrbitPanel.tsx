@@ -44,8 +44,6 @@ export function OrbitSection() {
   const tiltSpeed = useSceneStore((s) => s.tiltSpeed);
   const setTiltSpeed = useSceneStore((s) => s.setTiltSpeed);
   const cameraModel = useSceneStore((s) => s.cameraModel);
-  const drift = useSceneStore((s) => s.drift);
-  const setDrift = useSceneStore((s) => s.setDrift);
   const turntable = useSceneStore((s) => s.turntable);
   const setTurntable = useSceneStore((s) => s.setTurntable);
   const snv2 = useSceneStore((s) => s.snv2);
@@ -56,9 +54,6 @@ export function OrbitSection() {
   const setCompassMode = useSceneStore((s) => s.setCompassMode);
   const projection = useSceneStore((s) => s.projection);
   const orthoSize = useSceneStore((s) => s.orthoSize);
-  const driftMode = useSceneStore((s) => s.driftMode);
-  const setDriftMode = useSceneStore((s) => s.setDriftMode);
-  const isDrift = cameraModel === "drift";
   const isMap = cameraModel === "map";
   const setFocalAdjust = useSceneStore((s) => s.setFocalAdjust);
   // Show the focal pin (and, for Screen Y, the guide line) WHILE a slider is being adjusted,
@@ -106,9 +101,9 @@ export function OrbitSection() {
         <span className="flex items-center gap-1 text-sm">
           Compass
           <HelpHint>
-            The north needle over the city. Auto shows it while parked in top-down or zoomed far
-            out (ortho view size past 720, or camera past 3,200 m); On keeps it always; clicking
-            it rotates north-up.
+            The north-needle button in the top-right HUD row; clicking it rotates the view
+            north-up. Auto shows it with the HUD buttons and fades with them when idle; On
+            keeps it always visible.
           </HelpHint>
         </span>
         <Tabs value={compassMode} onValueChange={(v) => setCompassMode(v as CompassMode)}>
@@ -125,82 +120,8 @@ export function OrbitSection() {
           </TabsList>
         </Tabs>
       </div>
-      {/* Drift model controls — its motion is auto-driven, so the Map pose sliders
-          (Speed/Distance/Compass/Focal) are hidden while Drift is active; the framing
-          controls below (Screen Y / ground pull) still apply to both. */}
-      {isDrift && (
-        <SubGroup
-          label="Drift"
-          defaultOpen
-          action={
-            <HelpHint>
-              Hands-off ambient orbit — Space pauses. Revolve s = 0 stops the spin (pure wander +
-              bob). Screen Y sets how low the skyline sits.
-            </HelpHint>
-          }
-        >
-          <ValueSlider
-            label="Wander"
-            value={drift.wanderRadius}
-            min={0}
-            max={1}
-            step={0.05}
-            onChange={(v) => setDrift({ wanderRadius: v })}
-            stepperClass="w-32"
-            format={{ maximumFractionDigits: 2 }}
-          />
-          <ValueSlider
-            label="Wander spd"
-            value={drift.wanderSpeed}
-            min={0.2}
-            max={3}
-            step={0.1}
-            onChange={(v) => setDrift({ wanderSpeed: v })}
-            stepperClass="w-32"
-            format={{ maximumFractionDigits: 1 }}
-          />
-          <ValueSlider
-            label="Elev mean"
-            value={drift.elevMid}
-            min={1}
-            max={8}
-            step={0.5}
-            onChange={(v) => setDrift({ elevMid: v })}
-            stepperClass="w-32"
-            format={{ maximumFractionDigits: 1 }}
-          />
-          <ValueSlider
-            label="Elev bob"
-            value={drift.elevAmp}
-            min={0}
-            max={5}
-            step={0.5}
-            onChange={(v) => setDrift({ elevAmp: v })}
-            stepperClass="w-32"
-            format={{ maximumFractionDigits: 1 }}
-          />
-          <ValueSlider
-            label="Revolve s"
-            value={drift.revolveSec}
-            min={0}
-            max={900}
-            step={30}
-            onChange={(v) => setDrift({ revolveSec: v })}
-            stepperClass="w-32"
-            format={{ maximumFractionDigits: 0 }}
-          />
-          <ValueSlider
-            label="Breathe"
-            value={drift.breathe}
-            min={0}
-            max={0.2}
-            step={0.01}
-            onChange={(v) => setDrift({ breathe: v })}
-            stepperClass="w-32"
-            format={{ maximumFractionDigits: 2 }}
-          />
-        </SubGroup>
-      )}
+      {/* Drift knobs moved to their own top-level Drift section (user 2026-07-26) —
+          see DriftSection below. */}
       {cameraModel === "turntable" && (
         <SubGroup
           label="Turntable"
@@ -300,86 +221,6 @@ export function OrbitSection() {
               max={60}
               step={1}
               onChange={(tiltFloorDeg) => setSnv3({ tiltFloorDeg })}
-            />
-          </SubGroup>
-          <SubGroup
-            label="Drift"
-            defaultOpen
-            afterLabel={
-              <HelpHint>
-                A slow flight around the city — the view revolves, the focus wanders, the height
-                bobs gently. The header switch (or Space, or the helicopter button) turns the
-                drift on: adjust the camera any time and it eases back into the flight when you
-                let go. With idle drift on instead, the flight starts by itself after Delay
-                seconds of no input, and any input stops it until the timer runs down again.
-                Feel knobs are shared with the Drift camera model.
-              </HelpHint>
-            }
-            action={
-              <Switch
-                checked={driftMode}
-                onCheckedChange={setDriftMode}
-                aria-label="Drift"
-              />
-            }
-          >
-            <label className="flex cursor-pointer items-center justify-between gap-2 text-xs">
-              <span className="text-foreground/70">idle drift</span>
-              <Switch
-                checked={snv3.idleDrift}
-                onCheckedChange={(idleDrift) => setSnv3({ idleDrift })}
-                aria-label="Idle drift"
-              />
-            </label>
-            <ValueSlider
-              label="Delay"
-              hint="Seconds of no input before the idle drift starts."
-              value={snv3.idleDelaySec}
-              min={2}
-              max={60}
-              step={1}
-              onChange={(idleDelaySec) => setSnv3({ idleDelaySec })}
-              format={{ maximumFractionDigits: 0 }}
-            />
-            <ValueSlider
-              label="Wander"
-              hint="How far across the city the drifting focus roams."
-              value={drift.wanderRadius}
-              min={0}
-              max={1}
-              step={0.05}
-              onChange={(v) => setDrift({ wanderRadius: v })}
-              format={{ maximumFractionDigits: 2 }}
-            />
-            <ValueSlider
-              label="Speed"
-              hint="Wander pace — how briskly the focus tours the city."
-              value={drift.wanderSpeed}
-              min={0.2}
-              max={3}
-              step={0.1}
-              onChange={(v) => setDrift({ wanderSpeed: v })}
-              format={{ maximumFractionDigits: 1 }}
-            />
-            <ValueSlider
-              label="Elev bob"
-              hint="The gentle up/down deviation while drifting (degrees)."
-              value={drift.elevAmp}
-              min={0}
-              max={5}
-              step={0.5}
-              onChange={(v) => setDrift({ elevAmp: v })}
-              format={{ maximumFractionDigits: 1 }}
-            />
-            <ValueSlider
-              label="Revolve s"
-              hint="Seconds per full revolution while drifting; 0 = no revolve (pure wander + bob)."
-              value={drift.revolveSec}
-              min={0}
-              max={900}
-              step={30}
-              onChange={(v) => setDrift({ revolveSec: v })}
-              format={{ maximumFractionDigits: 0 }}
             />
           </SubGroup>
         </>
@@ -710,5 +551,123 @@ function ZoomTargetToggle() {
       <ScanSearch className="size-3.5" />
       <TargetIcon className="size-3.5" />
     </Button>
+  );
+}
+
+// ---- Drift: its own top-level settings section since 2026-07-26 (user: "not a child
+// of Orbit"). One home for the shared feel knobs — they drive the Drift camera model
+// AND Cam v3's drift flights — plus v3's transport switch and idle-drift preference.
+
+export function DriftHeaderActions() {
+  const isV3 = useSceneStore((s) => s.cameraModel === "snv3");
+  const driftMode = useSceneStore((s) => s.driftMode);
+  const setDriftMode = useSceneStore((s) => s.setDriftMode);
+  return (
+    <div className="flex items-center gap-2">
+      <HelpHint>
+        A slow flight around the city — the view revolves, the focus wanders, the height bobs
+        gently. In Cam v3 the switch (or Space, or the helicopter button) starts it; adjust the
+        camera any time and it eases back into the flight. The Drift camera model flies itself.
+        Feel knobs are shared by both.
+      </HelpHint>
+      {isV3 && <Switch checked={driftMode} onCheckedChange={setDriftMode} aria-label="Drift" />}
+    </div>
+  );
+}
+
+export function DriftSection() {
+  const cameraModel = useSceneStore((s) => s.cameraModel);
+  const drift = useSceneStore((s) => s.drift);
+  const setDrift = useSceneStore((s) => s.setDrift);
+  const snv3 = useSceneStore((s) => s.snv3);
+  const setSnv3 = useSceneStore((s) => s.setSnv3);
+  const isV3 = cameraModel === "snv3";
+  return (
+    <>
+      {isV3 && (
+        <>
+          <label className="flex cursor-pointer items-center justify-between gap-2 text-xs">
+            <span className="text-foreground/70">idle drift</span>
+            <Switch
+              checked={snv3.idleDrift}
+              onCheckedChange={(idleDrift) => setSnv3({ idleDrift })}
+              aria-label="Idle drift"
+            />
+          </label>
+          <ValueSlider
+            label="Delay"
+            hint="Seconds of no input before the idle drift starts."
+            value={snv3.idleDelaySec}
+            min={2}
+            max={60}
+            step={1}
+            onChange={(idleDelaySec) => setSnv3({ idleDelaySec })}
+            format={{ maximumFractionDigits: 0 }}
+          />
+        </>
+      )}
+      <ValueSlider
+        label="Wander"
+        hint="How far across the city the drifting focus roams."
+        value={drift.wanderRadius}
+        min={0}
+        max={1}
+        step={0.05}
+        onChange={(v) => setDrift({ wanderRadius: v })}
+        format={{ maximumFractionDigits: 2 }}
+      />
+      <ValueSlider
+        label="Speed"
+        hint="Wander pace — how briskly the focus tours the city."
+        value={drift.wanderSpeed}
+        min={0.2}
+        max={3}
+        step={0.1}
+        onChange={(v) => setDrift({ wanderSpeed: v })}
+        format={{ maximumFractionDigits: 1 }}
+      />
+      {cameraModel === "drift" && (
+        <ValueSlider
+          label="Elev mean"
+          hint="The Drift model's mean flight elevation (degrees). Cam v3 drifts from wherever the camera rests instead."
+          value={drift.elevMid}
+          min={1}
+          max={8}
+          step={0.5}
+          onChange={(v) => setDrift({ elevMid: v })}
+          format={{ maximumFractionDigits: 1 }}
+        />
+      )}
+      <ValueSlider
+        label="Elev bob"
+        hint="The gentle up/down deviation while drifting (degrees)."
+        value={drift.elevAmp}
+        min={0}
+        max={5}
+        step={0.5}
+        onChange={(v) => setDrift({ elevAmp: v })}
+        format={{ maximumFractionDigits: 1 }}
+      />
+      <ValueSlider
+        label="Revolve s"
+        hint="Seconds per full revolution while drifting; 0 = no revolve (pure wander + bob)."
+        value={drift.revolveSec}
+        min={0}
+        max={900}
+        step={30}
+        onChange={(v) => setDrift({ revolveSec: v })}
+        format={{ maximumFractionDigits: 0 }}
+      />
+      <ValueSlider
+        label="Breathe"
+        hint="Slow dolly in / out around the current distance while drifting."
+        value={drift.breathe}
+        min={0}
+        max={0.2}
+        step={0.01}
+        onChange={(v) => setDrift({ breathe: v })}
+        format={{ maximumFractionDigits: 2 }}
+      />
+    </>
   );
 }

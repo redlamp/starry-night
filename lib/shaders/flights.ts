@@ -56,7 +56,10 @@
 // uFlightDeviation, so spamming the debug buttons fans the planes into
 // separate lanes instead of stacking them on one baked line.
 
+import { lightSizeChunk } from "./lightSize";
+
 export const flightsVertexShader = /* glsl */ `
+${lightSizeChunk}
 uniform float uTime;
 uniform float uPixelRatio;
 uniform float uIntroProgress; // shared window-intro progress (Beacons pattern)
@@ -217,10 +220,12 @@ void main() {
   }
   vLevel = level;
 
-  float d = -mv.z;
-  float sizePx = aSize * uPixelRatio * (3600.0 / max(d, 1.0));
-  sizePx = max(sizePx, MIN_PX * uPixelRatio); // screen-size floor — never sub-pixel, at any range
-  gl_PointSize = min(sizePx, MAX_PX * uPixelRatio);
+  // #99: shared projection-derived sizing (replaces the hand-tuned 3600/-mv.z, which was
+  // FOV-blind and ortho-blind). ~1.6 m of glow per aSize unit reproduces the old close-range
+  // look; the MIN_PX floor still owns the far corridor (spotting), and ortho now scales
+  // with the view size instead of reading a meaningless view depth.
+  gl_PointSize = lightSizePx(1.6 * aSize, gl_Position, MIN_PX * uPixelRatio, MAX_PX * uPixelRatio);
+  vAlpha *= lightSizeBright; // Settings → Lights: brightness may follow the drop-off
 }
 `;
 

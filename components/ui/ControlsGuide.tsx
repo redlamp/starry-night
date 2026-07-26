@@ -14,7 +14,7 @@ import { useIdle } from "@/lib/useIdle";
 import { Switch } from "@/components/ui/switch";
 import { toggleProjection, toggleAllWireframe } from "@/lib/scene/cameraView";
 import { cameraCommand } from "@/lib/scene/cameraCommand";
-import { Eye, MapPin, Move } from "lucide-react";
+import { Eye, MapPin, Move, MoveVertical } from "lucide-react";
 import { getCameraModelMeta } from "@/components/scene/camera-models/catalog";
 import type { CameraModelId } from "@/lib/state/sceneStore";
 import { IconTip } from "@/components/ui/columns/EntityColumns";
@@ -34,7 +34,7 @@ type Item = {
   badge?: string;
   label: string;
   sub?: string;
-  affordance?: "pin" | "move" | "eye"; // right-aligned scene-affordance icon (mirrors the on-screen glyph)
+  affordance?: "pin" | "move" | "move-v" | "eye"; // right-aligned scene-affordance icon (mirrors the on-screen glyph)
   action?: CameraAction; // which live activity signal lights this row (explicit — labels are copy, not ids)
 };
 
@@ -134,7 +134,7 @@ const MODEL_GUIDE: Record<CameraModelId, GuideSpec> = {
         action: "look",
       },
       { icon: "mouse-wheel", motion: "ud", label: "Zoom", action: "zoom" },
-      { icon: "mouse-left", badge: "×2", label: "Pan To", sub: "double-click", action: "pan" },
+      { icon: "mouse-left", badge: "×2", label: "Pan To", sub: "double-click", action: "panTo" },
       {
         icon: "mouse-right",
         badge: "×2",
@@ -150,7 +150,7 @@ const MODEL_GUIDE: Record<CameraModelId, GuideSpec> = {
       { icon: "finger-1", badge: "×2", label: "Zoom In", sub: "double-tap", action: "zoomIn" },
     ],
     keys: [
-      { cap: "W A S D", label: "Move", action: "pan" },
+      { cap: "W A S D", label: "Move", action: "keysMove" },
       { cap: "Q / E", label: "Down / Up" },
       { cap: "T", label: "Top-Down / Back" },
       { cap: "R", label: "Reset Camera", action: "reset" },
@@ -300,7 +300,8 @@ function Glyph({
 // the scene during that gesture — pin (rotate/tilt), move arrows (move), eye (free-look) — so the sheet
 // reads as "this is what you'll see". Same sky-blue (#7dd3fc) the scene renders them in.
 function AffordanceIcon({ kind }: { kind: NonNullable<Item["affordance"]> }) {
-  const Icon = kind === "pin" ? MapPin : kind === "move" ? Move : Eye;
+  const Icon =
+    kind === "pin" ? MapPin : kind === "move" ? Move : kind === "move-v" ? MoveVertical : Eye;
   return <Icon aria-hidden className="ml-auto size-6 shrink-0 text-sky-300" strokeWidth={2.5} />;
 }
 
@@ -458,17 +459,22 @@ export function ControlsGuide() {
 
   // Live behavior highlight: while open, read the activity signal each frame and light the matching
   // row. Treated as idle ~260ms after the last mark, so the highlight clears when the gesture stops.
+  // Skyline vs aerial swaps what a vertical Move drag does — mirror the live regime so
+  // the rows describe the CURRENT behavior (user 2026-07-26). Piggybacks the same rAF.
+  const [skyline, setSkyline] = useState(false);
   useEffect(() => {
     if (!open) return;
     let raf = 0;
     const tick = () => {
       const fresh = performance.now() - cameraActivity.at < 260 ? cameraActivity.action : null;
       setActiveAction((prev) => (prev === fresh ? prev : fresh));
+      const sky = cameraModel === "snv3" && cameraCommand.liveSkyline;
+      setSkyline((prev) => (prev === sky ? prev : sky));
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [open]);
+  }, [open, cameraModel]);
 
   // Dismiss with Esc only — a click on the scene must NOT close it, so the panel stays up while you
   // try the gestures. The ✕ and the "?" button are the explicit closes.
@@ -483,7 +489,23 @@ export function ControlsGuide() {
 
   const guide = MODEL_GUIDE[cameraModel] ?? MODEL_GUIDE.map;
   const meta = getCameraModelMeta(cameraModel);
-  const items = mode === "mouse" ? guide.mouse : guide.touch;
+  const baseItems = mode === "mouse" ? guide.mouse : guide.touch;
+  // In skyline view the Move gesture's vertical axis pedestals (raises/lowers the frame)
+  // instead of ground-panning — relabel those rows while the regime is live.
+  const items =
+    cameraModel === "snv3" && skyline
+      ? baseItems.map((r) =>
+          r.label === "Move" && r.motion === "all"
+            ? {
+                ...r,
+                label: "Move / Pedestal",
+                sub: r.sub ?? "vertical = raise / lower",
+                // Match the on-screen glyph: up/down arrows, not the 4-way move.
+                affordance: r.affordance ? ("move-v" as const) : r.affordance,
+              }
+            : r,
+        )
+      : baseItems;
 
   if (captureMode) return null; // headless stills hide all UI
 

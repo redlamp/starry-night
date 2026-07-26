@@ -9,6 +9,7 @@ import { kelvinToColor } from "@/lib/color/kelvin";
 import { SCENE_WB_GAIN } from "@/lib/color/whiteBalance";
 import { sharedStreetlightIntroProgress } from "@/lib/shaders/sharedIntro";
 import { sharedTime } from "@/lib/shaders/sharedTime";
+import { lightSizeChunk, lightSizeUniforms } from "@/lib/shaders/lightSize";
 import { useSceneStore } from "@/lib/state/sceneStore";
 import {
   partitionByTile,
@@ -28,6 +29,7 @@ function applyWb(c: THREE.Color): THREE.Color {
 }
 
 const vertexShader = /* glsl */ `
+${lightSizeChunk}
 uniform float uPixelRatio;
 uniform float uBaseSize;
 uniform float uIntroProgress;
@@ -71,13 +73,16 @@ void main() {
   vec3 worldPos = (modelMatrix * vec4(position, 1.0)).xyz;
   float camDist = distance(worldPos, cameraPosition);
   float lodT = uLodEnabled > 0.5 ? smoothstep(uLodNear, uLodFar, camDist) : 0.0;
-  float sizeAtten = mix(1.0, uLodSizeFloor, lodT);
   vLodBright = mix(1.0, uLodBrightFloor, lodT);
   float keep = (uLodEnabled > 0.5 && camDist > uLodCull) ? 0.0 : 1.0;
 
-  // Fixed apparent base size (the old 180/vDist term collapsed every light to the
-  // floor at city distances, making them vanish under ortho); LOD scales it.
-  gl_PointSize = keep * clamp(uBaseSize * uPixelRatio * sizeAtten, 2.0, 10.0);
+  // #99: true screen-size attenuation via the shared lightSizePx helper. uBaseSize keeps
+  // its old meaning (~1.2 m of glow per unit reproduces the previous ~6px look at the
+  // default framing); the 2px floor prevents the old "collapse at city range", and the
+  // projection-derived math is ortho-correct without any special casing. The LOD size
+  // ramp is subsumed (brightness LOD above stays).
+  gl_PointSize = keep * lightSizePx(1.2 * uBaseSize, gl_Position, 2.0 * uPixelRatio, 10.0 * uPixelRatio);
+  vLodBright *= lightSizeBright; // Settings → Lights: brightness may follow the drop-off
 }
 `;
 
@@ -196,6 +201,8 @@ export function Streetlights({ masterSeed }: { masterSeed: string }) {
         uLodCull: { value: 16000 },
         uLodSizeFloor: { value: 0.5 },
         uLodBrightFloor: { value: 0.4 },
+        // #99 shared light sizing (written per frame by ProjectionBlender).
+        ...lightSizeUniforms(),
       },
       transparent: true,
       depthWrite: false,

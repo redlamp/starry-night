@@ -6,6 +6,7 @@ import * as THREE from "three";
 import { useSceneStore, DEFAULT_ORTHO_SIZE } from "@/lib/state/sceneStore";
 import { buildTraffic } from "@/lib/seed/traffic";
 import { sharedTime } from "@/lib/shaders/sharedTime";
+import { lightSizeUniforms } from "@/lib/shaders/lightSize";
 import { sharedStreetlightIntroProgress } from "@/lib/shaders/sharedIntro";
 import { trafficVertexShader, trafficFragmentShader } from "@/lib/shaders/traffic";
 import {
@@ -147,6 +148,8 @@ export function Traffic({ masterSeed }: { masterSeed: string }) {
         // lights match perspective at default framing and scale with zoom. (#78)
         uOrthoT: { value: 0 },
         uOrthoSizeScale: { value: 1 },
+        // #99 shared light sizing (written per frame by ProjectionBlender).
+        ...lightSizeUniforms(),
       },
       transparent: true,
       depthWrite: false,

@@ -29,6 +29,16 @@ Stars use the same `N/-mv.z` idiom in separate shaders (out of scope). Magic num
 
 Streetlights and traffic are constant-size by explicit design (the LOD shrink is coarse and world-distance-based); flights/helis have attenuation but live on their minimum-size floor; only beacons partially attenuate. Relevant history: #52 light LOD (2026-06-03) chose camera-world-distance so ortho wouldn't break; c5e188a moved the flights cap off size onto intensity because the 4px floor defeated size-zeroing ([[decision-flights-live-caps]]).
 
-## Fix shape (not yet built)
+## Fix shape (BUILT 2026-07-26 — issue #99, feat/light-size)
+
+Implemented as `lib/shaders/lightSize.ts`: one shared GLSL chunk, size derived
+from the LIVE projection matrix (`worldDiameter * P[1][1] * viewH / (2 * w)`) -
+exact in perspective, faked ortho, and mid-morph, no branching. Per-family
+glow diameters calibrated to the old look at the default framing; pixel
+floors kept; glare gamma 0.8; `sharedLightSize.uViewH` written per frame by
+ProjectionBlender. Research base: [[light-size-vs-distance]]. Original plan
+below for history.
+
+## Fix shape (as originally proposed)
 
 One shared attenuation snippet for all five shaders: perspective side = true `1/depth` with a FOV/viewport-derived scale (per-light world radius), floors kept so distant lights stay visible; ortho side = current constant/zoom behaviour; blend by `uOrthoT` (the Traffic pattern, generalized). Calibrate the scale so the reference framing matches today's look. Rendering-only — no determinism risk; per-system live feel-testing is the gate. The streetlight trap to avoid repeating: 1/d with no floor collapses everything at city range — the old removal treated the symptom.

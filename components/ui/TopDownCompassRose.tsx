@@ -10,45 +10,34 @@ import { IconTip } from "@/components/ui/columns/EntityColumns";
 // current compass heading through the dive instead of rolling north-up like a real map
 // (see wiki/notes/decision-camera-v3-continuous-modes) — a plan view with no north
 // reference reads as disorienting, so this rotates live to show where north is, and
-// doubles as a click-to-north-up affordance. Off/Auto/On via the Orbit panel setting.
+// doubles as a click-to-north-up affordance.
 //
-// Screen-space DOM overlay, parked LEFT of the drift/settings button pair at top-right
-// (user 2026-07-19); when the settings drawer is open (the button pair hides) it slides
-// to the drawer's left edge instead.
+// Placement + visibility (user 2026-07-26): the rose is a size-11 HUD button that sits
+// BETWEEN the drift and settings buttons in the top-right row (CameraPanel renders
+// CompassHudSlot there); when the settings drawer is open — the row is gone — it parks at
+// the drawer's left edge instead (TopDownCompassRose below). The Orbit panel's Off/Auto/On
+// setting: On = always visible, Auto = follows the HUD chrome (shows with the buttons,
+// fades with them on idle), Off = hidden.
 //
-// Bearing math: the live camera azimuth is the compass yaw of the EYE relative to the
-// FOCAL POINT (0 = eye due north of target, 90 = due east — same convention as
-// orbitWriteback's az = atan2(offset.x, offset.z)). At the near-zenith top-down polar
-// (StarryNightV3Model's TD_POLAR), working through camera-controls' actual look-at basis
-// at that limit puts true north on screen at (azimuthDeg + 180) clockwise from screen-up
-// — e.g. azimuthDeg 180 (eye south of target, looking north) reads as north-up (0 deg).
-// rotateNorthUp (registered by the model) tweens azimuthDeg to exactly 180 for that
-// reason — the shortest-way rotateTo already used by the rest of v3's tweens.
+// Bearing math: the live needle tracks cameraCommand.liveNorthScreenDeg — the ground-plane
+// bearing of world-north (stable at every elevation, roll-tracking at the top-down pole);
+// see the cameraCommand doc. Other models fall back to the 10Hz azimuth mirror.
 const NORTH_UP_LABEL = "Rotate North-Up";
 
-// Right offset when the drift + settings buttons are visible: 12px edge margin
-// + two size-11 (44px) buttons + two 6px gaps.
-const RIGHT_OF_BUTTONS_PX = 12 + 44 + 6 + 44 + 6;
+// Rose tilt legibility cap (user 2026-07-26 4.**): proportional up to TILT_LINEAR_TO, then
+// COMPRESSED — a near-flat camera used to push the disc to 68° (nearly edge-on, hard to
+// read). Raw look-flatness 40–90° now maps linearly into 40°–TILT_MAX, so the rose still
+// suggests the city plane at low elevations but stays mainly face-on. TILT_MAX is the
+// tuning knob (Taylor to supply the preferred value; 58 is the starting point).
+const TILT_LINEAR_TO = 40;
+const TILT_MAX = 58;
 
-export function TopDownCompassRose() {
-  const captureMode = useSceneStore((s) => s.captureMode);
+// The rose button itself — size/chrome matched to its row neighbours (size-11, same
+// border/backdrop as the drift + settings buttons), position left to the host.
+export function CompassRoseButton({ visible }: { visible: boolean }) {
   const isV3 = useSceneStore((s) => s.cameraModel === "snv3");
-  const parked = useSceneStore((s) => s.topDownParked);
-  const mode = useSceneStore((s) => s.compassMode);
-  const projection = useSceneStore((s) => s.projection);
-  const orthoSize = useSceneStore((s) => s.orthoSize);
-  const radius = useSceneStore((s) => s.orbit.radius);
-  const panelHidden = useSceneStore((s) => s.panelHidden);
-  const panelWidth = useSceneStore((s) => s.settingsPanelWidth);
   const needleRef = useRef<SVGSVGElement | null>(null);
   const tiltRef = useRef(0);
-
-  // Off / Auto / On (user 2026-07-18). Auto = the original top-down park,
-  // OR zoomed far enough out that the city reads as a map: ortho view size
-  // past 720, or perspective camera more than 3,200 m from its focal point.
-  const zoomedOut = projection === "orthographic" ? orthoSize > 720 : radius > 3200;
-  const visible =
-    mode === "on" ? true : mode === "off" ? false : (isV3 && parked) || zoomedOut;
 
   // The needle tethers to the camera's per-frame pose (cameraCommand.live*)
   // via rAF and a direct style write — NOT the orbit store mirror, whose 10Hz
@@ -63,11 +52,6 @@ export function TopDownCompassRose() {
     const tick = () => {
       const el = needleRef.current;
       if (el) {
-        // v3 publishes north's SCREEN bearing (projected through the live
-        // camera quaternion) — this includes the top-down park's ROLL, which
-        // is how that pose animates heading; the old azimuth-derived bearing
-        // snapped ahead of the visible city (user 2026-07-19). Other models
-        // fall back to the 10Hz azimuth mirror.
         const bearing = isV3
           ? cameraCommand.liveNorthScreenDeg
           : (useSceneStore.getState().orbit.azimuthDeg + 180) % 360;
@@ -75,7 +59,15 @@ export function TopDownCompassRose() {
           ? cameraCommand.liveElevationDeg
           : useSceneStore.getState().orbit.elevationDeg;
         const skyline = isV3 && cameraCommand.liveSkyline;
-        const targetTilt = skyline ? 0 : Math.min(68, Math.max(0, 90 - elev));
+        // Compressed tilt (4.**): linear to TILT_LINEAR_TO, then 40–90 squeezed into
+        // 40–TILT_MAX so low elevations keep the disc readable instead of edge-on.
+        const raw = Math.max(0, 90 - elev);
+        const legible =
+          raw <= TILT_LINEAR_TO
+            ? raw
+            : TILT_LINEAR_TO +
+              ((raw - TILT_LINEAR_TO) * (TILT_MAX - TILT_LINEAR_TO)) / (90 - TILT_LINEAR_TO);
+        const targetTilt = skyline ? 0 : legible;
         tiltRef.current += (targetTilt - tiltRef.current) * 0.12; // ~200ms settle
         el.style.transform = `perspective(160px) rotateX(${tiltRef.current}deg) rotateZ(${bearing}deg)`;
       }
@@ -85,44 +77,64 @@ export function TopDownCompassRose() {
     return () => cancelAnimationFrame(raf);
   }, [visible, isV3]);
 
-  if (captureMode) return null;
+  return (
+    <IconTip label={NORTH_UP_LABEL}>
+      <button
+        type="button"
+        onClick={() => cameraCommand.rotateNorthUp?.()}
+        aria-label={NORTH_UP_LABEL}
+        className={cn(
+          "border-foreground/10 bg-popover/70 text-foreground/85 hover:bg-foreground/10 flex size-11 items-center justify-center rounded-full border shadow-lg backdrop-blur-md transition-[opacity,background-color,color] duration-700",
+          visible ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0",
+        )}
+      >
+        {/* The rose (ring + needle) rotates and tilts as one disc lying on the
+            city plane — the ring's foreshortening is what makes the orientation
+            legible (user 2026-07-19); the button chrome stays put. Custom
+            two-tone needle (red = north): lucide's Compass draws its needle at
+            45°, so it never read as pointing north (user 2026-07-18). */}
+        <svg ref={needleRef} viewBox="0 0 24 24" aria-hidden="true" className="size-8">
+          <circle
+            cx="12"
+            cy="12"
+            r="10"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.3"
+            opacity={0.4}
+          />
+          <path d="M12 2.5 L15 12 L9 12 Z" fill="#e5484d" />
+          <path d="M12 21.5 L9 12 L15 12 Z" fill="currentColor" opacity={0.5} />
+          <circle cx="12" cy="12" r="1.1" fill="currentColor" opacity={0.7} />
+        </svg>
+      </button>
+    </IconTip>
+  );
+}
 
+// The top-right HUD row slot (CameraPanel, drawer closed): between the drift and the
+// settings buttons. On = always shown; Auto = fades with the row on idle; Off = gone.
+export function CompassHudSlot({ idle }: { idle: boolean }) {
+  const mode = useSceneStore((s) => s.compassMode);
+  if (mode === "off") return null;
+  return <CompassRoseButton visible={mode === "on" ? true : !idle} />;
+}
+
+// Drawer-open placement: the button row is replaced by the settings panel, so the rose
+// parks at the drawer's left edge (the user is active — no idle fade applies).
+export function TopDownCompassRose() {
+  const captureMode = useSceneStore((s) => s.captureMode);
+  const mode = useSceneStore((s) => s.compassMode);
+  const panelHidden = useSceneStore((s) => s.panelHidden);
+  const panelWidth = useSceneStore((s) => s.settingsPanelWidth);
+
+  if (captureMode || panelHidden || mode === "off") return null;
   return (
     <div
       className="pointer-events-none fixed top-3 z-20"
-      style={{ right: panelHidden ? RIGHT_OF_BUTTONS_PX : Math.max(panelWidth, 280) + 12 }}
+      style={{ right: Math.max(panelWidth, 280) + 12 }}
     >
-      <IconTip label={NORTH_UP_LABEL}>
-        <button
-          type="button"
-          onClick={() => cameraCommand.rotateNorthUp?.()}
-          aria-label={NORTH_UP_LABEL}
-          className={cn(
-            "border-foreground/10 bg-popover/70 text-foreground/85 hover:bg-foreground/10 flex size-14 items-center justify-center rounded-full border shadow-lg backdrop-blur-md transition-[opacity,background-color,color] duration-700",
-            visible ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0",
-          )}
-        >
-          {/* The rose (ring + needle) rotates and tilts as one disc lying on the
-              city plane — the ring's foreshortening is what makes the orientation
-              legible (user 2026-07-19); the button chrome stays put. Custom
-              two-tone needle (red = north): lucide's Compass draws its needle at
-              45°, so it never read as pointing north (user 2026-07-18). */}
-          <svg ref={needleRef} viewBox="0 0 24 24" aria-hidden="true" className="size-9">
-            <circle
-              cx="12"
-              cy="12"
-              r="10"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.3"
-              opacity={0.4}
-            />
-            <path d="M12 2.5 L15 12 L9 12 Z" fill="#e5484d" />
-            <path d="M12 21.5 L9 12 L15 12 Z" fill="currentColor" opacity={0.5} />
-            <circle cx="12" cy="12" r="1.1" fill="currentColor" opacity={0.7} />
-          </svg>
-        </button>
-      </IconTip>
+      <CompassRoseButton visible />
     </div>
   );
 }

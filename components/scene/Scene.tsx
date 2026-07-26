@@ -35,6 +35,7 @@ import { UnitHighlight } from "./UnitHighlight";
 import { FocusedBuildingHover } from "./FocusedBuildingHover";
 import { CommuteArc } from "./CommuteArc";
 import { RoadHover } from "./RoadHover";
+import { DistrictHover } from "./DistrictHover";
 import { StreetHighlight } from "./StreetHighlight";
 import { InspectCursor } from "./InspectCursor";
 import { GroundHaze } from "./GroundHaze";
@@ -248,6 +249,9 @@ export function Scene() {
         {cityReady && <CommuteArc masterSeed={masterSeed} />}
         {/* Inspect: street-name hover chip + hovered-road highlight. */}
         {cityReady && <RoadHover masterSeed={masterSeed} />}
+        {/* Directory districts list open: pointing at a district in the city
+          lights its list row (the reverse of the row → map hover). */}
+        {cityReady && <DistrictHover masterSeed={masterSeed} />}
         <InspectCursor />
         {/* Entity columns: persistent highlight for a selected street. */}
         {cityReady && <StreetHighlight masterSeed={masterSeed} />}

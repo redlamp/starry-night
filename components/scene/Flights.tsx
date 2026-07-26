@@ -6,6 +6,7 @@ import * as THREE from "three";
 import { useSceneStore, DEFAULT_FLIGHTS } from "@/lib/state/sceneStore";
 import { buildFlights, corridorLength, CLASS_SPEED, type FlightClass } from "@/lib/seed/flights";
 import { sharedTime } from "@/lib/shaders/sharedTime";
+import { lightSizeUniforms } from "@/lib/shaders/lightSize";
 import { sharedIntroProgress } from "@/lib/shaders/sharedIntro";
 import { flightsVertexShader, flightsFragmentShader } from "@/lib/shaders/flights";
 
@@ -250,6 +251,8 @@ export function Flights({ masterSeed }: { masterSeed: string }) {
         uGapMin: { value: gapMin },
         uGapMax: { value: gapMax },
         uFlightDeviation: { value: deviation },
+        // #99 shared light sizing (written per frame by ProjectionBlender).
+        ...lightSizeUniforms(),
       },
       transparent: true,
       depthWrite: false,

@@ -94,7 +94,8 @@ export function SeedControls() {
         scheduleCollapse();
       }}
       className={cn(
-        "pointer-events-auto absolute bottom-3 left-3 flex items-center gap-2 rounded-lg border border-white/10 bg-black/70 px-3 py-2 text-xs text-white backdrop-blur transition-opacity duration-200",
+        // Positioned by the page's bottom-left HUD stack (2026-07-26) — no own offsets.
+        "pointer-events-auto relative flex items-center gap-2 rounded-lg border border-white/10 bg-black/70 px-3 py-2 text-xs text-white backdrop-blur transition-opacity duration-200",
         expanded ? "opacity-100" : "opacity-40",
       )}
     >

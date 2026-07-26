@@ -13,7 +13,8 @@ export function FpsHud() {
   const color =
     perf.fps >= 55 ? "text-emerald-300" : perf.fps >= 35 ? "text-amber-300" : "text-rose-400";
   return (
-    <div className="pointer-events-none absolute top-3 left-3 z-50 rounded bg-black/55 px-2 py-1 font-mono text-xs backdrop-blur-sm">
+    // Positioned by the page's bottom-left HUD stack (2026-07-26) — no own offsets.
+    <div className="pointer-events-none relative rounded bg-black/55 px-2 py-1 font-mono text-xs backdrop-blur-sm">
       <span className={`${color} tabular-nums`}>{Math.round(perf.fps)} fps</span>
       <span className="text-foreground/50 tabular-nums"> · {perf.calls} calls</span>
     </div>
