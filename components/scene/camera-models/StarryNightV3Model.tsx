@@ -67,6 +67,13 @@ const PAN_EYE_REACH_MULT = 2.0; // how far past the ground disc the EYE may trav
 // handler grows this ring to groundR + the eye's current horizontal offset, so the eye never pins
 // on its rim while the focal is still travelling (pinning changed the eye→focal distance, which
 // read as a stuck camera + an RMB "zoom" — test round 3.21/5.30)
+// Ground-pan speed cap (review 2026-07-25 Q1): a grazing view amplifies a pixel of cursor
+// travel into an enormous ground delta (the hit distance grows ~1/sin(elevation), so at 2–8°
+// the city rockets). Cap each move's world delta at this multiple of the ON-SCREEN scale —
+// the world width one pixel covers at the focal distance — per pixel of cursor travel. At
+// comfortable elevations the true delta is well under the cap (the grabbed point stays glued
+// to the cursor); only the low-angle runaway is clipped.
+const PAN_SPEED_MAX = 3.5;
 const WHEEL_ZOOM_SPEED = 1.6; // GE/OrbitControls wheel curve: ~5% dolly per notch at speed 1.
 // Raised from 1.0 + the perspective step now rides camera-controls' smoothTime easing
 // (smooth=true) instead of landing instantly — faster AND softer (test round 5.30).
@@ -102,11 +109,37 @@ const ORTHO_SIZE_MAX = 2000 * CITY_SCALE;
 // reads as a pure frame shift); PERSPECTIVE pedestals the coupled eye + focal (a real altitude move,
 // floored at MIN_EYE_Y) — "reframing the camera". Both push the empty ground off the bottom, no re-tilt.
 // Hysteresis pair (2026-07-19 skyline-band plan): the old single 2° threshold
-// sat exactly ON the default pose (DEFAULT_ORBIT.elevationDeg = 2), so the
-// regime flickered at rest and every band entry felt ragged. Enter below 1°,
-// exit above 1.5° — both safely under the 2° default.
-const SKYLINE_ENTER_SIN = Math.sin(1.0 * DEG);
-const SKYLINE_EXIT_SIN = Math.sin(1.5 * DEG);
+// sat exactly ON the default pose, so the regime flickered at rest and every
+// band entry felt ragged.
+//
+// DYNAMIC since 2026-07-25 (review 1.1): the 2019 plan measured against
+// DEFAULT_ORBIT's 2° — but v3's R pose is DEFAULT_INTENT, which actually rests
+// at only ~1.06° (|atan(50.9 / 2764)|, looking slightly UP), INSIDE the fixed
+// 1.0–1.5° pair's dead band — and crop-follow scaling shrinks it further on
+// wide city shapes. A pose in the dead band keeps whatever latch state it
+// arrived with, so R could land "stuck" in skyline (LMB pedalling instead of
+// panning) with no way to see why. The band is now derived from the actual
+// default pose at each framing event (mount / R): enter = 55% and exit = 80%
+// of the default elevation, capped at the old 1.0°/1.5°, so the default pose
+// is ALWAYS comfortably outside the band.
+const SKYLINE_ENTER_MAX_DEG = 1.0;
+const SKYLINE_EXIT_MAX_DEG = 1.5;
+let skylineEnterSin = Math.sin(SKYLINE_ENTER_MAX_DEG * DEG);
+let skylineExitSin = Math.sin(SKYLINE_EXIT_MAX_DEG * DEG);
+function setSkylineBandBelowPose(
+  px: number,
+  py: number,
+  pz: number,
+  tx: number,
+  ty: number,
+  tz: number,
+) {
+  const elDeg = Math.abs(Math.atan2(py - ty, Math.hypot(px - tx, pz - tz))) / DEG;
+  const enterDeg = Math.max(0.1, Math.min(SKYLINE_ENTER_MAX_DEG, elDeg * 0.55));
+  const exitDeg = Math.max(enterDeg + 0.05, Math.min(SKYLINE_EXIT_MAX_DEG, elDeg * 0.8));
+  skylineEnterSin = Math.sin(enterDeg * DEG);
+  skylineExitSin = Math.sin(exitDeg * DEG);
+}
 const SKYLINE_SCREEN_Y_MIN = 0.05; // v3-local Skyline framing (fraction of the city's rest point up from bottom)
 const SKYLINE_SCREEN_Y_MAX = 0.95;
 
@@ -413,24 +446,44 @@ function clampToCity(x: number, z: number): { x: number; z: number } {
 const _panFocal = { x: 0, z: 0 };
 const _panEye = { x: 0, z: 0 };
 const _driftClamp = { x: 0, z: 0 }; // idle drift's roam-bound clamp output
-const _northView = new THREE.Vector3(); // compass telemetry temps
-const _qNorthInv = new THREE.Quaternion();
 
 // Skyline Mode = looking at the city near edge-on, in EITHER projection. The vertical-pan
 // reframe, the per-frame focal offset, and groundHit's synthesized pick all key off this —
-// single source of truth, now LATCHED with hysteresis (enter < 1°, exit > 1.5°) so the
+// single source of truth, now LATCHED with hysteresis (see the dynamic band above) so the
 // regime can't flicker at the boundary the way the old single 2° threshold did right at
-// the default pose. The latch self-corrects from the live aim on every call.
+// the default pose. The latch self-corrects from the live aim on every call — EXCEPT while
+// a drag is under way: a perspective pan can change the elevation without the user noticing
+// (the snow-globe eye-backout pivots the view as the focal pins at the rim), and the latch
+// flipping mid-gesture swapped pan ↔ pedestal semantics under the cursor (review 2026-07-25
+// 2.**). skylineHold freezes the latch from press to release; the regime re-evaluates on
+// the next idle frame.
 let skylineLatch = false;
+let skylineHold = false;
 function isSkylineMode(camera: THREE.Camera): boolean {
+  if (skylineHold) return skylineLatch;
   camera.getWorldDirection(_fwd);
   const a = Math.abs(_fwd.y);
   if (skylineLatch) {
-    if (a > SKYLINE_EXIT_SIN) skylineLatch = false;
-  } else if (a <= SKYLINE_ENTER_SIN) {
+    if (a > skylineExitSin) skylineLatch = false;
+  } else if (a <= skylineEnterSin) {
     skylineLatch = true;
   }
   return skylineLatch;
+}
+// DISPLAY preview of the regime: same hysteresis, own latch, NEVER frozen — the chip and
+// the diagram label must flip the moment the aim crosses the band, mid-drag included
+// (review 2026-07-26 1.4/1.6), while the gesture semantics stay held to skylineLatch
+// until release. Synced back to the real latch whenever no drag is under way.
+let skylinePreviewLatch = false;
+function skylinePreview(camera: THREE.Camera): boolean {
+  camera.getWorldDirection(_fwd);
+  const a = Math.abs(_fwd.y);
+  if (skylinePreviewLatch) {
+    if (a > skylineExitSin) skylinePreviewLatch = false;
+  } else if (a <= skylineEnterSin) {
+    skylinePreviewLatch = true;
+  }
+  return skylinePreviewLatch;
 }
 
 export function StarryNightV3Model() {
@@ -442,7 +495,13 @@ export function StarryNightV3Model() {
   const lastWrite = useRef(0);
   const grabP = useRef(new THREE.Vector3()); // free-look grab handle (a fixed world point)
   const orbitAxis = useRef(new THREE.Vector3(1, 0, 0)); // carried tilt axis (stable through straight-down)
-  const skylineScreenY = useRef(0.5); // Skyline Mode framing: city rest point up from bottom (0.5 = centred)
+  // Skyline Mode framing: the city's rest point this fraction up from the bottom of the frame.
+  // SEEDED from the live frame on every regime entry (adopt-on-entry, review 2026-07-26 3.**)
+  // so entering skyline never auto-moves the frame — the viewer's vertical drag is the only
+  // thing that changes it, within [SKYLINE_SCREEN_Y_MIN, MAX]. The initial value is only a
+  // formality; entry always overwrites it.
+  const skylineScreenY = useRef(0.5);
+  const prevOrthoSkyline = useRef(false); // adopt-on-entry edge detector (ortho lens shift)
   const orthoFocusTarget = useRef<number | null>(null); // in-flight ortho focus zoom: orthoSize goal (ramped in useFrame)
   const orthoFocusStart = useRef(0); // orthoSize at the moment the focus began
   const orthoFocusT = useRef(0); // ortho focus zoom progress 0..1 (smoothstep-eased)
@@ -508,6 +567,16 @@ export function StarryNightV3Model() {
       if (c) {
         const half = c.distance * Math.tan((s.cameraIntent.fov * DEG) / 2);
         s.setOrthoSize(THREE.MathUtils.clamp(half, ORTHO_SIZE_MIN, ORTHO_SIZE_MAX));
+        // Ortho must never look up (review 2026-07-25 2.*): the gestures cap the tilt at 0°,
+        // but a pose CARRIED IN below level — the hero default aims ~1° up at the skyline —
+        // kept its upward axis, and the parallel sensor's lower half dipped under the ground
+        // plane ("looking up under the ground"). Level the aim: bring the target down to eye
+        // height, keeping the eye put — the minimal-motion correction, tweened with the morph.
+        c.getPosition(_eye);
+        c.getTarget(_tgt);
+        if (_tgt.y > _eye.y) {
+          void c.setLookAt(_eye.x, _eye.y, _eye.z, _tgt.x, _eye.y, _tgt.z, true);
+        }
       }
     }
   }, [projection]);
@@ -693,12 +762,19 @@ export function StarryNightV3Model() {
       const py = DEFAULT_INTENT.position[1];
       const pz = CITY_CENTER.z + (DEFAULT_INTENT.position[2] - CITY_CENTER.z) * k;
       const tx = CITY_CENTER.x + (DEFAULT_INTENT.lookAt[0] - CITY_CENTER.x) * k;
-      const ty = DEFAULT_INTENT.lookAt[1];
+      let ty = DEFAULT_INTENT.lookAt[1];
       const tz = CITY_CENTER.z + (DEFAULT_INTENT.lookAt[2] - CITY_CENTER.z) * k;
+      const st = useSceneStore.getState();
+      // The skyline band derives from this framing's actual (perspective) elevation — set it
+      // BEFORE the ortho leveling below, which would zero it (see the band comment).
+      setSkylineBandBelowPose(px, py, pz, tx, ty, tz);
+      // Ortho must never look up (review 2026-07-25 2.*): the hero pose aims ~1° UP at the
+      // skyline, and a parallel sensor on an upward axis dips under the ground plane. Level
+      // the aim (target to eye height) when booting straight into ortho.
+      if (st.projection === "orthographic" && ty > py) ty = py;
       void c.setLookAt(px, py, pz, tx, ty, tz, false);
       // Ortho continuity: if we boot in ortho, match orthoSize to this pose's framing so the faked-
       // ortho render shows the same content the perspective pose would (no zoom mismatch on entry).
-      const st = useSceneStore.getState();
       if (st.projection === "orthographic") {
         const dist = Math.hypot(px - tx, py - ty, pz - tz);
         const half = dist * Math.tan((st.cameraIntent.fov * DEG) / 2);
@@ -985,6 +1061,13 @@ export function StarryNightV3Model() {
       // Rebuild the same transition from moveTo/rotateTo/dollyTo with the home
       // azimuth unwrapped to the winding nearest the current one, so R always
       // takes the short arc.
+      // R is definitionally NOT a skyline pose: refresh the band from this framing and drop a
+      // latched regime immediately — before 2026-07-25 the pose could sit inside the fixed
+      // band's dead zone and R landed "stuck" with pedestal semantics on LMB (review 1.1).
+      setSkylineBandBelowPose(px, py, pz, tx, ty, tz);
+      skylineLatch = false;
+      skylinePreviewLatch = false;
+      skylineHold = false;
       _e2.set(px - tx, py - ty, pz - tz);
       const homeRadius = _e2.length();
       const homeTheta = Math.atan2(_e2.x, _e2.z);
@@ -1165,6 +1248,7 @@ export function StarryNightV3Model() {
       markInput();
       touchPts.set(e.pointerId, { x: e.clientX, y: e.clientY });
       capturePointer(e.pointerId);
+      skylineHold = true; // same mid-gesture latch freeze as the mouse drags
       if (touchPts.size === 1) {
         touchDownT = e.timeStamp;
         lastX = e.clientX;
@@ -1217,7 +1301,21 @@ export function StarryNightV3Model() {
           _delta.subVectors(_grab, _cur);
           c.getPosition(_eye);
           c.getTarget(_tgt);
-          const groundR = CITY_TIERS[useSceneStore.getState().citySize] + GROUND_APRON_M;
+          const stT = useSceneStore.getState();
+          // Same low-angle speed cap as the mouse pan (PAN_SPEED_MAX).
+          {
+            const r2 = dom.getBoundingClientRect();
+            const halfH =
+              stT.projection === "orthographic"
+                ? stT.orthoSize * orbitFramingFactor(r2.width / Math.max(1, r2.height))
+                : _eye.distanceTo(_tgt) *
+                  Math.tan(((cam as THREE.PerspectiveCamera).fov * DEG) / 2);
+            const px = Math.abs(midX - beforeMidX) + Math.abs(midY - beforeMidY);
+            const maxLen = (px * (2 * halfH)) / Math.max(1, r2.height) * PAN_SPEED_MAX;
+            const len = _delta.length();
+            if (len > maxLen && len > 0) _delta.multiplyScalar(maxLen / len);
+          }
+          const groundR = CITY_TIERS[stT.citySize] + GROUND_APRON_M;
           const cl = clampToDisc(_tgt.x + _delta.x, _tgt.z + _delta.z, groundR, _panFocal);
           const adx = cl.x - _tgt.x;
           const adz = cl.z - _tgt.z;
@@ -1254,6 +1352,7 @@ export function StarryNightV3Model() {
           armOrbit(p.x, p.y);
         } else if (touchPts.size === 0) {
           twoFinger = false;
+          skylineHold = false;
         }
         return;
       }
@@ -1280,6 +1379,7 @@ export function StarryNightV3Model() {
         orbitPinPending = null;
         dragMoved = false;
         drag = null;
+        skylineHold = false;
       }
     };
 
@@ -1315,6 +1415,9 @@ export function StarryNightV3Model() {
         if (!groundHit(cam, dom, e.clientX, e.clientY, _grab, true)) drag = null;
       }
       if (drag) capturePointer(e.pointerId);
+      // Freeze the skyline latch for the whole gesture — semantics must not flip mid-drag
+      // (review 2026-07-25 2.**; see isSkylineMode).
+      skylineHold = drag !== null;
       applyCursor();
     };
 
@@ -1423,6 +1526,20 @@ export function StarryNightV3Model() {
         _delta.subVectors(_grab, _cur); // prev→curr ground delta (horizontal)
         c.getPosition(_eye);
         c.getTarget(_tgt);
+        // Low-angle speed cap (PAN_SPEED_MAX) — clamp this move's delta to a multiple of the
+        // on-screen scale so a grazing view can't fling the city (review 2026-07-25 Q1).
+        {
+          const r2 = dom.getBoundingClientRect();
+          const halfH =
+            st.projection === "orthographic"
+              ? st.orthoSize * orbitFramingFactor(r2.width / Math.max(1, r2.height))
+              : _eye.distanceTo(_tgt) *
+                Math.tan(((cam as THREE.PerspectiveCamera).fov * DEG) / 2);
+          const maxLen =
+            ((Math.abs(dx) + Math.abs(dy)) * (2 * halfH)) / Math.max(1, r2.height) * PAN_SPEED_MAX;
+          const len = _delta.length();
+          if (len > maxLen && len > 0) _delta.multiplyScalar(maxLen / len);
+        }
         const groundR = CITY_TIERS[useSceneStore.getState().citySize] + GROUND_APRON_M;
         const cl = clampToDisc(_tgt.x + _delta.x, _tgt.z + _delta.z, groundR, _panFocal);
         if (useSceneStore.getState().projection === "orthographic") {
@@ -1477,8 +1594,13 @@ export function StarryNightV3Model() {
         // Cap at straight-down; in PERSPECTIVE floor at the user's Min tilt (default 0° = level → no
         // looking up; negative lets the camera drop into a low, upward vantage). ORTHO is hard-capped
         // at 0° (parallel to ground) — never looks up (that would show the ground's underside).
-        const floor =
+        // The floor clamps INCREMENTALLY: a pose already below it may STAY (the hero default looks
+        // UP ~1.06°, floor 0°) — the clamp only blocks tilting further past it. The absolute clamp
+        // snapped such a pose to the floor on the first move event of any RMB drag, a ~1° pitch
+        // jerk even on a purely horizontal drag (review 2026-07-25 1.2, probe-confirmed).
+        const cfgFloor =
           useSceneStore.getState().projection === "perspective" ? cfg.tiltFloorDeg * DEG : 0;
+        const floor = Math.min(cfgFloor, lookDown);
         const applied = lookDown - THREE.MathUtils.clamp(desired, floor, MAX_ORBIT_EL);
         _q.setFromAxisAngle(orbitAxis.current, applied);
         _e2.copy(_eye).sub(_grab).applyQuaternion(_q).add(_grab);
@@ -1526,6 +1648,7 @@ export function StarryNightV3Model() {
           MAX_STEP,
         );
         _dir.multiplyScalar(1 / d);
+        const curDirY = _dir.y; // pre-rotation aim height — the incremental clamp's reference
         _q.setFromAxisAngle(_UP, dYaw);
         _dir.applyQuaternion(_q);
         _right.crossVectors(_dir, _UP).normalize();
@@ -1533,8 +1656,10 @@ export function StarryNightV3Model() {
         _look.copy(_dir).applyQuaternion(_q);
         // Cap how far up the aim may go. PERSPECTIVE honours the user's Min tilt (0° = no looking up;
         // negative lets it look up from a low vantage). ORTHO is hard-capped at 0° (parallel to ground)
-        // — never looks up (that would show the ground's underside).
-        const maxUpY = st.projection === "perspective" ? -Math.sin(st.snv3.tiltFloorDeg * DEG) : 0;
+        // — never looks up (that would show the ground's underside). Incremental, like the orbit tilt
+        // floor above: an aim already above the cap may stay — never snap-corrected mid-gesture.
+        const cfgMaxUpY = st.projection === "perspective" ? -Math.sin(st.snv3.tiltFloorDeg * DEG) : 0;
+        const maxUpY = Math.max(cfgMaxUpY, curDirY);
         if (_look.y > maxUpY) {
           _look.y = maxUpY;
           if (_look.lengthSq() > 1e-9) _look.normalize();
@@ -1571,6 +1696,7 @@ export function StarryNightV3Model() {
       orbitPinPending = null;
       dragMoved = false;
       drag = null;
+      skylineHold = false; // gesture over — the latch re-evaluates from the live aim
       releasePointer(e.pointerId);
       applyCursor(); // grabbing → grab (if a modifier is still held) → pointer
       applyModifierGlyph(); // keep the eye / move glyph if Ctrl / Shift is still held, else hide
@@ -1747,13 +1873,29 @@ export function StarryNightV3Model() {
     // still-perspective view. Doesn't touch the persisted Screen Y.
     const st = useSceneStore.getState();
     const pcam = state.camera as THREE.PerspectiveCamera;
+    const orthoSkyline = st.projectionBlend >= 0.9999 && isSkylineMode(pcam);
+    const curOffY = c.getFocalOffset(_focalOff).y;
     let targetOffY = 0;
-    if (st.projectionBlend >= 0.9999 && isSkylineMode(pcam)) {
+    if (orthoSkyline) {
       const oeff = st.orthoSize * orbitFramingFactor(pcam.aspect);
+      // ADOPT-ON-ENTRY (review 2026-07-26 3.**): entering the regime must not tween the
+      // frame toward a preset rest — seed the Screen-Y from wherever the frame already
+      // sits, so the only vertical motion inside skyline is the viewer's own pedestal
+      // drag. (The old preset tween read as a fast, jarring auto-drop.)
+      if (!prevOrthoSkyline.current) {
+        skylineScreenY.current = THREE.MathUtils.clamp(
+          0.5 + curOffY / (2 * oeff),
+          SKYLINE_SCREEN_Y_MIN,
+          SKYLINE_SCREEN_Y_MAX,
+        );
+      }
       targetOffY = (skylineScreenY.current - 0.5) * 2 * oeff;
     }
-    const curOffY = c.getFocalOffset(_focalOff).y;
-    const nextOffY = curOffY + (targetOffY - curOffY) * 0.35;
+    prevOrthoSkyline.current = orthoSkyline;
+    // Inside skyline the offset tracks the drag tightly (0.35); the exit release back to a
+    // centred frame is deliberately gentle (0.08, ~1s settle) — it's the one motion the
+    // viewer doesn't drive, so it must never read as a lurch (3.**).
+    const nextOffY = curOffY + (targetOffY - curOffY) * (orthoSkyline ? 0.35 : 0.08);
     if (Math.abs(nextOffY - curOffY) > 0.5) c.setFocalOffset(0, nextOffY, 0, false);
 
     // Ortho focus zoom (#87): advance a slow-start smoothstep ramp on THIS frame
@@ -1958,12 +2100,27 @@ export function StarryNightV3Model() {
     // live in perspective (the projectionBlend site only runs it in ortho).
     cameraCommand.liveAzimuthDeg = Math.atan2(_eye.x - _tgt.x, _eye.z - _tgt.z) / DEG;
     cameraCommand.liveElevationDeg = parkElevDeg;
-    cameraCommand.liveSkyline = isSkylineMode(cam);
-    // North's SCREEN bearing from the live camera quaternion — includes roll,
-    // which is how the top-down park animates heading (its azimuth stamps
-    // instantly); the needle must track the pixels, not the spherical state.
-    _northView.set(0, 0, 1).applyQuaternion(_qNorthInv.copy(cam.quaternion).invert());
-    cameraCommand.liveNorthScreenDeg = Math.atan2(_northView.x, _northView.y) / DEG;
+    // Published regime = the DISPLAY preview: during a drag it keeps evaluating the live aim
+    // (the chip/diagram flip as the boundary is crossed) while the gesture semantics stay on
+    // the frozen latch until release (1.4/1.6, 2026-07-26). Idle, the two are kept in sync.
+    cameraCommand.liveSkyline = skylineHold ? skylinePreview(cam) : isSkylineMode(cam);
+    if (!skylineHold) skylinePreviewLatch = skylineLatch;
+    // North's bearing for the compass rose, measured in the GROUND plane: world-north against
+    // the camera's right / (forward + up) horizontal unit directions. The old screen-space
+    // quaternion projection degenerated as the view flattened — both atan2 components shrink
+    // with sin(elevation), so pose noise amplified into full needle spins near skyline (review
+    // 2026-07-25 3.*). forward + up is never vertical (their horizontal parts trade off
+    // through the whole 0–90° tilt range), and at the top-down pole it degrades to the up
+    // vector alone — exactly the roll-tracking bearing the north-up park tween was
+    // probe-verified against, so the park animation is unchanged.
+    _right.setFromMatrixColumn(cam.matrixWorld, 0);
+    _camUp.setFromMatrixColumn(cam.matrixWorld, 1);
+    cam.getWorldDirection(_fwd);
+    const nhx = _fwd.x + _camUp.x;
+    const nhz = _fwd.z + _camUp.z;
+    const nhl = Math.hypot(nhx, nhz) || 1e-9;
+    const nrl = Math.hypot(_right.x, _right.z) || 1e-9;
+    cameraCommand.liveNorthScreenDeg = Math.atan2(_right.z / nrl, nhz / nhl) / DEG;
 
     const tt = state.clock.elapsedTime;
     if (tt - lastWrite.current >= 0.1) {

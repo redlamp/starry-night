@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useSceneStore } from "@/lib/state/sceneStore";
 import { CameraDiagram, type CamReadout } from "@/components/scene/CameraDiagram";
 import { cameraReadout, deriveReadout } from "@/lib/scene/cameraReadout";
+import { cameraCommand } from "@/lib/scene/cameraCommand";
 import { tweenProjectionTo } from "@/lib/scene/cameraView";
 
 // DOM overlay that paints the live side-view diagram in the app (Orbit settings → "Diagram").
@@ -20,6 +21,10 @@ export function CameraSideView() {
   const mode = useSceneStore((s) => s.cameraMode);
   const cameraModel = useSceneStore((s) => s.cameraModel);
   const [snap, setSnap] = useState<CamReadout>(() => ({ ...cameraReadout }));
+  // Live gesture regime under the projection label (review 2026-07-25 1.2): only Cam v3
+  // maintains the skyline latch telemetry, so other models get no row at all.
+  const [skyline, setSkyline] = useState(false);
+  const isV3 = cameraModel === "snv3";
   const sigRef = useRef("");
 
   // Only the Map model writes the live `cameraReadout` singleton (with the framing gauges); every other
@@ -36,16 +41,18 @@ export function CameraSideView() {
       const r = usesSingleton ? cameraReadout : deriveReadout();
       // Signature of the displayed quantities, rounded as the SVG rounds them — repaint only when one
       // moves a visible amount. blend keeps 2 decimals so a projection tween animates smoothly.
-      const sig = `${Math.round(r.elev)}|${Math.round(r.dist)}|${Math.round(r.focalY)}|${Math.round(r.camY)}|${r.parallel ? 1 : 0}|${Math.round(r.frustumHh)}|${r.blend.toFixed(2)}`;
+      const sky = isV3 && cameraCommand.liveSkyline;
+      const sig = `${Math.round(r.elev)}|${Math.round(r.dist)}|${Math.round(r.focalY)}|${Math.round(r.camY)}|${r.parallel ? 1 : 0}|${Math.round(r.frustumHh)}|${r.blend.toFixed(2)}|${sky ? 1 : 0}`;
       if (sig !== sigRef.current) {
         sigRef.current = sig;
         setSnap({ ...r });
+        setSkyline(sky);
       }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [active, usesSingleton]);
+  }, [active, usesSingleton, isV3]);
 
   if (!active) return null;
   return (
@@ -53,7 +60,8 @@ export function CameraSideView() {
       data={snap}
       mode={mode}
       show
-      className="bottom-16 left-3 z-10"
+      regime={isV3 && mode === "orbit" ? (skyline ? "skyline" : "standard") : undefined}
+      className="relative" // positioned by the page's bottom-left HUD stack (2026-07-26)
       onToggleProjection={
         projLocked
           ? undefined
