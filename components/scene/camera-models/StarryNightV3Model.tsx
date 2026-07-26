@@ -108,38 +108,13 @@ const ORTHO_SIZE_MAX = 2000 * CITY_SCALE;
 // reframes the city vertically: ORTHO shifts a focal-offset lens (the eye is invisible there, so it
 // reads as a pure frame shift); PERSPECTIVE pedestals the coupled eye + focal (a real altitude move,
 // floored at MIN_EYE_Y) — "reframing the camera". Both push the empty ground off the bottom, no re-tilt.
-// Hysteresis pair (2026-07-19 skyline-band plan): the old single 2° threshold
-// sat exactly ON the default pose, so the regime flickered at rest and every
-// band entry felt ragged.
-//
-// DYNAMIC since 2026-07-25 (review 1.1): the 2019 plan measured against
-// DEFAULT_ORBIT's 2° — but v3's R pose is DEFAULT_INTENT, which actually rests
-// at only ~1.06° (|atan(50.9 / 2764)|, looking slightly UP), INSIDE the fixed
-// 1.0–1.5° pair's dead band — and crop-follow scaling shrinks it further on
-// wide city shapes. A pose in the dead band keeps whatever latch state it
-// arrived with, so R could land "stuck" in skyline (LMB pedalling instead of
-// panning) with no way to see why. The band is now derived from the actual
-// default pose at each framing event (mount / R): enter = 55% and exit = 80%
-// of the default elevation, capped at the old 1.0°/1.5°, so the default pose
-// is ALWAYS comfortably outside the band.
-const SKYLINE_ENTER_MAX_DEG = 1.0;
-const SKYLINE_EXIT_MAX_DEG = 1.5;
-let skylineEnterSin = Math.sin(SKYLINE_ENTER_MAX_DEG * DEG);
-let skylineExitSin = Math.sin(SKYLINE_EXIT_MAX_DEG * DEG);
-function setSkylineBandBelowPose(
-  px: number,
-  py: number,
-  pz: number,
-  tx: number,
-  ty: number,
-  tz: number,
-) {
-  const elDeg = Math.abs(Math.atan2(py - ty, Math.hypot(px - tx, pz - tz))) / DEG;
-  const enterDeg = Math.max(0.1, Math.min(SKYLINE_ENTER_MAX_DEG, elDeg * 0.55));
-  const exitDeg = Math.max(enterDeg + 0.05, Math.min(SKYLINE_EXIT_MAX_DEG, elDeg * 0.8));
-  skylineEnterSin = Math.sin(enterDeg * DEG);
-  skylineExitSin = Math.sin(exitDeg * DEG);
-}
+// WIDE fixed band (Taylor 2026-07-26): skyline mode is simply "aiming within ~3° of
+// level", exit at 3.5° (hysteresis). The default pose (~1.06° looking up) rests INSIDE
+// the band, so R now lands in skyline mode. Replaces the pose-derived dynamic band
+// (55%/80% of the default elevation), which was too hair-trigger to test — history in
+// wiki/research/skyline-seam-handling.md.
+const skylineEnterSin = Math.sin(3.0 * DEG);
+const skylineExitSin = Math.sin(3.5 * DEG);
 const SKYLINE_SCREEN_Y_MIN = 0.05; // v3-local Skyline framing (fraction of the city's rest point up from bottom)
 const SKYLINE_SCREEN_Y_MAX = 0.95;
 
@@ -516,9 +491,13 @@ export function StarryNightV3Model() {
   // Orbit pivot marker. kind "orbit" = the transient clicked-ground pin (v2 behaviour);
   // kind "cone" = the cone-view arcs' centre point — pin + cone glyph, so it reads as
   // "the view is revolving around the middle of these arcs".
-  const [pin, setPin] = useState<{ pos: [number, number, number]; kind: "orbit" | "cone" } | null>(
-    null,
-  );
+  // `dragging`: pin shows FAINT (0.2) on bare press and solid once the drag is real —
+  // a double-click no longer pops a full-strength pin in and out (user 2026-07-26).
+  const [pin, setPin] = useState<{
+    pos: [number, number, number];
+    kind: "orbit" | "cone";
+    dragging: boolean;
+  } | null>(null);
   // Top-down flight (behaviour 1): the banked return pose. Non-null = "in top-down".
   const tdReturn = useRef<{ eye: THREE.Vector3; tgt: THREE.Vector3; orthoSize: number } | null>(
     null,
@@ -765,9 +744,6 @@ export function StarryNightV3Model() {
       let ty = DEFAULT_INTENT.lookAt[1];
       const tz = CITY_CENTER.z + (DEFAULT_INTENT.lookAt[2] - CITY_CENTER.z) * k;
       const st = useSceneStore.getState();
-      // The skyline band derives from this framing's actual (perspective) elevation — set it
-      // BEFORE the ortho leveling below, which would zero it (see the band comment).
-      setSkylineBandBelowPose(px, py, pz, tx, ty, tz);
       // Ortho must never look up (review 2026-07-25 2.*): the hero pose aims ~1° UP at the
       // skyline, and a parallel sensor on an upward axis dips under the ground plane. Level
       // the aim (target to eye height) when booting straight into ortho.
@@ -1061,12 +1037,8 @@ export function StarryNightV3Model() {
       // Rebuild the same transition from moveTo/rotateTo/dollyTo with the home
       // azimuth unwrapped to the winding nearest the current one, so R always
       // takes the short arc.
-      // R is definitionally NOT a skyline pose: refresh the band from this framing and drop a
-      // latched regime immediately — before 2026-07-25 the pose could sit inside the fixed
-      // band's dead zone and R landed "stuck" with pedestal semantics on LMB (review 1.1).
-      setSkylineBandBelowPose(px, py, pz, tx, ty, tz);
-      skylineLatch = false;
-      skylinePreviewLatch = false;
+      // R mid-drag must not leave the latch frozen; the regime itself self-corrects from
+      // the live aim (the default pose sits inside the 3° band, so R lands in skyline).
       skylineHold = false;
       _e2.set(px - tx, py - ty, pz - tz);
       const homeRadius = _e2.length();
@@ -1198,7 +1170,7 @@ export function StarryNightV3Model() {
         orbitPinPending = null;
       }
       if (immediatePin && orbitPinPending) {
-        setPin(orbitPinPending);
+        setPin({ ...orbitPinPending, dragging: false }); // faint until the drag is real
         orbitPinPending = null;
       } else {
         setPin(null); // deferred: shown once the drag begins (see onMove)
@@ -1449,6 +1421,8 @@ export function StarryNightV3Model() {
         // Deferred pan glyph: LMB leads with pan now, so only a REAL drag shows the hand —
         // a plain click / double-click stays clean (mirrors the old orbit-pin deferral).
         if (drag === "pan") showGlyph(isSkylineMode(cam) ? "pan-v" : "pan", e.clientX, e.clientY);
+        // The faint press pin goes solid the moment the drag is real (user 2026-07-26).
+        if (drag === "orbit") setPin((p) => (p && !p.dragging ? { ...p, dragging: true } : p));
       }
       if (drag === "look" || drag === "pan") moveGlyph(e.clientX, e.clientY);
       markCameraActivity(drag === "orbit" ? "rotate" : drag === "pan" ? "pan" : "look");
@@ -1566,7 +1540,7 @@ export function StarryNightV3Model() {
         // Reveal the pivot pin the moment the drag becomes "real" (same threshold as the cursor) — a
         // click or double-click never moves far enough, so the pin never flashes on a zoom-in.
         if (orbitPinPending && dragMoved) {
-          setPin(orbitPinPending);
+          setPin({ ...orbitPinPending, dragging: true });
           orbitPinPending = null;
         }
         // Rotate BOTH eye and target around the pivot _grab, so the pivot's screen position holds
@@ -1608,6 +1582,17 @@ export function StarryNightV3Model() {
         if (_e2.y > MIN_EYE_Y) {
           // ground guard
           _eye.copy(_e2);
+          _tgt.copy(_t2);
+        } else {
+          // Ground guard, DECOUPLED (2026-07-26 skyline-entry): the old guard rejected the
+          // whole step, which stalled a tilt-up a fraction of a degree above the skyline
+          // band whenever the orbit arc would sink the eye below the floor (near/low
+          // pivots) — "some areas can't enter skyline view". When the arc bottoms out,
+          // keep the eye where the floor holds it and apply the same pitch to the AIM
+          // alone (rotate the target about the eye) — the drag keeps tilting at the same
+          // angular rate, it just stops descending. `applied` is already capped by the
+          // tilt floor above, so the in-place pitch can't overshoot either.
+          _t2.copy(_tgt).sub(_eye).applyQuaternion(_q).add(_eye);
           _tgt.copy(_t2);
         }
         void c.setLookAt(_eye.x, _eye.y, _eye.z, _tgt.x, _tgt.y, _tgt.z, false);
@@ -1739,7 +1724,7 @@ export function StarryNightV3Model() {
       if (!groundHit(cam, dom, x, y, _cur)) return;
       const cl = clampToCity(_cur.x, _cur.z);
       markInput();
-      markCameraActivity("pan");
+      markCameraActivity("panTo"); // own guide row — must not light with plain pans
       void c.moveTo(cl.x, 0, cl.z, true);
     };
 
@@ -1945,7 +1930,7 @@ export function StarryNightV3Model() {
         eyeY = MIN_EYE_Y;
       }
       void c.setLookAt(_mvEye.x + dx, eyeY, _mvEye.z + dz, _mvTgt.x + dx, tgtY, _mvTgt.z + dz, false);
-      markCameraActivity("pan");
+      markCameraActivity("keysMove"); // own guide row — must not light with pointer pans
     }
 
     // ---- Drift (behaviour 2, reworked 2026-07-16): TWO ways into the same flight.
@@ -2136,6 +2121,8 @@ export function StarryNightV3Model() {
       <CameraControls ref={controls} makeDefault />
       {pin && (
         <Html position={pin.pos} center zIndexRange={[100, 0]} pointerEvents="none">
+          {/* Faint on bare press (0.2), solid once dragging — subtle for clicks. */}
+          <div style={{ opacity: pin.dragging ? 1 : 0.2, transition: "opacity 150ms" }}>
           {pin.kind === "cone" ? (
             // Cone-view pivot: the arcs' centre point the orbit revolves around — the
             // pin marks it, and the cone glyph above ties it to the cone button that
@@ -2154,6 +2141,7 @@ export function StarryNightV3Model() {
               style={{ width: 26, height: 26, transform: "translateY(-50%)" }}
             />
           )}
+          </div>
         </Html>
       )}
     </>

@@ -74,7 +74,12 @@ import {
   focalLengthMm,
   lensName,
 } from "@/components/ui/panels/PosePanel";
-import { OrbitSection, OrbitHeaderActions } from "@/components/ui/panels/OrbitPanel";
+import {
+  OrbitSection,
+  OrbitHeaderActions,
+  DriftSection,
+  DriftHeaderActions,
+} from "@/components/ui/panels/OrbitPanel";
 import { StarsSection } from "@/components/ui/panels/StarsPanel";
 import { BuildingsSection } from "@/components/ui/panels/BuildingsPanel";
 import { MoonSection } from "@/components/ui/panels/MoonPanel";
@@ -160,7 +165,12 @@ const SETTINGS_SECTIONS: { value: string; label: string; keywords: string }[] = 
     value: "orbit",
     label: "Orbit",
     keywords:
-      "elevation azimuth compass radius distance spin speed pause center focal auto rotate drift idle wander delay",
+      "elevation azimuth compass radius distance spin speed pause center focal auto rotate",
+  },
+  {
+    value: "drift",
+    label: "Drift",
+    keywords: "wander speed revolve breathe bob elevation idle delay auto flight helicopter space",
   },
   {
     value: "roads",
@@ -590,6 +600,17 @@ export function CameraPanel() {
               action={<OrbitHeaderActions />}
             >
               <OrbitSection />
+            </Section>
+
+            {/* Drift: own section since 2026-07-26 (was a SubGroup under Orbit). */}
+            <Section
+              value="drift"
+              icon={Helicopter}
+              label="Drift"
+              hidden={!show("drift")}
+              action={<DriftHeaderActions />}
+            >
+              <DriftSection />
             </Section>
 
             {/* Intro moved below Camera + Orbit (user 2026-06-28). */}

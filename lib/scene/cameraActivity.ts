@@ -5,7 +5,18 @@
 //
 // Display-only (a UI affordance, NOT scene state), so the performance.now() stamp is fine under the
 // determinism contract — same basis as the FPS meter. A plain mutable singleton, never React state.
-export type CameraAction = "rotate" | "focalY" | "pan" | "look" | "zoom" | "zoomIn" | "reset";
+// "keysMove" (WASD/QE) and "panTo" (double-click glide) are split from "pan" so an LMB
+// ground drag only lights its own row, not three at once (user 2026-07-26).
+export type CameraAction =
+  | "rotate"
+  | "focalY"
+  | "pan"
+  | "keysMove"
+  | "panTo"
+  | "look"
+  | "zoom"
+  | "zoomIn"
+  | "reset";
 
 export const cameraActivity: { action: CameraAction | null; at: number } = { action: null, at: 0 };
 
