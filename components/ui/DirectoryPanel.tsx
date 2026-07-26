@@ -544,6 +544,30 @@ export function DirectorySection() {
   );
   const pagedMatches = usePagedRows(allMatches, MAX_SEARCH_RESULTS, `${trimmedQuery}::${kindFilter}`);
 
+  // Reverse hover (review 2026-07-25 4.x): the scene's DistrictHover writes the
+  // same hoverDistrictId these rows set. Mirror "the districts list is visible"
+  // into the store so that component knows when to run, and when the hover
+  // comes from the MAP (cursor not over this list), show the row's hover tint
+  // and scroll it into view — highlight only, never expand.
+  const hoverDistrictId = useSceneStore((s) => s.hoverDistrictId);
+  const setDirectoryDistrictsVisible = useSceneStore((s) => s.setDirectoryDistrictsVisible);
+  const districtsVisible = kindFilter === "all" && trimmedQuery === "";
+  useEffect(() => {
+    setDirectoryDistrictsVisible(districtsVisible);
+    return () => setDirectoryDistrictsVisible(false);
+  }, [districtsVisible, setDirectoryDistrictsVisible]);
+  const districtListRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!hoverDistrictId) return;
+    const root = districtListRef.current;
+    // If the cursor is inside the list the hover came from a row's own
+    // mouseenter — scrolling would yank the row out from under it.
+    if (!root || root.matches(":hover")) return;
+    root
+      .querySelector(`[data-district-row="${hoverDistrictId}"]`)
+      ?.scrollIntoView({ block: "nearest" });
+  }, [hoverDistrictId]);
+
   // After the directory build lands the bundle derivation above is warm;
   // until then render the masthead skeleton below instead of blocking.
   if (!directory || !bundle) {
@@ -826,7 +850,7 @@ export function DirectorySection() {
 
           {/* -mr-3/pr-4: same edge-and-gap fix as the search list above. */}
           <ScrollArea className="-mr-3 flex min-h-0 flex-col overflow-hidden **:data-[slot=scroll-area-viewport]:h-auto **:data-[slot=scroll-area-viewport]:min-h-0">
-            <div className="flex flex-col pr-4">
+            <div ref={districtListRef} className="flex flex-col pr-4">
               {[...districtList]
                 .sort((a, b) =>
                   districtSort === "name"
@@ -849,6 +873,7 @@ export function DirectorySection() {
                   <Collapsible
                     key={d.id}
                     className="py-0.5"
+                    data-district-row={d.id}
                     onMouseEnter={() => setHoverDistrictId(d.id)}
                     onMouseLeave={() => setHoverDistrictId(null)}
                   >
@@ -863,6 +888,9 @@ export function DirectorySection() {
                       className={cn(
                         "hover:bg-muted/60 min-w-0 items-center rounded-md px-1.5 py-1.5",
                         topRef?.kind === "district" && topRef.id === d.id && "bg-primary/15",
+                        // Map-driven hover (DistrictHover) lights the row the same
+                        // way the cursor would (review 2026-07-25 4.x).
+                        hoverDistrictId === d.id && "bg-muted/60",
                       )}
                     >
                       <span className="flex min-w-0 flex-1 flex-col gap-0.5 text-left">

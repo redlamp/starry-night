@@ -588,6 +588,12 @@ type SceneState = {
   // hover ?? pinned ?? selected-building's district. Runtime tier.
   hoverDistrictId: string | null;
   setHoverDistrictId: (id: string | null) => void;
+  // True while the directory panel is actually SHOWING its districts list
+  // ("All" tab, empty search) — mirrored from the panel's local state so the
+  // scene-side reverse hover (DistrictHover: point at the city → light the
+  // list row, review 2026-07-25 4.x) knows when to run. Runtime tier.
+  directoryDistrictsVisible: boolean;
+  setDirectoryDistrictsVisible: (v: boolean) => void;
   // A tenant hovered on a building card → highlight their parcel in the scene.
   hoveredTenant: { buildingId: number; householdIndex?: number; businessId?: string } | null;
   setHoveredTenant: (t: { buildingId: number; householdIndex?: number; businessId?: string } | null) => void;
@@ -1348,6 +1354,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setDemographicsOpen: (demographicsOpen) => set({ demographicsOpen }),
   hoverDistrictId: null,
   setHoverDistrictId: (hoverDistrictId) => set({ hoverDistrictId }),
+  directoryDistrictsVisible: false,
+  setDirectoryDistrictsVisible: (directoryDistrictsVisible) => set({ directoryDistrictsVisible }),
   hoveredTenant: null,
   setHoveredTenant: (hoveredTenant) => set({ hoveredTenant }),
   pinnedDistrictId: null,
