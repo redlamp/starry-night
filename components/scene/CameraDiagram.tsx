@@ -93,10 +93,11 @@ export function CameraDiagram({
           <span
             className={cn(
               "font-mono text-[10px]",
-              regime === "skyline" ? "text-amber-300" : "text-zinc-500",
+              // Amber = skyline; sky-blue = aerial (user 2026-07-26).
+              regime === "skyline" ? "text-amber-300" : "text-sky-300",
             )}
           >
-            {regime === "skyline" ? "skyline view" : "standard view"}
+            {regime === "skyline" ? "skyline view" : "aerial view"}
           </span>
         </div>
       )}
