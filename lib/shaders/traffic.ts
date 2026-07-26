@@ -9,7 +9,10 @@
 // then reduces exactly to the original single-segment fract() loop (localT ==
 // t, inWindow always true, fade widths == the original 0.06/0.08 constants).
 
+import { lightSizeChunk } from "./lightSize";
+
 export const trafficVertexShader = /* glsl */ `
+${lightSizeChunk}
 uniform float uTime;
 uniform float uPixelRatio;
 uniform float uSizeScale;
@@ -23,10 +26,10 @@ uniform float uLodEnabled;    // distance LOD (#52)
 uniform float uLodNear;
 uniform float uLodFar;
 uniform float uLodCull;
-uniform float uLodSizeFloor;
+uniform float uLodSizeFloor;    // no longer sizes anything (#99 lightSizePx); kept for uniform plumbing
 uniform float uLodBrightFloor;
 uniform float uOrthoT;          // 0 = perspective, 1 = orthographic (projection blend)
-uniform float uOrthoSizeScale;  // ortho zoom ratio (refOrthoSize / orthoSize)
+uniform float uOrthoSizeScale;  // superseded by lightSizePx (#99); kept for uniform plumbing
 
 attribute vec3 aA;     // travel-start (lane-offset world point)
 attribute vec3 aB;     // travel-end
@@ -103,17 +106,17 @@ void main() {
   // camera-distance test would wrongly drop cars regardless of the ortho zoom.
   float keep = (uLodEnabled > 0.5 && camDist > uLodCull && uOrthoT < 0.5) ? 0.0 : 1.0;
 
-  // Size + brightness drivers, blended persp ↔ ortho by uOrthoT:
-  //  - perspective: camera-distance LOD (near full, far shrinks/dims to the floor) —
-  //    a real depth cue.
-  //  - ortho: no perspective depth, and the parked-far camera makes camDist useless.
-  //    Drive size by the ortho zoom ratio so lights stay full at the default frame
-  //    and scale WITH the city as orthoSize shrinks (zoom in); brightness stays full.
-  float perspSize = mix(1.0, uLodSizeFloor, lodT);
-  float sizeFactor = mix(perspSize, uOrthoSizeScale, uOrthoT);
   vLodBright = mix(mix(1.0, uLodBrightFloor, lodT), 1.0, uOrthoT);
 
-  gl_PointSize = keep * clamp(aSize * uPixelRatio * uSizeScale * sizeFactor, 1.0, 16.0);
+  // #99: true screen-size attenuation via the shared lightSizePx helper. aSize/uSizeScale
+  // keep their old meaning; ~1.2 m of glow per unit reproduces the previous look at the
+  // default framing. The old LOD size ramp and the uOrthoSizeScale zoom blend are
+  // subsumed — the projection-derived size shrinks with distance and tracks the ortho
+  // zoom exactly (brightness LOD above stays).
+  gl_PointSize =
+    keep *
+    lightSizePx(1.2 * aSize * uSizeScale, gl_Position, 1.0 * uPixelRatio, 16.0 * uPixelRatio);
+  vLodBright *= lightSizeBright; // Settings → Lights: brightness may follow the drop-off
 }
 `;
 
