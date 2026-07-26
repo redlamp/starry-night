@@ -106,9 +106,9 @@ export function OrbitSection() {
         <span className="flex items-center gap-1 text-sm">
           Compass
           <HelpHint>
-            The north needle over the city. Auto shows it while parked in top-down or zoomed far
-            out (ortho view size past 720, or camera past 3,200 m); On keeps it always; clicking
-            it rotates north-up.
+            The north-needle button in the top-right HUD row; clicking it rotates the view
+            north-up. Auto shows it with the HUD buttons and fades with them when idle; On
+            keeps it always visible.
           </HelpHint>
         </span>
         <Tabs value={compassMode} onValueChange={(v) => setCompassMode(v as CompassMode)}>
