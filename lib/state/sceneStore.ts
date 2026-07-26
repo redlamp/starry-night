@@ -47,6 +47,7 @@ export type {
   CameraLive,
   OrbitConfig,
   DriftConfig,
+  LightSizeConfig,
   Snv2Config,
   Snv3Config,
   TurntableConfig,
@@ -68,6 +69,7 @@ export {
   PRESETS,
   DEFAULT_ORBIT,
   DEFAULT_DRIFT,
+  DEFAULT_LIGHT_SIZE,
   DEFAULT_SNV2,
   DEFAULT_SNV3,
   DEFAULT_TURNTABLE,
@@ -125,6 +127,7 @@ import type {
   CameraLive,
   OrbitConfig,
   DriftConfig,
+  LightSizeConfig,
   Snv2Config,
   Snv3Config,
   TurntableConfig,
@@ -142,6 +145,7 @@ import {
   DEFAULT_INTENT,
   DEFAULT_ORBIT,
   DEFAULT_DRIFT,
+  DEFAULT_LIGHT_SIZE,
   DEFAULT_SNV2,
   DEFAULT_SNV3,
   DEFAULT_TURNTABLE,
@@ -249,6 +253,7 @@ type AnySettingEntry =
   | SettingEntry<"cameraMode">
   | SettingEntry<"cameraModel">
   | SettingEntry<"drift">
+  | SettingEntry<"lightSize">
   | SettingEntry<"snv2">
   | SettingEntry<"snv3">
   | SettingEntry<"turntable">
@@ -330,6 +335,7 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "cameraMode", defaultValue: "orbit" as const, persist: true },
   { key: "cameraModel", defaultValue: "snv3" as const, persist: true },
   { key: "drift", defaultValue: DEFAULT_DRIFT, persist: true },
+  { key: "lightSize", defaultValue: DEFAULT_LIGHT_SIZE, persist: true },
   { key: "snv2", defaultValue: DEFAULT_SNV2, persist: true },
   { key: "snv3", defaultValue: DEFAULT_SNV3, persist: true },
   { key: "turntable", defaultValue: DEFAULT_TURNTABLE, persist: true },
@@ -465,6 +471,9 @@ type SceneState = {
   setCameraModel: (id: CameraModelId) => void;
   drift: DriftConfig;
   setDrift: (patch: Partial<DriftConfig>) => void;
+  // #99 light-sprite sizing (Settings → Lights).
+  lightSize: LightSizeConfig;
+  setLightSize: (patch: Partial<LightSizeConfig>) => void;
   snv2: Snv2Config;
   setSnv2: (patch: Partial<Snv2Config>) => void;
   snv3: Snv3Config;
@@ -1024,6 +1033,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   cameraMode: "orbit",
   cameraModel: "snv3",
   drift: DEFAULT_DRIFT,
+  lightSize: DEFAULT_LIGHT_SIZE,
   snv2: DEFAULT_SNV2,
   snv3: DEFAULT_SNV3,
   turntable: DEFAULT_TURNTABLE,
@@ -1238,6 +1248,7 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setCameraMode: (cameraMode) => set({ cameraMode }),
   setCameraModel: (cameraModel) => set({ cameraModel }),
   setDrift: (patch) => set((s) => ({ drift: { ...s.drift, ...patch } })),
+  setLightSize: (patch) => set((s) => ({ lightSize: { ...s.lightSize, ...patch } })),
   setSnv2: (patch) => set((s) => ({ snv2: { ...s.snv2, ...patch } })),
   setSnv3: (patch) => set((s) => ({ snv3: { ...s.snv3, ...patch } })),
   driftMode: false,

@@ -71,6 +71,19 @@ export interface DriftConfig {
   breathe: number; // dolly breathe amount (fraction of radius)
 }
 
+// Light-sprite sizing tunables (#99): how the point-light families (cars, streetlights,
+// flights, helicopters, beacons) size + dim with camera distance. Live-editable in
+// Settings → Lights, persisted. The drop-off CURVE is a CSS-style cubic bezier from
+// (0,0) to (1,1) — control points [x1, y1, x2, y2] — mapping normalized geometric size
+// to displayed size (sampled into a 16-entry shader lookup).
+export interface LightSizeConfig {
+  glowScale: number; // global multiplier on every family's glow diameter (1 = calibrated look)
+  minScale: number; // multiplier on the per-family pixel FLOORS (far-spotting size)
+  maxScale: number; // multiplier on the per-family pixel CEILINGS (close-range cap)
+  brightFollow: number; // 0..1 — how much brightness follows the size drop-off (0 = size only)
+  curve: [number, number, number, number]; // cubic-bezier drop-off control points
+}
+
 // Starry Night Cam v2 tunables (the drone-style interactive camera). Live-editable in
 // Settings → Orbit → v2, and persisted.
 export interface Snv2Config {

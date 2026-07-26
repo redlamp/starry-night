@@ -18,6 +18,7 @@ import type {
   QualityTier,
   OrbitConfig,
   DriftConfig,
+  LightSizeConfig,
   Snv2Config,
   Snv3Config,
   TurntableConfig,
@@ -89,6 +90,17 @@ export const DEFAULT_ORBIT: OrbitConfig = {
   azimuthDeg: 187,
   elevationDeg: 2,
   periodSec: 1800,
+};
+
+// #99 light-sprite sizing. glowScale 1 = the calibrated match-the-old-look diameters;
+// brightFollow 0 = brightness untouched (only #52's LOD dims); the default curve
+// approximates the original pow(x, 0.8) glare-style drop-off.
+export const DEFAULT_LIGHT_SIZE: LightSizeConfig = {
+  glowScale: 1,
+  minScale: 1,
+  maxScale: 1,
+  brightFollow: 0,
+  curve: [0.35, 0.42, 0.75, 0.82],
 };
 
 export const DEFAULT_DRIFT: DriftConfig = {
