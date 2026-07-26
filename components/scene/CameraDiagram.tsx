@@ -1,5 +1,6 @@
 "use client";
 
+import { useId } from "react";
 import { cn } from "@/lib/utils";
 import type { CamReadout } from "@/lib/scene/cameraReadout";
 
@@ -33,6 +34,7 @@ export function CameraDiagram({
   show,
   onToggleProjection,
   className,
+  regime,
 }: {
   data: CamReadout;
   mode: string;
@@ -42,6 +44,10 @@ export function CameraDiagram({
   onToggleProjection?: () => void;
   // container position / stacking; defaults to the bottom-left corner (the lab's placement)
   className?: string;
+  // live gesture regime, shown under the projection label (review 2026-07-25 1.2: the
+  // skyline flip is hard to notice — the diagram is where to read it). Omitted = no row
+  // (models without a skyline regime).
+  regime?: "skyline" | "standard";
 }) {
   if (!show) return null;
 
@@ -59,8 +65,10 @@ export function CameraDiagram({
   return (
     <div
       className={cn(
-        "pointer-events-none absolute w-[248px] overflow-hidden rounded-lg border border-zinc-700/70 bg-black/55 backdrop-blur",
-        className ?? "bottom-3 left-3 z-10",
+        // Position comes from className: hosts either place it absolutely (the lab's
+        // default below) or let a flex stack own it (the app's bottom-left HUD stack).
+        "pointer-events-none w-[248px] overflow-hidden rounded-lg border border-zinc-700/70 bg-black/55 backdrop-blur",
+        className ?? "absolute bottom-3 left-3 z-10",
       )}
     >
       <div className="flex items-center justify-between px-2.5 pt-1.5 pb-1">
@@ -80,6 +88,18 @@ export function CameraDiagram({
           </span>
         )}
       </div>
+      {regime && (
+        <div className="flex items-center justify-end px-2.5 pb-0.5">
+          <span
+            className={cn(
+              "font-mono text-[10px]",
+              regime === "skyline" ? "text-amber-300" : "text-zinc-500",
+            )}
+          >
+            {regime === "skyline" ? "skyline view" : "standard view"}
+          </span>
+        </div>
+      )}
       {body}
       {mode !== "fly" && data.screenY != null && <FramingGauges data={data} />}
     </div>
@@ -128,6 +148,7 @@ function FramingGauges({ data }: { data: CamReadout }) {
 }
 
 function Diagram({ data }: { data: CamReadout }) {
+  const clipId = useId(); // two diagrams can mount at once (app overlay + camera lab)
   // Geometry in the side plane. Negative elevation (looking UP) is allowed; only the ±90
   // singularities are clamped off for drawing.
   const eG = Math.max(-85, Math.min(85, data.elev)) * DEG;
@@ -273,8 +294,37 @@ function Diagram({ data }: { data: CamReadout }) {
         ground
       </text>
 
-      {/* view frustum: cone (perspective) or parallel slab (ortho) */}
-      <path d={frustum} fill="#22d3ee" fillOpacity={0.08} stroke="#22d3ee" strokeOpacity={0.45} strokeWidth={1} />
+      {/* view frustum: cone (perspective) or parallel slab (ortho) — GROUND-CLIPPED (user
+          2026-07-26 3.*): the part of the sensor aimed below the ground plane sees only
+          void, so it draws ghost-faint and dashed. A near-level ortho slab used to render
+          as a giant solid box punching under the city — technically true, visually wrong. */}
+      <defs>
+        <clipPath id={`${clipId}-above`}>
+          <rect x={0} y={0} width={W} height={Math.max(0, groundYpx)} />
+        </clipPath>
+        <clipPath id={`${clipId}-below`}>
+          <rect x={0} y={groundYpx} width={W} height={Math.max(0, H - groundYpx)} />
+        </clipPath>
+      </defs>
+      <path
+        d={frustum}
+        clipPath={`url(#${clipId}-above)`}
+        fill="#22d3ee"
+        fillOpacity={0.08}
+        stroke="#22d3ee"
+        strokeOpacity={0.45}
+        strokeWidth={1}
+      />
+      <path
+        d={frustum}
+        clipPath={`url(#${clipId}-below)`}
+        fill="#22d3ee"
+        fillOpacity={0.015}
+        stroke="#22d3ee"
+        strokeOpacity={0.12}
+        strokeWidth={1}
+        strokeDasharray="2 3"
+      />
 
       {/* view axis: camera → view-centre (solid, neutral) + the projection PAST it (dashed) in the
           TARGET colour — soil-brown if it heads to the ground, sky-blue if it rises into the sky. The

@@ -1,3 +1,4 @@
+import * as THREE from "three";
 import { useSceneStore } from "@/lib/state/sceneStore";
 import { orbitFramingFactor } from "@/lib/scene/aspectFraming";
 
@@ -74,8 +75,18 @@ export function deriveReadout(): CamReadout {
   }
   const o = s.orbit;
   const dist = Math.max(1, o.radius);
+  // Elevation from the camera's TRUE view direction (the live rotation), NOT the
+  // eye→target segment: a focal-offset lens shift (Cam v3's ortho skyline pedestal)
+  // moves the eye off that segment, so the derived angle read a few degrees of
+  // down-tilt while the camera was actually level — the diagram drew a tilted slab
+  // and misstated how much of the sensor sits below the ground (user 2026-07-26 3.3).
+  // With the true pitch, the diagram's offset recovery (camY − focalY − dist·sin e)
+  // turns the lens shift into what it is: a LEVEL view axis riding up and down.
+  const r = s.cameraLive.rotation;
+  _dir.set(0, 0, -1).applyEuler(_euler.set(r[0], r[1], r[2], "XYZ"));
+  const elevTrue = Math.asin(Math.max(-1, Math.min(1, -_dir.y))) * (180 / Math.PI);
   return {
-    elev: o.elevationDeg,
+    elev: elevTrue,
     dist,
     focalY: o.lookAtY,
     camY,
@@ -84,3 +95,5 @@ export function deriveReadout(): CamReadout {
     blend,
   };
 }
+const _euler = new THREE.Euler();
+const _dir = new THREE.Vector3();
