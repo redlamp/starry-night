@@ -37,8 +37,9 @@ export function PerfOverlay() {
   }
 
   return (
+    // Positioned by the page's bottom-left HUD stack (2026-07-26) — no own offsets.
     <div
-      className="pointer-events-none absolute top-3 left-3 z-50 rounded bg-black/65 px-3 py-2 font-mono text-[11px] leading-relaxed backdrop-blur-sm"
+      className="pointer-events-none relative rounded bg-black/65 px-3 py-2 font-mono text-[11px] leading-relaxed backdrop-blur-sm"
       style={{ minWidth: 248 }}
     >
       <div className="mb-1 flex justify-between gap-4">
