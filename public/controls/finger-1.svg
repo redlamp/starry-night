@@ -1,5 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 40" width="32" height="40" fill="none" stroke="#d4d4d8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-  <rect x="6.5" y="21" width="19" height="16" rx="7"/>
-  <path d="M6.5 29 2.5 24" stroke-width="4"/>
-  <line x1="11" y1="5" x2="11" y2="23" stroke="#f59e0b" stroke-width="4.5"/>
+  <!-- Hand after MDI's gesture-swipe posture (pictogrammers.com, Apache-2.0 inspiration):
+       palm with curled-knuckle bumps; each FINGER is its own element so variants can
+       hide it (its knuckle bump shows instead) or highlight it (selection amber). -->
+  <!-- palm: top edge has a GAP where the index enters, then middle + ring knuckle bumps -->
+  <path d="M7 31 L7 23.5 Q7 21 9.5 21 M14.1 21 A2.3 2.3 0 0 1 18.7 21 A2.2 2.2 0 0 1 23.1 21 Q25.5 21 25.5 23.5 L25.5 31 Q25.5 37 19.5 37 L13 37 Q7 37 7 31 Z"/>
+  <!-- thumb (hideable/highlightable) -->
+  <path d="M7 28 L3.2 23.6" stroke-width="4"/>
+  <!-- finger: index (ACTIVE) -->
+  <line x1="11.8" y1="7" x2="11.8" y2="22" stroke="#f59e0b" stroke-width="4.4"/>
 </svg>
