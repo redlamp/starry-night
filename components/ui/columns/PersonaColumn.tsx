@@ -25,6 +25,7 @@ import { Collapsible, CollapsibleTrigger, CollapsiblePanel } from "@/components/
 import { HoverCard, HoverCardTrigger, HoverCardContent } from "@/components/ui/hover-card";
 import { Separator } from "@/components/ui/separator";
 import { useSceneStore } from "@/lib/state/sceneStore";
+import { useCityHover } from "@/lib/hooks/useCityHover";
 import { flyToBuilding, flyToSpan } from "@/lib/scene/focusBuilding";
 import {
   CHINESE_ANIMAL_GLYPHS,
@@ -230,6 +231,7 @@ export function PersonaColumn({
   hideFamilyTree?: boolean;
 }) {
   const push = useSceneStore((s) => s.pushColumn);
+  const hover = useCityHover();
   const masterSeed = useSceneStore((s) => s.masterSeed);
   // Card disclosure state is shared across every card instance (user
   // 2026-07-11) — see sceneStore. Both PersonaColumn parts read it.
@@ -595,6 +597,7 @@ export function PersonaColumn({
                   <button
                     type="button"
                     onClick={() => push({ kind: "district", id: persona.homeDistrictId })}
+                    {...hover.district(persona.homeDistrictId)}
                     className="hover:underline"
                   >
                     {homeDistrictName}
@@ -606,6 +609,7 @@ export function PersonaColumn({
                   <button
                     type="button"
                     onClick={() => push({ kind: "building", id: persona.homeBuildingId })}
+                    {...hover.persona(persona.homeBuildingId, persona.householdIndex)}
                     className="hover:underline"
                   >
                     {homeAddressLine}
@@ -633,6 +637,7 @@ export function PersonaColumn({
                         <button
                           type="button"
                           onClick={() => push({ kind: "company", id: workPlace.id })}
+                          {...hover.company(workPlace.buildingId, workPlace.id)}
                           className="hover:underline"
                         >
                           {workPlace.name}
@@ -642,6 +647,7 @@ export function PersonaColumn({
                         <button
                           type="button"
                           onClick={() => push({ kind: "district", id: workDistrictId })}
+                          {...hover.district(workDistrictId)}
                           className="hover:underline"
                         >
                           {workDistrictName}
@@ -651,6 +657,7 @@ export function PersonaColumn({
                         <button
                           type="button"
                           onClick={() => push({ kind: "building", id: workBuildingId })}
+                          {...hover.building(workBuildingId)}
                           className="hover:underline"
                         >
                           {workAddressLine}
@@ -680,6 +687,7 @@ export function PersonaColumn({
                     <button
                       type="button"
                       onClick={() => push({ kind: "district", id: workDistrictId })}
+                      {...hover.district(workDistrictId)}
                       className="hover:underline"
                     >
                       {workDistrictName}
@@ -692,6 +700,7 @@ export function PersonaColumn({
                       <button
                         type="button"
                         onClick={() => push({ kind: "building", id: school.buildingId })}
+                        {...hover.building(school.buildingId)}
                         className="hover:underline"
                       >
                         {workAddressLine}
@@ -700,6 +709,7 @@ export function PersonaColumn({
                     <button
                       type="button"
                       onClick={() => push({ kind: "company", id: school.id })}
+                      {...hover.company(school.buildingId, school.id)}
                       className="hover:underline"
                     >
                       {school.name}
@@ -778,6 +788,7 @@ export function PersonaColumn({
                     <button
                       type="button"
                       onClick={() => push({ kind: "persona", id: partner.id })}
+                      {...hover.persona(partner.homeBuildingId, partner.householdIndex)}
                       className="hover:underline"
                     >
                       {partner.fullName}
@@ -820,6 +831,7 @@ export function PersonaColumn({
                       key={link.personaId}
                       type="button"
                       onClick={() => push({ kind: "persona", id: link.personaId })}
+                      {...hover.persona(relative.homeBuildingId, relative.householdIndex)}
                       className="hover:bg-foreground/10 -mx-1 flex flex-wrap items-baseline justify-between gap-x-4 rounded px-1 text-left text-base"
                     >
                       <span className="text-muted-foreground shrink-0 capitalize">{link.role}</span>

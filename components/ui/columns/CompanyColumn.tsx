@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Separator } from "@/components/ui/separator";
 import { useSceneStore } from "@/lib/state/sceneStore";
+import { useCityHover } from "@/lib/hooks/useCityHover";
 import { CONNECTION_COLOR } from "@/components/scene/CommuteArc";
 import { useEntityIndexes } from "./entityData";
 import { ColumnStat, ShowMore } from "./EntityColumns";
@@ -12,6 +13,7 @@ const STUDENT_CAP = 10;
 
 export function CompanyColumn({ id, part }: { id: string; part: "pinned" | "rest" }) {
   const push = useSceneStore((s) => s.pushColumn);
+  const hover = useCityHover();
   const indexes = useEntityIndexes();
   const [allStudents, setAllStudents] = useState(false);
   const biz = indexes.directory.businesses.get(id);
@@ -38,6 +40,7 @@ export function CompanyColumn({ id, part }: { id: string; part: "pinned" | "rest
         <button
           type="button"
           onClick={() => push({ kind: "building", id: biz.buildingId })}
+          {...hover.company(biz.buildingId, biz.id)}
           className="text-muted-foreground text-left text-sm hover:underline"
         >
           {buildingName ? `${buildingName} · ` : ""}
@@ -85,6 +88,7 @@ export function CompanyColumn({ id, part }: { id: string; part: "pinned" | "rest
                     key={pid}
                     type="button"
                     onClick={() => push({ kind: "persona", id: pid })}
+                    {...hover.persona(persona.homeBuildingId, persona.householdIndex)}
                     className="hover:bg-foreground/10 -mx-1 flex flex-col rounded px-1 text-left text-sm"
                   >
                     <span className="truncate">{persona.fullName}</span>
@@ -99,6 +103,7 @@ export function CompanyColumn({ id, part }: { id: string; part: "pinned" | "rest
                   key={pid}
                   type="button"
                   onClick={() => push({ kind: "persona", id: pid })}
+                  {...hover.persona(persona.homeBuildingId, persona.householdIndex)}
                   className="hover:bg-foreground/10 -mx-1 flex items-baseline justify-between gap-1.5 rounded px-1 text-left text-sm"
                 >
                   <span className="truncate">{persona.fullName}</span>
@@ -128,6 +133,7 @@ export function CompanyColumn({ id, part }: { id: string; part: "pinned" | "rest
                   key={pid}
                   type="button"
                   onClick={() => push({ kind: "persona", id: pid })}
+                  {...hover.persona(persona.homeBuildingId, persona.householdIndex)}
                   className="hover:bg-foreground/10 -mx-1 flex items-baseline justify-between gap-2 rounded px-1 text-left text-sm"
                 >
                   <span className="truncate">

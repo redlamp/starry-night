@@ -7,7 +7,9 @@ import { generateCity } from "@/lib/seed/cityGen";
 
 // Entity columns: while a STREET column is topmost, its whole polyline draws
 // x-ray on the scene (the road-hover highlight, made persistent) so "this
-// street" has a body, not just a name.
+// street" has a body, not just a name. A road hovered on that card — a
+// highway's crossing rows (user 2026-07-27) — draws at the same time, in its
+// own tier color, so the junction reads on the map before it's opened.
 
 const TIER_COLOR: Record<string, string> = {
   highway: "#e8b04a",
@@ -15,16 +17,14 @@ const TIER_COLOR: Record<string, string> = {
   minor: "#9fb3d1",
 };
 
-export function StreetHighlight({ masterSeed }: { masterSeed: string }) {
-  const columnPath = useSceneStore((s) => s.columnPath);
-  const columnCursor = useSceneStore((s) => s.columnCursor);
+// One x-ray polyline for a road id, or null. Hovered lines draw brighter and
+// above the card's own street so a crossing stands out against it.
+function useRoadLine(roadId: string | null, hovered: boolean): THREE.Line | null {
+  const masterSeed = useSceneStore((s) => s.masterSeed);
   const cityShape = useSceneStore((s) => s.cityShape);
   const cityShapeScale = useSceneStore((s) => s.cityShapeScale);
   const citySize = useSceneStore((s) => s.citySize);
   const citySketch = useSceneStore((s) => s.citySketch);
-
-  const top = columnCursor >= 0 ? columnPath[columnCursor] : undefined;
-  const roadId = top?.kind === "street" ? top.id : null;
 
   const line = useMemo(() => {
     void citySize;
@@ -42,23 +42,23 @@ export function StreetHighlight({ masterSeed }: { masterSeed: string }) {
         ? "arterial"
         : "minor";
     const pts: number[] = [];
-    for (const v of road.vertices) pts.push(v.x, 2, v.z);
+    for (const v of road.vertices) pts.push(v.x, hovered ? 2.5 : 2, v.z);
     const geo = new THREE.BufferGeometry();
     geo.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
     const mat = new THREE.LineBasicMaterial({
-      color: new THREE.Color(TIER_COLOR[tier]),
+      color: new THREE.Color(hovered ? "#ffffff" : TIER_COLOR[tier]),
       transparent: true,
-      opacity: 0.85,
+      opacity: hovered ? 1 : 0.85,
       depthTest: false,
       depthWrite: false,
       fog: false,
       toneMapped: false,
     });
     const l = new THREE.Line(geo, mat);
-    l.renderOrder = 1001;
+    l.renderOrder = hovered ? 1002 : 1001;
     l.frustumCulled = false;
     return l;
-  }, [roadId, masterSeed, cityShape, cityShapeScale, citySize, citySketch]);
+  }, [roadId, hovered, masterSeed, cityShape, cityShapeScale, citySize, citySketch]);
 
   useEffect(() => {
     return () => {
@@ -68,6 +68,24 @@ export function StreetHighlight({ masterSeed }: { masterSeed: string }) {
     };
   }, [line]);
 
-  if (!line) return null;
-  return <primitive object={line} />;
+  return line;
+}
+
+export function StreetHighlight() {
+  const columnPath = useSceneStore((s) => s.columnPath);
+  const columnCursor = useSceneStore((s) => s.columnCursor);
+  const hoverRoadId = useSceneStore((s) => s.hoverRoadId);
+
+  const top = columnCursor >= 0 ? columnPath[columnCursor] : undefined;
+  const roadId = top?.kind === "street" ? top.id : null;
+
+  const line = useRoadLine(roadId, false);
+  const hoverLine = useRoadLine(hoverRoadId === roadId ? null : hoverRoadId, true);
+
+  return (
+    <>
+      {line && <primitive object={line} />}
+      {hoverLine && <primitive object={hoverLine} />}
+    </>
+  );
 }

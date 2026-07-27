@@ -603,6 +603,15 @@ type SceneState = {
   // list row, review 2026-07-25 4.x) knows when to run. Runtime tier.
   directoryDistrictsVisible: boolean;
   setDirectoryDistrictsVisible: (v: boolean) => void;
+  // A road hovered on a card (a highway's crossing rows, user 2026-07-27) →
+  // draw that road's polyline in the scene alongside the card's own street.
+  // Runtime tier, same as hoverDistrictId.
+  hoverRoadId: string | null;
+  setHoverRoadId: (id: string | null) => void;
+  // A building hovered on a card → cage it in the scene (user 2026-07-27:
+  // hovering ANY card list row highlights what it points at). Runtime tier.
+  hoverBuildingId: number | null;
+  setHoverBuildingId: (id: number | null) => void;
   // A tenant hovered on a building card → highlight their parcel in the scene.
   hoveredTenant: { buildingId: number; householdIndex?: number; businessId?: string } | null;
   setHoveredTenant: (t: { buildingId: number; householdIndex?: number; businessId?: string } | null) => void;
@@ -1355,6 +1364,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
             // and turns boundaries back off IF this open auto-showed them —
             // a manual Settings > Districts enable still survives.
             hoverDistrictId: null,
+            hoverRoadId: null,
+            hoverBuildingId: null,
             pinnedDistrictId: null,
             ...(s.boundariesAutoOn
               ? { showDistrictBoundaries: false, boundariesAutoOn: false }
@@ -1365,6 +1376,10 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setDemographicsOpen: (demographicsOpen) => set({ demographicsOpen }),
   hoverDistrictId: null,
   setHoverDistrictId: (hoverDistrictId) => set({ hoverDistrictId }),
+  hoverRoadId: null,
+  setHoverRoadId: (hoverRoadId) => set({ hoverRoadId }),
+  hoverBuildingId: null,
+  setHoverBuildingId: (hoverBuildingId) => set({ hoverBuildingId }),
   directoryDistrictsVisible: false,
   setDirectoryDistrictsVisible: (directoryDistrictsVisible) => set({ directoryDistrictsVisible }),
   hoveredTenant: null,

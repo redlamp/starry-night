@@ -12,8 +12,34 @@ import { SELECT_OUTLINE_COLOR } from "@/lib/state/sceneDefaults";
 // (depthTest off). Vertically aligned to the REAL building span — bottom flush with
 // the ground, small pad above the roof (user 2026-07-27; the old base lift + height
 // grow read as a misaligned floating box). The old x-ray wireframe is retired.
+//
+// A second, fainter white cage tracks `hoverBuildingId` — the building a card
+// list row is pointing at (user 2026-07-27) — so hovering a row locates it in
+// the city without committing to a selection.
 export function SelectedBuildingOutline({ masterSeed }: { masterSeed: string }) {
   const selectedBuildingId = useSceneStore((s) => s.selectedBuildingId);
+  const hoverBuildingId = useSceneStore((s) => s.hoverBuildingId);
+
+  const selected = useBuildingCage(selectedBuildingId, masterSeed, false);
+  const hovered = useBuildingCage(
+    hoverBuildingId === selectedBuildingId ? null : hoverBuildingId,
+    masterSeed,
+    true,
+  );
+
+  return (
+    <>
+      {selected && <primitive object={selected} />}
+      {hovered && <primitive object={hovered} />}
+    </>
+  );
+}
+
+function useBuildingCage(
+  buildingId: number | null,
+  masterSeed: string,
+  hover: boolean,
+): THREE.Mesh | null {
   const cityShape = useSceneStore((s) => s.cityShape);
   const cityShapeScale = useSceneStore((s) => s.cityShapeScale);
   const citySize = useSceneStore((s) => s.citySize);
@@ -22,9 +48,9 @@ export function SelectedBuildingOutline({ masterSeed }: { masterSeed: string }) 
   const mesh = useMemo(() => {
     void citySize;
     void citySketch;
-    if (selectedBuildingId === null) return null;
+    if (buildingId === null) return null;
     const { buildings } = generateCity(masterSeed, cityShape, cityShapeScale);
-    const b = buildings.find((x) => x.id === selectedBuildingId);
+    const b = buildings.find((x) => x.id === buildingId);
     if (!b) return null;
 
     // Lateral margin only (user 2026-07-27: the cage read as taller than the building and
@@ -37,9 +63,11 @@ export function SelectedBuildingOutline({ masterSeed }: { masterSeed: string }) 
     const m = new THREE.Mesh(
       new THREE.BoxGeometry(1, 1, 1),
       new THREE.MeshBasicMaterial({
-        color: new THREE.Color(SELECT_OUTLINE_COLOR),
+        color: new THREE.Color(hover ? "#ffffff" : SELECT_OUTLINE_COLOR),
         transparent: true,
-        opacity: 0.16,
+        // The hover cage has to be findable at a glance across a whole city
+        // block, so it reads BRIGHTER than the selection cage, not fainter.
+        opacity: hover ? 0.3 : 0.16,
         side: THREE.BackSide, // inside faces visible — a cage you see the inner walls + floor of
         blending: THREE.AdditiveBlending,
         depthTest: false,
@@ -54,7 +82,7 @@ export function SelectedBuildingOutline({ masterSeed }: { masterSeed: string }) 
     m.frustumCulled = false;
     m.renderOrder = 1001; // under the unit highlights (1002)
     return m;
-  }, [selectedBuildingId, masterSeed, cityShape, cityShapeScale, citySize, citySketch]);
+  }, [buildingId, hover, masterSeed, cityShape, cityShapeScale, citySize, citySketch]);
 
   useEffect(() => {
     return () => {
@@ -64,6 +92,5 @@ export function SelectedBuildingOutline({ masterSeed }: { masterSeed: string }) 
     };
   }, [mesh]);
 
-  if (!mesh) return null;
-  return <primitive object={mesh} />;
+  return mesh;
 }

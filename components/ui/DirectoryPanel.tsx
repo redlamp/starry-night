@@ -23,7 +23,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { HoverCard, HoverCardTrigger, HoverCardContent } from "@/components/ui/hover-card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { IconTip } from "@/components/ui/columns/EntityColumns";
+import { AddrNum, IconTip } from "@/components/ui/columns/EntityColumns";
 import {
   WorkplaceKindBadge,
   WORKPLACE_KIND_ICON,
@@ -53,17 +53,6 @@ import { focusBuilding } from "@/lib/scene/focusBuilding";
 // recomputes from the seed; only query/filter/spotlight-step are UI state.
 
 const MAX_SEARCH_RESULTS = 50;
-
-// Address numbers render as a right-aligned column sized by the city's widest
-// address (tabular-nums is inherited panel-wide), so "1203 Martin Parkway"
-// and "9 Martin Parkway" align their street names (user 2026-07-08).
-function AddrNum({ n, width }: { n: number; width: number }) {
-  return (
-    <span className="inline-block text-right" style={{ minWidth: `${width}ch` }}>
-      {n}
-    </span>
-  );
-}
 
 // Deterministic index into an array of length `mod`, seeded on the master
 // seed's own characters (FNV-1a) — never Math.random/Date.now. Gives every

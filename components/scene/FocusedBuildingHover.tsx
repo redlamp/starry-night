@@ -7,6 +7,7 @@ import { generateCity, type Building } from "@/lib/seed/cityGen";
 import { seededRng } from "@/lib/seed/rng";
 import { SELECT_OUTLINE_COLOR } from "@/lib/state/sceneDefaults";
 import { tenancyLayout, type TenantRegion } from "@/lib/seed/tenancyLayout";
+import { claimUnitClick } from "@/lib/scene/unitClick";
 import { UnitBox, brighten } from "./UnitBox";
 
 // When a building is FOCUSED, all its selectable units show as translucent
@@ -92,6 +93,9 @@ function BuildingUnitPicker({
           onPointerOut={() => setHovered((prev) => (prev === i ? null : prev))}
           onClick={(e) => {
             e.stopPropagation();
+            // Tell the building's own handler this click found a unit — see
+            // lib/scene/unitClick.ts.
+            claimUnitClick(e.nativeEvent);
             onSelect(r);
           }}
         />

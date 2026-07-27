@@ -14,6 +14,7 @@ import {
 } from "@/lib/scene/tileCull";
 import { reportTileCull } from "@/lib/scene/tileCullDebug";
 import { focusBuilding } from "@/lib/scene/focusBuilding";
+import { unitClaimedClick } from "@/lib/scene/unitClick";
 import {
   generateCity,
   ARCHETYPE_ORDER,
@@ -621,7 +622,29 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
             // 2026-07-27): don't claim the event, so the ray continues to the
             // unit boxes inside — the NEAREST unit's handler stopPropagation()s,
             // making units selectable from any side, first-unit-hit wins.
-            if (b.id === useSceneStore.getState().focusedBuildingId) return;
+            // If NO unit took the click it landed on the building itself, so the
+            // drill returns to this building's card (user 2026-07-27: looking at
+            // a resident, clicking the building goes back to the building).
+            if (b.id === useSceneStore.getState().focusedBuildingId) {
+              const down = downPos.current;
+              if (down) {
+                const ddx = ev.nativeEvent.clientX - down.x;
+                const ddy = ev.nativeEvent.clientY - down.y;
+                if (ddx * ddx + ddy * ddy > 36) return; // a drag, not a click
+              }
+              const native = ev.nativeEvent;
+              // Unit handlers farther along the ray still have to run, so decide
+              // after this dispatch completes.
+              queueMicrotask(() => {
+                if (unitClaimedClick(native)) return;
+                const s = useSceneStore.getState();
+                s.setSelectedBuildingId(b.id);
+                const at = s.columnPath.findIndex((r) => r.kind === "building" && r.id === b.id);
+                if (at >= 0) s.resetColumns(s.columnPath.slice(0, at + 1));
+                else s.pushColumn({ kind: "building", id: b.id });
+              });
+              return;
+            }
             ev.stopPropagation();
             // Reject drags: R3F's onClick only checks that press+release hit the
             // SAME object, not how far the pointer travelled — so an orbit drag
