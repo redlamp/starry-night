@@ -10,6 +10,7 @@ import * as THREE from "three";
 import { useSceneStore, DEFAULT_INTENT, DEFAULT_PROJECTION } from "@/lib/state/sceneStore";
 import { orbitFramingFactor } from "@/lib/scene/aspectFraming";
 import { markCameraActivity } from "@/lib/scene/cameraActivity";
+import { setMultiTouch } from "@/lib/scene/touchGate";
 import { cameraCommand } from "@/lib/scene/cameraCommand";
 import { tweenProjectionTo, cropFollowScale } from "@/lib/scene/cameraView";
 import { isTypingTarget } from "@/lib/utils";
@@ -42,16 +43,17 @@ import { writeOrbitPose } from "./orbitWriteback";
 //   4. TOUCH, hand-rolled (v2 left camera-controls' native touch on; it reads wrong on
 //      phones). FLIPPED + DISAMBIGUATED 2026-07-26: 1-finger MOVES (ground pan,
 //      synthesized-pick fallback); a 2-finger gesture LATCHES to exactly one of
-//      orbit (swipe left-right) / tilt (swipe up-down) / rotate (twist, about the
-//      midpoint's ground point) / zoom (pinch) — first clear motion wins, so inputs
-//      never overlap mid-gesture; double-tap zooms in. Same math and clamps as mouse.
+//      orbit (swipe left-right) / tilt (swipe up-down) / zoom (pinch) — first clear
+//      motion wins, so inputs never overlap mid-gesture. Double-taps mirror the mouse's
+//      double-clicks: 1-finger = pan to, 2-finger = zoom in (2026-07-27). Same math and
+//      clamps as mouse. Twist-rotate retired 2026-07-27 (it stole small swipes).
 //
 //   Desktop   LMB drag         Orbit + Tilt around the CLICKED point (a pin marks it; cleared on release)
 //             RMB / Shift+LMB  Move — grab the ground (grabbing cursor); it stays under the cursor
 //             Ctrl/⌘ + LMB     Aim — grab a map point and swing the view in place (free-look)
 //             wheel            Zoom toward the cursor  ·  double-click  Zoom in
 //             t                Top-down toggle (in-camera flight, see above)
-//   Touch     1-finger  Move  ·  2-finger (latched)  swipe ←→ Orbit · swipe ↑↓ Tilt · twist Rotate · pinch Zoom  ·  double-tap  Zoom in
+//   Touch     1-finger  Move  ·  2-finger (latched)  swipe ←→ Orbit · swipe ↑↓ Tilt · pinch Zoom  ·  double-tap  Pan to (1) / Zoom in (2)
 //
 // Perspective + faked-ortho (via ProjectionBlender), same as v2: parallel-ray picks at
 // full ortho, orthoSize-based zoom, frame-on-mount + ~10/s pose write-back. Self-gates
@@ -180,8 +182,14 @@ function driftWander1(t: number, seedPh: number, axisPh: number): number {
 
 // ---- Touch gestures (v3 behaviour 4) ---------------------------------------------------
 const TOUCH_DOUBLE_TAP_MS = 320; // two taps within this window …
-const TOUCH_DOUBLE_TAP_PX = 40; // … and this radius = double-tap zoom-in
-const TOUCH_TAP_MAX_MS = 250; // a tap must release within this to count as one
+const TOUCH_DOUBLE_TAP_PX = 40; // … and this radius = a double-tap
+const TOUCH_TAP_MAX_MS = 250; // a 1-finger tap must release within this to count
+// A 2-finger tap is four events (two downs, two ups), so it needs a longer budget
+// and a looser radius than the 1-finger one — the midpoint of two fingers is never
+// as steady as a single fingertip (user 2026-07-27: 2-finger double-tap = zoom to).
+const TOUCH_TAP2_MAX_MS = 450;
+const TOUCH_TAP2_MOVE_PX = 26; // midpoint travel that disqualifies a 2-finger tap
+const TOUCH_DOUBLE_TAP2_PX = 70;
 
 const _eye = new THREE.Vector3();
 const _tgt = new THREE.Vector3();
@@ -1244,19 +1252,6 @@ export function StarryNightV3Model() {
       void c.setLookAt(_eye.x, _eye.y, _eye.z, _tgt.x, _tgt.y, _tgt.z, false);
     };
 
-    // Pure yaw around the armed pivot by an absolute angle (radians) — the 2-finger
-    // TWIST rotate. Positive = the city turns clockwise on screen with the fingers
-    // (screen-coord twist angle passes through unchanged; probe-verified direction).
-    const applyOrbitYaw = (c: CameraControlsImpl, rad: number) => {
-      if (Math.abs(rad) < 1e-5) return;
-      c.getPosition(_eye);
-      c.getTarget(_tgt);
-      _q.setFromAxisAngle(_UP, rad);
-      _eye.sub(_grab).applyQuaternion(_q).add(_grab);
-      _tgt.sub(_grab).applyQuaternion(_q).add(_grab);
-      void c.setLookAt(_eye.x, _eye.y, _eye.z, _tgt.x, _tgt.y, _tgt.z, false);
-    };
-
     // Pointer capture, throw-safe: set/releasePointerCapture throw NotFoundError for a
     // pointer the browser doesn't consider active (synthetic events — the CDP test
     // harness — and some cancelled-touch races). A throw mid-handler strands the whole
@@ -1278,41 +1273,52 @@ export function StarryNightV3Model() {
     };
 
     // ---- Touch (behaviour 4, FLIPPED + DISAMBIGUATED 2026-07-26): 1-finger move ·
-    // 2-finger latched gesture (orbit / tilt / twist-rotate / pinch-zoom) · double-tap
-    // zoom-in. Hand-rolled on pointer events (native camera-controls touch is off) so
-    // the math, pivots, and clamps are EXACTLY the mouse gestures'. 3-finger free-look
-    // is deliberately out of scope.
+    // 2-finger latched gesture (orbit / tilt / pinch-zoom) · double-tap zoom-in.
+    // Hand-rolled on pointer events (native camera-controls touch is off) so the math,
+    // pivots, and clamps are EXACTLY the mouse gestures'. 3-finger free-look is
+    // deliberately out of scope.
     const touchPts = new Map<number, { x: number; y: number }>();
     let twoFinger = false; // a 2-finger gesture owns the input (drag stays null)
     // 2-finger gesture DISAMBIGUATION (user 2026-07-26: "mitigate too much overlap of
     // inputs"): the gesture LATCHES to exactly one mode — the first motion channel past
     // its threshold wins and the others are ignored until the finger count changes.
-    //   pinch (spread)      → zoom          twist (angle)   → rotate about the midpoint
+    //   pinch (spread)      → zoom
     //   swipe left-right    → orbit (yaw)   swipe up-down   → tilt
-    let g2Mode: null | "zoom" | "twist" | "orbit" | "tilt" = null;
+    // Twist-rotate was removed 2026-07-27 (user: too many overlapping channels for the
+    // gain — a twist always starts as a small swipe, so it stole those gestures).
+    let g2Mode: null | "zoom" | "orbit" | "tilt" = null;
     let g2RefMidX = 0; // gesture-start references (for the latch thresholds)
     let g2RefMidY = 0;
     let g2RefDist = 1;
-    let g2RefAng = 0;
     let g2PrevMidX = 0; // previous-event values (for the incremental deltas)
     let g2PrevMidY = 0;
     let g2PrevDist = 1;
-    let g2PrevAng = 0;
     const G2_SWIPE_PX = 18; // midpoint travel before a swipe latches
     const G2_PINCH_PX = 24; // spread change before zoom latches
-    const G2_TWIST_RAD = 0.17; // ~10° of twist before rotate latches
     let touchDownT = 0; // first-finger-down e.timeStamp (tap detection)
     let lastTapT = 0;
     let lastTapX = 0;
     let lastTapY = 0;
+    // Tap routing: the most fingers this gesture ever had decides which tap it can
+    // be. Lifting two fingers happens one at a time, so without this a quick
+    // 2-finger tap would fall out of the 1-finger tap branch on the last release.
+    let gestureMaxFingers = 0;
+    let g2TapDownT = 0; // when the SECOND finger landed
+    let lastTap2T = 0; // 2-finger double-tap pairing (kept apart from the 1-finger pair)
+    let lastTap2X = 0;
+    let lastTap2Y = 0;
 
     const onTouchDown = (e: PointerEvent) => {
       const c = controls.current;
       if (!c) return;
       markInput();
       touchPts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      // 2+ fingers = a camera gesture; close the selection gate (see touchGate).
+      setMultiTouch(touchPts.size >= 2);
       capturePointer(e.pointerId);
       skylineHold = true; // same mid-gesture latch freeze as the mouse drags
+      if (touchPts.size === 1) gestureMaxFingers = 1;
+      else gestureMaxFingers = Math.max(gestureMaxFingers, touchPts.size);
       if (touchPts.size === 1) {
         touchDownT = e.timeStamp;
         lastX = e.clientX;
@@ -1329,7 +1335,7 @@ export function StarryNightV3Model() {
       } else if (touchPts.size === 2) {
         // Second finger down: arm the pivot at the MIDPOINT's ground point and reset the
         // gesture latch — onTouchMove classifies the motion into exactly one of
-        // zoom / twist-rotate / orbit / tilt (see g2Mode above).
+        // zoom / orbit / tilt (see g2Mode above).
         const pts = [...touchPts.values()];
         const midX = (pts[0].x + pts[1].x) / 2;
         const midY = (pts[0].y + pts[1].y) / 2;
@@ -1339,10 +1345,10 @@ export function StarryNightV3Model() {
         setPin(null);
         twoFinger = true;
         g2Mode = null;
+        g2TapDownT = e.timeStamp;
         g2RefMidX = g2PrevMidX = midX;
         g2RefMidY = g2PrevMidY = midY;
         g2RefDist = g2PrevDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y) || 1;
-        g2RefAng = g2PrevAng = Math.atan2(pts[1].y - pts[0].y, pts[1].x - pts[0].x);
       } else {
         // 3+ fingers: stand down entirely (no free-look on touch in this pass).
         drag = null;
@@ -1365,27 +1371,16 @@ export function StarryNightV3Model() {
         const midX = (pts[0].x + pts[1].x) / 2;
         const midY = (pts[0].y + pts[1].y) / 2;
         const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y) || 1;
-        const ang = Math.atan2(pts[1].y - pts[0].y, pts[1].x - pts[0].x);
         // LATCH: first channel past its threshold owns the whole gesture (one gesture,
         // one behavior — the overlap-mitigation ask). Ratios normalize each channel to
         // its own threshold so the clearest intent wins.
         if (g2Mode === null) {
-          const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
           const swipeDx = Math.abs(midX - g2RefMidX);
           const swipeDy = Math.abs(midY - g2RefMidY);
           const rSwipe = Math.max(swipeDx, swipeDy) / G2_SWIPE_PX;
           const rPinch = Math.abs(dist - g2RefDist) / G2_PINCH_PX;
-          const rTwist = Math.abs(wrap(ang - g2RefAng)) / G2_TWIST_RAD;
-          const best = Math.max(rSwipe, rPinch, rTwist);
-          if (best >= 1) {
-            g2Mode =
-              best === rPinch
-                ? "zoom"
-                : best === rTwist
-                  ? "twist"
-                  : swipeDx >= swipeDy
-                    ? "orbit"
-                    : "tilt";
+          if (Math.max(rSwipe, rPinch) >= 1) {
+            g2Mode = rPinch >= rSwipe ? "zoom" : swipeDx >= swipeDy ? "orbit" : "tilt";
           }
         }
         if (g2Mode === "zoom") {
@@ -1396,26 +1391,20 @@ export function StarryNightV3Model() {
             markCameraActivity("zoom");
             zoomAtCursor(c, cam, dom, midX, midY, k, false);
           }
-        } else if (g2Mode === "twist") {
-          // TWIST: yaw around the midpoint's ground pivot by the finger-angle change —
-          // the city turns with the fingers (Google Earth's rotate).
-          const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
-          markCameraActivity("rotate");
-          applyOrbitYaw(c, wrap(ang - g2PrevAng));
         } else if (g2Mode === "orbit") {
           // SWIPE LEFT-RIGHT: orbit (yaw only — the vertical component is ignored so the
-          // latched gesture stays single-purpose).
+          // latched gesture stays single-purpose). Marks "rotate" / "tilt" separately so
+          // the guide lights only the row you're actually driving (user 2026-07-27).
           markCameraActivity("rotate");
           applyOrbitDelta(c, midX - g2PrevMidX, 0);
         } else if (g2Mode === "tilt") {
           // SWIPE UP-DOWN: tilt only.
-          markCameraActivity("rotate");
+          markCameraActivity("tilt");
           applyOrbitDelta(c, 0, midY - g2PrevMidY);
         }
         g2PrevMidX = midX;
         g2PrevMidY = midY;
         g2PrevDist = dist;
-        g2PrevAng = ang;
         return true;
       }
       entry.x = e.clientX;
@@ -1426,6 +1415,7 @@ export function StarryNightV3Model() {
     const onTouchUp = (e: PointerEvent) => {
       markInput();
       touchPts.delete(e.pointerId);
+      setMultiTouch(touchPts.size >= 2);
       releasePointer(e.pointerId);
       if (twoFinger) {
         if (touchPts.size === 1) {
@@ -1442,28 +1432,63 @@ export function StarryNightV3Model() {
         } else if (touchPts.size === 0) {
           twoFinger = false;
           skylineHold = false;
+          gestureMaxFingers = 0;
+          g2TapDownT = 0;
         }
         return;
       }
       if (touchPts.size === 0) {
-        // TAP: released quickly without a real drag. Two of them close together =
-        // double-tap zoom-in (mirrors double-click, and the same inspect-mode guard:
-        // there a double-tap is the building-focus gesture, so the zoom stands down).
-        const wasTap = !dragMoved && e.timeStamp - touchDownT < TOUCH_TAP_MAX_MS;
-        if (wasTap) {
-          if (
-            e.timeStamp - lastTapT < TOUCH_DOUBLE_TAP_MS &&
-            Math.hypot(e.clientX - lastTapX, e.clientY - lastTapY) < TOUCH_DOUBLE_TAP_PX
-          ) {
-            lastTapT = 0; // consumed — a third tap starts a fresh pair
-            if (!useSceneStore.getState().inspectMode)
-              glideZoomIn(e.clientX, e.clientY, e.timeStamp);
-          } else {
-            lastTapT = e.timeStamp;
-            lastTapX = e.clientX;
-            lastTapY = e.clientY;
+        // TAP: released quickly without a real drag. Mirrors the mouse's double-click
+        // pair (user 2026-07-27): 1-finger double-tap = PAN TO the tapped ground point,
+        // 2-finger double-tap = the ZOOM-IN glide at the midpoint.
+        if (gestureMaxFingers >= 2) {
+          // A 2-finger tap: both fingers landed and left without latching a gesture and
+          // without the midpoint wandering. Position comes from the last midpoint — the
+          // releasing pointer is one finger, not the pair's centre.
+          const held =
+            g2TapDownT > 0 &&
+            e.timeStamp - g2TapDownT < TOUCH_TAP2_MAX_MS &&
+            g2Mode === null &&
+            Math.hypot(g2PrevMidX - g2RefMidX, g2PrevMidY - g2RefMidY) < TOUCH_TAP2_MOVE_PX;
+          if (held) {
+            if (
+              e.timeStamp - lastTap2T < TOUCH_DOUBLE_TAP_MS + TOUCH_TAP2_MAX_MS &&
+              Math.hypot(g2PrevMidX - lastTap2X, g2PrevMidY - lastTap2Y) < TOUCH_DOUBLE_TAP2_PX
+            ) {
+              lastTap2T = 0; // consumed — a third tap starts a fresh pair
+              // No inspect-mode guard: a 2-finger double-tap has no building-focus
+              // meaning to collide with, so it zooms in either mode.
+              glideZoomIn(g2PrevMidX, g2PrevMidY, e.timeStamp);
+            } else {
+              lastTap2T = e.timeStamp;
+              lastTap2X = g2PrevMidX;
+              lastTap2Y = g2PrevMidY;
+            }
+          }
+          lastTapT = 0; // never pair a 2-finger tap with a 1-finger one
+        } else {
+          const wasTap = !dragMoved && e.timeStamp - touchDownT < TOUCH_TAP_MAX_MS;
+          if (wasTap) {
+            if (
+              e.timeStamp - lastTapT < TOUCH_DOUBLE_TAP_MS &&
+              Math.hypot(e.clientX - lastTapX, e.clientY - lastTapY) < TOUCH_DOUBLE_TAP_PX
+            ) {
+              lastTapT = 0; // consumed — a third tap starts a fresh pair
+              // Same inspect-mode guard the zoom had: there a double-tap is the
+              // building-FOCUS gesture (InstancedCity), so the camera stands down.
+              if (!useSceneStore.getState().inspectMode) {
+                lastTapGestureT = e.timeStamp; // swallow the browser's synthesized dblclick
+                panToFocus(e.clientX, e.clientY);
+              }
+            } else {
+              lastTapT = e.timeStamp;
+              lastTapX = e.clientX;
+              lastTapY = e.clientY;
+            }
           }
         }
+        gestureMaxFingers = 0;
+        g2TapDownT = 0;
         if (drag === "orbit") setPin(null);
         orbitPinPending = null;
         dragMoved = false;
@@ -1754,9 +1779,10 @@ export function StarryNightV3Model() {
 
     // Double-tap / double-click zoom-in as a GLIDE (4.27): a slower smoothTime bracket
     // around the zoom transition, plus the eased ortho size ramp instead of the instant
-    // set — a tween in both projections. Also stamps lastTapZoomT so the browser's
-    // SYNTHESIZED dblclick after a touch double-tap can't fire the zoom a second time.
-    let lastTapZoomT = 0;
+    // set — a tween in both projections. lastTapGestureT is stamped by EVERY handled
+    // touch double-tap (zoom or pan-to) so the browser's SYNTHESIZED dblclick can't fire
+    // a second camera gesture on top of it.
+    let lastTapGestureT = 0;
     // Hand-rolled RMB double-click tracking (see onUp).
     let lastRmbUpT = 0;
     let lastRmbUpX = 0;
@@ -1764,7 +1790,7 @@ export function StarryNightV3Model() {
     const glideZoomIn = (x: number, y: number, stamp: number) => {
       const c = controls.current;
       if (!c) return;
-      lastTapZoomT = stamp;
+      lastTapGestureT = stamp;
       markCameraActivity("zoomIn"); // its own guide row (double-click), distinct from wheel Zoom
       if (baseSmoothTime.current === null) baseSmoothTime.current = c.smoothTime;
       const base = baseSmoothTime.current;
@@ -1798,7 +1824,7 @@ export function StarryNightV3Model() {
     const onDbl = (e: MouseEvent) => {
       const c = controls.current;
       if (!c) return;
-      if (e.timeStamp - lastTapZoomT < 700) return; // synthesized from a handled touch double-tap
+      if (e.timeStamp - lastTapGestureT < 700) return; // synthesized from a handled touch double-tap
       // In inspect mode a double-click is the building FOCUS gesture (InstancedCity handles it), so
       // no camera gesture must also fire — two camera tweens on one double-click fought
       // and read as a harsh snap.
