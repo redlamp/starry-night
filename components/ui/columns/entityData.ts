@@ -3,8 +3,16 @@
 import { useMemo } from "react";
 import { useSceneStore } from "@/lib/state/sceneStore";
 import { usePersonaDirectoryDeferred } from "@/lib/hooks/usePersonaDirectory";
-import { generateCity, type Building } from "@/lib/seed/cityGen";
+import { generateCity, tensorDistrictField, type Building } from "@/lib/seed/cityGen";
 import type { District } from "@/lib/seed/district";
+import { crossingsAlong, districtRunsAlong, roadLength } from "@/lib/seed/roadGeometry";
+import {
+  regionForBusiness,
+  regionForHousehold,
+  tenancyLayout,
+  type TenantRegion,
+} from "@/lib/seed/tenancyLayout";
+import { seededRng } from "@/lib/seed/rng";
 import {
   buildPersonaDirectory,
   type PersonaDirectory,
@@ -26,7 +34,26 @@ export type RoadInfo = {
   roadId: string;
   name: string;
   tier: "highway" | "arterial" | "minor";
+  closed: boolean;
   vertices: Array<{ x: number; z: number }>;
+};
+
+// A district the road passes through, placed along it: where it starts and how
+// much road is inside. Ordered by `alongM` so the list reads as a route.
+export type DistrictSpan = {
+  district: District;
+  alongM: number; // metres from the road's first vertex to where it enters
+  lengthM: number; // metres of road inside this district (0 = address-only)
+};
+
+// A road crossing another road, ordered along the host (highway cards list
+// their junctions as a route). Offramps aren't modelled yet — this is the
+// geometric crossing, which is where one would go.
+export type RoadCrossingInfo = {
+  roadId: string;
+  name: string;
+  tier: RoadInfo["tier"];
+  alongM: number; // metres from the host road's first vertex
 };
 
 export type DistrictAgg = {
@@ -49,7 +76,16 @@ export type StreetAgg = {
   residentCount: number; // listed residents — the browsable sample
   populationEst: number; // full residential capacity (#96)
   residentsSample: Persona[]; // capped — columns show "N residents · sample"
-  districts: District[]; // districts the street's buildings sit in
+  // Districts the road runs through, IN ORDER ALONG IT (user 2026-07-27) — the
+  // same reading direction as `crossings`. Derived from the polyline against the
+  // district field, which is also the only source a highway has: highways carry
+  // no addressed buildings at all (assignAddresses skips that tier).
+  districts: District[];
+  districtSpans: DistrictSpan[];
+  lengthM: number;
+  // Roads crossing this one, ordered along it. Highways only for now (the tier
+  // where "what does it connect to" is the whole story).
+  crossings: RoadCrossingInfo[];
 };
 
 export type EntityIndexes = {
@@ -60,8 +96,12 @@ export type EntityIndexes = {
   roadById: Map<string, RoadInfo>;
   districtAgg: (districtId: string) => DistrictAgg | null;
   streetAgg: (roadId: string) => StreetAgg | null;
+  // Both in TOP-FLOOR-FIRST order (user 2026-07-27), so reading down a card's
+  // occupant list walks down the building the highlight is drawing on.
   companiesInBuilding: (buildingId: number) => Business[];
   householdsInBuilding: (buildingId: number) => Household[];
+  // The building's unit placement — the same layout the scene draws.
+  tenancyForBuilding: (buildingId: number) => TenantRegion[];
 };
 
 const RESIDENT_SAMPLE_CAP = 30;
@@ -82,7 +122,7 @@ function buildEntityIndexes(
 
   const roadById = new Map<string, RoadInfo>();
   const addRoads = (
-    roads: Array<{ id: string; vertices: Array<{ x: number; z: number }> }>,
+    roads: Array<{ id: string; vertices: Array<{ x: number; z: number }>; closed?: boolean }>,
     tier: RoadInfo["tier"],
   ) => {
     for (const r of roads) {
@@ -90,6 +130,7 @@ function buildEntityIndexes(
         roadId: r.id,
         name: names.streetNames.get(r.id) ?? "Unnamed Road",
         tier,
+        closed: r.closed ?? false,
         vertices: r.vertices,
       });
     }
@@ -170,6 +211,64 @@ function buildEntityIndexes(
     };
   };
 
+  // Geometry-derived highway rollups. Both queries walk a ~1.5k-vertex polyline
+  // against the whole 106k-segment network, so they're memoised per road — a
+  // card re-render must not re-run them.
+  const districtField = tensorDistrictField(masterSeed);
+  const spanCache = new Map<string, DistrictSpan[]>();
+  const crossingCache = new Map<string, RoadCrossingInfo[]>();
+
+  // A district needs this much road inside it to count as "runs through" —
+  // below that it's a corner clipped by the polyline, not a district the road
+  // serves. (Highway 9 touches 13 districts; 3 of them for under 80m.) A
+  // district that ADDRESSES buildings on the road is kept regardless.
+  const MIN_RUN_M = 120;
+
+  // Districts along the road, entry order. Geometry is the ordering authority;
+  // any district that addresses buildings here but never gets crossed (a lot on
+  // the far side of a boundary) lands at the end with a zero span.
+  const districtSpansFor = (road: RoadInfo, addressed: District[]): DistrictSpan[] => {
+    const hit = spanCache.get(road.roadId);
+    if (hit) return hit;
+    const addressedIds = new Set(addressed.map((d) => d.id));
+    const acc = new Map<string, DistrictSpan>();
+    for (const run of districtRunsAlong(road.vertices, districtField)) {
+      const fieldDistrict = districtField.districts[run.index];
+      if (!fieldDistrict) continue;
+      const district = districtById.get(fieldDistrict.id) ?? fieldDistrict;
+      const prev = acc.get(district.id);
+      if (prev) prev.lengthM += run.lengthM;
+      else acc.set(district.id, { district, alongM: run.startM, lengthM: run.lengthM });
+    }
+    const total = roadLength(road.vertices, road.closed);
+    const out = [...acc.values()].filter(
+      (s) => s.lengthM >= MIN_RUN_M || addressedIds.has(s.district.id),
+    );
+    for (const d of addressed) {
+      if (!acc.has(d.id)) out.push({ district: d, alongM: total, lengthM: 0 });
+    }
+    out.sort((a, b) => a.alongM - b.alongM);
+    spanCache.set(road.roadId, out);
+    return out;
+  };
+
+  const geoCrossings = (road: RoadInfo): RoadCrossingInfo[] => {
+    const hit = crossingCache.get(road.roadId);
+    if (hit) return hit;
+    const others: Array<{ id: string; vertices: Array<{ x: number; z: number }> }> = [];
+    for (const r of roadById.values()) {
+      if (r.roadId !== road.roadId) others.push({ id: r.roadId, vertices: r.vertices });
+    }
+    const out = crossingsAlong(road, others).map((c) => ({
+      roadId: c.roadId,
+      name: roadById.get(c.roadId)?.name ?? "Unnamed Road",
+      tier: roadById.get(c.roadId)?.tier ?? "minor",
+      alongM: c.alongM,
+    }));
+    crossingCache.set(road.roadId, out);
+    return out;
+  };
+
   const streetAgg = (roadId: string): StreetAgg | null => {
     const road = roadById.get(roadId);
     if (!road) return null;
@@ -197,6 +296,7 @@ function buildEntityIndexes(
         }
       }
     }
+    const districtSpans = districtSpansFor(road, [...districts.values()]);
     return {
       road,
       buildingIds,
@@ -204,9 +304,40 @@ function buildEntityIndexes(
       residentCount,
       populationEst: Math.round(populationEst),
       residentsSample,
-      districts: [...districts.values()],
+      districts: districtSpans.map((s) => s.district),
+      districtSpans,
+      lengthM: roadLength(road.vertices, road.closed),
+      crossings: road.tier === "highway" ? geoCrossings(road) : [],
     };
   };
+
+  // The building's tenancy layout — the SAME call the scene makes (UnitHighlight
+  // / FocusedBuildingHover / CommuteArc), so a card's unit talk matches what's
+  // drawn. Memoised per building: cards ask on every render.
+  const tenancyCache = new Map<number, TenantRegion[]>();
+  const tenancyForBuilding = (buildingId: number): TenantRegion[] => {
+    const hit = tenancyCache.get(buildingId);
+    if (hit) return hit;
+    const building = buildingById.get(buildingId);
+    if (!building) return [];
+    const regions = tenancyLayout(
+      building,
+      directory.byHomeBuilding.get(buildingId) ?? [],
+      directory.byWorkBuilding.get(buildingId) ?? [],
+      districtById.get(building.districtId)?.character ?? "residential",
+      seededRng(`${masterSeed}::personas::tenancy::${buildingId}`),
+    );
+    tenancyCache.set(buildingId, regions);
+    return regions;
+  };
+
+  // Top floor first (user 2026-07-27: hovering down the list must walk down the
+  // building). Occupants with no placed unit sort last, keeping their order.
+  const byFloorDesc = <T>(items: readonly T[], floorOf: (item: T) => number): T[] =>
+    items
+      .map((item, i) => ({ item, i, floor: floorOf(item) }))
+      .sort((a, b) => b.floor - a.floor || a.i - b.i)
+      .map((e) => e.item);
 
   return {
     directory,
@@ -216,8 +347,21 @@ function buildEntityIndexes(
     roadById,
     districtAgg,
     streetAgg,
-    companiesInBuilding: (buildingId: number) => directory.byWorkBuilding.get(buildingId) ?? [],
-    householdsInBuilding: (buildingId: number) => directory.byHomeBuilding.get(buildingId) ?? [],
+    companiesInBuilding: (buildingId: number) => {
+      const regions = tenancyForBuilding(buildingId);
+      return byFloorDesc(
+        directory.byWorkBuilding.get(buildingId) ?? [],
+        (biz) => regionForBusiness(regions, biz.id)?.floorStart ?? -1,
+      );
+    },
+    householdsInBuilding: (buildingId: number) => {
+      const regions = tenancyForBuilding(buildingId);
+      return byFloorDesc(
+        directory.byHomeBuilding.get(buildingId) ?? [],
+        (hh) => regionForHousehold(regions, hh.index)?.floorStart ?? -1,
+      );
+    },
+    tenancyForBuilding,
   };
 }
 

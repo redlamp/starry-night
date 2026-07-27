@@ -812,6 +812,18 @@ export function IconTip({
   );
 }
 
+// Address numbers render as a right-aligned column sized by the city's widest
+// address, so "1203 Martin Parkway" and "9 Martin Parkway" align their street
+// names (user 2026-07-08). Shared with the directory's building lists — the two
+// used to carry separate copies and drifted apart.
+export function AddrNum({ n, width }: { n: number; width: number }) {
+  return (
+    <span className="inline-block text-right tabular-nums" style={{ minWidth: `${width}ch` }}>
+      {n}
+    </span>
+  );
+}
+
 // "+N more" that actually expands (user 2026-07-08). Column sections keep a
 // local expanded flag and pass it through here.
 export function ShowMore({
