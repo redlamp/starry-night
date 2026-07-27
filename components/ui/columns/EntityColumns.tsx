@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, type ReactElement, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, type ReactElement, type ReactNode } from "react";
 import {
   ChevronLeft,
   ChevronRight,
@@ -592,9 +592,11 @@ function EntityColumnsBody() {
         const deck = columnsView === "deck";
         const depth = top - i;
         const Icon = KIND_ICON[ref.kind];
-        return (
+        const card = (
           <div
-            key={`${ref.kind}:${ref.id}:${i}`}
+            // Verification hook (same idiom as data-district-row): layout probes
+            // need to find a card without pattern-matching utility classes.
+            data-entity-card={`${ref.kind}:${ref.id}`}
             // deck: the whole sliver is a jump-back button. side: columns stay
             // fully interactive; a capture-phase jump re-roots the path at
             // this column, then the click's own push branches from here.
@@ -605,11 +607,32 @@ function EntityColumnsBody() {
             role={deck && !isTop ? "button" : undefined}
             className={cn(
               "flex w-72 shrink-0 flex-col rounded-xl border border-border bg-popover/95 text-popover-foreground shadow-lg backdrop-blur-md",
-              // Transition transform/filter ONLY — margins snap. Animating
-              // margin-right is a per-frame reflow (the choppiness the user
-              // saw); transforms composite on the GPU.
-              "transition-[transform,filter] duration-300 will-change-transform motion-reduce:transition-none",
+              // Cards may grow to FILL the display (user 2026-07-27): the cap
+              // lives on the card, not on the scroll viewport, so the header
+              // takes what it needs (a wrapped title is 1.5rem taller) and the
+              // body gets the exact remainder. Short cards stay short — this is
+              // a max, not a height.
+              //
+              // 8rem = the dock's own top-16 (4rem) + its horizontal scrollbar
+              // row (0.75rem) + the SEED chip's row at the bottom (its bottom-3
+              // offset + 2.375rem chip + a hair of gap). With the directory
+              // closed the dock's left edge is 12px — exactly the bottom-left
+              // HUD stack's — so a card that ran to the window bottom would sit
+              // on top of the seed. The seed stays readable at a glance (user
+              // 2026-07-27); the taller HUD slots above it (side-view diagram,
+              // perf badge) are still fair game for a full-height card.
+              "max-h-[calc(100vh-8rem)]",
+              // Transition transform/filter/border-color ONLY — margins snap.
+              // Animating margin-right is a per-frame reflow (the choppiness the
+              // user saw); transforms composite on the GPU.
+              "transition-[transform,filter,border-color] duration-300 will-change-transform motion-reduce:transition-none",
               deck && !isTop && "cursor-pointer",
+              // A card below the top lifts its border on hover, alongside the
+              // "Return to Card" tooltip — the deck dims these cards to 0.68
+              // brightness, so the border needs to go well past border-border to
+              // read as lit (user 2026-07-27). Shorter than the 300ms transform
+              // tween so the edge answers the pointer promptly.
+              !isTop && "hover:border-foreground/50 hover:duration-150",
             )}
             style={
               !deck || isTop
@@ -634,7 +657,7 @@ function EntityColumnsBody() {
             {/* Header row 1: kind icon + type chip left, nav cluster right.
                 Row 2: the full name/address title, free to WRAP — long
                 company/building names no longer crop (user 2026-07-08). */}
-            <div className="flex flex-col gap-0.5 border-b border-border/60 px-3 py-2">
+            <div className="flex shrink-0 flex-col gap-0.5 border-b border-border/60 px-3 py-2">
               <div className="flex items-center justify-between gap-1">
                 <div className="flex min-w-0 items-center gap-1.5">
                   <Icon className="size-4 shrink-0 text-muted-foreground" />
@@ -709,16 +732,21 @@ function EntityColumnsBody() {
                 "super quick tween when expanding/collapsing"). Deck slivers
                 read as uniform tabs via the cap + fade-out mask; the inner
                 ScrollArea pins its scrollbar to the card's inner-right edge. */}
-            {/* Summary details stay pinned ABOVE the scrolling lists (user
-                2026-07-08) — expanding a long list scrolls below while the
-                stats stay put. */}
-            <div className="flex flex-col gap-2.5 px-3 pt-3">
-              <ColumnBody entityRef={ref} part="pinned" />
-            </div>
+            {/* Only the HEADER is fixed (user 2026-07-27, reversing the
+                2026-07-08 pinned-stats layout): the summary details and the
+                district list scroll with the lists below them. A road crossing
+                a dozen districts left almost no room for its own content on a
+                short screen. `part="pinned"` still names the summary block —
+                it's the first thing in the scroll body now, not a fixed pane. */}
             <div
-              className="overflow-hidden transition-[max-height] duration-200 ease-out motion-reduce:transition-none"
+              className="flex min-h-0 flex-1 basis-auto flex-col overflow-hidden transition-[max-height] duration-200 ease-out motion-reduce:transition-none"
               style={{
-                maxHeight: deck && !isTop ? "11rem" : "min(60vh, calc(100vh - 16rem))",
+                // basis-auto + min-h-0: content height while there's room, then
+                // the card's own max-h clamps and this shrinks to the remainder
+                // so the body scrolls. The expanded max-height stays a concrete
+                // value purely so the deck collapse still TWEENS (a jump to
+                // `none` wouldn't animate); the card's cap is what really binds.
+                maxHeight: deck && !isTop ? "11rem" : "100vh",
                 maskImage:
                   deck && !isTop
                     ? "linear-gradient(to bottom, black 60%, transparent)"
@@ -729,16 +757,33 @@ function EntityColumnsBody() {
                     : undefined,
               }}
             >
-              {/* Cap the VIEWPORT, not the root — the card's height chain is
-                  indefinite, so a root max-h never makes the viewport scroll
-                  (see the directory scroll lesson, 2026-07-08). */}
-              <ScrollArea className="**:data-[slot=scroll-area-viewport]:max-h-[min(60vh,calc(100vh-16rem))]">
+              {/* The DirectoryPanel's recipe (the one that provably scrolls in this
+                  codebase): flex column all the way down with min-h-0 at every
+                  level, viewport h-auto. A height cap alone doesn't scroll — an
+                  indefinite chain never does, and `h-full` on the viewport
+                  resolves to auto here, which silently CLIPS instead
+                  (re-learned 2026-07-27). */}
+              <ScrollArea className="flex min-h-0 flex-1 flex-col overflow-hidden **:data-[slot=scroll-area-viewport]:h-auto **:data-[slot=scroll-area-viewport]:min-h-0">
                 <div className="flex flex-col gap-2.5 p-3 pr-4">
+                  <ColumnBody entityRef={ref} part="pinned" />
                   <ColumnBody entityRef={ref} part="rest" />
                 </div>
               </ScrollArea>
             </div>
           </div>
+        );
+        const key = `${ref.kind}:${ref.id}:${i}`;
+        // A card below the top is already a jump-back target (see the click
+        // handlers above); the tooltip just names it (user 2026-07-27). It
+        // follows the cursor and shows with no delay — the trigger is a whole
+        // card, so a centred label would land over the card covering it, and a
+        // delay reads as unresponsive on something this large.
+        return isTop ? (
+          <Fragment key={key}>{card}</Fragment>
+        ) : (
+          <IconTip key={key} label="Return to Card" delay={0} trackCursor>
+            {card}
+          </IconTip>
         );
             })}
           </div>
@@ -777,11 +822,11 @@ export function StandaloneEntityCard({
         </div>
         <RefTitle entityRef={entityRef} indexes={indexes} />
       </div>
-      <div className="flex flex-col gap-2.5 px-3 pt-3">
-        <ColumnBody entityRef={entityRef} part="pinned" hideFamilyTree={hideFamilyTree} />
-      </div>
+      {/* Header fixed, everything else scrolls — same as the dock's cards
+          (user 2026-07-27). */}
       <ScrollArea className="**:data-[slot=scroll-area-viewport]:max-h-[min(60vh,calc(100vh-16rem))]">
         <div className="flex flex-col gap-2.5 p-3 pr-4">
+          <ColumnBody entityRef={entityRef} part="pinned" hideFamilyTree={hideFamilyTree} />
           <ColumnBody entityRef={entityRef} part="rest" hideFamilyTree={hideFamilyTree} />
         </div>
       </ScrollArea>
@@ -796,15 +841,21 @@ export function IconTip({
   label,
   children,
   delay = 300,
+  trackCursor,
 }: {
   label: string;
   children: ReactElement;
   // Fly-to buttons pass delay={0} for instant tooltips (user 2026-07-11).
   delay?: number;
+  // Wide triggers (a whole card) follow the cursor instead of anchoring to the
+  // element's centre — on a card that's mostly hidden behind the top one, a
+  // centred label would float over the card doing the covering (user
+  // 2026-07-27).
+  trackCursor?: boolean;
 }) {
   return (
     <TooltipProvider delay={delay}>
-      <Tooltip>
+      <Tooltip trackCursorAxis={trackCursor ? "both" : undefined}>
         <TooltipTrigger render={children} />
         <TooltipContent>{label}</TooltipContent>
       </Tooltip>
