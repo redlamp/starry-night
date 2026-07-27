@@ -15,6 +15,7 @@ import {
 import { reportTileCull } from "@/lib/scene/tileCullDebug";
 import { focusBuilding } from "@/lib/scene/focusBuilding";
 import { unitClaimedClick } from "@/lib/scene/unitClick";
+import { multiTouchActive } from "@/lib/scene/touchGate";
 import {
   generateCity,
   ARCHETYPE_ORDER,
@@ -611,6 +612,7 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
             // its own onClick instead, and a click never reaches a building
             // behind the front-most hit — topmost-only selection (user request).
             if (!inspectMode || hidden || ev.instanceId == null) return;
+            if (multiTouchActive()) return; // 2-finger camera gesture, not a pick
             // ev.instanceId is the volatile DRAW slot #55 compaction just
             // rewrote; stableIndex (the ride-along compaction channel, never
             // GPU-bound) maps it back to the tile-major index into e.list —
@@ -664,6 +666,7 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
           onDoubleClick={(ev: ThreeEvent<MouseEvent>) => {
             ev.stopPropagation();
             if (!inspectMode || hidden || ev.instanceId == null) return;
+            if (multiTouchActive()) return;
             const b = e.list[Math.round(e.stableIndex.array[ev.instanceId])];
             if (!b) return;
             useSceneStore.getState().setSelectedBuildingId(b.id);
