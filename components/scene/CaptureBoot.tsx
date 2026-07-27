@@ -5,6 +5,7 @@ import { useSceneStore, QUALITY_TIERS, type QualityTier } from "@/lib/state/scen
 import { CITY_SHAPES, type CityShapeSetting } from "@/lib/seed/cityShape";
 import { readTileCull } from "@/lib/scene/tileCullDebug";
 import { cameraCommand } from "@/lib/scene/cameraCommand";
+import { cameraActivity } from "@/lib/scene/cameraActivity";
 import { sharedTime } from "@/lib/shaders/sharedTime";
 import { applyDeviceFit } from "@/lib/perf/applyDeviceFit";
 import { buildPersonaDirectory, personaFlavor } from "@/lib/seed/personas";
@@ -63,6 +64,9 @@ export function CaptureBoot() {
       // Imperative camera channel too (setTiltDeg etc.) — gesture probes need
       // exact poses that synthetic drags can only approximate.
       (window as unknown as Record<string, unknown>).__cameraCommand = cameraCommand;
+      // The ControlsGuide's live-highlight signal: a gesture probe can assert
+      // WHICH row lights, not just what the camera did (user 2026-07-27).
+      (window as unknown as Record<string, unknown>).__cameraActivity = cameraActivity;
     }
     if (capture) {
       state.setCaptureMode(true);

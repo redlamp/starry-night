@@ -145,14 +145,24 @@ const MODEL_GUIDE: Record<CameraModelId, GuideSpec> = {
     ],
     touch: [
       // Flipped + disambiguated 2026-07-26: 1 finger moves; a 2-finger gesture LATCHES
-      // to exactly one of orbit (left-right) / tilt (up-down) / rotate (twist) / zoom
-      // (pinch) — first clear motion wins, so inputs never overlap mid-gesture.
+      // to exactly one of orbit (left-right) / tilt (up-down) / zoom (pinch) — first
+      // clear motion wins, so inputs never overlap mid-gesture. Twist-rotate retired
+      // 2026-07-27. Orbit and Tilt carry DIFFERENT actions so a latched swipe lights
+      // only the row it's driving.
       { icon: "finger-1", motion: "all", label: "Move", affordance: "move", action: "pan" },
       { icon: "finger-2", motion: "lr", label: "Orbit", action: "rotate" },
-      { icon: "finger-2", motion: "ud", label: "Tilt", action: "rotate" },
-      { icon: "finger-2", label: "Rotate", sub: "twist", action: "rotate" },
+      { icon: "finger-2", motion: "ud", label: "Tilt", action: "tilt" },
       { icon: "pinch", label: "Zoom", sub: "pinch in / out", action: "zoom" },
-      { icon: "finger-1", badge: "×2", label: "Zoom In", sub: "double-tap", action: "zoomIn" },
+      // Double-taps mirror the mouse's double-clicks (user 2026-07-27): one finger
+      // pans to the tapped point, two fingers zoom in on the midpoint.
+      { icon: "finger-1", badge: "×2", label: "Pan To", sub: "double-tap", action: "panTo" },
+      {
+        icon: "finger-2",
+        badge: "×2",
+        label: "Zoom In",
+        sub: "two-finger double-tap",
+        action: "zoomIn",
+      },
     ],
     keys: [
       { cap: "W A S D", label: "Move", action: "keysMove" },

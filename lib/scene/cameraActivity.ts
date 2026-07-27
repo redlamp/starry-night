@@ -6,9 +6,13 @@
 // Display-only (a UI affordance, NOT scene state), so the performance.now() stamp is fine under the
 // determinism contract — same basis as the FPS meter. A plain mutable singleton, never React state.
 // "keysMove" (WASD/QE) and "panTo" (double-click glide) are split from "pan" so an LMB
-// ground drag only lights its own row, not three at once (user 2026-07-26).
+// ground drag only lights its own row, not three at once (user 2026-07-26). "tilt" is
+// split from "rotate" for the same reason: a latched 2-finger swipe drives ONE axis, so
+// only that row should light (user 2026-07-27). Gestures that yaw and tilt together (the
+// mouse RMB drag) stay "rotate".
 export type CameraAction =
   | "rotate"
+  | "tilt"
   | "focalY"
   | "pan"
   | "keysMove"

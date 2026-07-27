@@ -5,6 +5,7 @@ import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
 import { Html } from "@react-three/drei";
 import { useSceneStore } from "@/lib/state/sceneStore";
+import { multiTouchActive } from "@/lib/scene/touchGate";
 import { roadQueryFor, buildCityNames, type RoadHit } from "@/lib/seed/naming";
 
 // Inspect-mode road hover: point at a street and get its name plus the
@@ -74,6 +75,9 @@ export function RoadHover({ masterSeed }: { masterSeed: string }) {
     };
     const onUp = (e: PointerEvent) => {
       if (!downOnCanvas || !(e.target instanceof HTMLCanvasElement)) return;
+      // Touch fires a pointer pair PER FINGER, so a 2-finger camera gesture would
+      // otherwise select the road under a fingertip (user 2026-07-27).
+      if (multiTouchActive()) return;
       if (Math.hypot(e.clientX - downX, e.clientY - downY) > 4) return;
       const road = hitRef.current;
       if (!road) return;
