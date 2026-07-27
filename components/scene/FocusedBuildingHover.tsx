@@ -84,6 +84,7 @@ function BuildingUnitPicker({
           color={color}
           proud
           opacity={hovered === i ? 0.62 : 0.12}
+          outline={hovered === i ? "solid" : "dashed"}
           onPointerOver={(e) => {
             e.stopPropagation();
             setHovered(i);

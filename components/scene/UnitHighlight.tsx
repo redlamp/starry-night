@@ -73,5 +73,17 @@ export function UnitHighlight({ masterSeed }: { masterSeed: string }) {
   }, [hoverKey, selectedPersonaId, directory, masterSeed, cityShape, cityShapeScale, citySize, citySketch]);
 
   if (!resolved) return null;
-  return <UnitBox building={resolved.building} region={resolved.region} color={resolved.color} opacity={0.62} />;
+  // Selected/hovered tenant's unit: full solid outline. `proud` matches the
+  // focused-building picker's scale exactly, so when both draw the same unit
+  // the outlines coincide instead of double-ghosting (user 2026-07-27).
+  return (
+    <UnitBox
+      building={resolved.building}
+      region={resolved.region}
+      color={resolved.color}
+      opacity={0.62}
+      outline="solid"
+      proud
+    />
+  );
 }
