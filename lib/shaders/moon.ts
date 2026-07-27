@@ -27,8 +27,18 @@ export const moonFragmentShader = /* glsl */ `
   varying vec3 vNormalView;
 
   // Array-free ordered (Bayer) dither thresholds, recursive 2 → 4. Returns [0,1).
+  //
+  // bayer4 REDUCES its coordinate mod 4 before recursing, and that is load-bearing on
+  // mobile: bayer2 squares its input, and gl_FragCoord.y is measured from the BOTTOM of
+  // the viewport — so a moon high in the sky on a tall phone screen arrives here as
+  // y ≈ 2000. Squared, that blows past mediump's fp16 ceiling (65504; even y = 256
+  // overflows) → +Inf → fract() → NaN → step() → 0, i.e. an all-black disc with only
+  // the halo left glowing (user 2026-07-27, Pixel 6). Desktop never saw it because
+  // ANGLE/desktop GL promote mediump to fp32. The pattern has period 4 on both axes, so
+  // the reduction is bit-identical where the old form worked, and keeps every square
+  // under 16 where it didn't.
   float bayer2(vec2 a) { a = floor(a); return fract(a.x * 0.5 + a.y * a.y * 0.75); }
-  float bayer4(vec2 a) { return bayer2(0.5 * a) * 0.25 + bayer2(a); }
+  float bayer4(vec2 a) { vec2 p = mod(a, 4.0); return bayer2(0.5 * p) * 0.25 + bayer2(p); }
 
   void main() {
     vec3 N = normalize(vNormalView);
