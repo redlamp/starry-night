@@ -144,8 +144,13 @@ const MODEL_GUIDE: Record<CameraModelId, GuideSpec> = {
       },
     ],
     touch: [
-      { icon: "finger-1", motion: "all", label: "Rotate & Tilt", action: "rotate" },
-      { icon: "finger-2", motion: "all", label: "Move", action: "pan" },
+      // Flipped + disambiguated 2026-07-26: 1 finger moves; a 2-finger gesture LATCHES
+      // to exactly one of orbit (left-right) / tilt (up-down) / rotate (twist) / zoom
+      // (pinch) — first clear motion wins, so inputs never overlap mid-gesture.
+      { icon: "finger-1", motion: "all", label: "Move", affordance: "move", action: "pan" },
+      { icon: "finger-2", motion: "lr", label: "Orbit", action: "rotate" },
+      { icon: "finger-2", motion: "ud", label: "Tilt", action: "rotate" },
+      { icon: "finger-2", label: "Rotate", sub: "twist", action: "rotate" },
       { icon: "pinch", label: "Zoom", sub: "pinch in / out", action: "zoom" },
       { icon: "finger-1", badge: "×2", label: "Zoom In", sub: "double-tap", action: "zoomIn" },
     ],

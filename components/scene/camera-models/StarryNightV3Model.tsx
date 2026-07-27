@@ -5,7 +5,7 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { uiObstructionInsetLeft } from "@/lib/scene/focusBuilding";
 import { CameraControls, Html } from "@react-three/drei";
 import CameraControlsImpl from "camera-controls";
-import { Cone, MapPin } from "lucide-react";
+import { MapPin } from "lucide-react";
 import * as THREE from "three";
 import { useSceneStore, DEFAULT_INTENT, DEFAULT_PROJECTION } from "@/lib/state/sceneStore";
 import { orbitFramingFactor } from "@/lib/scene/aspectFraming";
@@ -36,19 +36,22 @@ import { writeOrbitPose } from "./orbitWriteback";
 //      Feel knobs reuse the Drift sliders (store.drift): revolve/wander/bob/breathe.
 //   3. CONE-VIEW FRAMING: a focusRequest may carry viewAzimuthDeg (the arc-perpendicular
 //      bearing EntityColumns computes) — the focus glide rotates there the SHORT way, so
-//      commute/connection arcs present broadside. While LMB-orbiting a cone-view pivot,
-//      a pin + cone glyph marks the arcs' centre point the view is revolving around.
+//      commute/connection arcs present broadside. While orbiting a cone-view pivot, a
+//      plain pin marks the arcs' centre point (the cone itself is the quick-toggle on
+//      the roof pin — BuildingPin, user 2026-07-27).
 //   4. TOUCH, hand-rolled (v2 left camera-controls' native touch on; it reads wrong on
-//      phones): 1-finger orbits + tilts around the touched ground point, 2-finger pans
-//      (ground-anchored midpoint) + pinch-zooms toward the pinch centre, double-tap
-//      zooms in. Same math as the mouse gestures, same clamps.
+//      phones). FLIPPED + DISAMBIGUATED 2026-07-26: 1-finger MOVES (ground pan,
+//      synthesized-pick fallback); a 2-finger gesture LATCHES to exactly one of
+//      orbit (swipe left-right) / tilt (swipe up-down) / rotate (twist, about the
+//      midpoint's ground point) / zoom (pinch) — first clear motion wins, so inputs
+//      never overlap mid-gesture; double-tap zooms in. Same math and clamps as mouse.
 //
 //   Desktop   LMB drag         Orbit + Tilt around the CLICKED point (a pin marks it; cleared on release)
 //             RMB / Shift+LMB  Move — grab the ground (grabbing cursor); it stays under the cursor
 //             Ctrl/⌘ + LMB     Aim — grab a map point and swing the view in place (free-look)
 //             wheel            Zoom toward the cursor  ·  double-click  Zoom in
 //             t                Top-down toggle (in-camera flight, see above)
-//   Touch     1-finger         Orbit + Tilt  ·  2-finger  pan + pinch-zoom  ·  double-tap  Zoom in
+//   Touch     1-finger  Move  ·  2-finger (latched)  swipe ←→ Orbit · swipe ↑↓ Tilt · twist Rotate · pinch Zoom  ·  double-tap  Zoom in
 //
 // Perspective + faked-ortho (via ProjectionBlender), same as v2: parallel-ray picks at
 // full ortho, orthoSize-based zoom, frame-on-mount + ~10/s pose write-back. Self-gates
@@ -488,14 +491,13 @@ export function StarryNightV3Model() {
   // top-down back to this model, #83) was pending at mount. A live getState() read INSIDE
   // that effect would already see it cleared (the handoff effect runs first) and stomp it.
   const hadHandoffOnMount = useRef(useSceneStore.getState().cameraHandoff !== null);
-  // Orbit pivot marker. kind "orbit" = the transient clicked-ground pin (v2 behaviour);
-  // kind "cone" = the cone-view arcs' centre point — pin + cone glyph, so it reads as
-  // "the view is revolving around the middle of these arcs".
-  // `dragging`: pin shows FAINT (0.2) on bare press and solid once the drag is real —
-  // a double-click no longer pops a full-strength pin in and out (user 2026-07-26).
+  // Orbit pivot marker: the transient pin at the drag's pivot — a clicked ground point,
+  // or the cone-view arcs' centroid (its cone glyph moved to the roof-pin quick-toggle,
+  // user 2026-07-27). `dragging`: pin shows FAINT (0.2) on bare press and solid once the
+  // drag is real — a double-click never pops a full-strength pin (user 2026-07-26).
   const [pin, setPin] = useState<{
     pos: [number, number, number];
-    kind: "orbit" | "cone";
+    kind: "orbit";
     dragging: boolean;
   } | null>(null);
   // Top-down flight (behaviour 1): the banked return pose. Non-null = "in top-down".
@@ -953,7 +955,7 @@ export function StarryNightV3Model() {
     let dragMoved = false;
     let dragDownX = 0;
     let dragDownY = 0;
-    let orbitPinPending: { pos: [number, number, number]; kind: "orbit" | "cone" } | null = null;
+    let orbitPinPending: { pos: [number, number, number]; kind: "orbit" } | null = null;
     let hoverX = 0; // last mouse position over the canvas — anchors the armed-modifier glyph
     let hoverY = 0;
     let overCanvas = false;
@@ -1152,9 +1154,10 @@ export function StarryNightV3Model() {
         // the building the double-click framed, at any height. A focused BUILDING
         // already wears its selection MapPin (BuildingPin, above the roof) — no
         // transient pin. The CONE pivot is a bare point in space (the arcs' centre),
-        // so it DOES get a marker: the pin + cone glyph, raised for the drag.
+        // so it gets a plain pin for the drag — the cone itself lives as the
+        // quick-toggle button on the building's roof pin (user 2026-07-27).
         _grab.set(fp[0], fp[1], fp[2]);
-        orbitPinPending = st.coneFollow ? { pos: [fp[0], fp[1], fp[2]], kind: "cone" } : null;
+        orbitPinPending = st.coneFollow ? { pos: [fp[0], fp[1], fp[2]], kind: "orbit" } : null;
       } else if (groundHit(cam, dom, clientX, clientY, _cur)) {
         // Pivot must lie within the ground disc — a click near the horizon hits the (infinite)
         // ground plane far off the map, so clamp it to the disc edge; we never orbit around a
@@ -1183,6 +1186,77 @@ export function StarryNightV3Model() {
       if (h > 1e-3) orbitAxis.current.set(-_dir.z, 0, _dir.x).multiplyScalar(1 / h);
     };
 
+    // One orbit/tilt step around the armed pivot (_grab) — the mouse RMB drag's math,
+    // shared with the 2-finger touch gesture (which drives it with the MIDPOINT delta).
+    // Rotate BOTH eye and target around the pivot, so the pivot's screen position holds
+    // (no re-centre). Yaw around world-up (stable at any tilt). Tilt around a CARRIED
+    // horizontal axis (kept valid through the pole).
+    const applyOrbitDelta = (c: CameraControlsImpl, dx: number, dy: number) => {
+      c.getPosition(_eye);
+      c.getTarget(_tgt);
+      const cfg = useSceneStore.getState().snv3;
+      const orbitRate = ORBIT_RATE * cfg.orbitSpeed;
+      _q.setFromAxisAngle(_UP, -dx * orbitRate);
+      _eye.sub(_grab).applyQuaternion(_q).add(_grab);
+      _tgt.sub(_grab).applyQuaternion(_q).add(_grab);
+      _dir.subVectors(_tgt, _eye);
+      const dlen = _dir.length() || 1e-3;
+      const horiz = Math.hypot(_dir.x, _dir.z);
+      if (horiz > 1e-3) orbitAxis.current.set(-_dir.z, 0, _dir.x).multiplyScalar(1 / horiz);
+      // Clamp the TILT in pitch, not after the fact. The carried axis is perpendicular to the
+      // look heading, so rotating the look direction about it changes its pitch by exactly the
+      // rotation angle. Cap the DESIRED look-down at MAX_ORBIT_EL and apply only the residual —
+      // so it lands exactly at straight-down and never rotates PAST it. (The old post-rotation
+      // elevation check let a single large step overshoot the pole and land on the far side at a
+      // low-enough angle to pass — teleporting the eye across the top: the reported flip/flicker.)
+      const lookDown = Math.asin(THREE.MathUtils.clamp(-_dir.y / dlen, -1, 1));
+      const desired = lookDown + dy * orbitRate; // drag down tilts toward straight-down
+      // Cap at straight-down; in PERSPECTIVE floor at the user's Min tilt (default 0° = level → no
+      // looking up; negative lets the camera drop into a low, upward vantage). ORTHO is hard-capped
+      // at 0° (parallel to ground) — never looks up (that would show the ground's underside).
+      // The floor clamps INCREMENTALLY: a pose already below it may STAY (the hero default looks
+      // UP ~1.06°, floor 0°) — the clamp only blocks tilting further past it. The absolute clamp
+      // snapped such a pose to the floor on the first move event of any RMB drag, a ~1° pitch
+      // jerk even on a purely horizontal drag (review 2026-07-25 1.2, probe-confirmed).
+      const cfgFloor =
+        useSceneStore.getState().projection === "perspective" ? cfg.tiltFloorDeg * DEG : 0;
+      const floor = Math.min(cfgFloor, lookDown);
+      const applied = lookDown - THREE.MathUtils.clamp(desired, floor, MAX_ORBIT_EL);
+      _q.setFromAxisAngle(orbitAxis.current, applied);
+      _e2.copy(_eye).sub(_grab).applyQuaternion(_q).add(_grab);
+      _t2.copy(_tgt).sub(_grab).applyQuaternion(_q).add(_grab);
+      if (_e2.y > MIN_EYE_Y) {
+        // ground guard
+        _eye.copy(_e2);
+        _tgt.copy(_t2);
+      } else {
+        // Ground guard, DECOUPLED (2026-07-26 skyline-entry): the old guard rejected the
+        // whole step, which stalled a tilt-up a fraction of a degree above the skyline
+        // band whenever the orbit arc would sink the eye below the floor (near/low
+        // pivots) — "some areas can't enter skyline view". When the arc bottoms out,
+        // keep the eye where the floor holds it and apply the same pitch to the AIM
+        // alone (rotate the target about the eye) — the drag keeps tilting at the same
+        // angular rate, it just stops descending. `applied` is already capped by the
+        // tilt floor above, so the in-place pitch can't overshoot either.
+        _t2.copy(_tgt).sub(_eye).applyQuaternion(_q).add(_eye);
+        _tgt.copy(_t2);
+      }
+      void c.setLookAt(_eye.x, _eye.y, _eye.z, _tgt.x, _tgt.y, _tgt.z, false);
+    };
+
+    // Pure yaw around the armed pivot by an absolute angle (radians) — the 2-finger
+    // TWIST rotate. Positive = the city turns clockwise on screen with the fingers
+    // (screen-coord twist angle passes through unchanged; probe-verified direction).
+    const applyOrbitYaw = (c: CameraControlsImpl, rad: number) => {
+      if (Math.abs(rad) < 1e-5) return;
+      c.getPosition(_eye);
+      c.getTarget(_tgt);
+      _q.setFromAxisAngle(_UP, rad);
+      _eye.sub(_grab).applyQuaternion(_q).add(_grab);
+      _tgt.sub(_grab).applyQuaternion(_q).add(_grab);
+      void c.setLookAt(_eye.x, _eye.y, _eye.z, _tgt.x, _tgt.y, _tgt.z, false);
+    };
+
     // Pointer capture, throw-safe: set/releasePointerCapture throw NotFoundError for a
     // pointer the browser doesn't consider active (synthetic events — the CDP test
     // harness — and some cancelled-touch races). A throw mid-handler strands the whole
@@ -1203,12 +1277,30 @@ export function StarryNightV3Model() {
       }
     };
 
-    // ---- Touch (behaviour 4): 1-finger orbit + tilt · 2-finger pan + pinch-zoom ·
-    // double-tap zoom-in. Hand-rolled on pointer events (native camera-controls touch is
-    // off) so the math, pivots, and clamps are EXACTLY the mouse gestures'. Twist-rotate
-    // and 3-finger free-look are deliberately out of the first pass.
+    // ---- Touch (behaviour 4, FLIPPED + DISAMBIGUATED 2026-07-26): 1-finger move ·
+    // 2-finger latched gesture (orbit / tilt / twist-rotate / pinch-zoom) · double-tap
+    // zoom-in. Hand-rolled on pointer events (native camera-controls touch is off) so
+    // the math, pivots, and clamps are EXACTLY the mouse gestures'. 3-finger free-look
+    // is deliberately out of scope.
     const touchPts = new Map<number, { x: number; y: number }>();
-    let twoFinger = false; // the 2-finger pan+pinch owns the gesture (drag stays null)
+    let twoFinger = false; // a 2-finger gesture owns the input (drag stays null)
+    // 2-finger gesture DISAMBIGUATION (user 2026-07-26: "mitigate too much overlap of
+    // inputs"): the gesture LATCHES to exactly one mode — the first motion channel past
+    // its threshold wins and the others are ignored until the finger count changes.
+    //   pinch (spread)      → zoom          twist (angle)   → rotate about the midpoint
+    //   swipe left-right    → orbit (yaw)   swipe up-down   → tilt
+    let g2Mode: null | "zoom" | "twist" | "orbit" | "tilt" = null;
+    let g2RefMidX = 0; // gesture-start references (for the latch thresholds)
+    let g2RefMidY = 0;
+    let g2RefDist = 1;
+    let g2RefAng = 0;
+    let g2PrevMidX = 0; // previous-event values (for the incremental deltas)
+    let g2PrevMidY = 0;
+    let g2PrevDist = 1;
+    let g2PrevAng = 0;
+    const G2_SWIPE_PX = 18; // midpoint travel before a swipe latches
+    const G2_PINCH_PX = 24; // spread change before zoom latches
+    const G2_TWIST_RAD = 0.17; // ~10° of twist before rotate latches
     let touchDownT = 0; // first-finger-down e.timeStamp (tap detection)
     let lastTapT = 0;
     let lastTapX = 0;
@@ -1229,13 +1321,28 @@ export function StarryNightV3Model() {
         dragDownY = e.clientY;
         dragMoved = false;
         twoFinger = false;
-        armOrbit(e.clientX, e.clientY);
-      } else if (touchPts.size === 2) {
-        // Second finger down: the gesture becomes pan + pinch; the orbit stands down.
-        drag = null;
+        // FLIPPED 2026-07-26 (user: "similar to mouse inputs"): 1 finger MOVES (the mouse
+        // LMB ground pan, synthesized-pick fallback included), 2 fingers rotate + tilt.
+        drag = "pan";
         setPin(null);
-        orbitPinPending = null;
+        if (!groundHit(cam, dom, e.clientX, e.clientY, _grab, true)) drag = null;
+      } else if (touchPts.size === 2) {
+        // Second finger down: arm the pivot at the MIDPOINT's ground point and reset the
+        // gesture latch — onTouchMove classifies the motion into exactly one of
+        // zoom / twist-rotate / orbit / tilt (see g2Mode above).
+        const pts = [...touchPts.values()];
+        const midX = (pts[0].x + pts[1].x) / 2;
+        const midY = (pts[0].y + pts[1].y) / 2;
+        armOrbit(midX, midY);
+        orbitPinPending = null; // no pivot pin on touch (a pinch must never flash it)
+        drag = null; // the 2-finger branch drives the camera itself
+        setPin(null);
         twoFinger = true;
+        g2Mode = null;
+        g2RefMidX = g2PrevMidX = midX;
+        g2RefMidY = g2PrevMidY = midY;
+        g2RefDist = g2PrevDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y) || 1;
+        g2RefAng = g2PrevAng = Math.atan2(pts[1].y - pts[0].y, pts[1].x - pts[0].x);
       } else {
         // 3+ fingers: stand down entirely (no free-look on touch in this pass).
         drag = null;
@@ -1252,54 +1359,63 @@ export function StarryNightV3Model() {
       if (!c || !entry) return true;
       markInput();
       if (twoFinger && touchPts.size >= 2) {
-        const pts = [...touchPts.values()];
-        const beforeMidX = (pts[0].x + pts[1].x) / 2;
-        const beforeMidY = (pts[0].y + pts[1].y) / 2;
-        const beforeDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y) || 1;
         entry.x = e.clientX;
         entry.y = e.clientY;
-        const pts2 = [...touchPts.values()];
-        const midX = (pts2[0].x + pts2[1].x) / 2;
-        const midY = (pts2[0].y + pts2[1].y) / 2;
-        const afterDist = Math.hypot(pts2[0].x - pts2[1].x, pts2[0].y - pts2[1].y) || 1;
-        // PAN: ground-anchored midpoint, the mouse pan's incremental prev→curr delta.
-        // RIGID in both projections (the perspective snow-globe eye-backout stays a
-        // desktop nicety) — focal clamped to the ground disc, eye moved by the same delta.
-        markCameraActivity("pan");
-        if (
-          groundHit(cam, dom, beforeMidX, beforeMidY, _grab) &&
-          groundHit(cam, dom, midX, midY, _cur)
-        ) {
-          _delta.subVectors(_grab, _cur);
-          c.getPosition(_eye);
-          c.getTarget(_tgt);
-          const stT = useSceneStore.getState();
-          // Same low-angle speed cap as the mouse pan (PAN_SPEED_MAX).
-          {
-            const r2 = dom.getBoundingClientRect();
-            const halfH =
-              stT.projection === "orthographic"
-                ? stT.orthoSize * orbitFramingFactor(r2.width / Math.max(1, r2.height))
-                : _eye.distanceTo(_tgt) *
-                  Math.tan(((cam as THREE.PerspectiveCamera).fov * DEG) / 2);
-            const px = Math.abs(midX - beforeMidX) + Math.abs(midY - beforeMidY);
-            const maxLen = (px * (2 * halfH)) / Math.max(1, r2.height) * PAN_SPEED_MAX;
-            const len = _delta.length();
-            if (len > maxLen && len > 0) _delta.multiplyScalar(maxLen / len);
+        const pts = [...touchPts.values()];
+        const midX = (pts[0].x + pts[1].x) / 2;
+        const midY = (pts[0].y + pts[1].y) / 2;
+        const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y) || 1;
+        const ang = Math.atan2(pts[1].y - pts[0].y, pts[1].x - pts[0].x);
+        // LATCH: first channel past its threshold owns the whole gesture (one gesture,
+        // one behavior — the overlap-mitigation ask). Ratios normalize each channel to
+        // its own threshold so the clearest intent wins.
+        if (g2Mode === null) {
+          const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
+          const swipeDx = Math.abs(midX - g2RefMidX);
+          const swipeDy = Math.abs(midY - g2RefMidY);
+          const rSwipe = Math.max(swipeDx, swipeDy) / G2_SWIPE_PX;
+          const rPinch = Math.abs(dist - g2RefDist) / G2_PINCH_PX;
+          const rTwist = Math.abs(wrap(ang - g2RefAng)) / G2_TWIST_RAD;
+          const best = Math.max(rSwipe, rPinch, rTwist);
+          if (best >= 1) {
+            g2Mode =
+              best === rPinch
+                ? "zoom"
+                : best === rTwist
+                  ? "twist"
+                  : swipeDx >= swipeDy
+                    ? "orbit"
+                    : "tilt";
           }
-          const groundR = CITY_TIERS[stT.citySize] + GROUND_APRON_M;
-          const cl = clampToDisc(_tgt.x + _delta.x, _tgt.z + _delta.z, groundR, _panFocal);
-          const adx = cl.x - _tgt.x;
-          const adz = cl.z - _tgt.z;
-          void c.setLookAt(_eye.x + adx, _eye.y, _eye.z + adz, cl.x, _tgt.y, cl.z, false);
         }
-        // PINCH: zoom toward the midpoint (spread = in). zoomAtCursor bridges both
-        // projections (perspective dollies about the ground point; ortho scales + re-pins).
-        const k = beforeDist / afterDist;
-        if (Math.abs(k - 1) > 0.001) {
-          markCameraActivity("zoom");
-          zoomAtCursor(c, cam, dom, midX, midY, k, false);
+        if (g2Mode === "zoom") {
+          // PINCH: zoom toward the midpoint (spread = in). zoomAtCursor bridges both
+          // projections (perspective dollies about the ground point; ortho scales + re-pins).
+          const k = g2PrevDist / dist;
+          if (Math.abs(k - 1) > 0.001) {
+            markCameraActivity("zoom");
+            zoomAtCursor(c, cam, dom, midX, midY, k, false);
+          }
+        } else if (g2Mode === "twist") {
+          // TWIST: yaw around the midpoint's ground pivot by the finger-angle change —
+          // the city turns with the fingers (Google Earth's rotate).
+          const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
+          markCameraActivity("rotate");
+          applyOrbitYaw(c, wrap(ang - g2PrevAng));
+        } else if (g2Mode === "orbit") {
+          // SWIPE LEFT-RIGHT: orbit (yaw only — the vertical component is ignored so the
+          // latched gesture stays single-purpose).
+          markCameraActivity("rotate");
+          applyOrbitDelta(c, midX - g2PrevMidX, 0);
+        } else if (g2Mode === "tilt") {
+          // SWIPE UP-DOWN: tilt only.
+          markCameraActivity("rotate");
+          applyOrbitDelta(c, 0, midY - g2PrevMidY);
         }
+        g2PrevMidX = midX;
+        g2PrevMidY = midY;
+        g2PrevDist = dist;
+        g2PrevAng = ang;
         return true;
       }
       entry.x = e.clientX;
@@ -1313,7 +1429,7 @@ export function StarryNightV3Model() {
       releasePointer(e.pointerId);
       if (twoFinger) {
         if (touchPts.size === 1) {
-          // One finger stays down: hand the gesture back to a re-anchored orbit.
+          // One finger stays down: hand the gesture back to a re-anchored MOVE (flipped).
           twoFinger = false;
           const p = [...touchPts.values()][0];
           lastX = p.x;
@@ -1321,7 +1437,8 @@ export function StarryNightV3Model() {
           dragDownX = p.x;
           dragDownY = p.y;
           dragMoved = false;
-          armOrbit(p.x, p.y);
+          drag = "pan";
+          if (!groundHit(cam, dom, p.x, p.y, _grab, true)) drag = null;
         } else if (touchPts.size === 0) {
           twoFinger = false;
           skylineHold = false;
@@ -1543,59 +1660,7 @@ export function StarryNightV3Model() {
           setPin({ ...orbitPinPending, dragging: true });
           orbitPinPending = null;
         }
-        // Rotate BOTH eye and target around the pivot _grab, so the pivot's screen position holds
-        // (no re-centre). Yaw around world-up (stable at any tilt). Tilt around a CARRIED horizontal
-        // axis (kept valid through the pole).
-        c.getPosition(_eye);
-        c.getTarget(_tgt);
-        const cfg = useSceneStore.getState().snv3;
-        const orbitRate = ORBIT_RATE * cfg.orbitSpeed;
-        _q.setFromAxisAngle(_UP, -dx * orbitRate);
-        _eye.sub(_grab).applyQuaternion(_q).add(_grab);
-        _tgt.sub(_grab).applyQuaternion(_q).add(_grab);
-        _dir.subVectors(_tgt, _eye);
-        const dlen = _dir.length() || 1e-3;
-        const horiz = Math.hypot(_dir.x, _dir.z);
-        if (horiz > 1e-3) orbitAxis.current.set(-_dir.z, 0, _dir.x).multiplyScalar(1 / horiz);
-        // Clamp the TILT in pitch, not after the fact. The carried axis is perpendicular to the
-        // look heading, so rotating the look direction about it changes its pitch by exactly the
-        // rotation angle. Cap the DESIRED look-down at MAX_ORBIT_EL and apply only the residual —
-        // so it lands exactly at straight-down and never rotates PAST it. (The old post-rotation
-        // elevation check let a single large step overshoot the pole and land on the far side at a
-        // low-enough angle to pass — teleporting the eye across the top: the reported flip/flicker.)
-        const lookDown = Math.asin(THREE.MathUtils.clamp(-_dir.y / dlen, -1, 1));
-        const desired = lookDown + dy * orbitRate; // drag down tilts toward straight-down
-        // Cap at straight-down; in PERSPECTIVE floor at the user's Min tilt (default 0° = level → no
-        // looking up; negative lets the camera drop into a low, upward vantage). ORTHO is hard-capped
-        // at 0° (parallel to ground) — never looks up (that would show the ground's underside).
-        // The floor clamps INCREMENTALLY: a pose already below it may STAY (the hero default looks
-        // UP ~1.06°, floor 0°) — the clamp only blocks tilting further past it. The absolute clamp
-        // snapped such a pose to the floor on the first move event of any RMB drag, a ~1° pitch
-        // jerk even on a purely horizontal drag (review 2026-07-25 1.2, probe-confirmed).
-        const cfgFloor =
-          useSceneStore.getState().projection === "perspective" ? cfg.tiltFloorDeg * DEG : 0;
-        const floor = Math.min(cfgFloor, lookDown);
-        const applied = lookDown - THREE.MathUtils.clamp(desired, floor, MAX_ORBIT_EL);
-        _q.setFromAxisAngle(orbitAxis.current, applied);
-        _e2.copy(_eye).sub(_grab).applyQuaternion(_q).add(_grab);
-        _t2.copy(_tgt).sub(_grab).applyQuaternion(_q).add(_grab);
-        if (_e2.y > MIN_EYE_Y) {
-          // ground guard
-          _eye.copy(_e2);
-          _tgt.copy(_t2);
-        } else {
-          // Ground guard, DECOUPLED (2026-07-26 skyline-entry): the old guard rejected the
-          // whole step, which stalled a tilt-up a fraction of a degree above the skyline
-          // band whenever the orbit arc would sink the eye below the floor (near/low
-          // pivots) — "some areas can't enter skyline view". When the arc bottoms out,
-          // keep the eye where the floor holds it and apply the same pitch to the AIM
-          // alone (rotate the target about the eye) — the drag keeps tilting at the same
-          // angular rate, it just stops descending. `applied` is already capped by the
-          // tilt floor above, so the in-place pitch can't overshoot either.
-          _t2.copy(_tgt).sub(_eye).applyQuaternion(_q).add(_eye);
-          _tgt.copy(_t2);
-        }
-        void c.setLookAt(_eye.x, _eye.y, _eye.z, _tgt.x, _tgt.y, _tgt.z, false);
+        applyOrbitDelta(c, dx, dy);
       } else {
         // Free-look grab handle: keep the eye fixed and swing the aim so the grabbed world point
         // (grabP) tracks the cursor — GE's "drag the world" look. Servo the view each move to pin
@@ -2121,26 +2186,15 @@ export function StarryNightV3Model() {
       <CameraControls ref={controls} makeDefault />
       {pin && (
         <Html position={pin.pos} center zIndexRange={[100, 0]} pointerEvents="none">
-          {/* Faint on bare press (0.2), solid once dragging — subtle for clicks. */}
+          {/* Faint on bare press (0.2), solid once dragging — subtle for clicks.
+              One plain pin for every pivot (the cone-view centroid included — its
+              cone glyph moved to the roof-pin quick-toggle, user 2026-07-27). */}
           <div style={{ opacity: pin.dragging ? 1 : 0.2, transition: "opacity 150ms" }}>
-          {pin.kind === "cone" ? (
-            // Cone-view pivot: the arcs' centre point the orbit revolves around — the
-            // pin marks it, and the cone glyph above ties it to the cone button that
-            // framed this view (why THIS point: it keeps all the arcs in frame).
-            <div
-              className="flex flex-col items-center text-sky-300"
-              style={{ transform: "translateY(-70%)" }}
-            >
-              <Cone strokeWidth={2.5} style={{ width: 18, height: 18, marginBottom: 2 }} />
-              <MapPin strokeWidth={2.5} style={{ width: 26, height: 26 }} />
-            </div>
-          ) : (
             <MapPin
               className="text-sky-300"
               strokeWidth={2.5}
               style={{ width: 26, height: 26, transform: "translateY(-50%)" }}
             />
-          )}
           </div>
         </Html>
       )}

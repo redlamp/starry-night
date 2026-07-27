@@ -610,6 +610,18 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
             // its own onClick instead, and a click never reaches a building
             // behind the front-most hit — topmost-only selection (user request).
             if (!inspectMode || hidden || ev.instanceId == null) return;
+            // ev.instanceId is the volatile DRAW slot #55 compaction just
+            // rewrote; stableIndex (the ride-along compaction channel, never
+            // GPU-bound) maps it back to the tile-major index into e.list —
+            // the STABLE identity that survives the next recompaction.
+            const stableIdx = Math.round(e.stableIndex.array[ev.instanceId]);
+            const b = e.list[stableIdx];
+            if (!b) return; // defensive: a bad slot -> index should never happen, but never crash on a click
+            // The FOCUSED building's own walls are transparent to clicks (user
+            // 2026-07-27): don't claim the event, so the ray continues to the
+            // unit boxes inside — the NEAREST unit's handler stopPropagation()s,
+            // making units selectable from any side, first-unit-hit wins.
+            if (b.id === useSceneStore.getState().focusedBuildingId) return;
             ev.stopPropagation();
             // Reject drags: R3F's onClick only checks that press+release hit the
             // SAME object, not how far the pointer travelled — so an orbit drag
@@ -621,13 +633,6 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
               const dy = ev.nativeEvent.clientY - d.y;
               if (dx * dx + dy * dy > 36) return; // > ~6 px of travel = a drag
             }
-            // ev.instanceId is the volatile DRAW slot #55 compaction just
-            // rewrote; stableIndex (the ride-along compaction channel, never
-            // GPU-bound) maps it back to the tile-major index into e.list —
-            // the STABLE identity that survives the next recompaction.
-            const stableIdx = Math.round(e.stableIndex.array[ev.instanceId]);
-            const b = e.list[stableIdx];
-            if (!b) return; // defensive: a bad slot -> index should never happen, but never crash on a click
             useSceneStore.getState().setSelectedBuildingId(b.id);
           }}
           // #87 focus: double-click a building (inspect mode) to select AND

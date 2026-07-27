@@ -1390,9 +1390,10 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setColumnsView: (columnsView) => set({ columnsView }),
   settingsPanelWidth: 448,
   setSettingsPanelWidth: (settingsPanelWidth) => set({ settingsPanelWidth }),
-  // Default ON (user 2026-07-18): inspecting starts in cone mode; the toggle
-  // still turns it off per session. Runtime tier, not persisted.
-  coneFollow: true,
+  // Default OFF (user 2026-07-27, reversing the 2026-07-18 default-on trial):
+  // inspecting starts without cone-follow; the toggle turns it on per session.
+  // Runtime tier, not persisted.
+  coneFollow: false,
   setConeFollow: (coneFollow) => set({ coneFollow }),
   inspectMode: false,
   setInspectMode: (on) =>

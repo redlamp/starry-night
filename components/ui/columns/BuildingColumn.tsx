@@ -150,9 +150,13 @@ export function BuildingColumn({ id, part }: { id: number; part: "pinned" | "res
               >
                 {/* Unit right-aligned in the row, like the ages column
                     (user 2026-07-08). Pilled so it reads as metadata, distinct
-                    from the plain-text ages below (user 2026-07-10). */}
-                <div className="flex items-baseline justify-between gap-2 text-sm font-medium">
-                  <span className="truncate">{hh.label}</span>
+                    from the plain-text ages below (user 2026-07-10). Family
+                    name reads as a section label: ALL CAPS, one size down,
+                    two shades darker (user 2026-07-27). */}
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="text-foreground/60 truncate text-xs font-medium tracking-wide uppercase">
+                    {hh.label}
+                  </span>
                   {hh.unit && (
                     <Badge variant="outline" className="shrink-0 px-1.5 py-0 text-[10px] font-normal">
                       Unit {hh.unit}

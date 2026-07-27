@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
@@ -12,6 +12,7 @@ import { generateCity, type Building } from "@/lib/seed/cityGen";
 import { seededRng } from "@/lib/seed/rng";
 import type { CommuteMode, Persona } from "@/lib/seed/personas";
 import { ensureBuildingStories } from "@/lib/seed/personaStory";
+import { storefrontGroundFrac, floorFrac } from "@/lib/scene/storefront";
 import { tenancyLayout, regionForHousehold, regionForBusiness, type TenantRegion } from "@/lib/seed/tenancyLayout";
 
 // Relationship arcs over the city, X-RAY drawn (depthTest off) like the #87
@@ -47,6 +48,9 @@ export function CommuteArc({ masterSeed }: { masterSeed: string }) {
   const cityShapeScale = useSceneStore((s) => s.cityShapeScale);
   const citySize = useSceneStore((s) => s.citySize);
   const citySketch = useSceneStore((s) => s.citySketch);
+  // Storefront floor warp inputs — arc anchors must match UnitBox's floor mapping.
+  const sfShare = useSceneStore((s) => s.windowAA.storefront);
+  const sfHeight = useSceneStore((s) => s.windowAA.storefrontHeight);
 
   const topRef = columnCursor >= 0 ? columnPath[columnCursor] : undefined;
   const topKey = topRef ? `${topRef.kind}:${topRef.id}` : null;
@@ -93,14 +97,17 @@ export function CommuteArc({ masterSeed }: { masterSeed: string }) {
     const buildingTop = (b: Building) => new THREE.Vector3(b.x, b.height + 4, b.z);
 
     // Top centre of a unit cube, in world space (local unit-box → scale → rotate → translate).
+    // floorFrac applies the storefront floor-0 stretch so the anchor sits on the SAME
+    // warped floor the unit box draws at (user 2026-07-27, see lib/scene/storefront).
     const unitTop = (b: Building, region: TenantRegion) => {
       const cx = (region.xMin + region.xMax) / 2;
       const cz = (region.zMin + region.zMax) / 2;
-      const yTop = region.floorEnd / b.floors - 0.5;
+      const yTop =
+        floorFrac(region.floorEnd, b.floors, storefrontGroundFrac(b, sfShare, sfHeight)) - 0.5;
       const v = new THREE.Vector3(cx * b.width, yTop * b.height, cz * b.depth);
       v.applyAxisAngle(UP, -b.rotationY);
       v.add(new THREE.Vector3(b.x, b.height / 2, b.z));
-      v.y += 4; // small clearance above the cube top
+      v.y += 0.3; // touch the cube top (the old 4m clearance read as floating — user 2026-07-27)
       return v;
     };
 
@@ -175,6 +182,30 @@ export function CommuteArc({ masterSeed }: { masterSeed: string }) {
     }
     if (topRef?.kind === "building") {
       employmentArcs((dir.byWorkBuilding.get(topRef.id) ?? []).map((b) => b.id));
+      // Residents' commutes too (user 2026-07-27: purely residential buildings
+      // drew NO arcs — a building's arcs are its people, both directions): one
+      // thin violet arc per resident commuting somewhere outside the building.
+      const home = buildingById.get(topRef.id);
+      if (home) {
+        for (const hh of dir.byHomeBuilding.get(topRef.id) ?? []) {
+          for (const pid of hh.memberIds) {
+            const p = dir.personas.get(pid);
+            if (!p?.commute || p.commuteTargetBuildingId === undefined) continue;
+            if (p.commuteTargetBuildingId === home.id) continue;
+            const work = buildingById.get(p.commuteTargetBuildingId);
+            if (!work) continue;
+            const anchor = personaAnchor(p);
+            if (anchor)
+              addArc(
+                anchor,
+                businessAnchor(work, p.businessId ?? p.schoolId),
+                CONNECTION_COLOR,
+                1.5,
+                0.55,
+              );
+          }
+        }
+      }
       return done();
     }
 
@@ -221,7 +252,7 @@ export function CommuteArc({ masterSeed }: { masterSeed: string }) {
     return done();
     // topRef's identity changes every store update; topKey is its stable key.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedPersonaId, topKey, directory, masterSeed, cityShape, cityShapeScale, citySize, citySketch]);
+  }, [selectedPersonaId, topKey, directory, masterSeed, cityShape, cityShapeScale, citySize, citySketch, sfShare, sfHeight]);
 
   useEffect(() => {
     materialsRef.current = built?.materials ?? [];

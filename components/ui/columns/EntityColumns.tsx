@@ -476,15 +476,29 @@ function EntityColumnsBody() {
   }, [open]);
 
   // Cone-follow: re-frame to the top card's location set whenever the drill
-  // moves (or the mode is switched on). Needs indexes — while the directory
-  // build hasn't landed there's nothing to frame yet.
+  // moves. Needs indexes — while the directory build hasn't landed there's
+  // nothing to frame yet.
   const topRef = visible.length > 0 ? visible[visible.length - 1] : undefined;
   const topKey = topRef ? `${topRef.kind}:${topRef.id}` : null;
   useEffect(() => {
     if (!coneFollow || !topRef || !indexes) return;
     showLocations(topRef, indexes);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [coneFollow, topKey, indexes]);
+  }, [topKey, indexes]);
+
+  // Cone TOGGLE = a two-zone camera swap (user 2026-07-27): switching ON
+  // frames the connections (the arc set); switching OFF frames the entity
+  // itself (the building). Fires only on actual flips — drill moves are the
+  // effects above.
+  const prevConeFollow = useRef(coneFollow);
+  useEffect(() => {
+    const was = prevConeFollow.current;
+    prevConeFollow.current = coneFollow;
+    if (was === coneFollow || !topRef || !indexes) return;
+    if (coneFollow) showLocations(topRef, indexes);
+    else flyToEntity(topRef, indexes);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coneFollow]);
 
   // Selection-follow (user 2026-07-11 round 3): every card that lands on
   // top glides the camera to its place — pushing, back/forward, and the

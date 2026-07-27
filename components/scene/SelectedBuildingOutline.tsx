@@ -9,8 +9,9 @@ import { SELECT_OUTLINE_COLOR } from "@/lib/state/sceneDefaults";
 // Selection highlight: a translucent CUBE that SURROUNDS the selected building,
 // rendered BackSide so you see its INSIDE faces — the far interior walls and the
 // bottom from within — a cage around the building, not the building itself. X-ray
-// (depthTest off) and lifted so the bottom clears the road and wraps the base
-// (user 30). The old x-ray wireframe + floor plate is retired.
+// (depthTest off). Vertically aligned to the REAL building span — bottom flush with
+// the ground, small pad above the roof (user 2026-07-27; the old base lift + height
+// grow read as a misaligned floating box). The old x-ray wireframe is retired.
 export function SelectedBuildingOutline({ masterSeed }: { masterSeed: string }) {
   const selectedBuildingId = useSceneStore((s) => s.selectedBuildingId);
   const cityShape = useSceneStore((s) => s.cityShape);
@@ -26,9 +27,12 @@ export function SelectedBuildingOutline({ masterSeed }: { masterSeed: string }) 
     const b = buildings.find((x) => x.id === selectedBuildingId);
     if (!b) return null;
 
-    const grow = 1.08; // the cage sits just outside the building on every side
-    const boxH = b.height * grow;
-    const ground = Math.min(6, b.height * 0.08); // lift the bottom off the road
+    // Lateral margin only (user 2026-07-27: the cage read as taller than the building and
+    // floating off the road — the old 1.08 height grow + 6m base lift). Vertically it hugs
+    // the real span: bottom exactly at the ground, a small fixed pad above the roof.
+    const grow = 1.08; // the cage sits just outside the building's SIDES
+    const topPad = Math.min(2, b.height * 0.02);
+    const boxH = b.height + topPad;
 
     const m = new THREE.Mesh(
       new THREE.BoxGeometry(1, 1, 1),
@@ -44,7 +48,7 @@ export function SelectedBuildingOutline({ masterSeed }: { masterSeed: string }) 
         toneMapped: false,
       }),
     );
-    m.position.set(b.x, ground + boxH / 2, b.z);
+    m.position.set(b.x, boxH / 2, b.z); // bottom flush with the ground
     m.rotation.set(0, -b.rotationY, 0);
     m.scale.set(b.width * grow, boxH, b.depth * grow);
     m.frustumCulled = false;
