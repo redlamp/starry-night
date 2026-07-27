@@ -5,6 +5,7 @@ import { Building2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useSceneStore } from "@/lib/state/sceneStore";
+import { useCityHover } from "@/lib/hooks/useCityHover";
 import { approxCount } from "@/lib/utils";
 import { useEntityIndexes } from "./entityData";
 import { ColumnStat, ShowMore } from "./EntityColumns";
@@ -13,6 +14,7 @@ const STREET_CAP = 8;
 
 export function DistrictColumn({ id, part }: { id: string; part: "pinned" | "rest" }) {
   const push = useSceneStore((s) => s.pushColumn);
+  const hover = useCityHover();
   const indexes = useEntityIndexes();
   const [allStreets, setAllStreets] = useState(false);
   const [allLandmarks, setAllLandmarks] = useState(false);
@@ -61,6 +63,7 @@ export function DistrictColumn({ id, part }: { id: string; part: "pinned" | "res
                 key={s.roadId}
                 type="button"
                 onClick={() => push({ kind: "street", id: s.roadId })}
+                {...hover.road(s.roadId)}
                 className="-mx-1 flex items-baseline justify-between gap-2 rounded px-1 text-left text-sm hover:bg-foreground/10"
               >
                 <span className="truncate">{s.name}</span>
@@ -89,6 +92,7 @@ export function DistrictColumn({ id, part }: { id: string; part: "pinned" | "res
                 key={b.buildingId}
                 type="button"
                 onClick={() => push({ kind: "building", id: b.buildingId })}
+                {...hover.building(b.buildingId)}
                 className="-mx-1 rounded px-1 text-left text-sm hover:bg-foreground/10"
               >
                 <span className="truncate">{b.name}</span>

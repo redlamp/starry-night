@@ -254,7 +254,7 @@ export function Scene() {
         {cityReady && <DistrictHover masterSeed={masterSeed} />}
         <InspectCursor />
         {/* Entity columns: persistent highlight for a selected street. */}
-        {cityReady && <StreetHighlight masterSeed={masterSeed} />}
+        {cityReady && <StreetHighlight />}
         {/* old controller's store-based indicator; the drei bridge renders its own
           live one (tracks the camera-controls target with no throttle lag) */}
         {oldController && <FocalIndicator />}
