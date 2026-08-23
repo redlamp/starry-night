@@ -5,7 +5,7 @@ import typescript from "eslint-config-next/typescript";
 // arrays now, so we spread them directly — the old FlatCompat string-extends
 // path throws a circular-structure error under ESLint 10.
 const eslintConfig = [
-  { ignores: ["**/.next/**", "**/out/**", "**/node_modules/**", "**/.remember/**", "next-env.d.ts"] },
+  { ignores: ["**/.next/**", "**/out/**", "**/node_modules/**", "**/.remember/**", "wiki/.obsidian/**", "next-env.d.ts"] },
   ...coreWebVitals,
   ...typescript,
   {
