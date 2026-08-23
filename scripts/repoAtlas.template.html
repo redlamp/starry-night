@@ -348,7 +348,8 @@
           .join("");
         document.getElementById("subline").innerHTML =
           `One repo at <code>${esc(DATA.meta.repo)}</code> on <b>${esc(DATA.meta.currentBranch)}</b> · ` +
-          `${DATA.meta.dirCount} matching workspace dirs, ${DATA.meta.huskCount} of them empty husks · ` +
+          `${DATA.meta.dirCount} matching workspace ${DATA.meta.dirCount === 1 ? "dir" : "dirs"}, ` +
+          `${DATA.meta.huskCount === 0 ? "no empty husks" : `${DATA.meta.huskCount} of them empty husks`} · ` +
           `history runs ${day(DATA.meta.firstCommit)} → ${day(DATA.rows.reduce((a, r) => (r.lastActivity > a ? r.lastActivity : a), ""))}`;
         document.getElementById("gen").textContent = new Date(DATA.meta.generated).toLocaleString();
       }
