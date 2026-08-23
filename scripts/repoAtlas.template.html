@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Starry Night — Repo Atlas</title>
+    <style>
+      :root {
+        --bg: #f7f7f5;
+        --panel: #ffffff;
+        --ink: #1b1b1a;
+        --muted: #6b6b66;
+        --line: #e2e2dd;
+        --accent: #3d5afe;
+        --open: #1f7a4d;
+        --merged: #6b6b66;
+        --stale: #a8641c;
+        --husk: #b3261e;
+        --trunk: #3d5afe;
+        --bar: #d7d7d1;
+        --radius: 10px;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --bg: #14140f;
+          --panel: #1c1c18;
+          --ink: #ece9e0;
+          --muted: #9a978c;
+          --line: #2e2e28;
+          --accent: #8fa4ff;
+          --open: #5fd39b;
+          --merged: #9a978c;
+          --stale: #e0a45c;
+          --husk: #f08b82;
+          --trunk: #8fa4ff;
+          --bar: #35352d;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 28px 24px 64px;
+        background: var(--bg);
+        color: var(--ink);
+        font:
+          15px/1.5 ui-sans-serif,
+          system-ui,
+          -apple-system,
+          "Segoe UI",
+          sans-serif;
+      }
+      .wrap {
+        max-width: 1240px;
+        margin: 0 auto;
+      }
+      h1 {
+        font-size: 22px;
+        margin: 0 0 4px;
+        letter-spacing: -0.01em;
+      }
+      .sub {
+        color: var(--muted);
+        margin: 0 0 22px;
+        font-size: 13px;
+      }
+      .sub code {
+        font-size: 12px;
+      }
+
+      .tiles {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 10px;
+        margin-bottom: 20px;
+      }
+      .tile {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 12px 14px;
+      }
+      .tile b {
+        display: block;
+        font-size: 24px;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        line-height: 1.2;
+      }
+      .tile span {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+        margin-bottom: 14px;
+      }
+      input[type="search"] {
+        flex: 1 1 220px;
+        min-width: 180px;
+        padding: 8px 11px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        color: var(--ink);
+        font: inherit;
+        font-size: 14px;
+      }
+      input[type="search"]:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 1px;
+      }
+      .chip {
+        padding: 7px 12px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: var(--panel);
+        color: var(--muted);
+        font: inherit;
+        font-size: 13px;
+        cursor: pointer;
+      }
+      .chip[aria-pressed="true"] {
+        background: var(--ink);
+        color: var(--bg);
+        border-color: var(--ink);
+      }
+      .hint {
+        color: var(--muted);
+        font-size: 12px;
+        margin: 0 0 10px;
+      }
+
+      .tablewrap {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        overflow-x: auto;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        min-width: 940px;
+        font-size: 14px;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 9px 12px;
+        border-bottom: 1px solid var(--line);
+        white-space: nowrap;
+        vertical-align: top;
+      }
+      thead th {
+        position: sticky;
+        top: 0;
+        background: var(--panel);
+        color: var(--muted);
+        font-weight: 500;
+        font-size: 12px;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+        cursor: pointer;
+        user-select: none;
+        z-index: 1;
+      }
+      thead th:hover {
+        color: var(--ink);
+      }
+      thead th .arrow {
+        opacity: 0;
+        margin-left: 3px;
+      }
+      thead th[aria-sort] .arrow {
+        opacity: 1;
+        color: var(--accent);
+      }
+      tbody tr:last-child td {
+        border-bottom: 0;
+      }
+      tbody tr:hover td {
+        background: color-mix(in srgb, var(--accent) 6%, transparent);
+      }
+      .num {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+      .name {
+        font-weight: 600;
+        white-space: normal;
+        min-width: 200px;
+      }
+      .detail {
+        display: block;
+        font-weight: 400;
+        color: var(--muted);
+        font-size: 12px;
+        white-space: normal;
+        max-width: 420px;
+        margin-top: 2px;
+      }
+      .badge {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 12px;
+        border: 1px solid currentColor;
+      }
+      .k-active {
+        color: var(--open);
+      }
+      .k-merged {
+        color: var(--merged);
+      }
+      .k-worktree {
+        color: var(--stale);
+      }
+      .k-husk {
+        color: var(--husk);
+      }
+      .s-trunk {
+        color: var(--trunk);
+      }
+      .s-stale {
+        color: var(--stale);
+      }
+      .ago {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .bar {
+        display: block;
+        height: 4px;
+        border-radius: 2px;
+        background: var(--bar);
+        margin-top: 5px;
+        min-width: 2px;
+      }
+      .empty {
+        padding: 28px;
+        text-align: center;
+        color: var(--muted);
+      }
+      footer {
+        margin-top: 18px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      footer code {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 5px;
+        padding: 1px 5px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Starry Night — Repo Atlas</h1>
+      <p class="sub" id="subline"></p>
+
+      <div class="tiles" id="tiles"></div>
+
+      <div class="controls">
+        <input type="search" id="q" placeholder="Filter by name or description…" />
+        <button class="chip" data-kind="active" aria-pressed="true">Live branches</button>
+        <button class="chip" data-kind="worktree" aria-pressed="true">Worktrees</button>
+        <button class="chip" data-kind="merged" aria-pressed="true">Merged streams</button>
+        <button class="chip" data-kind="husk" aria-pressed="true">Husk dirs</button>
+      </div>
+      <p class="hint">Click any column heading to sort; click again to reverse.</p>
+
+      <div class="tablewrap">
+        <table>
+          <thead>
+            <tr id="head"></tr>
+          </thead>
+          <tbody id="body"></tbody>
+        </table>
+        <div class="empty" id="empty" hidden>Nothing matches those filters.</div>
+      </div>
+
+      <footer>
+        Regenerate with <code>bun run scripts/repoAtlas.ts</code> · generated
+        <span id="gen"></span>
+      </footer>
+    </div>
+
+    <script>
+      /*__DATA__*/
+
+      const COLS = [
+        { key: "name", label: "Stream", sort: (r) => r.name.toLowerCase() },
+        { key: "kind", label: "Kind", sort: (r) => r.kind },
+        { key: "status", label: "Status", sort: (r) => r.status },
+        { key: "lastActivity", label: "Last updated", sort: (r) => +new Date(r.lastActivity || 0), desc: true },
+        { key: "commits", label: "Commits", sort: (r) => r.commits, num: true, desc: true },
+        { key: "ahead", label: "Ahead", sort: (r) => r.ahead ?? -1, num: true, desc: true },
+        { key: "behind", label: "Behind", sort: (r) => r.behind ?? -1, num: true, desc: true },
+        { key: "churn", label: "Churn", sort: (r) => r.insertions + r.deletions, num: true, desc: true },
+        { key: "files", label: "Files", sort: (r) => r.files, num: true, desc: true },
+        { key: "age", label: "Span", sort: (r) => span(r), num: true, desc: true },
+      ];
+
+      const DAY = 864e5;
+      const span = (r) =>
+        r.firstActivity && r.lastActivity
+          ? Math.max(0, Math.round((+new Date(r.lastActivity) - +new Date(r.firstActivity)) / DAY))
+          : 0;
+
+      function ago(iso) {
+        if (!iso) return "—";
+        const d = Math.round((Date.now() - +new Date(iso)) / DAY);
+        if (d <= 0) return "today";
+        if (d === 1) return "yesterday";
+        if (d < 30) return d + "d ago";
+        if (d < 365) return Math.round(d / 30) + "mo ago";
+        return (d / 365).toFixed(1) + "y ago";
+      }
+      const day = (iso) => (iso ? new Date(iso).toISOString().slice(0, 10) : "—");
+      const esc = (s) =>
+        String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+
+      let sortKey = "lastActivity";
+      let sortDir = -1;
+      const active = new Set(["active", "worktree", "merged", "husk"]);
+      const maxCommits = Math.max(1, ...DATA.rows.filter((r) => r.kind !== "active" || r.status !== "trunk").map((r) => r.commits));
+
+      function tiles() {
+        const live = DATA.rows.filter((r) => r.kind === "active" && !["trunk", "merged"].includes(r.status));
+        const open = DATA.rows.filter((r) => r.kind === "active" && (r.status === "open" || r.status === "checked out"));
+        const t = [
+          [DATA.meta.totalCommits.toLocaleString(), "commits, all refs"],
+          [DATA.rows.filter((r) => r.kind === "merged").length, "streams merged and gone"],
+          [open.length, open.length === 1 ? "branch with unmerged work" : "branches with unmerged work"],
+          [DATA.rows.filter((r) => r.kind === "worktree" || (r.path && r.path.includes(".claude"))).length, "extra worktrees"],
+          [DATA.meta.huskCount, "husk dirs (no repo)"],
+          [DATA.meta.dirtyCount, "uncommitted files here"],
+          [DATA.meta.tags.length, "release tags"],
+        ];
+        document.getElementById("tiles").innerHTML = t
+          .map(([v, l]) => `<div class="tile"><b>${esc(v)}</b><span>${esc(l)}</span></div>`)
+          .join("");
+        document.getElementById("subline").innerHTML =
+          `One repo at <code>${esc(DATA.meta.repo)}</code> on <b>${esc(DATA.meta.currentBranch)}</b> · ` +
+          `${DATA.meta.dirCount} matching workspace ${DATA.meta.dirCount === 1 ? "dir" : "dirs"}, ` +
+          `${DATA.meta.huskCount === 0 ? "no empty husks" : `${DATA.meta.huskCount} of them empty husks`} · ` +
+          `history runs ${day(DATA.meta.firstCommit)} → ${day(DATA.rows.reduce((a, r) => (r.lastActivity > a ? r.lastActivity : a), ""))}`;
+        document.getElementById("gen").textContent = new Date(DATA.meta.generated).toLocaleString();
+      }
+
+      function head() {
+        document.getElementById("head").innerHTML = COLS.map(
+          (c) =>
+            `<th data-key="${c.key}" class="${c.num ? "num" : ""}"${
+              sortKey === c.key ? ` aria-sort="${sortDir < 0 ? "descending" : "ascending"}"` : ""
+            }>${esc(c.label)}<span class="arrow">${sortDir < 0 ? "▾" : "▴"}</span></th>`,
+        ).join("");
+        document.querySelectorAll("#head th").forEach((th) =>
+          th.addEventListener("click", () => {
+            const c = COLS.find((x) => x.key === th.dataset.key);
+            if (sortKey === c.key) sortDir *= -1;
+            else {
+              sortKey = c.key;
+              sortDir = c.desc ? -1 : 1;
+            }
+            head();
+            render();
+          }),
+        );
+      }
+
+      function render() {
+        const q = document.getElementById("q").value.trim().toLowerCase();
+        const col = COLS.find((c) => c.key === sortKey);
+        const rows = DATA.rows
+          .filter((r) => active.has(r.kind))
+          .filter((r) => !q || (r.name + " " + r.detail + " " + r.status).toLowerCase().includes(q))
+          .sort((a, b) => {
+            const x = col.sort(a),
+              y = col.sort(b);
+            return (x < y ? -1 : x > y ? 1 : 0) * sortDir || a.name.localeCompare(b.name);
+          });
+
+        document.getElementById("empty").hidden = rows.length > 0;
+        document.getElementById("body").innerHTML = rows
+          .map((r) => {
+            const churn = r.insertions + r.deletions;
+            const w = Math.min(100, Math.round((r.commits / maxCommits) * 100));
+            return `<tr>
+            <td class="name">${esc(r.name)}<span class="detail">${esc(r.detail || "")}${
+              r.path ? `<br><span style="opacity:.75">${esc(r.path)}</span>` : ""
+            }</span></td>
+            <td><span class="badge k-${r.kind}">${esc(r.kind)}</span></td>
+            <td class="${r.status === "trunk" ? "s-trunk" : r.status === "stale" ? "s-stale" : ""}">${esc(r.status)}${
+              r.dirty ? `<br><span class="ago">${r.dirty} uncommitted</span>` : ""
+            }</td>
+            <td>${day(r.lastActivity)}<br><span class="ago">${ago(r.lastActivity)}</span></td>
+            <td class="num">${r.commits.toLocaleString()}<span class="bar" style="width:${w}%"></span></td>
+            <td class="num">${r.ahead ?? "—"}</td>
+            <td class="num">${r.behind ?? "—"}</td>
+            <td class="num">${churn ? "+" + r.insertions.toLocaleString() + " / -" + r.deletions.toLocaleString() : "—"}</td>
+            <td class="num">${r.files || "—"}</td>
+            <td class="num">${span(r) ? span(r) + "d" : "—"}</td>
+          </tr>`;
+          })
+          .join("");
+      }
+
+      document.querySelectorAll(".chip").forEach((c) =>
+        c.addEventListener("click", () => {
+          const on = c.getAttribute("aria-pressed") === "true";
+          c.setAttribute("aria-pressed", String(!on));
+          if (on) active.delete(c.dataset.kind);
+          else active.add(c.dataset.kind);
+          render();
+        }),
+      );
+      document.getElementById("q").addEventListener("input", render);
+
+      tiles();
+      head();
+      render();
+    </script>
+  </body>
+</html>

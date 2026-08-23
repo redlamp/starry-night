@@ -37,6 +37,13 @@ without a protagonist. Companion anchors: [[after-dark-starry-night-original]]
   character *and* an externalization of Kusanagi's identity crisis. Pioneering
   cel + CG + digital compositing; Kawai's score carries the emotional arc in
   place of dialogue. Everything below is measured against it.
+- **Companion essay — the real Hong Kong, and its disappearance:**
+  <https://youtu.be/FnPo0eTIRJQ> — "Why This Cyberpunk City is Dying" *(title
+  read off the page; channel and upload date not captured — re-check before
+  citing publicly)*. Filed 2026-08-23. Per the user: it covers Hong Kong as the
+  city GitS drew from, and the death of the cyberpunk city. Relevant because our
+  neon-density and signage levers are borrowed from a real place that is losing
+  the exact features we are reproducing.
 
 ## Anime / Japanese animation
 

@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Starry Night — Repo Atlas</title>
+    <style>
+      :root {
+        --bg: #f7f7f5;
+        --panel: #ffffff;
+        --ink: #1b1b1a;
+        --muted: #6b6b66;
+        --line: #e2e2dd;
+        --accent: #3d5afe;
+        --open: #1f7a4d;
+        --merged: #6b6b66;
+        --stale: #a8641c;
+        --husk: #b3261e;
+        --trunk: #3d5afe;
+        --bar: #d7d7d1;
+        --radius: 10px;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --bg: #14140f;
+          --panel: #1c1c18;
+          --ink: #ece9e0;
+          --muted: #9a978c;
+          --line: #2e2e28;
+          --accent: #8fa4ff;
+          --open: #5fd39b;
+          --merged: #9a978c;
+          --stale: #e0a45c;
+          --husk: #f08b82;
+          --trunk: #8fa4ff;
+          --bar: #35352d;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 28px 24px 64px;
+        background: var(--bg);
+        color: var(--ink);
+        font:
+          15px/1.5 ui-sans-serif,
+          system-ui,
+          -apple-system,
+          "Segoe UI",
+          sans-serif;
+      }
+      .wrap {
+        max-width: 1240px;
+        margin: 0 auto;
+      }
+      h1 {
+        font-size: 22px;
+        margin: 0 0 4px;
+        letter-spacing: -0.01em;
+      }
+      .sub {
+        color: var(--muted);
+        margin: 0 0 22px;
+        font-size: 13px;
+      }
+      .sub code {
+        font-size: 12px;
+      }
+
+      .tiles {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 10px;
+        margin-bottom: 20px;
+      }
+      .tile {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 12px 14px;
+      }
+      .tile b {
+        display: block;
+        font-size: 24px;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        line-height: 1.2;
+      }
+      .tile span {
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        align-items: center;
+        margin-bottom: 14px;
+      }
+      input[type="search"] {
+        flex: 1 1 220px;
+        min-width: 180px;
+        padding: 8px 11px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        color: var(--ink);
+        font: inherit;
+        font-size: 14px;
+      }
+      input[type="search"]:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 1px;
+      }
+      .chip {
+        padding: 7px 12px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: var(--panel);
+        color: var(--muted);
+        font: inherit;
+        font-size: 13px;
+        cursor: pointer;
+      }
+      .chip[aria-pressed="true"] {
+        background: var(--ink);
+        color: var(--bg);
+        border-color: var(--ink);
+      }
+      .hint {
+        color: var(--muted);
+        font-size: 12px;
+        margin: 0 0 10px;
+      }
+
+      .tablewrap {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        overflow-x: auto;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        min-width: 940px;
+        font-size: 14px;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 9px 12px;
+        border-bottom: 1px solid var(--line);
+        white-space: nowrap;
+        vertical-align: top;
+      }
+      thead th {
+        position: sticky;
+        top: 0;
+        background: var(--panel);
+        color: var(--muted);
+        font-weight: 500;
+        font-size: 12px;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+        cursor: pointer;
+        user-select: none;
+        z-index: 1;
+      }
+      thead th:hover {
+        color: var(--ink);
+      }
+      thead th .arrow {
+        opacity: 0;
+        margin-left: 3px;
+      }
+      thead th[aria-sort] .arrow {
+        opacity: 1;
+        color: var(--accent);
+      }
+      tbody tr:last-child td {
+        border-bottom: 0;
+      }
+      tbody tr:hover td {
+        background: color-mix(in srgb, var(--accent) 6%, transparent);
+      }
+      .num {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+      }
+      .name {
+        font-weight: 600;
+        white-space: normal;
+        min-width: 200px;
+      }
+      .detail {
+        display: block;
+        font-weight: 400;
+        color: var(--muted);
+        font-size: 12px;
+        white-space: normal;
+        max-width: 420px;
+        margin-top: 2px;
+      }
+      .badge {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 999px;
+        font-size: 12px;
+        border: 1px solid currentColor;
+      }
+      .k-active {
+        color: var(--open);
+      }
+      .k-merged {
+        color: var(--merged);
+      }
+      .k-worktree {
+        color: var(--stale);
+      }
+      .k-husk {
+        color: var(--husk);
+      }
+      .s-trunk {
+        color: var(--trunk);
+      }
+      .s-stale {
+        color: var(--stale);
+      }
+      .ago {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .bar {
+        display: block;
+        height: 4px;
+        border-radius: 2px;
+        background: var(--bar);
+        margin-top: 5px;
+        min-width: 2px;
+      }
+      .empty {
+        padding: 28px;
+        text-align: center;
+        color: var(--muted);
+      }
+      footer {
+        margin-top: 18px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      footer code {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 5px;
+        padding: 1px 5px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1>Starry Night — Repo Atlas</h1>
+      <p class="sub" id="subline"></p>
+
+      <div class="tiles" id="tiles"></div>
+
+      <div class="controls">
+        <input type="search" id="q" placeholder="Filter by name or description…" />
+        <button class="chip" data-kind="active" aria-pressed="true">Live branches</button>
+        <button class="chip" data-kind="worktree" aria-pressed="true">Worktrees</button>
+        <button class="chip" data-kind="merged" aria-pressed="true">Merged streams</button>
+        <button class="chip" data-kind="husk" aria-pressed="true">Husk dirs</button>
+      </div>
+      <p class="hint">Click any column heading to sort; click again to reverse.</p>
+
+      <div class="tablewrap">
+        <table>
+          <thead>
+            <tr id="head"></tr>
+          </thead>
+          <tbody id="body"></tbody>
+        </table>
+        <div class="empty" id="empty" hidden>Nothing matches those filters.</div>
+      </div>
+
+      <footer>
+        Regenerate with <code>bun run scripts/repoAtlas.ts</code> · generated
+        <span id="gen"></span>
+      </footer>
+    </div>
+
+    <script>
+      const DATA = {"meta":{"generated":"2026-08-23T15:45:07.709Z","workspace":"C:\\workspace","repo":"C:\\workspace\\starry-night","origin":"https://github.com/redlamp/starry-night.git","currentBranch":"feat/figma","dirtyCount":9,"totalCommits":902,"firstCommit":"2026-05-21T22:03:31+01:00","tags":["v2026.07.27","v2026.07.26","v2026.07.19","v2026.07.18","v2026.07.16","v2026.07.15","v2026.07.12","v2026.07.11","v2026.07.10","v2026.07.08","v2026.07.06","v2026.07.05","v2026.07.04","v2026.07.03","v2026.07.02","v2026.07.01","v2026.06.28","v2026.06.23","v2026.06.22","v2026.06.21","v2026.06.14","v2026.06.13","v2026.05.30","v2026.06.04","v2026.06.08","v2026.06.07","v2026.06.06","v2026.06.05","v2026.06.03","v2026.06.02","v2026.06.01","v2026.05.31","v2026.05.29","v2026.05.28","v2026.05.27","v2026.05.26","v2026.05.25","v2026.05.22","v2026.05.21"],"dirCount":1,"huskCount":0,"trunk":"dev"},"rows":[{"name":"dev","kind":"active","status":"trunk","lastActivity":"2026-07-27T16:10:34+01:00","firstActivity":"2026-07-27T16:10:34+01:00","commits":881,"ahead":null,"behind":null,"insertions":0,"deletions":0,"files":0,"dirty":null,"path":null,"detail":"Merge feat/card-layout into dev: cards scroll under a fixed header, fill the display above the seed chip, and label the stack on hover"},{"name":"fable","kind":"active","status":"merged","lastActivity":"2026-07-27T10:05:06+01:00","firstActivity":"2026-07-27T10:05:06+01:00","commits":0,"ahead":0,"behind":26,"insertions":0,"deletions":0,"files":0,"dirty":null,"path":null,"detail":"Merge feat/touch-flip into fable: mobile touch remap + building inspection pass"},{"name":"feat/figma","kind":"active","status":"checked out","lastActivity":"2026-08-23T16:40:22+01:00","firstActivity":"2026-07-31T22:07:21+01:00","commits":6,"ahead":6,"behind":0,"insertions":5971,"deletions":1,"files":15,"dirty":9,"path":"C:/workspace/starry-night","detail":"docs(wiki): file the Hong Kong / dying-cyberpunk-city video under the GitS anchor"},{"name":"feature/road-reveal","kind":"active","status":"stale","lastActivity":"2026-06-06T07:59:29+01:00","firstActivity":"2026-06-05T14:41:34+01:00","commits":15,"ahead":15,"behind":592,"insertions":1483,"deletions":98,"files":23,"dirty":null,"path":null,"detail":"docs(reveal): choreography editor prototype + animation language wiki"},{"name":"main","kind":"active","status":"trunk","lastActivity":"2026-07-27T16:10:34+01:00","firstActivity":"2026-07-27T16:10:34+01:00","commits":881,"ahead":null,"behind":null,"insertions":0,"deletions":0,"files":0,"dirty":null,"path":null,"detail":"Merge feat/card-layout into dev: cards scroll under a fixed header, fill the display above the seed chip, and label the stack on hover"},{"name":"worktree-agent-a05e074c7b19adfe2","kind":"active","status":"merged","lastActivity":"2026-07-18T10:06:43+01:00","firstActivity":"2026-07-18T10:06:43+01:00","commits":0,"ahead":0,"behind":101,"insertions":0,"deletions":0,"files":0,"dirty":null,"path":null,"detail":"feat(directory): demographics report panel, phase 1 (#97)"},{"name":"worktree-agent-a278bb46707029b31","kind":"active","status":"merged","lastActivity":"2026-07-18T14:12:24+01:00","firstActivity":"2026-07-18T14:12:24+01:00","commits":0,"ahead":0,"behind":84,"insertions":0,"deletions":0,"files":0,"dirty":null,"path":null,"detail":"feat(directory): per-kind browse lists under the filter tabs (#92 feedback)"},{"name":"agent-a05e074c7b19adfe2","kind":"worktree","status":"unregistered","lastActivity":"2026-08-23T09:00:31.193Z","firstActivity":"2026-08-23T09:00:31.193Z","commits":0,"ahead":null,"behind":null,"insertions":0,"deletions":0,"files":0,"dirty":null,"path":"C:\\workspace\\starry-night\\.claude\\worktrees\\agent-a05e074c7b19adfe2","detail":"on disk but absent from `git worktree list` - git pruned the admin data"},{"name":"agent-a278bb46707029b31","kind":"worktree","status":"unregistered","lastActivity":"2026-08-23T09:00:34.598Z","firstActivity":"2026-08-23T09:00:34.598Z","commits":0,"ahead":null,"behind":null,"insertions":0,"deletions":0,"files":0,"dirty":null,"path":"C:\\workspace\\starry-night\\.claude\\worktrees\\agent-a278bb46707029b31","detail":"on disk but absent from `git worktree list` - git pruned the admin data"},{"name":"agent-aa3d85e5ac3b087fe","kind":"worktree","status":"unregistered","lastActivity":"2026-07-18T09:07:07.211Z","firstActivity":"2026-07-18T09:07:07.211Z","commits":0,"ahead":null,"behind":null,"insertions":0,"deletions":0,"files":0,"dirty":null,"path":"C:\\workspace\\starry-night\\.claude\\worktrees\\agent-aa3d85e5ac3b087fe","detail":"on disk but absent from `git worktree list` - git pruned the admin data"},{"name":"feat/card-layout","kind":"merged","status":"merged","lastActivity":"2026-07-27T16:10:34+01:00","firstActivity":"2026-07-27T16:10:34+01:00","commits":2,"ahead":null,"behind":null,"insertions":534,"deletions":25,"files":4,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feat/moon-mediump","kind":"merged","status":"merged","lastActivity":"2026-07-27T11:53:53+01:00","firstActivity":"2026-07-27T11:53:53+01:00","commits":1,"ahead":null,"behind":null,"insertions":175,"deletions":1,"files":3,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feat/touch-taps","kind":"merged","status":"merged","lastActivity":"2026-07-27T11:28:36+01:00","firstActivity":"2026-07-27T11:28:36+01:00","commits":3,"ahead":null,"behind":null,"insertions":870,"deletions":85,"files":14,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feat/card-city-links","kind":"merged","status":"merged","lastActivity":"2026-07-27T10:53:39+01:00","firstActivity":"2026-07-27T10:53:39+01:00","commits":4,"ahead":null,"behind":null,"insertions":1183,"deletions":86,"files":21,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feat/touch-flip","kind":"merged","status":"merged","lastActivity":"2026-07-27T10:05:06+01:00","firstActivity":"2026-07-27T10:05:06+01:00","commits":6,"ahead":null,"behind":null,"insertions":1502,"deletions":190,"files":27,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feat/light-size","kind":"merged","status":"merged","lastActivity":"2026-07-26T12:28:28+01:00","firstActivity":"2026-07-26T12:28:28+01:00","commits":3,"ahead":null,"behind":null,"insertions":989,"deletions":30,"files":23,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feat/skyline-entry","kind":"merged","status":"merged","lastActivity":"2026-07-26T11:31:31+01:00","firstActivity":"2026-07-26T11:31:31+01:00","commits":3,"ahead":null,"behind":null,"insertions":634,"deletions":240,"files":11,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feat/camera-seams-hud","kind":"merged","status":"merged","lastActivity":"2026-07-26T10:58:36+01:00","firstActivity":"2026-07-26T10:58:36+01:00","commits":7,"ahead":null,"behind":null,"insertions":2194,"deletions":137,"files":32,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feat/camera-feel","kind":"merged","status":"merged","lastActivity":"2026-07-19T14:53:19+01:00","firstActivity":"2026-07-19T14:53:19+01:00","commits":8,"ahead":null,"behind":null,"insertions":934,"deletions":106,"files":15,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"test/2026-07-18-round","kind":"merged","status":"merged","lastActivity":"2026-07-18T19:51:25+01:00","firstActivity":"2026-07-18T19:51:25+01:00","commits":35,"ahead":null,"behind":null,"insertions":3590,"deletions":765,"files":39,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feat/demographics-panel","kind":"merged","status":"merged","lastActivity":"2026-07-18T10:11:46+01:00","firstActivity":"2026-07-18T10:11:46+01:00","commits":1,"ahead":null,"behind":null,"insertions":894,"deletions":0,"files":10,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feat/bus-routes-design","kind":"merged","status":"merged","lastActivity":"2026-07-18T10:08:52+01:00","firstActivity":"2026-07-18T10:08:52+01:00","commits":1,"ahead":null,"behind":null,"insertions":193,"deletions":0,"files":1,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feat/compass-rose","kind":"merged","status":"merged","lastActivity":"2026-07-18T10:08:51+01:00","firstActivity":"2026-07-18T10:08:51+01:00","commits":1,"ahead":null,"behind":null,"insertions":108,"deletions":0,"files":5,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feat/naming-packs","kind":"merged","status":"merged","lastActivity":"2026-07-18T10:08:51+01:00","firstActivity":"2026-07-18T10:08:51+01:00","commits":1,"ahead":null,"behind":null,"insertions":305,"deletions":23,"files":13,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feat/directory-perf","kind":"merged","status":"merged","lastActivity":"2026-07-18T10:08:42+01:00","firstActivity":"2026-07-18T10:08:42+01:00","commits":1,"ahead":null,"behind":null,"insertions":165,"deletions":18,"files":1,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feat/companies-view","kind":"merged","status":"merged","lastActivity":"2026-07-18T10:08:42+01:00","firstActivity":"2026-07-18T10:08:42+01:00","commits":9,"ahead":null,"behind":null,"insertions":396,"deletions":44,"files":10,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feat/full-city-framing","kind":"merged","status":"merged","lastActivity":"2026-07-18T09:55:42+01:00","firstActivity":"2026-07-18T09:55:42+01:00","commits":1,"ahead":null,"behind":null,"insertions":176,"deletions":41,"files":10,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feat/camera-v3","kind":"merged","status":"merged","lastActivity":"2026-07-15T19:56:42+01:00","firstActivity":"2026-07-15T19:56:42+01:00","commits":3,"ahead":null,"behind":null,"insertions":2628,"deletions":79,"files":25,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feat/persona-units","kind":"merged","status":"merged x2","lastActivity":"2026-07-15T07:48:19+01:00","firstActivity":"2026-07-13T08:43:07+01:00","commits":15,"ahead":null,"behind":null,"insertions":5311,"deletions":1039,"files":31,"dirty":null,"path":null,"detail":"2 merges into the trunk line"},{"name":"writing-lab","kind":"merged","status":"merged","lastActivity":"2026-07-12T22:34:31+01:00","firstActivity":"2026-07-12T22:34:31+01:00","commits":8,"ahead":null,"behind":null,"insertions":2549,"deletions":717,"files":16,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feat/persona-perf","kind":"merged","status":"merged","lastActivity":"2026-07-10T13:30:24+01:00","firstActivity":"2026-07-10T13:30:24+01:00","commits":12,"ahead":null,"behind":null,"insertions":1491,"deletions":482,"files":33,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feat/personas","kind":"merged","status":"merged x3","lastActivity":"2026-07-08T23:43:37+01:00","firstActivity":"2026-07-08T09:27:46+01:00","commits":20,"ahead":null,"behind":null,"insertions":11282,"deletions":753,"files":65,"dirty":null,"path":null,"detail":"3 merges into the trunk line"},{"name":"feat/heli-splines","kind":"merged","status":"merged","lastActivity":"2026-07-08T09:27:47+01:00","firstActivity":"2026-07-08T09:27:47+01:00","commits":1,"ahead":null,"behind":null,"insertions":180,"deletions":41,"files":3,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feat/camera-wasd","kind":"merged","status":"merged","lastActivity":"2026-07-06T10:13:29+01:00","firstActivity":"2026-07-06T10:13:29+01:00","commits":2,"ahead":null,"behind":null,"insertions":315,"deletions":144,"files":17,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feat/city-features","kind":"merged","status":"merged x3","lastActivity":"2026-07-06T00:06:49+01:00","firstActivity":"2026-07-05T12:34:22+01:00","commits":33,"ahead":null,"behind":null,"insertions":4348,"deletions":646,"files":45,"dirty":null,"path":null,"detail":"3 merges into the trunk line"},{"name":"feat/flights","kind":"merged","status":"merged","lastActivity":"2026-07-04T13:41:16+01:00","firstActivity":"2026-07-04T13:41:16+01:00","commits":5,"ahead":null,"behind":null,"insertions":1137,"deletions":227,"files":11,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feat/archetype-hover","kind":"merged","status":"merged","lastActivity":"2026-07-04T13:31:32+01:00","firstActivity":"2026-07-04T13:31:32+01:00","commits":4,"ahead":null,"behind":null,"insertions":521,"deletions":39,"files":8,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feat/boot-star-wake","kind":"merged","status":"merged","lastActivity":"2026-07-04T12:38:40+01:00","firstActivity":"2026-07-04T12:38:40+01:00","commits":1,"ahead":null,"behind":null,"insertions":22,"deletions":3,"files":1,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feat/traffic-rural","kind":"merged","status":"merged","lastActivity":"2026-07-04T12:38:40+01:00","firstActivity":"2026-07-04T12:38:40+01:00","commits":2,"ahead":null,"behind":null,"insertions":322,"deletions":76,"files":3,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feat/ortho-near-clip","kind":"merged","status":"merged","lastActivity":"2026-07-04T08:44:54+01:00","firstActivity":"2026-07-04T08:44:54+01:00","commits":1,"ahead":null,"behind":null,"insertions":18,"deletions":1,"files":1,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feat/window-hybrid","kind":"merged","status":"merged","lastActivity":"2026-07-03T19:22:47+01:00","firstActivity":"2026-07-03T19:22:47+01:00","commits":12,"ahead":null,"behind":null,"insertions":3946,"deletions":512,"files":30,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/camera-direct-orbit","kind":"merged","status":"merged","lastActivity":"2026-06-28T19:36:05+01:00","firstActivity":"2026-06-28T19:36:05+01:00","commits":2,"ahead":null,"behind":null,"insertions":76,"deletions":102,"files":1,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/adaptive-quality","kind":"merged","status":"merged","lastActivity":"2026-06-28T18:11:34+01:00","firstActivity":"2026-06-28T18:11:34+01:00","commits":3,"ahead":null,"behind":null,"insertions":520,"deletions":102,"files":7,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/camera-models","kind":"merged","status":"merged","lastActivity":"2026-06-28T17:12:27+01:00","firstActivity":"2026-06-28T17:12:27+01:00","commits":13,"ahead":null,"behind":null,"insertions":2732,"deletions":373,"files":30,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/traffic-light-size","kind":"merged","status":"merged","lastActivity":"2026-06-23T23:14:45+01:00","firstActivity":"2026-06-23T23:14:45+01:00","commits":1,"ahead":null,"behind":null,"insertions":14,"deletions":0,"files":3,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/traffic-density-viz","kind":"merged","status":"merged","lastActivity":"2026-06-23T23:14:45+01:00","firstActivity":"2026-06-23T23:14:45+01:00","commits":3,"ahead":null,"behind":null,"insertions":290,"deletions":43,"files":5,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/moon-lock-v3","kind":"merged","status":"merged","lastActivity":"2026-06-23T23:14:45+01:00","firstActivity":"2026-06-23T23:14:45+01:00","commits":3,"ahead":null,"behind":null,"insertions":36,"deletions":5,"files":3,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/fog-focal-distance","kind":"merged","status":"merged","lastActivity":"2026-06-23T23:14:45+01:00","firstActivity":"2026-06-23T23:14:45+01:00","commits":1,"ahead":null,"behind":null,"insertions":16,"deletions":10,"files":1,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"#78","kind":"merged","status":"merged","lastActivity":"2026-06-23T08:43:38+01:00","firstActivity":"2026-06-23T08:43:38+01:00","commits":1,"ahead":null,"behind":null,"insertions":282,"deletions":42,"files":5,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"#53","kind":"merged","status":"merged","lastActivity":"2026-06-23T08:42:27+01:00","firstActivity":"2026-06-23T08:42:27+01:00","commits":1,"ahead":null,"behind":null,"insertions":520,"deletions":102,"files":7,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/traffic-street-density","kind":"merged","status":"merged","lastActivity":"2026-06-23T08:19:28+01:00","firstActivity":"2026-06-23T08:19:28+01:00","commits":1,"ahead":null,"behind":null,"insertions":22,"deletions":8,"files":1,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/moon-phases","kind":"merged","status":"merged","lastActivity":"2026-06-22T22:57:43+01:00","firstActivity":"2026-06-22T22:57:43+01:00","commits":3,"ahead":null,"behind":null,"insertions":530,"deletions":103,"files":10,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/star-scintillation","kind":"merged","status":"merged","lastActivity":"2026-06-22T22:02:59+01:00","firstActivity":"2026-06-22T22:02:59+01:00","commits":2,"ahead":null,"behind":null,"insertions":275,"deletions":110,"files":7,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/star-twinkle","kind":"merged","status":"merged","lastActivity":"2026-06-22T10:12:09+01:00","firstActivity":"2026-06-22T10:12:09+01:00","commits":3,"ahead":null,"behind":null,"insertions":194,"deletions":56,"files":5,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feat/camera-mobile-framing","kind":"merged","status":"merged","lastActivity":"2026-06-21T23:44:48+01:00","firstActivity":"2026-06-21T23:44:48+01:00","commits":12,"ahead":null,"behind":null,"insertions":5166,"deletions":577,"files":50,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feat/orbit-compass-loop","kind":"merged","status":"merged","lastActivity":"2026-06-14T17:00:33+01:00","firstActivity":"2026-06-14T17:00:33+01:00","commits":6,"ahead":null,"behind":null,"insertions":881,"deletions":196,"files":10,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/prebake-default-city","kind":"merged","status":"merged","lastActivity":"2026-06-13T23:33:27+01:00","firstActivity":"2026-06-13T23:33:27+01:00","commits":15,"ahead":null,"behind":null,"insertions":3610,"deletions":2289,"files":28,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feat/drei-camera-tuning","kind":"merged","status":"merged x2","lastActivity":"2026-06-13T23:22:44+01:00","firstActivity":"2026-06-13T23:02:17+01:00","commits":18,"ahead":null,"behind":null,"insertions":2319,"deletions":465,"files":11,"dirty":null,"path":null,"detail":"2 merges into the trunk line"},{"name":"feature/suburbs-v2","kind":"merged","status":"merged x2","lastActivity":"2026-06-08T08:50:13+01:00","firstActivity":"2026-06-07T23:01:51+01:00","commits":31,"ahead":null,"behind":null,"insertions":4130,"deletions":1000,"files":40,"dirty":null,"path":null,"detail":"2 merges into the trunk line"},{"name":"intro/exploration","kind":"merged","status":"merged","lastActivity":"2026-06-08T00:47:45+01:00","firstActivity":"2026-06-08T00:47:45+01:00","commits":26,"ahead":null,"behind":null,"insertions":3430,"deletions":193,"files":36,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"arch/city-planning","kind":"merged","status":"merged x18","lastActivity":"2026-06-02T09:15:49+01:00","firstActivity":"2026-05-26T23:59:37+01:00","commits":105,"ahead":null,"behind":null,"insertions":12474,"deletions":4800,"files":100,"dirty":null,"path":null,"detail":"18 merges into the trunk line"},{"name":"feature/horizon-fog-tune","kind":"merged","status":"merged","lastActivity":"2026-05-28T21:24:45+01:00","firstActivity":"2026-05-28T21:24:45+01:00","commits":2,"ahead":null,"behind":null,"insertions":223,"deletions":95,"files":10,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/orbit-north-up","kind":"merged","status":"merged","lastActivity":"2026-05-28T10:14:57+01:00","firstActivity":"2026-05-28T10:14:57+01:00","commits":1,"ahead":null,"behind":null,"insertions":177,"deletions":70,"files":3,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/orbit-hiccup-fix","kind":"merged","status":"merged","lastActivity":"2026-05-28T10:14:57+01:00","firstActivity":"2026-05-28T10:14:57+01:00","commits":1,"ahead":null,"behind":null,"insertions":20,"deletions":1,"files":1,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/orbit-framing","kind":"merged","status":"merged","lastActivity":"2026-05-28T08:40:08+01:00","firstActivity":"2026-05-28T08:40:08+01:00","commits":1,"ahead":null,"behind":null,"insertions":83,"deletions":14,"files":2,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/aviation-beacons","kind":"merged","status":"merged","lastActivity":"2026-05-27T19:51:29+01:00","firstActivity":"2026-05-27T19:51:29+01:00","commits":1,"ahead":null,"behind":null,"insertions":130,"deletions":0,"files":3,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/camera-cleanup","kind":"merged","status":"merged","lastActivity":"2026-05-27T19:51:29+01:00","firstActivity":"2026-05-27T19:51:29+01:00","commits":1,"ahead":null,"behind":null,"insertions":21,"deletions":23,"files":3,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/stars-ortho","kind":"merged","status":"merged","lastActivity":"2026-05-27T09:50:27+01:00","firstActivity":"2026-05-27T09:50:27+01:00","commits":1,"ahead":null,"behind":null,"insertions":83,"deletions":8,"files":3,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/road-surfaces","kind":"merged","status":"merged","lastActivity":"2026-05-27T09:50:13+01:00","firstActivity":"2026-05-27T09:50:13+01:00","commits":1,"ahead":null,"behind":null,"insertions":125,"deletions":0,"files":3,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/window-aa","kind":"merged","status":"merged","lastActivity":"2026-05-27T08:56:54+01:00","firstActivity":"2026-05-27T08:56:54+01:00","commits":2,"ahead":null,"behind":null,"insertions":468,"deletions":81,"files":9,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/persist-settings","kind":"merged","status":"merged","lastActivity":"2026-05-26T23:31:46+01:00","firstActivity":"2026-05-26T23:31:46+01:00","commits":4,"ahead":null,"behind":null,"insertions":69,"deletions":32,"files":4,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/orbit-topdown","kind":"merged","status":"merged","lastActivity":"2026-05-26T21:45:49+01:00","firstActivity":"2026-05-26T21:45:49+01:00","commits":1,"ahead":null,"behind":null,"insertions":34,"deletions":12,"files":1,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/city-gen-tuning","kind":"merged","status":"merged","lastActivity":"2026-05-26T21:45:31+01:00","firstActivity":"2026-05-26T21:45:31+01:00","commits":2,"ahead":null,"behind":null,"insertions":133,"deletions":99,"files":6,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/plan-route","kind":"merged","status":"merged","lastActivity":"2026-05-26T21:09:24+01:00","firstActivity":"2026-05-26T21:09:24+01:00","commits":1,"ahead":null,"behind":null,"insertions":510,"deletions":106,"files":8,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/streetlight-matrix","kind":"merged","status":"merged","lastActivity":"2026-05-26T21:02:06+01:00","firstActivity":"2026-05-26T21:02:06+01:00","commits":1,"ahead":null,"behind":null,"insertions":135,"deletions":48,"files":3,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/cluster-placement","kind":"merged","status":"merged","lastActivity":"2026-05-26T20:58:21+01:00","firstActivity":"2026-05-26T20:58:21+01:00","commits":1,"ahead":null,"behind":null,"insertions":373,"deletions":61,"files":8,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/district-shells","kind":"merged","status":"merged","lastActivity":"2026-05-26T20:48:48+01:00","firstActivity":"2026-05-26T20:48:48+01:00","commits":1,"ahead":null,"behind":null,"insertions":804,"deletions":359,"files":7,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/topology-highways","kind":"merged","status":"merged","lastActivity":"2026-05-26T20:32:14+01:00","firstActivity":"2026-05-26T20:32:14+01:00","commits":1,"ahead":null,"behind":null,"insertions":442,"deletions":0,"files":8,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/distance-fog","kind":"merged","status":"merged","lastActivity":"2026-05-26T19:41:38+01:00","firstActivity":"2026-05-26T19:41:38+01:00","commits":1,"ahead":null,"behind":null,"insertions":283,"deletions":22,"files":5,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/moon-stars-shader","kind":"merged","status":"merged","lastActivity":"2026-05-26T19:40:44+01:00","firstActivity":"2026-05-26T19:40:44+01:00","commits":2,"ahead":null,"behind":null,"insertions":277,"deletions":15,"files":7,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/quality-tiers","kind":"merged","status":"merged","lastActivity":"2026-05-26T19:39:56+01:00","firstActivity":"2026-05-26T19:39:56+01:00","commits":1,"ahead":null,"behind":null,"insertions":80,"deletions":15,"files":4,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/dev-port","kind":"merged","status":"merged","lastActivity":"2026-05-26T07:08:31+01:00","firstActivity":"2026-05-26T07:08:31+01:00","commits":1,"ahead":null,"behind":null,"insertions":4,"deletions":4,"files":3,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/mobile-touch","kind":"merged","status":"merged","lastActivity":"2026-05-25T19:46:54+01:00","firstActivity":"2026-05-25T19:46:54+01:00","commits":2,"ahead":null,"behind":null,"insertions":25,"deletions":2,"files":4,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/debug-panel-shadcn","kind":"merged","status":"merged","lastActivity":"2026-05-25T18:36:50+01:00","firstActivity":"2026-05-25T18:36:50+01:00","commits":2,"ahead":null,"behind":null,"insertions":2166,"deletions":568,"files":20,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/intro-wake-up","kind":"merged","status":"merged","lastActivity":"2026-05-25T17:57:01+01:00","firstActivity":"2026-05-25T17:57:01+01:00","commits":3,"ahead":null,"behind":null,"insertions":555,"deletions":47,"files":11,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/update-defaults","kind":"merged","status":"merged","lastActivity":"2026-05-25T11:51:07+01:00","firstActivity":"2026-05-25T11:51:07+01:00","commits":1,"ahead":null,"behind":null,"insertions":12,"deletions":12,"files":1,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/rmb-focal-indicator-toggle","kind":"merged","status":"merged","lastActivity":"2026-05-25T11:45:38+01:00","firstActivity":"2026-05-25T11:45:38+01:00","commits":1,"ahead":null,"behind":null,"insertions":56,"deletions":47,"files":4,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/focal-fixed-and-indicator","kind":"merged","status":"merged","lastActivity":"2026-05-25T11:38:07+01:00","firstActivity":"2026-05-25T11:38:07+01:00","commits":1,"ahead":null,"behind":null,"insertions":151,"deletions":67,"files":5,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/ortho-ground-and-horizon","kind":"merged","status":"merged","lastActivity":"2026-05-25T11:29:45+01:00","firstActivity":"2026-05-25T11:29:45+01:00","commits":2,"ahead":null,"behind":null,"insertions":138,"deletions":54,"files":4,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/projection-restore-and-fog","kind":"merged","status":"merged","lastActivity":"2026-05-25T11:15:08+01:00","firstActivity":"2026-05-25T11:15:08+01:00","commits":2,"ahead":null,"behind":null,"insertions":42,"deletions":5,"files":4,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/fly-drag-lock","kind":"merged","status":"merged","lastActivity":"2026-05-25T11:07:23+01:00","firstActivity":"2026-05-25T11:07:23+01:00","commits":2,"ahead":null,"behind":null,"insertions":73,"deletions":9,"files":3,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/ortho-projection","kind":"merged","status":"merged","lastActivity":"2026-05-25T11:05:06+01:00","firstActivity":"2026-05-25T11:05:06+01:00","commits":2,"ahead":null,"behind":null,"insertions":206,"deletions":29,"files":6,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"fix/orbit-elevation-floor","kind":"merged","status":"merged","lastActivity":"2026-05-25T10:55:07+01:00","firstActivity":"2026-05-25T10:55:07+01:00","commits":2,"ahead":null,"behind":null,"insertions":2,"deletions":2,"files":2,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/orbit-focal-y","kind":"merged","status":"merged","lastActivity":"2026-05-25T10:53:43+01:00","firstActivity":"2026-05-25T10:53:43+01:00","commits":2,"ahead":null,"behind":null,"insertions":63,"deletions":4,"files":2,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/camera-mode-hotkeys","kind":"merged","status":"merged","lastActivity":"2026-05-25T10:42:24+01:00","firstActivity":"2026-05-25T10:42:24+01:00","commits":2,"ahead":null,"behind":null,"insertions":95,"deletions":34,"files":2,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/wiki-pass","kind":"merged","status":"merged","lastActivity":"2026-05-25T10:37:13+01:00","firstActivity":"2026-05-25T10:37:13+01:00","commits":1,"ahead":null,"behind":null,"insertions":299,"deletions":0,"files":7,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/debug-panel-overhaul","kind":"merged","status":"merged","lastActivity":"2026-05-25T10:33:59+01:00","firstActivity":"2026-05-25T10:33:59+01:00","commits":1,"ahead":null,"behind":null,"insertions":279,"deletions":123,"files":2,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/drag-orbit-controls","kind":"merged","status":"merged","lastActivity":"2026-05-25T10:25:53+01:00","firstActivity":"2026-05-25T10:25:53+01:00","commits":2,"ahead":null,"behind":null,"insertions":206,"deletions":31,"files":3,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/mobile-debug-toggle","kind":"merged","status":"merged","lastActivity":"2026-05-22T10:10:35+01:00","firstActivity":"2026-05-22T10:10:35+01:00","commits":2,"ahead":null,"behind":null,"insertions":11,"deletions":4,"files":1,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/moon-celestial-model","kind":"merged","status":"merged","lastActivity":"2026-05-22T10:01:09+01:00","firstActivity":"2026-05-22T10:01:09+01:00","commits":2,"ahead":null,"behind":null,"insertions":75,"deletions":60,"files":3,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/gh-pages-deploy","kind":"merged","status":"merged","lastActivity":"2026-05-22T09:41:05+01:00","firstActivity":"2026-05-22T09:41:05+01:00","commits":2,"ahead":null,"behind":null,"insertions":67,"deletions":0,"files":2,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/district-mood-bias","kind":"merged","status":"merged","lastActivity":"2026-05-22T09:37:14+01:00","firstActivity":"2026-05-22T09:37:14+01:00","commits":1,"ahead":null,"behind":null,"insertions":296,"deletions":21,"files":7,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/m2-flicker","kind":"merged","status":"merged","lastActivity":"2026-05-22T07:57:51+01:00","firstActivity":"2026-05-22T07:57:51+01:00","commits":4,"ahead":null,"behind":null,"insertions":1397,"deletions":124,"files":17,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/m1-polish","kind":"merged","status":"merged","lastActivity":"2026-05-22T07:12:55+01:00","firstActivity":"2026-05-22T07:12:55+01:00","commits":1,"ahead":null,"behind":null,"insertions":665,"deletions":24,"files":14,"dirty":null,"path":null,"detail":"1 merge into the trunk line"},{"name":"feature/m1-scaffold","kind":"merged","status":"merged","lastActivity":"2026-05-22T00:06:45+01:00","firstActivity":"2026-05-22T00:06:45+01:00","commits":2,"ahead":null,"behind":null,"insertions":3306,"deletions":21,"files":40,"dirty":null,"path":null,"detail":"1 merge into the trunk line"}]};
+
+      const COLS = [
+        { key: "name", label: "Stream", sort: (r) => r.name.toLowerCase() },
+        { key: "kind", label: "Kind", sort: (r) => r.kind },
+        { key: "status", label: "Status", sort: (r) => r.status },
+        { key: "lastActivity", label: "Last updated", sort: (r) => +new Date(r.lastActivity || 0), desc: true },
+        { key: "commits", label: "Commits", sort: (r) => r.commits, num: true, desc: true },
+        { key: "ahead", label: "Ahead", sort: (r) => r.ahead ?? -1, num: true, desc: true },
+        { key: "behind", label: "Behind", sort: (r) => r.behind ?? -1, num: true, desc: true },
+        { key: "churn", label: "Churn", sort: (r) => r.insertions + r.deletions, num: true, desc: true },
+        { key: "files", label: "Files", sort: (r) => r.files, num: true, desc: true },
+        { key: "age", label: "Span", sort: (r) => span(r), num: true, desc: true },
+      ];
+
+      const DAY = 864e5;
+      const span = (r) =>
+        r.firstActivity && r.lastActivity
+          ? Math.max(0, Math.round((+new Date(r.lastActivity) - +new Date(r.firstActivity)) / DAY))
+          : 0;
+
+      function ago(iso) {
+        if (!iso) return "—";
+        const d = Math.round((Date.now() - +new Date(iso)) / DAY);
+        if (d <= 0) return "today";
+        if (d === 1) return "yesterday";
+        if (d < 30) return d + "d ago";
+        if (d < 365) return Math.round(d / 30) + "mo ago";
+        return (d / 365).toFixed(1) + "y ago";
+      }
+      const day = (iso) => (iso ? new Date(iso).toISOString().slice(0, 10) : "—");
+      const esc = (s) =>
+        String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+
+      let sortKey = "lastActivity";
+      let sortDir = -1;
+      const active = new Set(["active", "worktree", "merged", "husk"]);
+      const maxCommits = Math.max(1, ...DATA.rows.filter((r) => r.kind !== "active" || r.status !== "trunk").map((r) => r.commits));
+
+      function tiles() {
+        const live = DATA.rows.filter((r) => r.kind === "active" && !["trunk", "merged"].includes(r.status));
+        const open = DATA.rows.filter((r) => r.kind === "active" && (r.status === "open" || r.status === "checked out"));
+        const t = [
+          [DATA.meta.totalCommits.toLocaleString(), "commits, all refs"],
+          [DATA.rows.filter((r) => r.kind === "merged").length, "streams merged and gone"],
+          [open.length, open.length === 1 ? "branch with unmerged work" : "branches with unmerged work"],
+          [DATA.rows.filter((r) => r.kind === "worktree" || (r.path && r.path.includes(".claude"))).length, "extra worktrees"],
+          [DATA.meta.huskCount, "husk dirs (no repo)"],
+          [DATA.meta.dirtyCount, "uncommitted files here"],
+          [DATA.meta.tags.length, "release tags"],
+        ];
+        document.getElementById("tiles").innerHTML = t
+          .map(([v, l]) => `<div class="tile"><b>${esc(v)}</b><span>${esc(l)}</span></div>`)
+          .join("");
+        document.getElementById("subline").innerHTML =
+          `One repo at <code>${esc(DATA.meta.repo)}</code> on <b>${esc(DATA.meta.currentBranch)}</b> · ` +
+          `${DATA.meta.dirCount} matching workspace ${DATA.meta.dirCount === 1 ? "dir" : "dirs"}, ` +
+          `${DATA.meta.huskCount === 0 ? "no empty husks" : `${DATA.meta.huskCount} of them empty husks`} · ` +
+          `history runs ${day(DATA.meta.firstCommit)} → ${day(DATA.rows.reduce((a, r) => (r.lastActivity > a ? r.lastActivity : a), ""))}`;
+        document.getElementById("gen").textContent = new Date(DATA.meta.generated).toLocaleString();
+      }
+
+      function head() {
+        document.getElementById("head").innerHTML = COLS.map(
+          (c) =>
+            `<th data-key="${c.key}" class="${c.num ? "num" : ""}"${
+              sortKey === c.key ? ` aria-sort="${sortDir < 0 ? "descending" : "ascending"}"` : ""
+            }>${esc(c.label)}<span class="arrow">${sortDir < 0 ? "▾" : "▴"}</span></th>`,
+        ).join("");
+        document.querySelectorAll("#head th").forEach((th) =>
+          th.addEventListener("click", () => {
+            const c = COLS.find((x) => x.key === th.dataset.key);
+            if (sortKey === c.key) sortDir *= -1;
+            else {
+              sortKey = c.key;
+              sortDir = c.desc ? -1 : 1;
+            }
+            head();
+            render();
+          }),
+        );
+      }
+
+      function render() {
+        const q = document.getElementById("q").value.trim().toLowerCase();
+        const col = COLS.find((c) => c.key === sortKey);
+        const rows = DATA.rows
+          .filter((r) => active.has(r.kind))
+          .filter((r) => !q || (r.name + " " + r.detail + " " + r.status).toLowerCase().includes(q))
+          .sort((a, b) => {
+            const x = col.sort(a),
+              y = col.sort(b);
+            return (x < y ? -1 : x > y ? 1 : 0) * sortDir || a.name.localeCompare(b.name);
+          });
+
+        document.getElementById("empty").hidden = rows.length > 0;
+        document.getElementById("body").innerHTML = rows
+          .map((r) => {
+            const churn = r.insertions + r.deletions;
+            const w = Math.min(100, Math.round((r.commits / maxCommits) * 100));
+            return `<tr>
+            <td class="name">${esc(r.name)}<span class="detail">${esc(r.detail || "")}${
+              r.path ? `<br><span style="opacity:.75">${esc(r.path)}</span>` : ""
+            }</span></td>
+            <td><span class="badge k-${r.kind}">${esc(r.kind)}</span></td>
+            <td class="${r.status === "trunk" ? "s-trunk" : r.status === "stale" ? "s-stale" : ""}">${esc(r.status)}${
+              r.dirty ? `<br><span class="ago">${r.dirty} uncommitted</span>` : ""
+            }</td>
+            <td>${day(r.lastActivity)}<br><span class="ago">${ago(r.lastActivity)}</span></td>
+            <td class="num">${r.commits.toLocaleString()}<span class="bar" style="width:${w}%"></span></td>
+            <td class="num">${r.ahead ?? "—"}</td>
+            <td class="num">${r.behind ?? "—"}</td>
+            <td class="num">${churn ? "+" + r.insertions.toLocaleString() + " / -" + r.deletions.toLocaleString() : "—"}</td>
+            <td class="num">${r.files || "—"}</td>
+            <td class="num">${span(r) ? span(r) + "d" : "—"}</td>
+          </tr>`;
+          })
+          .join("");
+      }
+
+      document.querySelectorAll(".chip").forEach((c) =>
+        c.addEventListener("click", () => {
+          const on = c.getAttribute("aria-pressed") === "true";
+          c.setAttribute("aria-pressed", String(!on));
+          if (on) active.delete(c.dataset.kind);
+          else active.add(c.dataset.kind);
+          render();
+        }),
+      );
+      document.getElementById("q").addEventListener("input", render);
+
+      tiles();
+      head();
+      render();
+    </script>
+  </body>
+</html>
