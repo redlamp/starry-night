@@ -6,7 +6,7 @@ This `wiki/` folder is an Obsidian vault — a human-readable knowledge graph of
 - `~/.claude/memory/` — global cross-project tool gotchas, auto-injected once per session by SessionStart hook
 - `docs/` — formal project docs, PRDs, specifications, public-facing artefacts
 
-If you (Claude) are unsure where info belongs, prefer `wiki/` for: project state, decisions and rationale, lessons learned, half-formed thoughts, links between concepts, daily progress notes. Cross-cutting feedback rules → built-in. Cross-project tool gotchas → global memory. Formal/public artefacts → `docs/`. See [[decision-collapse-memory-to-wiki]] for the layer split rationale.
+If you (Claude) are unsure where info belongs, prefer `wiki/` for: project state, decisions and rationale, lessons learned, half-formed thoughts, links between concepts, daily progress notes. Cross-cutting feedback rules → built-in. Cross-project tool gotchas → global memory. Formal/public artefacts → `docs/`. The layer split is defined in `~/.claude/CLAUDE.md`.
 
 ## Folder layout
 
@@ -24,8 +24,8 @@ If you (Claude) are unsure where info belongs, prefer `wiki/` for: project state
 
 ## Naming
 
-- All filenames: lowercase, kebab-case, `.md` extension. Example: `chess-narrative-engine.md`.
-- Note titles inside the file: H1 in Title Case. Example: `# Chess Narrative Engine`.
+- All filenames: lowercase, kebab-case, `.md` extension. Example: `decision-facade-display-space-color.md`.
+- Note titles inside the file: H1 in Title Case. Example: `# Decision: Facade Display-Space Color`.
 - Daily notes: `YYYY-MM-DD.md` (no title needed, date is the title).
 - Test plans: see the dedicated section below.
 
@@ -45,11 +45,11 @@ Tags live in YAML frontmatter at the top of a note:
 ```yaml
 ---
 tags:
-  - domain/supabase
-  - domain/security
+  - domain/city-gen
+  - domain/procgen
   - status/adopted
-  - scope/m1
-  - origin/v1-failure
+  - scope/m2
+  - origin/external-research
 ---
 ```
 
@@ -59,7 +59,7 @@ Inline `#tag` in body also works — Obsidian indexes both. Always use the names
 
 | Axis | Prefix | Values | Cardinality |
 |---|---|---|---|
-| Domain (what it's about) | `domain/` | `supabase`, `auth`, `security`, `realtime`, `chess-engine`, `narrative`, `vercel`, `ci-cd`, `stack`, `memory` | 1+ per note |
+| Domain (what it's about) | `domain/` | `3d`, `city-gen`, `procgen`, `visual-language`, `camera`, `sky`, `lighting`, `personas`, `narrative`, `perf`, `ui`, `stack`, `ci-cd`, `security` | 1+ per note |
 | Status (lifecycle) | `status/` | `adopted`, `deferred`, `superseded`, `verified`, `open`, `draft` | exactly 1 |
 | Scope (milestone) | `scope/` | `foundation`, `m1`, `m2`, `m3-plus` | 0–1 |
 | Origin (why it exists) | `origin/` | `v1-failure`, `verification-gate`, `external-research` | 0+ |
@@ -100,7 +100,7 @@ Inline `#tag` in body also works — Obsidian indexes both. Always use the names
 
 ## Test plans
 
-- `test-plans/test-plan-[date]-[topic].md` (own folder since 2026-07-19, user: "more than notes now"; naming per user 2026-07-10): date = the session the plan targets, topic = the feature stream. Example: `test-plans/test-plan-2026-07-10-personas.md`.
+- `test-plans/test-plan-[date]-[topic].md`: date = the session the plan targets, topic = the feature stream. Example: `test-plans/test-plan-2026-07-10-personas.md`.
 - Numbered `## N.` sections; testable items as numbered check boxes (`1. [ ]` — Obsidian renders numbered task lists) so the user ticks what's tested AND references results as `section.item` ("7.4").
 - Info-only sections get plain bullets/numbers, no boxes. End with a "Known / Parked" section so resolved items don't get re-reported; when more than one dev server is live, open with a section→server table.
 
