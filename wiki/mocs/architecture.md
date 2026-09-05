@@ -36,6 +36,7 @@ reference notes that describe how the running system behaves.
 - [[camera-controls-feature-matrix]] — behavior-by-behavior migration matrix
 - [[plan-drei-camera-migration]] — the drei `<CameraControls>` migration plan
 - [[camera-rotate-tilt-foray]] — (historical) grab-to-rotate + tilt-gate experiments, all reverted; records why each approach failed and the fundamental grab-vs-tilt geometric tension
+- [[vignette-lab]] — **2026-09-05:** the `/vignette-lab` testbed — deterministic seeded shot lists over the real city, McCloud-transition-tagged, GSAP-eased hold moves + a shadcn playback panel
 
 ## Load-bearing decisions (see [[decisions]] for the full list)
 
