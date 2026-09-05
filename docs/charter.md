@@ -27,7 +27,9 @@ awake, and why.
   capture first.
 - **Every city is a pure function of its seed.** Same seed, same city, down
   to each lit window and each resident. No wall clock, no `Math.random`, no
-  frame timing feeds generation. Golden gates enforce this.
+  frame timing feeds generation. Golden gates enforce this. Today that holds
+  within one JavaScript engine; parity across engines (Chrome and Safari)
+  is a 2.0 gate.
 - **Feel is judged live.** Synthetic drag tests measure geometry, not feel.
   Camera and touch work is not done until Taylor has driven it.
 - **Apophenia over exposition.** Residents get the least text that implies
