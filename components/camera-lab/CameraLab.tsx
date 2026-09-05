@@ -10,12 +10,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import * as THREE from "three";
 import { Canvas, useFrame } from "@react-three/fiber";
-import {
-  CameraControls,
-  GizmoHelper,
-  GizmoViewport,
-  PerspectiveCamera,
-} from "@react-three/drei";
+import { CameraControls, GizmoHelper, GizmoViewport, PerspectiveCamera } from "@react-three/drei";
 import type CameraControlsImpl from "camera-controls";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -41,7 +36,15 @@ const METHOD_KEY = "camera-lab.method";
 const PROJECTION_KEY = "camera-lab.projection";
 
 type Projection = "perspective" | "orthographic";
-const ZERO_CAM: CamReadout = { elev: 0, dist: 0, focalY: 0, camY: 0, parallel: false, frustumHh: 0, blend: 0 };
+const ZERO_CAM: CamReadout = {
+  elev: 0,
+  dist: 0,
+  focalY: 0,
+  camY: 0,
+  parallel: false,
+  frustumHh: 0,
+  blend: 0,
+};
 
 const _dir = new THREE.Vector3();
 const _focal = new THREE.Vector3();
@@ -85,7 +88,13 @@ function LabPin({ focusRef }: { focusRef: React.RefObject<THREE.Vector3> }) {
       </mesh>
       <mesh ref={stem} renderOrder={10}>
         <cylinderGeometry args={[2.5, 2.5, 1, 8]} />
-        <meshBasicMaterial color="#34e0c8" transparent opacity={0.5} toneMapped={false} depthTest={false} />
+        <meshBasicMaterial
+          color="#34e0c8"
+          transparent
+          opacity={0.5}
+          toneMapped={false}
+          depthTest={false}
+        />
       </mesh>
       <mesh ref={ring} rotation={[-Math.PI / 2, 0, 0]} renderOrder={10}>
         <ringGeometry args={[40, 52, 48]} />
@@ -181,14 +190,16 @@ function LabHud({
 
   return (
     <>
-      <div className="pointer-events-none absolute top-3 right-3 z-10 rounded bg-black/40 px-2 py-1 text-right font-mono text-[10px] text-zinc-300 backdrop-blur">
+      <div className="pointer-events-none absolute top-3 right-3 z-10 rounded bg-black/40 px-2 py-1 text-right font-mono text-xs text-zinc-300 backdrop-blur">
         <div className="text-teal-300">{method.name}</div>
         <div>
           elev {isFly ? "—" : cam.elev.toFixed(1)}° · dist {isFly ? "—" : Math.round(cam.dist)}
           {!isFly && <span className="text-zinc-500"> · {cam.parallel ? "ortho" : "persp"}</span>}
         </div>
         <div className="tabular-nums">
-          <span style={{ color: fps.fps >= 55 ? "#6ee7b7" : fps.fps >= 35 ? "#fcd34d" : "#fb7185" }}>
+          <span
+            style={{ color: fps.fps >= 55 ? "#6ee7b7" : fps.fps >= 35 ? "#fcd34d" : "#fb7185" }}
+          >
             {fps.fps} fps
           </span>
           <span className="text-zinc-500"> · low {fps.low}</span>
@@ -462,7 +473,15 @@ export function CameraLab() {
         const cam = c.camera;
         cam.getWorldDirection(_dir);
         _focal.copy(cam.position).addScaledVector(_dir, HERE_DIST);
-        c.setLookAt(cam.position.x, cam.position.y, cam.position.z, _focal.x, _focal.y, _focal.z, false);
+        c.setLookAt(
+          cam.position.x,
+          cam.position.y,
+          cam.position.z,
+          _focal.x,
+          _focal.y,
+          _focal.z,
+          false,
+        );
       }
     };
     raf = requestAnimationFrame(tick);
@@ -507,15 +526,16 @@ export function CameraLab() {
                 onClick={() => selectMethod(m.id)}
                 className={cn(
                   "h-auto w-full flex-col items-start gap-0.5 py-1.5 text-left whitespace-normal",
-                  m.id === methodId && "border-teal-600 bg-teal-500/10 text-teal-100 hover:bg-teal-500/15",
+                  m.id === methodId &&
+                    "border-teal-600 bg-teal-500/10 text-teal-100 hover:bg-teal-500/15",
                 )}
               >
                 <span className="text-xs">{m.name}</span>
-                <span className="text-[10px] text-zinc-500">≈ {m.parallel}</span>
+                <span className="text-xs text-zinc-500">≈ {m.parallel}</span>
               </Button>
             ))}
           </div>
-          <div className="rounded bg-zinc-900/60 p-2 text-[11px] leading-snug text-zinc-400">
+          <div className="rounded bg-zinc-900/60 p-2 text-xs leading-snug text-zinc-400">
             <p>{method.blurb}</p>
             <p className="mt-1.5 text-zinc-500">
               <span className="text-zinc-400">desktop:</span> {method.desktop}
@@ -542,7 +562,7 @@ export function CameraLab() {
             />
           </Label>
           {projectionLocked && (
-            <p className="-mt-1 text-[10px] text-zinc-600">{method.name} is perspective-only.</p>
+            <p className="-mt-1 text-xs text-zinc-600">{method.name} is perspective-only.</p>
           )}
 
           <Label className="flex w-full cursor-pointer items-center justify-between gap-2 text-xs font-normal text-zinc-300">
@@ -660,13 +680,12 @@ export function CameraLab() {
         </LabSection>
 
         <LabSection title="test plan" collapsible storageKey="camera-lab.sect.testplan">
-          <ol className="ml-4 list-decimal space-y-1 text-[11px] leading-snug text-zinc-400">
+          <ol className="ml-4 list-decimal space-y-1 text-xs leading-snug text-zinc-400">
             {TASKS.map((t) => (
               <li key={t}>{t}</li>
             ))}
           </ol>
         </LabSection>
-
       </LabSidebar>
 
       <div className="relative flex-1">

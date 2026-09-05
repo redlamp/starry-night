@@ -215,7 +215,7 @@ export function PinPlaneReadout() {
   const kPersp = radius * Math.tan((fov * Math.PI) / 180 / 2);
   const delta = kPersp - orthoSize;
   return (
-    <div className="border-foreground/10 mt-1 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 border-t pt-1.5 font-mono text-[11px]">
+    <div className="border-foreground/10 mt-1 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 border-t pt-1.5 font-mono text-xs">
       <div className="text-sky-300">K ortho (size)</div>
       <div className="text-right tabular-nums">{fmt(orthoSize, 0)}</div>
       <div className="text-amber-700">K persp (d·tan½fov)</div>

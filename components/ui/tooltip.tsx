@@ -55,17 +55,19 @@ function HelpHint({
   label?: string;
 }) {
   return (
-    <TooltipProvider delay={100}>
+    // No explicit delay — TooltipProvider's own default (150ms) is the single
+    // source (owner 2026-09-05, presentation batch item 5).
+    <TooltipProvider>
       <Tooltip>
         <TooltipTrigger
           aria-label={label}
-          className="text-foreground/40 hover:text-foreground/80 focus-visible:text-foreground/80 inline-flex size-4 shrink-0 cursor-help items-center justify-center rounded-full border border-current text-[9px] leading-none font-semibold transition-colors"
+          className="text-foreground/40 hover:text-foreground/80 focus-visible:text-foreground/80 inline-flex size-4 shrink-0 cursor-help items-center justify-center rounded-full border border-current text-xs leading-none font-semibold transition-colors"
         >
           ?
         </TooltipTrigger>
         <TooltipContent
           side={side}
-          className="bg-popover text-foreground border-border max-w-[15rem] border text-[11px] leading-snug font-normal shadow-md"
+          className="bg-popover text-foreground border-border max-w-[15rem] border text-xs leading-snug font-normal shadow-md"
         >
           {children}
         </TooltipContent>

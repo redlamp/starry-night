@@ -161,7 +161,7 @@ export function DensitySection() {
           gradients overflow into each other. Sliders PREVIEW on the heat-map
           overlay (live field + band contours, no rebuild); Confirm commits
           and regenerates, Reset discards. */}
-      <div className="text-foreground/55 pt-1 text-[11px]">
+      <div className="text-foreground/55 pt-1 text-xs">
         profile · previews live, confirm to rebuild
       </div>
       <ValueSlider

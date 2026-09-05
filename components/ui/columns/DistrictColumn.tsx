@@ -21,7 +21,7 @@ export function DistrictColumn({ id, part }: { id: string; part: "pinned" | "res
   const agg = indexes.districtAgg(id);
   if (!agg) {
     return part === "pinned" ? null : (
-      <div className="text-sm text-muted-foreground">District not found.</div>
+      <div className="text-muted-foreground text-sm">District not found.</div>
     );
   }
 
@@ -30,19 +30,19 @@ export function DistrictColumn({ id, part }: { id: string; part: "pinned" | "res
       <>
         <div className="flex flex-wrap items-center gap-1.5">
           <Badge variant="secondary" style={{ color: agg.district.color }}>
-          {agg.district.displayName}
-        </Badge>
-        <Badge variant="outline" className="capitalize">
-          {agg.district.character}
-        </Badge>
-      </div>
+            {agg.district.displayName}
+          </Badge>
+          <Badge variant="outline" className="capitalize">
+            {agg.district.character}
+          </Badge>
+        </div>
 
-      <div className="flex flex-col gap-1">
-        <ColumnStat label="Population" value={approxCount(agg.populationEst)} />
-        <ColumnStat label="Listed" value={agg.residentCount.toLocaleString()} />
-        <ColumnStat label="Companies" value={agg.companyCount.toLocaleString()} />
-        <ColumnStat label="Homes" value={agg.homeBuildingCount.toLocaleString()} />
-        <ColumnStat label="Area" value={`${(agg.district.area / 1e6).toFixed(2)} km²`} muted />
+        <div className="flex flex-col gap-1">
+          <ColumnStat label="Population" value={approxCount(agg.populationEst)} />
+          <ColumnStat label="Listed" value={agg.residentCount.toLocaleString()} />
+          <ColumnStat label="Companies" value={agg.companyCount.toLocaleString()} />
+          <ColumnStat label="Homes" value={agg.homeBuildingCount.toLocaleString()} />
+          <ColumnStat label="Area" value={`${(agg.district.area / 1e6).toFixed(2)} km²`} muted />
         </div>
       </>
     );
@@ -56,7 +56,10 @@ export function DistrictColumn({ id, part }: { id: string; part: "pinned" | "res
             <div className="flex items-baseline justify-between gap-2">
               <div className="text-sm font-medium">Streets</div>
               {/* The count column is buildings-per-street. */}
-              <Building2 className="size-3.5 shrink-0 text-muted-foreground" aria-label="Buildings on street" />
+              <Building2
+                className="text-muted-foreground size-3.5 shrink-0"
+                aria-label="Buildings on street"
+              />
             </div>
             {(allStreets ? agg.streets : agg.streets.slice(0, STREET_CAP)).map((s) => (
               <button
@@ -64,10 +67,10 @@ export function DistrictColumn({ id, part }: { id: string; part: "pinned" | "res
                 type="button"
                 onClick={() => push({ kind: "street", id: s.roadId })}
                 {...hover.road(s.roadId)}
-                className="-mx-1 flex items-baseline justify-between gap-2 rounded px-1 text-left text-sm hover:bg-foreground/10"
+                className="hover:bg-foreground/10 focus-visible:ring-ring/50 -mx-1 flex items-baseline justify-between gap-2 rounded-sm px-1 text-left text-sm focus-visible:ring-3 focus-visible:outline-none"
               >
                 <span className="truncate">{s.name}</span>
-                <span className="shrink-0 tabular-nums text-muted-foreground">
+                <span className="text-muted-foreground shrink-0 tabular-nums">
                   {s.buildingCount}
                 </span>
               </button>
@@ -93,7 +96,7 @@ export function DistrictColumn({ id, part }: { id: string; part: "pinned" | "res
                 type="button"
                 onClick={() => push({ kind: "building", id: b.buildingId })}
                 {...hover.building(b.buildingId)}
-                className="-mx-1 rounded px-1 text-left text-sm hover:bg-foreground/10"
+                className="hover:bg-foreground/10 focus-visible:ring-ring/50 -mx-1 rounded-sm px-1 text-left text-sm focus-visible:ring-3 focus-visible:outline-none"
               >
                 <span className="truncate">{b.name}</span>
               </button>

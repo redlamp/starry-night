@@ -41,7 +41,7 @@ function DistrictRows({
           onClick={() => push({ kind: "district", id: d.id })}
           {...hover.district(d.id)}
           className={cn(
-            "hover:bg-foreground/10 -mx-1 flex items-baseline justify-between gap-2 rounded px-1 text-left text-sm",
+            "hover:bg-foreground/10 focus-visible:ring-ring/50 -mx-1 flex items-baseline justify-between gap-2 rounded-sm px-1 text-left text-sm focus-visible:ring-3 focus-visible:outline-none",
             hoverDistrictId === d.id && "bg-foreground/10",
           )}
         >
@@ -77,7 +77,7 @@ export function StreetColumn({ id, part }: { id: string; part: "pinned" | "rest"
   const agg = indexes.streetAgg(id);
   if (!agg) {
     return part === "pinned" ? null : (
-      <div className="text-sm text-muted-foreground">Street not found.</div>
+      <div className="text-muted-foreground text-sm">Street not found.</div>
     );
   }
 
@@ -131,35 +131,37 @@ export function StreetColumn({ id, part }: { id: string; part: "pinned" | "rest"
             {/* Directory formatting (BuildingsView): address number in a
                 right-aligned fixed-width column, then the street, with a named
                 building's name as an outline badge on the right. */}
-            {(allBuildings ? agg.buildingIds : agg.buildingIds.slice(0, LIST_CAP)).map((buildingId) => {
-              const address = indexes.names.addresses.get(buildingId);
-              const name = indexes.names.buildingNames.get(buildingId);
-              return (
-                <button
-                  key={buildingId}
-                  type="button"
-                  onClick={() => push({ kind: "building", id: buildingId })}
-                  {...hover.building(buildingId)}
-                  className="hover:bg-foreground/10 -mx-1 flex items-baseline justify-between gap-2 rounded px-1 text-left text-sm"
-                >
-                  <span className="flex min-w-0 items-baseline gap-1.5">
-                    {address ? (
-                      <>
-                        <AddrNum n={address.number} width={indexes.names.maxAddressDigits} />
-                        <span className="truncate">{address.street}</span>
-                      </>
-                    ) : (
-                      <span className="truncate">Building #{buildingId}</span>
+            {(allBuildings ? agg.buildingIds : agg.buildingIds.slice(0, LIST_CAP)).map(
+              (buildingId) => {
+                const address = indexes.names.addresses.get(buildingId);
+                const name = indexes.names.buildingNames.get(buildingId);
+                return (
+                  <button
+                    key={buildingId}
+                    type="button"
+                    onClick={() => push({ kind: "building", id: buildingId })}
+                    {...hover.building(buildingId)}
+                    className="hover:bg-foreground/10 focus-visible:ring-ring/50 -mx-1 flex items-baseline justify-between gap-2 rounded-sm px-1 text-left text-sm focus-visible:ring-3 focus-visible:outline-none"
+                  >
+                    <span className="flex min-w-0 items-baseline gap-1.5">
+                      {address ? (
+                        <>
+                          <AddrNum n={address.number} width={indexes.names.maxAddressDigits} />
+                          <span className="truncate">{address.street}</span>
+                        </>
+                      ) : (
+                        <span className="truncate">Building #{buildingId}</span>
+                      )}
+                    </span>
+                    {name && (
+                      <Badge variant="outline" className="max-w-[7rem] shrink-0 truncate">
+                        {name}
+                      </Badge>
                     )}
-                  </span>
-                  {name && (
-                    <Badge variant="outline" className="max-w-[7rem] shrink-0 truncate">
-                      {name}
-                    </Badge>
-                  )}
-                </button>
-              );
-            })}
+                  </button>
+                );
+              },
+            )}
             <ShowMore
               total={agg.buildingIds.length}
               cap={LIST_CAP}
@@ -174,36 +176,36 @@ export function StreetColumn({ id, part }: { id: string; part: "pinned" | "rest"
         <>
           {agg.buildingIds.length > 0 && <Separator />}
           <div className="flex flex-col gap-0.5">
-          {/* Every road that crosses this one, in order along it — the junction
+            {/* Every road that crosses this one, in order along it — the junction
               list a highway has instead of an address list. Offramps aren't
               modelled yet; when they are, they attach to these points. */}
-          <div className="text-sm font-medium">Crossings</div>
-          {(allCrossings ? agg.crossings : agg.crossings.slice(0, LIST_CAP)).map((c) => (
-            <button
-              key={c.roadId}
-              type="button"
-              onClick={() => push({ kind: "street", id: c.roadId })}
-              {...hover.road(c.roadId)}
-              className="hover:bg-foreground/10 -mx-1 flex items-baseline justify-between gap-2 rounded px-1 text-left text-sm"
-            >
-              <span className="truncate">{c.name}</span>
-              <span className="text-muted-foreground flex shrink-0 items-baseline gap-2">
-                {c.tier !== "minor" && (
-                  <Badge variant="outline" className="shrink-0">
-                    {TIER_LABEL[c.tier]}
-                  </Badge>
-                )}
-                <span className="tabular-nums">{(c.alongM / 1000).toFixed(2)} km</span>
-              </span>
-            </button>
-          ))}
-          <ShowMore
-            total={agg.crossings.length}
-            cap={LIST_CAP}
-            expanded={allCrossings}
-            onToggle={() => setAllCrossings(!allCrossings)}
-            noun="crossings"
-          />
+            <div className="text-sm font-medium">Crossings</div>
+            {(allCrossings ? agg.crossings : agg.crossings.slice(0, LIST_CAP)).map((c) => (
+              <button
+                key={c.roadId}
+                type="button"
+                onClick={() => push({ kind: "street", id: c.roadId })}
+                {...hover.road(c.roadId)}
+                className="hover:bg-foreground/10 focus-visible:ring-ring/50 -mx-1 flex items-baseline justify-between gap-2 rounded-sm px-1 text-left text-sm focus-visible:ring-3 focus-visible:outline-none"
+              >
+                <span className="truncate">{c.name}</span>
+                <span className="text-muted-foreground flex shrink-0 items-baseline gap-2">
+                  {c.tier !== "minor" && (
+                    <Badge variant="outline" className="shrink-0">
+                      {TIER_LABEL[c.tier]}
+                    </Badge>
+                  )}
+                  <span className="tabular-nums">{(c.alongM / 1000).toFixed(2)} km</span>
+                </span>
+              </button>
+            ))}
+            <ShowMore
+              total={agg.crossings.length}
+              cap={LIST_CAP}
+              expanded={allCrossings}
+              onToggle={() => setAllCrossings(!allCrossings)}
+              noun="crossings"
+            />
           </div>
         </>
       )}
@@ -219,7 +221,7 @@ export function StreetColumn({ id, part }: { id: string; part: "pinned" | "rest"
                 type="button"
                 onClick={() => push({ kind: "company", id: biz.id })}
                 {...hover.company(biz.buildingId, biz.id)}
-                className="-mx-1 flex items-center justify-between gap-2 rounded px-1 text-left text-sm hover:bg-foreground/10"
+                className="hover:bg-foreground/10 focus-visible:ring-ring/50 -mx-1 flex items-center justify-between gap-2 rounded-sm px-1 text-left text-sm focus-visible:ring-3 focus-visible:outline-none"
               >
                 <span className="truncate">{biz.name}</span>
                 <Badge variant="outline" className="shrink-0 capitalize">
@@ -248,10 +250,10 @@ export function StreetColumn({ id, part }: { id: string; part: "pinned" | "rest"
                 type="button"
                 onClick={() => push({ kind: "persona", id: p.id })}
                 {...hover.persona(p.homeBuildingId, p.householdIndex)}
-                className="-mx-1 flex items-baseline justify-between gap-2 rounded px-1 text-left text-sm hover:bg-foreground/10"
+                className="hover:bg-foreground/10 focus-visible:ring-ring/50 -mx-1 flex items-baseline justify-between gap-2 rounded-sm px-1 text-left text-sm focus-visible:ring-3 focus-visible:outline-none"
               >
                 <span className="truncate">{p.fullName}</span>
-                <span className="shrink-0 tabular-nums text-muted-foreground">{p.age}</span>
+                <span className="text-muted-foreground shrink-0 tabular-nums">{p.age}</span>
               </button>
             ))}
             <ShowMore
@@ -262,9 +264,9 @@ export function StreetColumn({ id, part }: { id: string; part: "pinned" | "rest"
               noun="residents"
             />
             {allPeople && agg.residentCount > agg.residentsSample.length && (
-              <div className="px-1 text-sm text-muted-foreground">
-                {agg.residentCount - agg.residentsSample.length} more live here; open a building
-                for its full households.
+              <div className="text-muted-foreground px-1 text-sm">
+                {agg.residentCount - agg.residentsSample.length} more live here; open a building for
+                its full households.
               </div>
             )}
           </div>

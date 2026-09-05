@@ -51,7 +51,7 @@ export function ScreenYGuide() {
           }}
         />
         {/* % beside the dimension line */}
-        <div className="absolute top-1/2 left-full ml-1 -translate-y-1/2 rounded bg-black/75 px-1.5 py-0.5 text-[11px] font-medium text-white tabular-nums">
+        <div className="absolute top-1/2 left-full ml-1 -translate-y-1/2 rounded bg-black/75 px-1.5 py-0.5 text-xs font-medium text-white tabular-nums">
           {screenY}%
         </div>
       </div>

@@ -39,7 +39,10 @@ const CHECKLIST: { route: string; groups: Group[] }[] = [
           { id: "orbit-focal2f", label: "Two-finger drag adjusts the focal point (touch)" },
           { id: "orbit-zoom", label: "Pinch / scroll-wheel zooms (radius)" },
           { id: "orbit-spacepause", label: "Spacebar pauses / resumes auto-revolution" },
-          { id: "orbit-autorev", label: "Auto-revolution: the ambient slow orbit (screensaver turn)" },
+          {
+            id: "orbit-autorev",
+            label: "Auto-revolution: the ambient slow orbit (screensaver turn)",
+          },
         ],
       },
       {
@@ -74,16 +77,28 @@ const CHECKLIST: { route: string; groups: Group[] }[] = [
         items: [
           { id: "intro-stage-orbit", label: "Drag orbits the Mac" },
           { id: "intro-stage-zoom", label: "Pinch / wheel zooms" },
-          { id: "intro-stage-dbl", label: "Double-click / tap the stage recenters the studio camera" },
+          {
+            id: "intro-stage-dbl",
+            label: "Double-click / tap the stage recenters the studio camera",
+          },
           { id: "intro-mac-dbl", label: "Double-click / tap a Mac focuses + recenters on it" },
         ],
       },
       {
         title: "Screen (the CRT city)",
         items: [
-          { id: "intro-screen-enter", label: "Hover (desktop) / tap-to-focus (touch) enters screen interaction" },
-          { id: "intro-screen-manip", label: "Drag orbits the city, pinch zooms, two-finger adjusts focus" },
-          { id: "intro-screen-dbl", label: "Double-click / tap the screen recenters the city camera" },
+          {
+            id: "intro-screen-enter",
+            label: "Hover (desktop) / tap-to-focus (touch) enters screen interaction",
+          },
+          {
+            id: "intro-screen-manip",
+            label: "Drag orbits the city, pinch zooms, two-finger adjusts focus",
+          },
+          {
+            id: "intro-screen-dbl",
+            label: "Double-click / tap the screen recenters the city camera",
+          },
           { id: "intro-snowglobe", label: "Snow-globe: the city parallaxes with the camera orbit" },
           { id: "intro-skey", label: "S toggles screen ↔ snow-globe" },
         ],
@@ -310,8 +325,7 @@ function DragLookFly({
     if (k["KeyA"]) camera.position.addScaledVector(_flyRight, -v);
     if (k["KeyE"] || k["Space"]) camera.position.y += v; // E / Space = up
     // Q / C / Shift = down
-    if (k["KeyQ"] || k["KeyC"] || k["ShiftLeft"] || k["ShiftRight"])
-      camera.position.y -= v;
+    if (k["KeyQ"] || k["KeyC"] || k["ShiftLeft"] || k["ShiftRight"]) camera.position.y -= v;
   });
 
   return null;
@@ -515,120 +529,120 @@ export function DreiLab() {
         </div>
         <p className="-mt-3 text-xs text-zinc-500">phase-0 camera-controls spike</p>
 
-            <Section title="mode">
-              <Label className="flex w-full cursor-pointer items-center justify-between gap-2 text-xs font-normal text-zinc-300">
-                <span>
-                  fly mode <span className="text-zinc-600">(F)</span>
-                </span>
-                <Switch
-                  checked={mode === "fly"}
-                  onCheckedChange={(c) => (c ? enterFly() : enterOrbit("fromHere"))}
-                />
-              </Label>
-              <Label className="flex w-full cursor-pointer items-center justify-between gap-2 text-xs font-normal text-zinc-300">
-                <span>
-                  auto-orbit <span className="text-zinc-600">(Space)</span>
-                </span>
-                <Switch checked={autoOrbit} onCheckedChange={setAutoOrbit} />
-              </Label>
-              {mode === "fly" && (
-                <div className="grid grid-cols-1 gap-2">
-                  <Button variant="outline" size="sm" onClick={() => enterOrbit("fromHere")}>
-                    exit → orbit from here
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => enterOrbit("home")}>
-                    exit → return to orbit (home)
-                  </Button>
-                </div>
-              )}
-              <p className="text-[11px] text-zinc-500">
-                {mode === "orbit"
-                  ? "orbit pivots on the target (= focus point); right-drag / two-finger trucks it"
-                  : "WASD move · E/Space up, Q/C/Shift down · wheel = speed · hold-drag to look (horizon-locked); release frees the cursor."}
-              </p>
-            </Section>
+        <Section title="mode">
+          <Label className="flex w-full cursor-pointer items-center justify-between gap-2 text-xs font-normal text-zinc-300">
+            <span>
+              fly mode <span className="text-zinc-600">(F)</span>
+            </span>
+            <Switch
+              checked={mode === "fly"}
+              onCheckedChange={(c) => (c ? enterFly() : enterOrbit("fromHere"))}
+            />
+          </Label>
+          <Label className="flex w-full cursor-pointer items-center justify-between gap-2 text-xs font-normal text-zinc-300">
+            <span>
+              auto-orbit <span className="text-zinc-600">(Space)</span>
+            </span>
+            <Switch checked={autoOrbit} onCheckedChange={setAutoOrbit} />
+          </Label>
+          {mode === "fly" && (
+            <div className="grid grid-cols-1 gap-2">
+              <Button variant="outline" size="sm" onClick={() => enterOrbit("fromHere")}>
+                exit → orbit from here
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => enterOrbit("home")}>
+                exit → return to orbit (home)
+              </Button>
+            </div>
+          )}
+          <p className="text-xs text-zinc-500">
+            {mode === "orbit"
+              ? "orbit pivots on the target (= focus point); right-drag / two-finger trucks it"
+              : "WASD move · E/Space up, Q/C/Shift down · wheel = speed · hold-drag to look (horizon-locked); release frees the cursor."}
+          </p>
+        </Section>
 
-            <Section title="projection">
-              <Label className="flex w-full cursor-pointer items-center justify-between gap-2 text-xs font-normal text-zinc-300">
-                <span>
-                  orthographic <span className="text-zinc-600">(tweens)</span>
-                </span>
-                <Switch
-                  checked={ortho}
-                  onCheckedChange={(c) => {
-                    setOrtho(c);
-                    orthoTarget.current = c ? 1 : 0;
-                  }}
-                />
-              </Label>
-            </Section>
+        <Section title="projection">
+          <Label className="flex w-full cursor-pointer items-center justify-between gap-2 text-xs font-normal text-zinc-300">
+            <span>
+              orthographic <span className="text-zinc-600">(tweens)</span>
+            </span>
+            <Switch
+              checked={ortho}
+              onCheckedChange={(c) => {
+                setOrtho(c);
+                orthoTarget.current = c ? 1 : 0;
+              }}
+            />
+          </Label>
+        </Section>
 
-            <Section title="camera-controls api">
-              <div className="grid grid-cols-2 gap-2">
-                <Button variant="outline" size="sm" disabled={mode === "fly"} onClick={poseA}>
-                  transition A
-                </Button>
-                <Button variant="outline" size="sm" disabled={mode === "fly"} onClick={topDown}>
-                  top-down (T)
-                </Button>
-                <Button variant="outline" size="sm" disabled={mode === "fly"} onClick={fit}>
-                  fitToBox
-                </Button>
-                <Button variant="outline" size="sm" disabled={mode === "fly"} onClick={save}>
-                  saveState
-                </Button>
-                <Button variant="outline" size="sm" disabled={mode === "fly"} onClick={reset}>
-                  reset
-                </Button>
-              </div>
-            </Section>
+        <Section title="camera-controls api">
+          <div className="grid grid-cols-2 gap-2">
+            <Button variant="outline" size="sm" disabled={mode === "fly"} onClick={poseA}>
+              transition A
+            </Button>
+            <Button variant="outline" size="sm" disabled={mode === "fly"} onClick={topDown}>
+              top-down (T)
+            </Button>
+            <Button variant="outline" size="sm" disabled={mode === "fly"} onClick={fit}>
+              fitToBox
+            </Button>
+            <Button variant="outline" size="sm" disabled={mode === "fly"} onClick={save}>
+              saveState
+            </Button>
+            <Button variant="outline" size="sm" disabled={mode === "fly"} onClick={reset}>
+              reset
+            </Button>
+          </div>
+        </Section>
 
-            <Section title="focus point">
-              <div className="grid grid-cols-2 gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={mode === "fly"}
-                  onClick={() => controls.current?.setTarget(0, 1, 0, true)}
-                >
-                  → centre
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={mode === "fly"}
-                  onClick={() => controls.current?.setTarget(9, 1, 0, true)}
-                >
-                  → red
-                </Button>
-              </div>
-              <div className="font-mono text-[10px] text-zinc-500">
-                pos [{readout.pos}]
-                <br />
-                tgt [{readout.tgt}]
-              </div>
-            </Section>
+        <Section title="focus point">
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={mode === "fly"}
+              onClick={() => controls.current?.setTarget(0, 1, 0, true)}
+            >
+              → centre
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={mode === "fly"}
+              onClick={() => controls.current?.setTarget(9, 1, 0, true)}
+            >
+              → red
+            </Button>
+          </div>
+          <div className="font-mono text-xs text-zinc-500">
+            pos [{readout.pos}]
+            <br />
+            tgt [{readout.tgt}]
+          </div>
+        </Section>
 
-            {CHECKLIST.map((sectionData) => (
-              <Section key={sectionData.route} title={sectionData.route}>
-                {sectionData.groups.map((g) => (
-                  <div key={g.title} className="flex flex-col gap-1.5">
-                    <div className="font-mono text-[11px] text-zinc-600">{g.title}</div>
-                    {g.items.map((it) => (
-                      <Label
-                        key={it.id}
-                        className="flex w-full cursor-pointer items-center justify-between gap-3 text-[11px] leading-snug font-normal text-zinc-300"
-                      >
-                        <span className={checked[it.id] ? "text-zinc-600 line-through" : ""}>
-                          {it.label}
-                        </span>
-                        <Switch checked={!!checked[it.id]} onCheckedChange={() => toggle(it.id)} />
-                      </Label>
-                    ))}
-                  </div>
+        {CHECKLIST.map((sectionData) => (
+          <Section key={sectionData.route} title={sectionData.route}>
+            {sectionData.groups.map((g) => (
+              <div key={g.title} className="flex flex-col gap-1.5">
+                <div className="font-mono text-xs text-zinc-600">{g.title}</div>
+                {g.items.map((it) => (
+                  <Label
+                    key={it.id}
+                    className="flex w-full cursor-pointer items-center justify-between gap-3 text-xs leading-snug font-normal text-zinc-300"
+                  >
+                    <span className={checked[it.id] ? "text-zinc-600 line-through" : ""}>
+                      {it.label}
+                    </span>
+                    <Switch checked={!!checked[it.id]} onCheckedChange={() => toggle(it.id)} />
+                  </Label>
                 ))}
-              </Section>
+              </div>
             ))}
+          </Section>
+        ))}
       </LabSidebar>
 
       {/* right pane — the live scene */}

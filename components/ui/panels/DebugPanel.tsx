@@ -144,7 +144,7 @@ export function TrafficGroup() {
         step={0.1}
         onChange={(density) => setTraffic({ density })}
       />
-      <div className="text-foreground/55 pt-1 text-[11px]">per-tier ×</div>
+      <div className="text-foreground/55 pt-1 text-xs">per-tier ×</div>
       <ValueSlider
         label="highway"
         value={traffic.highway}
@@ -213,7 +213,7 @@ export function FlightsGroup() {
           {/* Planes in the air: B = big (airliner), S = small (light GA), plus
               the helicopter count (0 until helicopters land). */}
           <span
-            className="text-foreground/60 flex items-center gap-1 text-[10px] tabular-nums"
+            className="text-foreground/60 flex items-center gap-1 text-xs tabular-nums"
             title="Planes in the air (B: airliner, S: light GA) + helicopters"
           >
             <Plane aria-hidden className="size-3" />
@@ -271,9 +271,7 @@ export function FlightsGroup() {
           loop. All three on one row under a "Spawn" header, so the labels drop
           the "Spawn" prefix (kept in the tooltip). Independent of the Planes/
           Helis caps above. */}
-      <span className="text-foreground/55 text-[11px] font-medium tracking-wide uppercase">
-        Spawn
-      </span>
+      <span className="text-foreground/55 text-xs font-medium tracking-wide uppercase">Spawn</span>
       <div className="flex gap-1.5">
         <Button
           size="xs"

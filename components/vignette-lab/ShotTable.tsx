@@ -80,11 +80,11 @@ export function ShotTable({
               {i + 1}
             </span>
             <span className="min-w-0 flex-1 truncate font-medium">{shot.label}</span>
-            <span className="text-muted-foreground shrink-0 font-mono text-[10px]">
+            <span className="text-muted-foreground shrink-0 font-mono text-xs">
               {shot.transitionIn === "cut" ? "cut" : `move ${shot.transitionSec ?? ""}s`}
             </span>
           </div>
-          <div className="text-muted-foreground flex items-center gap-1.5 text-[10px]">
+          <div className="text-muted-foreground flex items-center gap-1.5 text-xs">
             <span className="bg-muted rounded px-1 py-0.5">{shot.mccloud}</span>
             <span>hold</span>
             <input
@@ -99,7 +99,7 @@ export function ShotTable({
             <span>s</span>
             <div onClick={(e) => e.stopPropagation()} className="ml-1">
               <Select value={shot.move} onValueChange={(v) => onChangeMove(i, v as MoveKind)}>
-                <SelectTrigger size="sm" className="h-6 px-1.5 text-[10px]">
+                <SelectTrigger size="sm" className="h-6 px-1.5 text-xs">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

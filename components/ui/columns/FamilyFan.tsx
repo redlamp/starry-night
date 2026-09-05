@@ -226,7 +226,7 @@ export function FanChart({
           type="button"
           onClick={() => onSelect(focusP.id)}
           aria-label={`${focusP.givenName} ${focusP.familyName}, ${focusP.age}`}
-          className="absolute top-1/2 left-1/2 flex size-24 -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full text-xs"
+          className="focus-visible:ring-ring/50 absolute top-1/2 left-1/2 flex size-24 -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full text-xs focus-visible:ring-3 focus-visible:outline-none"
         >
           <span className="max-w-[6rem] truncate font-medium">{focusP.givenName}</span>
           <span className="max-w-[6rem] truncate font-medium">{focusP.familyName}</span>

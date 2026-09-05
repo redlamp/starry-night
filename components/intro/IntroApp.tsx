@@ -8,12 +8,7 @@ import { IntroScene } from "./IntroScene";
 import { IntroFpsBadge } from "./IntroFpsBadge";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import type { BwLevels, IntroViewMode, ScreenColorMode } from "./viewMode";
 
@@ -66,7 +61,7 @@ function SliderRow({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="text-foreground/80 flex items-center justify-between font-mono text-[10px]">
+      <div className="text-foreground/80 flex items-center justify-between font-mono text-xs">
         <span>{label}</span>
         <span className="tabular-nums">{value.toFixed(2)}</span>
       </div>
@@ -222,7 +217,7 @@ export function IntroApp() {
                       <TooltipTrigger
                         data-testid={`viewport-depth-${id}`}
                         onClick={() => setColorMode(id)}
-                        className={cn(chip(colorMode === id), "px-2 font-mono text-[10px]")}
+                        className={cn(chip(colorMode === id), "px-2 font-mono text-xs")}
                       >
                         {label}
                       </TooltipTrigger>

@@ -174,7 +174,7 @@ function PersonBox({
         // a WHITE ring OUTSIDE the cell (box-shadow — zero layout, no
         // position shift), leaving the border free to carry the lineage
         // colour (inline borderColor overrides the muted fallback).
-        "flex w-44 flex-col items-center rounded-md border px-2.5 py-1 text-xs transition-colors",
+        "focus-visible:ring-ring/50 flex w-44 flex-col items-center rounded-md border px-2.5 py-1 text-xs transition-colors focus-visible:ring-3 focus-visible:outline-none",
         blood ? "border-solid" : "border-dashed",
         "border-muted-foreground/80 bg-background hover:bg-muted",
         focused && "ring-2 ring-white/90",
@@ -428,7 +428,8 @@ function FamilyChart({
       };
       // person id → owning union, for the top-down pass's parent lookups.
       const unionOf = new Map<string, UnionNode>();
-      for (const row of web.rows) for (const u of row) for (const m of u.members) unionOf.set(m.id, u);
+      for (const row of web.rows)
+        for (const u of row) for (const m of u.members) unionOf.set(m.id, u);
 
       // Pack one row toward per-block target centers (order preserved,
       // tighter min gap in column mode where vertical space is the scarce
@@ -486,10 +487,7 @@ function FamilyChart({
             desired: c.target - widths[i] / 2,
             width: widths[i],
             gapBefore:
-              i > 0 &&
-              !wantsAir(calc[i - 1].u) &&
-              !wantsAir(c.u) &&
-              siblings(calc[i - 1].u, c.u)
+              i > 0 && !wantsAir(calc[i - 1].u) && !wantsAir(c.u) && siblings(calc[i - 1].u, c.u)
                 ? tightGap
                 : wideGap,
           })),
@@ -516,9 +514,7 @@ function FamilyChart({
         for (let r = web.rows.length - 2; r >= 0; r -= 1) {
           packToward(web.rows[r], (u, cur) => {
             const kids = u.childIds.map(box).filter(Boolean) as Box[];
-            return kids.length
-              ? kids.reduce((s, k) => s + packC(k), 0) / kids.length
-              : packC(cur);
+            return kids.length ? kids.reduce((s, k) => s + packC(k), 0) / kids.length : packC(cur);
           });
         }
       };
@@ -549,9 +545,7 @@ function FamilyChart({
           packToward(web.rows[r], (u, cur) => {
             const anchors: number[] = [];
             for (const m of u.members) {
-              const parentIds = m.family
-                .filter((l) => l.role === "parent")
-                .map((l) => l.personaId);
+              const parentIds = m.family.filter((l) => l.role === "parent").map((l) => l.personaId);
               const parentUnion = parentIds.map((pid) => unionOf.get(pid)).find(Boolean);
               const p = parentUnion ? hangPointFor(parentUnion, m.id) : null;
               if (p !== null) anchors.push(p);
@@ -670,9 +664,7 @@ function FamilyChart({
               p2: Math.max(...ps, c.anchor.p),
             };
           })
-          .sort(
-            (p, q) => p.p2 - p.p1 - (q.p2 - q.p1) || p.p1 - q.p1 || p.anchor.p - q.anchor.p,
-          );
+          .sort((p, q) => p.p2 - p.p1 - (q.p2 - q.p1) || p.p1 - q.p1 || p.anchor.p - q.anchor.p);
         // The TRUE inter-column channel for this group: from the widest
         // parent union's trailing edge to the child row's leading edge —
         // buses live strictly inside it, so lines never overlap cells
@@ -686,7 +678,8 @@ function FamilyChart({
           // Fork sits at the CENTER of the channel; parallel buses fan
           // alternately around it (only when lanes are actually needed),
           // clamped inside the channel with a 6px margin off the cells.
-          const laneOff = lane === 0 ? 0 : lane % 2 === 1 ? -7 * Math.ceil(lane / 2) : 7 * (lane / 2);
+          const laneOff =
+            lane === 0 ? 0 : lane % 2 === 1 ? -7 * Math.ceil(lane / 2) : 7 * (lane / 2);
           const busG = Math.min(
             Math.max((parentEdge + rowG) / 2 + laneOff, parentEdge + 6),
             rowG - 6,
@@ -747,11 +740,7 @@ function FamilyChart({
       for (const [key, dx] of blockShifts) {
         const el = blockEls.get(key);
         if (el) {
-          el.style.transform = dx
-            ? vertical
-              ? `translateY(${dx}px)`
-              : `translateX(${dx}px)`
-            : "";
+          el.style.transform = dx ? (vertical ? `translateY(${dx}px)` : `translateX(${dx}px)`) : "";
         }
       }
 
@@ -843,8 +832,13 @@ function FamilyChart({
     const pointers = new Map<number, { x: number; y: number }>();
     let panStart: { x: number; y: number; tx: number; ty: number } | null = null;
     let dragging = false;
-    let pinch: { d0: number; s0: number; mid0: { x: number; y: number }; tx0: number; ty0: number } | null =
-      null;
+    let pinch: {
+      d0: number;
+      s0: number;
+      mid0: { x: number; y: number };
+      tx0: number;
+      ty0: number;
+    } | null = null;
 
     const local = (e: { clientX: number; clientY: number }) => {
       const r = vp.getBoundingClientRect();
@@ -917,7 +911,10 @@ function FamilyChart({
         const [a, b] = [...pointers.values()];
         const d = Math.hypot(a.x - b.x, a.y - b.y);
         const mid = local({ clientX: (a.x + b.x) / 2, clientY: (a.y + b.y) / 2 });
-        const s2 = Math.min(2.5, Math.max(fitScale() * 0.5, pinch.s0 * (d / Math.max(1, pinch.d0))));
+        const s2 = Math.min(
+          2.5,
+          Math.max(fitScale() * 0.5, pinch.s0 * (d / Math.max(1, pinch.d0))),
+        );
         const k = s2 / pinch.s0;
         // Anchor the content point under the initial midpoint, then follow
         // the midpoint as it moves — zoom and pan in one gesture.
@@ -1005,9 +1002,7 @@ function FamilyChart({
       focused={p.id === focusId}
       blood={web.bloodIds.has(p.id)}
       pinned={p.id === originId}
-      lineHue={
-        lineage && web.hues.has(p.id) ? hueCss(web.hues.get(p.id) as number) : undefined
-      }
+      lineHue={lineage && web.hues.has(p.id) ? hueCss(web.hues.get(p.id) as number) : undefined}
       tint={tint ? genderTintCss(p.genderIdentity) : undefined}
       onSelect={() => onSelect(p.id)}
       boxRef={refFor(p.id)}
@@ -1056,83 +1051,80 @@ function FamilyChart({
         }}
       />
       <div
-      ref={viewportRef}
-      className="absolute inset-0 cursor-grab touch-none overflow-hidden select-none active:cursor-grabbing"
-      onClickCapture={(e) => {
-        // A pan that ends over a person box must not read as a click.
-        if (gesture.current.suppressClick) {
-          e.preventDefault();
-          e.stopPropagation();
-          gesture.current.suppressClick = false;
-        }
-      }}
-      onDoubleClick={(e) => {
-        if ((e.target as HTMLElement).closest("button")) return;
-        gesture.current.touched = false;
-        tweenToFit();
-      }}
-    >
-      {/* The gesture layer: pan/zoom land here as one transform. NO
+        ref={viewportRef}
+        className="absolute inset-0 cursor-grab touch-none overflow-hidden select-none active:cursor-grabbing"
+        onClickCapture={(e) => {
+          // A pan that ends over a person box must not read as a click.
+          if (gesture.current.suppressClick) {
+            e.preventDefault();
+            e.stopPropagation();
+            gesture.current.suppressClick = false;
+          }
+        }}
+        onDoubleClick={(e) => {
+          if ((e.target as HTMLElement).closest("button")) return;
+          gesture.current.touched = false;
+          tweenToFit();
+        }}
+      >
+        {/* The gesture layer: pan/zoom land here as one transform. NO
           will-change — pinning the layer kept its raster cached at layout
           scale, so zooming scaled PIXELS (user 2026-07-11: "very
           pixelated"); without it the browser re-rasterizes the DOM/SVG
           vectors crisp once the gesture settles. */}
-      <div ref={canvasRef} className="absolute top-0 left-0 origin-top-left">
-        {/* overflow-hidden: the normalize contract puts ALL visible content
+        <div ref={canvasRef} className="absolute top-0 left-0 origin-top-left">
+          {/* overflow-hidden: the normalize contract puts ALL visible content
             inside this box — the content root's own natural-layout box
             (translated, not resized) can hang past it (the 33px Amanda
             sliver, user 2026-07-11); clipping it can never hide anything
             real. */}
-        <div
-          className="relative overflow-hidden"
-          style={{ width: view.w, height: view.h }}
-        >
-          <div
-            ref={contentRef}
-            className={cn(
-              "absolute top-0 left-0 flex w-max origin-top-left items-center justify-center",
-              // Channel width back to gap-7 — the centered forks made the
-              // extra column distance unnecessary (user 2026-07-10).
-              vertical ? "flex-row gap-7" : "flex-col gap-9",
-            )}
-          >
-            <svg
-              className="text-muted-foreground/80 pointer-events-none absolute top-0 left-0 overflow-visible"
-              width={view.svgW}
-              height={view.svgH}
-              aria-hidden
+          <div className="relative overflow-hidden" style={{ width: view.w, height: view.h }}>
+            <div
+              ref={contentRef}
+              className={cn(
+                "absolute top-0 left-0 flex w-max origin-top-left items-center justify-center",
+                // Channel width back to gap-7 — the centered forks made the
+                // extra column distance unnecessary (user 2026-07-10).
+                vertical ? "flex-row gap-7" : "flex-col gap-9",
+              )}
             >
-              {segs.map((s, i) => (
-                <line
-                  key={i}
-                  x1={s.x1}
-                  y1={s.y1}
-                  x2={s.x2}
-                  y2={s.y2}
-                  // Lineage Colors on → the union's line hue/blend; off (or no
-                  // colored member) → the muted connector color via currentColor.
-                  stroke={lineage && s.color ? s.color : "currentColor"}
-                  strokeWidth={1.5}
-                  strokeLinecap="round"
-                  strokeDasharray={s.dashed ? "2 5" : undefined}
-                />
-              ))}
-            </svg>
-            {web.rows.map((row, i) => (
-              <div
-                key={row[0]?.key ?? i}
-                className={cn(
-                  "flex justify-center gap-4",
-                  vertical ? "flex-col items-start" : "items-start",
-                )}
+              <svg
+                className="text-muted-foreground/80 pointer-events-none absolute top-0 left-0 overflow-visible"
+                width={view.svgW}
+                height={view.svgH}
+                aria-hidden
               >
-                {row.map(renderUnion)}
-              </div>
-            ))}
+                {segs.map((s, i) => (
+                  <line
+                    key={i}
+                    x1={s.x1}
+                    y1={s.y1}
+                    x2={s.x2}
+                    y2={s.y2}
+                    // Lineage Colors on → the union's line hue/blend; off (or no
+                    // colored member) → the muted connector color via currentColor.
+                    stroke={lineage && s.color ? s.color : "currentColor"}
+                    strokeWidth={1.5}
+                    strokeLinecap="round"
+                    strokeDasharray={s.dashed ? "2 5" : undefined}
+                  />
+                ))}
+              </svg>
+              {web.rows.map((row, i) => (
+                <div
+                  key={row[0]?.key ?? i}
+                  className={cn(
+                    "flex justify-center gap-4",
+                    vertical ? "flex-col items-start" : "items-start",
+                  )}
+                >
+                  {row.map(renderUnion)}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
-    </div>
     </>
   );
 }
@@ -1209,7 +1201,8 @@ export function FamilyTree({ personaId, indexes }: { personaId: string; indexes:
     setFocusId(personaId);
   }
 
-  const focus = indexes.directory.personas.get(focusId) ?? indexes.directory.personas.get(personaId);
+  const focus =
+    indexes.directory.personas.get(focusId) ?? indexes.directory.personas.get(personaId);
   if (!focus) return null;
   // No view-aware per-generation budget anymore (user 2026-07-11): the
   // pan/zoom canvas makes oversized generations navigable, so only
@@ -1297,7 +1290,7 @@ export function FamilyTree({ personaId, indexes }: { personaId: string; indexes:
                   rows stay fixed in place — only the tree scrolls. */}
               <div
                 data-slot="family-tree-panel"
-                className="relative flex max-h-[85vh] min-h-[30rem] w-fit min-w-[44rem] max-w-[calc(96vw-19.5rem)] flex-col overflow-hidden rounded-xl border border-border bg-popover/95 text-popover-foreground shadow-lg backdrop-blur-md tabular-nums"
+                className="border-border bg-popover/95 text-popover-foreground relative flex max-h-[85vh] min-h-[30rem] w-fit max-w-[calc(96vw-19.5rem)] min-w-[44rem] flex-col overflow-hidden rounded-xl border tabular-nums shadow-lg backdrop-blur-md"
               >
                 {mode === "fan" && fan ? (
                   <FanChart fan={fan} lineage={lineage} tint={tintOn} onSelect={setFocusId} />
@@ -1318,8 +1311,8 @@ export function FamilyTree({ personaId, indexes }: { personaId: string; indexes:
                     only the controls themselves catch clicks. Title left;
                     back control + X share the right cluster (user
                     2026-07-08). */}
-                <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center justify-between gap-3 rounded-t-xl bg-gradient-to-b from-popover via-popover/55 to-transparent px-4 pt-3 pb-6">
-                  <DialogTitle className="min-w-0 truncate text-sm font-medium text-foreground">
+                <div className="from-popover via-popover/55 pointer-events-none absolute inset-x-0 top-0 z-10 flex items-center justify-between gap-3 rounded-t-xl bg-gradient-to-b to-transparent px-4 pt-3 pb-6">
+                  <DialogTitle className="text-foreground min-w-0 truncate text-sm font-medium">
                     The {focus.familyName} Family
                   </DialogTitle>
                   <div className="pointer-events-auto flex items-center gap-2">
@@ -1331,7 +1324,7 @@ export function FamilyTree({ personaId, indexes }: { personaId: string; indexes:
                         type="button"
                         onClick={() => setFocusId(origin.id)}
                         disabled={focus.id === origin.id}
-                        className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-xs font-normal disabled:cursor-default disabled:opacity-45 disabled:hover:text-muted-foreground"
+                        className="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 disabled:hover:text-muted-foreground flex items-center gap-1 rounded-sm text-xs font-normal focus-visible:ring-3 focus-visible:outline-none disabled:cursor-default disabled:opacity-45"
                       >
                         Back to {origin.givenName}
                         <Undo2 className="size-3.5" aria-hidden />
@@ -1346,8 +1339,8 @@ export function FamilyTree({ personaId, indexes }: { personaId: string; indexes:
                     hovering over the chart's bottom edge on the mirrored
                     scrim (user 2026-07-11). Both rows keep constant heights
                     so nothing shifts when the note appears. */}
-                <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 flex flex-col rounded-b-xl bg-gradient-to-t from-popover via-popover/55 to-transparent px-4 pt-6 pb-2">
-                  <div className="h-5 shrink-0 truncate text-xs text-muted-foreground">
+                <div className="from-popover via-popover/55 pointer-events-none absolute inset-x-0 bottom-0 z-10 flex flex-col rounded-b-xl bg-gradient-to-t to-transparent px-4 pt-6 pb-2">
+                  <div className="text-muted-foreground h-5 shrink-0 truncate text-xs">
                     {footerBits.join(" · ")}
                   </div>
                   {/* Nav strip (user 2026-07-11): the main "?" guide's

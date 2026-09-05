@@ -49,6 +49,7 @@ import { buildViewLink } from "@/lib/scene/viewLink";
 import { cameraCommand } from "@/lib/scene/cameraCommand";
 import type { CameraModelId } from "@/lib/state/sceneStore";
 import { Accordion } from "@/components/ui/accordion";
+import { GLASS } from "@/components/ui/FloatingPanel";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
@@ -126,7 +127,7 @@ function DriftTransportButton({ idle }: { idle: boolean }) {
         aria-label={label}
         aria-pressed={on}
         className={cn(
-          "flex size-11 items-center justify-center rounded-full border shadow-lg backdrop-blur-md transition-[opacity,background-color,color] duration-700",
+          "flex size-11 items-center justify-center rounded-full border shadow-lg backdrop-blur-md transition-[opacity,background-color,color] duration-700 motion-reduce:transition-none",
           on
             ? "bg-primary text-primary-foreground border-transparent"
             : "bg-popover/70 text-foreground/85 border-foreground/10 active:bg-foreground/5",
@@ -427,7 +428,7 @@ export function CameraPanel() {
           <button
             onClick={() => setHidden(false)}
             className={cn(
-              "bg-popover/70 text-foreground/85 border-foreground/10 active:bg-foreground/5 flex size-11 items-center justify-center rounded-full border shadow-lg backdrop-blur-md transition-opacity duration-700",
+              "bg-popover/70 text-foreground/85 border-foreground/10 active:bg-foreground/5 flex size-11 items-center justify-center rounded-full border shadow-lg backdrop-blur-md transition-opacity duration-700 motion-reduce:transition-none",
               idle ? "pointer-events-none opacity-0" : "pointer-events-auto opacity-100",
             )}
             aria-label="Show Settings"
@@ -481,7 +482,11 @@ export function CameraPanel() {
 
   return (
     <div
-      className="border-foreground/10 bg-popover/70 text-foreground pointer-events-auto fixed top-0 right-0 bottom-0 z-40 flex h-dvh max-h-dvh max-w-full flex-col border-l shadow-2xl backdrop-blur-md"
+      // GLASS recipe (presentation batch item 2).
+      className={cn(
+        "text-foreground pointer-events-auto fixed top-0 right-0 bottom-0 z-40 flex h-dvh max-h-dvh max-w-full flex-col border-l",
+        GLASS,
+      )}
       style={{ width: panelWidth }}
     >
       {/* Grab the left edge to resize; double-click resets to the default width. */}
@@ -534,7 +539,7 @@ export function CameraPanel() {
             </TabsList>
           </Tabs>
           {studioMode && (
-            <span className="text-foreground/50 px-0.5 text-[11px] leading-snug">
+            <span className="text-foreground/50 px-0.5 text-xs leading-snug">
               author tools: generation, debug, labs
             </span>
           )}
@@ -567,7 +572,7 @@ export function CameraPanel() {
             the Map/Drift/Turntable selector into a single dropdown over the existing
             cameraMode + cameraModel. See wiki plan-unify-camera-selector. */}
         <div className="flex flex-col gap-1.5">
-          <span className="text-foreground/55 text-[10px] font-medium tracking-wide uppercase">
+          <span className="text-foreground/55 text-xs font-medium tracking-wide uppercase">
             Camera
           </span>
           <Select value={activeCamera} onValueChange={pickCamera}>
@@ -586,7 +591,7 @@ export function CameraPanel() {
                 ))}
             </SelectContent>
           </Select>
-          <span className="text-foreground/50 text-[11px] leading-snug">{cameraCaption}</span>
+          <span className="text-foreground/50 text-xs leading-snug">{cameraCaption}</span>
         </div>
       </div>
 
@@ -622,9 +627,9 @@ export function CameraPanel() {
                   <div className="text-foreground/70 grid grid-cols-[auto_1fr_1fr_1fr] items-center gap-x-2 gap-y-1 font-mono text-xs">
                     {/* header row: x / y / z over the value columns */}
                     <div />
-                    <div className="text-foreground/40 text-right text-[10px] uppercase">x</div>
-                    <div className="text-foreground/40 text-right text-[10px] uppercase">y</div>
-                    <div className="text-foreground/40 text-right text-[10px] uppercase">z</div>
+                    <div className="text-foreground/40 text-right text-xs uppercase">x</div>
+                    <div className="text-foreground/40 text-right text-xs uppercase">y</div>
+                    <div className="text-foreground/40 text-right text-xs uppercase">z</div>
 
                     <Tooltip>
                       <TooltipTrigger render={<Camera className="size-3.5" />} />
@@ -650,7 +655,7 @@ export function CameraPanel() {
                     <div className="text-right tabular-nums">{fmt(liveRotDeg[1], 1)}</div>
                     <div className="text-right tabular-nums">{fmt(liveRotDeg[2], 1)}</div>
 
-                    <div className="text-foreground/40 text-[10px] uppercase">fov</div>
+                    <div className="text-foreground/40 text-xs uppercase">fov</div>
                     <div className="text-right tabular-nums">{fmt(cameraLive.fov)}</div>
                     <Tooltip>
                       <TooltipTrigger
@@ -660,7 +665,7 @@ export function CameraPanel() {
                     </Tooltip>
                     <div className="text-right tabular-nums">{fmt(orbit.radius)}</div>
 
-                    <div className="text-foreground/40 text-[10px] uppercase">lens</div>
+                    <div className="text-foreground/40 text-xs uppercase">lens</div>
                     <div className="text-right tabular-nums">
                       {focalLengthMm(cameraLive.fov)} mm
                     </div>
@@ -898,7 +903,7 @@ export function CameraPanel() {
                   className="text-foreground/70 hover:bg-foreground/10 hover:text-foreground flex items-center justify-between gap-2 rounded px-2 py-1.5 text-sm"
                 >
                   <span>{s.label}</span>
-                  <span className="bg-foreground/10 text-foreground/60 rounded px-1.5 py-0.5 text-[10px] tracking-wide uppercase">
+                  <span className="bg-foreground/10 text-foreground/60 rounded px-1.5 py-0.5 text-xs tracking-wide uppercase">
                     in {studioMode ? "Look" : "Studio"}
                   </span>
                 </button>

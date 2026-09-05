@@ -13,6 +13,15 @@ import { cn } from "@/lib/utils";
 // live in local component state and are NOT persisted (phase 1) — reopening
 // starts from the default placement.
 
+// Two surface recipes, shared across the app's floating chrome (presentation
+// batch, owner 2026-09-05 — see wiki/notes/decision-ui-surfaces-and-tokens.md).
+// GLASS: HUD chips, the dock, and drawers — thin translucent chrome you look
+// through at the scene. CARD: reading surfaces (entity cards, the directory,
+// the demographics tooltip) — denser and closer to opaque, since these hold
+// text you read for a while rather than glance at.
+export const GLASS = "border-foreground/10 bg-popover/70 backdrop-blur-md shadow-lg";
+export const CARD = "border-border bg-popover/95 backdrop-blur-md shadow-lg";
+
 const MARGIN = 8; // px kept between the panel and the viewport edge
 
 type Point = { x: number; y: number };
@@ -74,7 +83,9 @@ export function FloatingPanel({
       const prev = restoreRef.current ?? { h: defaultHeight, y: MARGIN };
       const h = Math.min(prev.h, vh - MARGIN * 2);
       setSize((s) => ({ ...s, h }));
-      setPos((p) => (p ? { ...p, y: clamp(prev.y, MARGIN, Math.max(MARGIN, vh - h - MARGIN)) } : p));
+      setPos((p) =>
+        p ? { ...p, y: clamp(prev.y, MARGIN, Math.max(MARGIN, vh - h - MARGIN)) } : p,
+      );
       setExpanded(false);
     }
   };
@@ -169,16 +180,17 @@ export function FloatingPanel({
       role="dialog"
       aria-label={typeof title === "string" ? title : undefined}
       className={cn(
-        // /65 + blur-xl: at /95 the backdrop blur was imperceptible and the
-        // panel read as a flat card over the scene (user 2026-07-18).
-        "pointer-events-auto fixed z-50 flex flex-col overflow-hidden rounded-xl border border-border bg-popover/65 text-popover-foreground shadow-2xl backdrop-blur-xl",
+        // GLASS recipe (presentation batch item 2) — this floating window is
+        // HUD-adjacent chrome, not a reading surface.
+        "text-popover-foreground pointer-events-auto fixed z-50 flex flex-col overflow-hidden rounded-xl border",
+        GLASS,
         className,
       )}
       style={{ left: pos.x, top: pos.y, width: size.w, height: size.h }}
     >
       <div
         onPointerDown={beginDrag("move")}
-        className="flex shrink-0 cursor-grab touch-none items-center justify-between gap-2 border-b border-border/60 px-3 py-2 select-none active:cursor-grabbing"
+        className="border-border/60 flex shrink-0 cursor-grab touch-none items-center justify-between gap-2 border-b px-3 py-2 select-none active:cursor-grabbing"
       >
         <span className="truncate text-sm font-medium">{title}</span>
         <span className="flex shrink-0 items-center gap-1">

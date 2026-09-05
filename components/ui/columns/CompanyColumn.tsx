@@ -41,7 +41,7 @@ export function CompanyColumn({ id, part }: { id: string; part: "pinned" | "rest
           type="button"
           onClick={() => push({ kind: "building", id: biz.buildingId })}
           {...hover.company(biz.buildingId, biz.id)}
-          className="text-muted-foreground text-left text-sm hover:underline"
+          className="text-muted-foreground focus-visible:ring-ring/50 rounded-sm text-left text-sm hover:underline focus-visible:ring-3 focus-visible:outline-none"
         >
           {buildingName ? `${buildingName} · ` : ""}
           {address ? `${address.number} ${address.street}` : `Building #${biz.buildingId}`}
@@ -89,7 +89,7 @@ export function CompanyColumn({ id, part }: { id: string; part: "pinned" | "rest
                     type="button"
                     onClick={() => push({ kind: "persona", id: pid })}
                     {...hover.persona(persona.homeBuildingId, persona.householdIndex)}
-                    className="hover:bg-foreground/10 -mx-1 flex flex-col rounded px-1 text-left text-sm"
+                    className="hover:bg-foreground/10 focus-visible:ring-ring/50 -mx-1 flex flex-col rounded-sm px-1 text-left text-sm focus-visible:ring-3 focus-visible:outline-none"
                   >
                     <span className="truncate">{persona.fullName}</span>
                     <span className="text-muted-foreground truncate text-right text-xs">
@@ -104,7 +104,7 @@ export function CompanyColumn({ id, part }: { id: string; part: "pinned" | "rest
                   type="button"
                   onClick={() => push({ kind: "persona", id: pid })}
                   {...hover.persona(persona.homeBuildingId, persona.householdIndex)}
-                  className="hover:bg-foreground/10 -mx-1 flex items-baseline justify-between gap-1.5 rounded px-1 text-left text-sm"
+                  className="hover:bg-foreground/10 focus-visible:ring-ring/50 -mx-1 flex items-baseline justify-between gap-1.5 rounded-sm px-1 text-left text-sm focus-visible:ring-3 focus-visible:outline-none"
                 >
                   <span className="truncate">{persona.fullName}</span>
                   <span className="text-muted-foreground max-w-[12rem] shrink-0 truncate text-right text-xs">
@@ -123,7 +123,7 @@ export function CompanyColumn({ id, part }: { id: string; part: "pinned" | "rest
           <div className="flex flex-col gap-0.5">
             <div className="flex items-baseline justify-between">
               <div className="text-sm font-medium">Students</div>
-              <span className="text-muted-foreground text-[11px] tracking-wide uppercase">Age</span>
+              <span className="text-muted-foreground text-xs tracking-wide uppercase">Age</span>
             </div>
             {(allStudents ? students : students.slice(0, STUDENT_CAP)).map((pid) => {
               const persona = indexes.directory.personas.get(pid);
@@ -134,7 +134,7 @@ export function CompanyColumn({ id, part }: { id: string; part: "pinned" | "rest
                   type="button"
                   onClick={() => push({ kind: "persona", id: pid })}
                   {...hover.persona(persona.homeBuildingId, persona.householdIndex)}
-                  className="hover:bg-foreground/10 -mx-1 flex items-baseline justify-between gap-2 rounded px-1 text-left text-sm"
+                  className="hover:bg-foreground/10 focus-visible:ring-ring/50 -mx-1 flex items-baseline justify-between gap-2 rounded-sm px-1 text-left text-sm focus-visible:ring-3 focus-visible:outline-none"
                 >
                   <span className="truncate">
                     {persona.givenName} {persona.familyName}

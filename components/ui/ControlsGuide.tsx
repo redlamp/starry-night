@@ -51,7 +51,13 @@ const MAP_MOUSE: Item[] = [
   { icon: "mouse-left", motion: "all", label: "Rotate & Tilt", action: "rotate" },
   { icon: "mouse-right", motion: "all", label: "Move", sub: "Shift + LMB", action: "pan" },
   { icon: "mouse-wheel", motion: "ud", label: "Zoom", sub: "z: cursor ↔ pin", action: "zoom" },
-  { icon: "mouse-both", motion: "ud", label: "Focal Height", sub: `${MOD} + LMB`, action: "focalY" },
+  {
+    icon: "mouse-both",
+    motion: "ud",
+    label: "Focal Height",
+    sub: `${MOD} + LMB`,
+    action: "focalY",
+  },
   { icon: "mouse-left", badge: "×2", label: "Reset", sub: "double-click", action: "reset" },
 ];
 const MAP_TOUCH: Item[] = [
@@ -177,7 +183,13 @@ const MODEL_GUIDE: Record<CameraModelId, GuideSpec> = {
   googleearth: {
     mouse: [
       { icon: "mouse-left", motion: "all", label: "Move", sub: "drag the ground", action: "pan" },
-      { icon: "mouse-right", motion: "all", label: "Orbit + Tilt", sub: "or Shift + LMB", action: "rotate" },
+      {
+        icon: "mouse-right",
+        motion: "all",
+        label: "Orbit + Tilt",
+        sub: "or Shift + LMB",
+        action: "rotate",
+      },
       { icon: "mouse-wheel", motion: "ud", label: "Zoom", action: "zoom" },
       { icon: "mouse-left", badge: "×2", label: "Zoom In", sub: "double-click", action: "zoomIn" },
     ],
@@ -548,8 +560,8 @@ export function ControlsGuide() {
           onClick={() => setOpen((o) => !o)}
           aria-label="Camera controls"
           className={cn(
-            "border-foreground/10 bg-popover/70 text-foreground/85 hover:bg-foreground/10 fixed right-3 bottom-3 z-20 flex size-11 items-center justify-center rounded-full border text-lg font-semibold shadow-lg backdrop-blur-md transition-[opacity,background-color,color] duration-700",
-            open && "border-transparent bg-primary text-primary-foreground",
+            "border-foreground/10 bg-popover/70 text-foreground/85 hover:bg-foreground/10 fixed right-3 bottom-3 z-20 flex size-11 items-center justify-center rounded-full border text-lg font-semibold shadow-lg backdrop-blur-md transition-[opacity,background-color,color] duration-700 motion-reduce:transition-none",
+            open && "bg-primary text-primary-foreground border-transparent",
             idle && !open ? "pointer-events-none opacity-0" : "pointer-events-auto opacity-100",
           )}
         >

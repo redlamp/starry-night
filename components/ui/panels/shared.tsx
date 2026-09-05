@@ -90,12 +90,12 @@ export function SubGroup({
             <button
               type="button"
               onClick={() => setOpen((o) => !o)}
-              className="text-foreground/55 hover:text-foreground/80 flex items-center text-[11px] font-medium tracking-wide uppercase transition-colors"
+              className="text-foreground/55 hover:text-foreground/80 flex items-center text-xs font-medium tracking-wide uppercase transition-colors"
             >
               {label}
             </button>
           ) : (
-            <span className="text-foreground/55 flex items-center text-[11px] font-medium tracking-wide uppercase">
+            <span className="text-foreground/55 flex items-center text-xs font-medium tracking-wide uppercase">
               {label}
             </span>
           )}

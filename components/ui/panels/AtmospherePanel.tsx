@@ -36,7 +36,7 @@ export function FogSection() {
   return (
     <>
       <div className="flex items-center justify-between">
-        <span className="text-foreground/55 text-[10px] tracking-wide uppercase">Fog</span>
+        <span className="text-foreground/55 text-xs tracking-wide uppercase">Fog</span>
         <Switch
           checked={fog.enabled}
           onCheckedChange={(enabled) => setFog({ enabled })}
@@ -107,7 +107,7 @@ export function FogSection() {
         />
       )}
       <div className="flex items-center justify-between pt-2">
-        <span className="text-foreground/55 text-[10px] tracking-wide uppercase">Ground haze</span>
+        <span className="text-foreground/55 text-xs tracking-wide uppercase">Ground haze</span>
         <Switch
           checked={haze.enabled}
           onCheckedChange={(enabled) => setHaze({ enabled })}

@@ -4,6 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useSceneStore } from "@/lib/state/sceneStore";
 import { randomSeedForReroll } from "@/lib/seed/rng";
 import { cn } from "@/lib/utils";
+import { GLASS } from "@/components/ui/FloatingPanel";
+// Build-time version stamp (presentation batch item 8) — resolveJsonModule
+// makes this a plain import; not bumped by this batch.
+import { version } from "../../package.json";
 
 /**
  * User-facing M4 seed control. Bottom-left overlay.
@@ -94,19 +98,24 @@ export function SeedControls() {
         scheduleCollapse();
       }}
       className={cn(
-        // Positioned by the page's bottom-left HUD stack (2026-07-26) — no own offsets.
-        "pointer-events-auto relative flex items-center gap-2 rounded-lg border border-white/10 bg-black/70 px-3 py-2 text-xs text-white backdrop-blur transition-opacity duration-200",
+        // Positioned by the page's bottom-left HUD stack (2026-07-26) — no own
+        // offsets. GLASS recipe + real foreground contrast (presentation batch
+        // items 1 + 8) — this chip is the share handle, so it needs to read
+        // clearly even at the dimmed/collapsed opacity.
+        "text-foreground pointer-events-auto relative flex items-center gap-2 rounded-lg border px-3 py-2 text-xs transition-opacity duration-200 motion-reduce:transition-none",
+        GLASS,
         expanded ? "opacity-100" : "opacity-40",
       )}
     >
-      <span className="text-white/50">seed</span>
-      <code className="rounded bg-white/10 px-2 py-0.5 font-mono text-white">{seed}</code>
+      <span className="text-muted-foreground">seed</span>
+      <code className="bg-foreground/10 text-foreground rounded px-2 py-0.5 font-mono">{seed}</code>
+      <span className="text-muted-foreground font-mono">v{version}</span>
       <button
         onClick={onCopy}
         className={cn(
           "rounded px-2 py-0.5 text-xs",
           expanded ? "inline-flex" : "hidden",
-          copied ? "bg-emerald-400/80 text-black" : "bg-white/10 hover:bg-white/20",
+          copied ? "bg-emerald-400/80 text-black" : "bg-foreground/10 hover:bg-foreground/20",
         )}
         title="Copy shareable URL"
       >
@@ -115,7 +124,7 @@ export function SeedControls() {
       <button
         onClick={() => setSeed(randomSeedForReroll())}
         className={cn(
-          "rounded bg-white/10 px-2 py-0.5 hover:bg-white/20",
+          "bg-foreground/10 hover:bg-foreground/20 rounded px-2 py-0.5",
           expanded ? "inline-flex" : "hidden",
         )}
         title="Generate new random seed"
