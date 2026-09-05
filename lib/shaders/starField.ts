@@ -130,6 +130,11 @@ export const starFieldVertexShader = /* glsl */ `
 `;
 
 export const starFieldFragmentShader = /* glsl */ `
+  // mediump kept (2026-09-05 precision audit): all uTime/hash math lives in the vertex
+  // stage (highp by default per c6f9335's audit); this stage only reads bounded
+  // varyings (vBrightness <~2.5, gl_PointCoord in [0,1]) — no overflow path. Covers the
+  // whole sky every frame, so mediump's mobile perf win is real. See
+  // wiki/notes/decision-shader-precision-policy.md.
   precision mediump float;
 
   varying float vBrightness;

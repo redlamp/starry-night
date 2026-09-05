@@ -12,7 +12,12 @@ export const moonHaloVertexShader = /* glsl */ `
 `;
 
 export const moonHaloFragmentShader = /* glsl */ `
-  precision mediump float;
+  // highp (2026-09-05 precision audit): no hazard found (all math is bounded UV-space
+  // distances/dots, div-by-zero already guarded), but this billboard covers a handful
+  // of screen pixels — mediump's mobile perf win is unmeasurable, so there is no
+  // upside to the residual risk. highp is the desktop default anyway. Needs a phone
+  // check. See wiki/notes/decision-shader-precision-policy.md.
+  precision highp float;
 
   uniform vec3 uColor;
   uniform float uInnerRadius; // 0..0.5 — radius where falloff begins (full opacity inside)
