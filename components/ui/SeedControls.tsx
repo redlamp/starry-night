@@ -104,7 +104,9 @@ export function SeedControls() {
         // clearly even at the dimmed/collapsed opacity.
         "text-foreground pointer-events-auto relative flex items-center gap-2 rounded-lg border px-3 py-2 text-xs transition-opacity duration-200 motion-reduce:transition-none",
         GLASS,
-        expanded ? "opacity-100" : "opacity-40",
+        // Rest-state floor raised 40 -> 70 (2026-09-05): the chip is the share
+        // handle and the version stamp, so it must read without a hover.
+        expanded ? "opacity-100" : "opacity-70",
       )}
     >
       <span className="text-muted-foreground">seed</span>
