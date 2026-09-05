@@ -89,31 +89,40 @@ export function HoverHighlightGroup() {
   );
 }
 
+// Look / Studio split (owner 2026-09-05): Look keeps the two look-and-feel
+// groups a viewer would tune (Facade color, the debug tint wash used to
+// eyeball a category at a glance); Studio keeps the window-render internals
+// an author cares about (render mode, per-archetype profiles, hover pick).
+// One component, no duplicated panel code — it just reads studioMode.
 export function BuildingsSection() {
   const lights = useSceneStore((s) => s.windowLights);
   const setWindowLights = useSceneStore((s) => s.setWindowLights);
+  const studioMode = useSceneStore((s) => s.studioMode);
+  if (studioMode) {
+    return (
+      <>
+        <SubGroup
+          label="Windows"
+          action={
+            <Switch
+              checked={lights}
+              onCheckedChange={setWindowLights}
+              title="All window lights on / off (darken the city to debug facades)"
+            />
+          }
+        >
+          <WindowsSection />
+        </SubGroup>
+        <HoverHighlightGroup />
+      </>
+    );
+  }
   return (
     <>
-      <SubGroup
-        label="Windows"
-        action={
-          <Switch
-            checked={lights}
-            onCheckedChange={setWindowLights}
-            title="All window lights on / off (darken the city to debug facades)"
-          />
-        }
-      >
-        <WindowsSection />
-      </SubGroup>
       <SubGroup label="Facade">
         <FacadeSection />
       </SubGroup>
-      {/* Debug Highlight (tint wash) and Hover Highlight are PEER groups
-          (2026-07-04, was nested): the tint category wash and the pointer-hover
-          building highlight are independent tools. */}
       <BuildingTintGroup />
-      <HoverHighlightGroup />
     </>
   );
 }

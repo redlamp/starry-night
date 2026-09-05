@@ -277,7 +277,8 @@ type AnySettingEntry =
   | SettingEntry<"antialias">
   | SettingEntry<"dprCap">
   | SettingEntry<"adaptive">
-  | SettingEntry<"perfStats">;
+  | SettingEntry<"perfStats">
+  | SettingEntry<"studioMode">;
 
 export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   // Quality tier persists so a user's pick (or a saved config's tier) survives
@@ -377,6 +378,9 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   // Adaptive quality + detailed perf overlay — settings (URL ?adaptive/?perf set them on boot).
   { key: "adaptive", defaultValue: false as const, persist: true },
   { key: "perfStats", defaultValue: false as const, persist: true },
+  // Look / Studio settings-drawer split (owner 2026-09-05): which depth the drawer
+  // shows. Persisted so a Studio-mode author's drawer boots back into Studio.
+  { key: "studioMode", defaultValue: false as const, persist: true },
 ];
 
 // cityPlanning visibility toggles — persisted separately because `cityPlanning`
@@ -816,6 +820,10 @@ type SceneState = {
   // both drive it. (user 2026-06-21)
   panelHidden: boolean;
   setPanelHidden: (v: boolean) => void;
+  // Settings drawer depth (owner 2026-09-05): Look (default) is the curated viewer
+  // set; Studio adds generation/debug/labs tools. Persisted registry entry.
+  studioMode: boolean;
+  setStudioMode: (v: boolean) => void;
   // Orbit auto-revolution pause. Toggled with Space in orbit mode; useFrame
   // skips advancing the sweep while true. Manual drag still works.
   orbitPaused: boolean;
@@ -1110,6 +1118,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setFocalDragging: (focalDragging) => set({ focalDragging }),
   panelHidden: true,
   setPanelHidden: (panelHidden) => set({ panelHidden }),
+  studioMode: false,
+  setStudioMode: (studioMode) => set({ studioMode }),
   orbitPaused: false,
   setOrbitPaused: (orbitPaused) => set({ orbitPaused }),
   orbit: DEFAULT_ORBIT,

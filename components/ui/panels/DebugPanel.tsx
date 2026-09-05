@@ -313,31 +313,17 @@ export function FlightsGroup() {
       </label>
       <label className="flex cursor-pointer items-center justify-between gap-2 text-xs">
         <span className="text-foreground/70">Heli Routes</span>
-        <Switch
-          checked={showHeliRoutes}
-          onCheckedChange={setShowHeliRoutes}
-          title="Heli Routes"
-        />
+        <Switch checked={showHeliRoutes} onCheckedChange={setShowHeliRoutes} title="Heli Routes" />
       </label>
     </SubGroup>
   );
 }
 
-// Debug View (#39): building tint (Slice A) + per-group render mode (Slice B).
-export function DebugSection() {
-  const renderModes = useSceneStore((s) => s.debug.renderModes);
-  const showTensorField = useSceneStore((s) => s.debug.showTensorField);
-  const tileOverlay = useSceneStore((s) => s.debug.tileOverlay);
-  const tileFreeze = useSceneStore((s) => s.debug.tileFreeze);
-  const setRenderMode = useSceneStore((s) => s.setRenderMode);
-  const setAllRenderModes = useSceneStore((s) => s.setAllRenderModes);
-  const setShowTensorField = useSceneStore((s) => s.setShowTensorField);
-  const setTileOverlay = useSceneStore((s) => s.setTileOverlay);
-  const setTileFreeze = useSceneStore((s) => s.setTileFreeze);
-  const showPinPlane = useSceneStore((s) => s.debug.showPinPlane);
-  const setShowPinPlane = useSceneStore((s) => s.setShowPinPlane);
-  const windowDebugView = useSceneStore((s) => s.debug.windowView);
-  const setWindowDebugView = useSceneStore((s) => s.setWindowDebugView);
+// World (owner 2026-09-05, Studio-only): city shape / size tier / crop / field
+// deviation — gen inputs, moved out of Debug View so they read as authoring
+// controls rather than inspection tools. Split out of DebugSection so its
+// drag-preview state (#58/#51: regen only on release) stays scoped here.
+export function WorldSection() {
   const cityShape = useSceneStore((s) => s.cityShape);
   const setCityShape = useSceneStore((s) => s.setCityShape);
   const cityShapeScale = useSceneStore((s) => s.cityShapeScale);
@@ -357,82 +343,122 @@ export function DebugSection() {
   const fieldDeviation = useSceneStore((s) => s.fieldDeviation);
   const setFieldDeviation = useSceneStore((s) => s.setFieldDeviation);
   const [dragDeviation, setDragDeviation] = useState<number | null>(null);
+  return (
+    <>
+      <ModeSelect
+        value={cityShape}
+        modes={CITY_SHAPE_MODES}
+        onChange={(v) => setCityShape(v as CityShapeSetting)}
+      />
+      {/* #58 size tier — notched: each notch generates a DIFFERENT city for the
+        same seed (a bigger canvas re-rolls the layout, it doesn't grow it). */}
+      <div className="flex items-center gap-2 text-xs">
+        <span className="text-foreground/70 w-16 shrink-0">size</span>
+        <Slider
+          min={0}
+          max={CITY_TIER_ORDER.length - 1}
+          step={1}
+          value={dragTierIdx ?? tierIdx}
+          onValueChange={(v) => setDragTierIdx(typeof v === "number" ? v : v[0])}
+          onValueCommitted={(v) => {
+            setDragTierIdx(null);
+            setCitySize(CITY_TIER_ORDER[typeof v === "number" ? v : v[0]]);
+          }}
+          className="flex-1"
+        />
+        <span className="text-foreground w-32 shrink-0 text-right font-mono tabular-nums">
+          {TIER_LABELS[shownTier]} ({tierKm(shownTier)} km)
+        </span>
+      </div>
+      <label className="flex cursor-pointer items-center justify-between gap-2 text-xs">
+        <span className="text-foreground/70">lock crop to city size</span>
+        <Switch checked={cropLock} onCheckedChange={setCropLock} />
+      </label>
+      {!cropLock ? (
+        <ValueSlider
+          label="crop km"
+          value={Math.round(cityShapeScale * sizeKm * 10) / 10}
+          min={1}
+          max={sizeKm}
+          step={0.5}
+          onChange={(km) => setCityShapeScale(Math.min(1, km / sizeKm))}
+        />
+      ) : null}
+      <HelpHint>
+        Size sets the generated extent (re-rolls the layout; bigger = slower to generate). Crop
+        reveals/hides the already-generated city — grow = reveal, never a re-roll. auto = each seed
+        picks its shape; square = full field.
+      </HelpHint>
+      {/* #51 deviation — scales each seed's rolled field deformation. Regen on
+        RELEASE only (same drag-preview rationale as the size tier). */}
+      <div className="flex items-center gap-2 text-xs">
+        <span className="text-foreground/70 w-16 shrink-0">deviation</span>
+        <Slider
+          min={0.25}
+          max={2}
+          step={0.05}
+          value={dragDeviation ?? fieldDeviation}
+          onValueChange={(v) => setDragDeviation(typeof v === "number" ? v : v[0])}
+          onValueCommitted={(v) => {
+            setDragDeviation(null);
+            setFieldDeviation(typeof v === "number" ? v : v[0]);
+          }}
+          className="flex-1"
+        />
+        <span className="text-foreground w-24 shrink-0 text-right font-mono tabular-nums">
+          ×{(dragDeviation ?? fieldDeviation).toFixed(2)}
+        </span>
+      </div>
+      <HelpHint>
+        Deviation scales how hard the street field bends (re-rolls on release). ×1 = the seed&apos;s
+        own character; lower = calmer grids, higher = stronger warps/shears.
+      </HelpHint>
+    </>
+  );
+}
+
+// Debug View (#39): building tint (Slice A) + per-group render mode (Slice B).
+export function DebugSection() {
+  const renderModes = useSceneStore((s) => s.debug.renderModes);
+  const showTensorField = useSceneStore((s) => s.debug.showTensorField);
+  const tileOverlay = useSceneStore((s) => s.debug.tileOverlay);
+  const tileFreeze = useSceneStore((s) => s.debug.tileFreeze);
+  const setRenderMode = useSceneStore((s) => s.setRenderMode);
+  const setAllRenderModes = useSceneStore((s) => s.setAllRenderModes);
+  const setShowTensorField = useSceneStore((s) => s.setShowTensorField);
+  const setTileOverlay = useSceneStore((s) => s.setTileOverlay);
+  const setTileFreeze = useSceneStore((s) => s.setTileFreeze);
+  const showPinPlane = useSceneStore((s) => s.debug.showPinPlane);
+  const setShowPinPlane = useSceneStore((s) => s.setShowPinPlane);
+  const windowDebugView = useSceneStore((s) => s.debug.windowView);
+  const setWindowDebugView = useSceneStore((s) => s.setWindowDebugView);
+  const fogBoundsAlways = useSceneStore((s) => s.fogBoundsAlways);
+  const setFogBoundsAlways = useSceneStore((s) => s.setFogBoundsAlways);
   // "all" tab reflects a shared mode, or sits blank when groups differ.
   const allMode = RENDER_GROUPS.every((g) => renderModes[g] === renderModes.buildings)
     ? renderModes.buildings
     : "";
   return (
     <>
-      <SubGroup label="City shape">
-        <ModeSelect
-          value={cityShape}
-          modes={CITY_SHAPE_MODES}
-          onChange={(v) => setCityShape(v as CityShapeSetting)}
-        />
-        {/* #58 size tier — notched: each notch generates a DIFFERENT city for the
-          same seed (a bigger canvas re-rolls the layout, it doesn't grow it). */}
-        <div className="flex items-center gap-2 text-xs">
-          <span className="text-foreground/70 w-16 shrink-0">size</span>
-          <Slider
-            min={0}
-            max={CITY_TIER_ORDER.length - 1}
-            step={1}
-            value={dragTierIdx ?? tierIdx}
-            onValueChange={(v) => setDragTierIdx(typeof v === "number" ? v : v[0])}
-            onValueCommitted={(v) => {
-              setDragTierIdx(null);
-              setCitySize(CITY_TIER_ORDER[typeof v === "number" ? v : v[0]]);
-            }}
-            className="flex-1"
-          />
-          <span className="text-foreground w-32 shrink-0 text-right font-mono tabular-nums">
-            {TIER_LABELS[shownTier]} ({tierKm(shownTier)} km)
-          </span>
-        </div>
-        <label className="flex cursor-pointer items-center justify-between gap-2 text-xs">
-          <span className="text-foreground/70">lock crop to city size</span>
-          <Switch checked={cropLock} onCheckedChange={setCropLock} />
-        </label>
-        {!cropLock ? (
-          <ValueSlider
-            label="crop km"
-            value={Math.round(cityShapeScale * sizeKm * 10) / 10}
-            min={1}
-            max={sizeKm}
-            step={0.5}
-            onChange={(km) => setCityShapeScale(Math.min(1, km / sizeKm))}
-          />
-        ) : null}
-        <HelpHint>
-          Size sets the generated extent (re-rolls the layout; bigger = slower to generate). Crop
-          reveals/hides the already-generated city — grow = reveal, never a re-roll. auto = each
-          seed picks its shape; square = full field.
-        </HelpHint>
-        {/* #51 deviation — scales each seed's rolled field deformation. Regen on
-          RELEASE only (same drag-preview rationale as the size tier). */}
-        <div className="flex items-center gap-2 text-xs">
-          <span className="text-foreground/70 w-16 shrink-0">deviation</span>
-          <Slider
-            min={0.25}
-            max={2}
-            step={0.05}
-            value={dragDeviation ?? fieldDeviation}
-            onValueChange={(v) => setDragDeviation(typeof v === "number" ? v : v[0])}
-            onValueCommitted={(v) => {
-              setDragDeviation(null);
-              setFieldDeviation(typeof v === "number" ? v : v[0]);
-            }}
-            className="flex-1"
-          />
-          <span className="text-foreground w-24 shrink-0 text-right font-mono tabular-nums">
-            ×{(dragDeviation ?? fieldDeviation).toFixed(2)}
-          </span>
-        </div>
-        <HelpHint>
-          Deviation scales how hard the street field bends (re-rolls on release). ×1 = the
-          seed&apos;s own character; lower = calmer grids, higher = stronger warps/shears.
-        </HelpHint>
-      </SubGroup>
+      {/* Fog bounds — moved here from Atmosphere (owner 2026-09-05): the walls
+          are an inspection aid, not a look-and-feel Atmosphere control. */}
+      <SubGroup
+        label="Fog Bounds"
+        action={
+          <>
+            <HelpHint>
+              Always show the fog boundary walls, not only while dragging the Atmosphere near/far
+              sliders.
+            </HelpHint>
+            <Switch
+              checked={fogBoundsAlways}
+              onCheckedChange={setFogBoundsAlways}
+              title="Always show the fog boundary walls"
+              aria-label="Always show the fog boundary walls"
+            />
+          </>
+        }
+      />
 
       <SubGroup
         label="Render modes"

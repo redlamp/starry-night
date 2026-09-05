@@ -50,6 +50,7 @@ Map of Content for architectural and product decisions. Each decision is an atom
 - [[decision-debug-panel-architecture]] — IA + master toggle + save / reset / copy values _(superseded)_
 - [[decision-settings-sidebar-shadcn]] — shadcn rewire: full-height sidebar, multi-open accordion, light/grey/dark theme tokens
 - [[settings-ia-evaluation]] — settings-panel IA evaluation + five layout proposals (A–E); Option D built and reverted; v2 direction = vertical grouped + Basic/Advanced toggle + search
+- [[decision-settings-look-studio]] — **Look/Studio split (2026-09-05):** the June v2 direction implemented — segmented Look/Studio tabs (CSS-order over one mounted section list), World extracted from Debug View, cross-tab search tags, Title Case slider labels in Stars/Moon/Atmosphere, unified "Show Boundaries" label, labeled footer buttons
 
 ## Intro exploration
 

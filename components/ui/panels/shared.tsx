@@ -3,11 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { ChevronDown, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import {
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
+import { AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import {
   Select,
   SelectContent,
@@ -29,6 +25,7 @@ export function Section({
   children,
   hidden,
   action,
+  order,
 }: {
   value: string;
   icon: LucideIcon;
@@ -38,11 +35,15 @@ export function Section({
   // Rendered in the header row, left of the chevron — a sibling of the trigger
   // (not nested inside it) so clicking it doesn't toggle the accordion.
   action?: ReactNode;
+  // Visual position within the accordion's flex layout (Look/Studio tabs share
+  // one mounted list; each tab just re-orders it — CSS order, not DOM order).
+  order?: number;
 }) {
   if (hidden) return null;
   return (
     <AccordionItem
       value={value}
+      style={order != null ? { order } : undefined}
       className="border-foreground/10 bg-foreground/[0.04] rounded-lg border not-last:border-b"
     >
       <div className="relative">

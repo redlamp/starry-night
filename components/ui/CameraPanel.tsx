@@ -18,6 +18,7 @@ import {
   ExternalLink,
   FlaskConical,
   Gauge,
+  Globe,
   Helicopter,
   Info,
   Link2,
@@ -48,6 +49,7 @@ import { buildViewLink } from "@/lib/scene/viewLink";
 import { cameraCommand } from "@/lib/scene/cameraCommand";
 import type { CameraModelId } from "@/lib/state/sceneStore";
 import { Accordion } from "@/components/ui/accordion";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
@@ -89,6 +91,7 @@ import { FogSection, AtmosphereToggle } from "@/components/ui/panels/AtmosphereP
 import { IntroSection } from "@/components/ui/panels/IntroPanel";
 import {
   DebugSection,
+  WorldSection,
   StreetlightsGroup,
   TrafficGroup,
   FlightsGroup,
@@ -125,7 +128,7 @@ function DriftTransportButton({ idle }: { idle: boolean }) {
         className={cn(
           "flex size-11 items-center justify-center rounded-full border shadow-lg backdrop-blur-md transition-[opacity,background-color,color] duration-700",
           on
-            ? "border-transparent bg-primary text-primary-foreground"
+            ? "bg-primary text-primary-foreground border-transparent"
             : "bg-popover/70 text-foreground/85 border-foreground/10 active:bg-foreground/5",
           // Fades with the rest of the chrome even while a flight is up (user
           // 2026-07-16) — during a drift you're watching the city, not the buttons.
@@ -150,7 +153,9 @@ function copyConfigToClipboard() {
 // surface a control filed under a non-obvious section label — e.g. the tensor
 // field toggle lives under "Debug View", not "Roads". Matching is AND-over-tokens
 // against label + value + keywords; matching sections auto-expand while searching.
-// Order mirrors the accordion's render order (user 2026-06-07).
+// Search spans BOTH tabs (LOOK_SECTIONS / STUDIO_SECTIONS below) — a match that
+// lives in the other tab is surfaced as a small "in Studio"/"in Look" tag instead
+// of a full accordion item (owner 2026-09-05, Look/Studio split).
 const SETTINGS_SECTIONS: { value: string; label: string; keywords: string }[] = [
   {
     value: "intro",
@@ -166,8 +171,7 @@ const SETTINGS_SECTIONS: { value: string; label: string; keywords: string }[] = 
   {
     value: "orbit",
     label: "Orbit",
-    keywords:
-      "elevation azimuth compass radius distance spin speed pause center focal auto rotate",
+    keywords: "elevation azimuth compass radius distance spin speed pause center focal auto rotate",
   },
   {
     value: "drift",
@@ -196,13 +200,19 @@ const SETTINGS_SECTIONS: { value: string; label: string; keywords: string }[] = 
     value: "population",
     label: "Population",
     keywords:
-      "districts shells borders outline color region zones density heat map heatmap people residents traffic coupling estimate profile centres centers spread shoulder satellites gradient",
+      "districts shells borders boundaries outline color region zones density heat map heatmap people residents traffic coupling estimate profile centres centers spread shoulder satellites gradient",
+  },
+  {
+    value: "world",
+    label: "World",
+    keywords:
+      "city shape circle square scale size buildings count footprint crop km deviation field warp shear grain tier",
   },
   {
     value: "city-details",
     label: "City Details",
     keywords:
-      "shape circle square scale size buildings count footprint seed reroll random refresh regenerate naming region street names us uk high street gate",
+      "seed reroll random refresh regenerate naming region street names us uk high street gate topology crossroads bypass ring radial highway arterial street counts",
   },
   {
     value: "stars",
@@ -219,7 +229,7 @@ const SETTINGS_SECTIONS: { value: string; label: string; keywords: string }[] = 
     value: "debug",
     label: "Debug View",
     keywords:
-      "render modes wireframe hidden tensor field flow visualization overlay ground tile culling cull frustum freeze grid materialise city shape size tier deviation",
+      "render modes wireframe hidden tensor field flow visualization overlay ground tile culling cull frustum freeze grid materialise fog bounds walls boundary always show",
   },
   {
     value: "perf",
@@ -252,6 +262,33 @@ const LAB_LINKS: { href: string; label: string }[] = [
   // applies the deploy basePath. prefetch is off on every row: labs are separate
   // surfaces and the .html one isn't a route at all.
   { href: "/prototypes/tenancy-layout.html", label: "Tenancy Layout" },
+];
+
+// Look / Studio tab section order (owner 2026-09-05, decision-settings-look-studio).
+// "window-profiles" (Buildings) and "perf" (Performance) appear in BOTH — each
+// renders different sub-groups depending on studioMode (see BuildingsSection /
+// the Performance Section body below), not duplicated section code.
+const LOOK_SECTIONS = [
+  "pose",
+  "orbit",
+  "drift",
+  "lights",
+  "stars",
+  "moon",
+  "fog",
+  "window-profiles",
+  "perf",
+  "intro",
+];
+const STUDIO_SECTIONS = [
+  "world",
+  "roads",
+  "population",
+  "city-details",
+  "window-profiles",
+  "perf",
+  "debug",
+  "labs",
 ];
 
 function LabsSection() {
@@ -326,6 +363,8 @@ export function CameraPanel() {
 
   const hidden = useSceneStore((s) => s.panelHidden);
   const setHidden = useSceneStore((s) => s.setPanelHidden);
+  const studioMode = useSceneStore((s) => s.studioMode);
+  const setStudioMode = useSceneStore((s) => s.setStudioMode);
   const [savedExists, setSavedExists] = useState(() => hasSavedConfig());
   const [query, setQuery] = useState("");
   const [openSections, setOpenSections] = useState<string[]>([]);
@@ -424,11 +463,21 @@ export function CameraPanel() {
     cameraLive.rotation[2] * RAD2DEG,
   ];
 
+  const activeSections = studioMode ? STUDIO_SECTIONS : LOOK_SECTIONS;
   const searching = query.trim().length > 0;
-  const matchedValues = SETTINGS_SECTIONS.filter((s) => matchSection(query, s)).map((s) => s.value);
-  const shownSections = searching ? new Set(matchedValues) : null;
-  const openValues = searching ? matchedValues : openSections;
-  const show = (value: string) => !shownSections || shownSections.has(value);
+  // Search spans both tabs; only matches that live in the CURRENT tab become full
+  // accordion sections (openValues/show below) — a match in the other tab surfaces
+  // as a small "in Studio"/"in Look" tag instead (rendered after the accordion).
+  const matchedAll = SETTINGS_SECTIONS.filter((s) => matchSection(query, s));
+  const currentTabMatches = matchedAll.filter((s) => activeSections.includes(s.value));
+  const otherTabMatches = matchedAll.filter((s) => !activeSections.includes(s.value));
+  const shownSections = new Set(searching ? currentTabMatches.map((s) => s.value) : activeSections);
+  const openValues = searching ? currentTabMatches.map((s) => s.value) : openSections;
+  const show = (value: string) => shownSections.has(value);
+  const orderOf = (value: string) => {
+    const idx = activeSections.indexOf(value);
+    return idx === -1 ? 999 : idx;
+  };
 
   return (
     <div
@@ -469,6 +518,26 @@ export function CameraPanel() {
               </Button>
             </IconTip>
           </div>
+        </div>
+        {/* Look / Studio (owner 2026-09-05, decision-settings-look-studio): Look is the
+            curated viewer set; Studio adds generation/debug/labs tools. Sections shared
+            by both (Buildings, Performance) show different sub-groups per mode — see
+            each section body below. */}
+        <div className="flex flex-col gap-1">
+          <Tabs
+            value={studioMode ? "studio" : "look"}
+            onValueChange={(v) => setStudioMode(v === "studio")}
+          >
+            <TabsList className="w-full">
+              <TabsTrigger value="look">Look</TabsTrigger>
+              <TabsTrigger value="studio">Studio</TabsTrigger>
+            </TabsList>
+          </Tabs>
+          {studioMode && (
+            <span className="text-foreground/50 px-0.5 text-[11px] leading-snug">
+              author tools: generation, debug, labs
+            </span>
+          )}
         </div>
         <div className="relative">
           <Search
@@ -532,14 +601,18 @@ export function CameraPanel() {
             }}
             className="flex flex-col gap-1.5"
           >
-            {/* Section order (2026-07-08): Camera, Orbit, Intro, Roads, Buildings,
-                Population, City Details*, Stars, Moon, Atmosphere,
-                Debug, Performance, Labs. (*unlisted — kept with the city group.) */}
+            {/* Every section stays mounted; `order` (CSS flex order, not DOM order) lays
+                each tab's sections out per LOOK_SECTIONS / STUDIO_SECTIONS above, and
+                `hidden` unmounts whatever isn't in the active tab (or doesn't match a
+                search). Look: Camera, Orbit, Drift, Lights, Stars, Moon, Atmosphere,
+                Buildings, Performance, Intro. Studio: World, Transport, Population,
+                City Details, Buildings, Performance, Debug View, Labs. */}
             <Section
               value="pose"
               icon={Camera}
               label="Camera"
               hidden={!show("pose")}
+              order={orderOf("pose")}
               action={<CameraHeaderActions />}
             >
               <PoseSection flying={flying} />
@@ -605,6 +678,7 @@ export function CameraPanel() {
               icon={OrbitIcon}
               label="Orbit"
               hidden={!show("orbit")}
+              order={orderOf("orbit")}
               action={<OrbitHeaderActions />}
             >
               <OrbitSection />
@@ -616,6 +690,7 @@ export function CameraPanel() {
               icon={Helicopter}
               label="Drift"
               hidden={!show("drift")}
+              order={orderOf("drift")}
               action={<DriftHeaderActions />}
             >
               <DriftSection />
@@ -627,6 +702,7 @@ export function CameraPanel() {
               icon={Sparkles}
               label="Intro"
               hidden={!show("intro")}
+              order={orderOf("intro")}
               action={
                 <Button
                   variant="secondary"
@@ -643,6 +719,19 @@ export function CameraPanel() {
               <IntroSection />
             </Section>
 
+            {/* World (owner 2026-09-05, Studio-only): city shape / size / crop /
+                deviation — gen inputs, moved out of Debug View to read as authoring
+                controls rather than inspection tools. */}
+            <Section
+              value="world"
+              icon={Globe}
+              label="World"
+              hidden={!show("world")}
+              order={orderOf("world")}
+            >
+              <WorldSection />
+            </Section>
+
             {/* Transport (user 2026-06-08; relabelled from "Roads" 2026-07-04 once
                 Flights landed alongside the road layers): each block is its own
                 expandable sub-group — Highlight (tri-switch on header), Streetlights,
@@ -655,12 +744,19 @@ export function CameraPanel() {
               icon={Lightbulb}
               label="Lights"
               hidden={!show("lights")}
+              order={orderOf("lights")}
               action={<LightsHeaderActions />}
             >
               <LightsSection />
             </Section>
 
-            <Section value="roads" icon={Route} label="Transport" hidden={!show("roads")}>
+            <Section
+              value="roads"
+              icon={Route}
+              label="Transport"
+              hidden={!show("roads")}
+              order={orderOf("roads")}
+            >
               <SubGroup label="Highlight" action={<RoadHighlightAction />}>
                 <RoadHighlightTiers />
               </SubGroup>
@@ -669,11 +765,15 @@ export function CameraPanel() {
               <FlightsGroup />
             </Section>
 
+            {/* Buildings appears in both tabs — BuildingsSection itself picks the
+                sub-groups per studioMode (Facade + Debug Highlight in Look; Windows +
+                Hover Highlight in Studio). Placement only, one component. */}
             <Section
               value="window-profiles"
               icon={Building2}
               label="Buildings"
               hidden={!show("window-profiles")}
+              order={orderOf("window-profiles")}
             >
               <BuildingsSection />
             </Section>
@@ -686,6 +786,7 @@ export function CameraPanel() {
               icon={MapIcon}
               label="Population"
               hidden={!show("population")}
+              order={orderOf("population")}
             >
               <SubGroup label="Density" action={<PopulationHeatAction />}>
                 <DensitySection />
@@ -700,17 +801,30 @@ export function CameraPanel() {
               icon={Info}
               label="City Details"
               hidden={!show("city-details")}
+              order={orderOf("city-details")}
             >
               <SeedRow />
               <NamingRegionRow />
               <CityDetailsSection />
             </Section>
 
-            <Section value="stars" icon={Stars} label="Stars" hidden={!show("stars")}>
+            <Section
+              value="stars"
+              icon={Stars}
+              label="Stars"
+              hidden={!show("stars")}
+              order={orderOf("stars")}
+            >
               <StarsSection />
             </Section>
 
-            <Section value="moon" icon={Moon} label="Moon" hidden={!show("moon")}>
+            <Section
+              value="moon"
+              icon={Moon}
+              label="Moon"
+              hidden={!show("moon")}
+              order={orderOf("moon")}
+            >
               <MoonSection />
             </Section>
 
@@ -719,102 +833,136 @@ export function CameraPanel() {
               icon={CloudFog}
               label="Atmosphere"
               hidden={!show("fog")}
+              order={orderOf("fog")}
               action={<AtmosphereToggle />}
             >
               <FogSection />
             </Section>
 
-            <Section value="debug" icon={Bug} label="Debug View" hidden={!show("debug")}>
+            <Section
+              value="debug"
+              icon={Bug}
+              label="Debug View"
+              hidden={!show("debug")}
+              order={orderOf("debug")}
+            >
               <DebugSection />
             </Section>
 
+            {/* Performance appears in both tabs — Look keeps just the tier select
+                (header action = the badge/stats display toggle); Studio swaps in
+                everything else (adaptive fit, AA, DPR, LOD, live stats). */}
             <Section
               value="perf"
               icon={Gauge}
               label="Performance"
               hidden={!show("perf")}
+              order={orderOf("perf")}
               action={<PerfDisplayToggle />}
             >
-              <PerfReadout />
-              {/* Adaptive + AA / DPR / LOD / Stats as collapsible SubGroups
-                  (parity with the other panels; user 2026-06-13). */}
-              <AdaptiveGroup />
-              <AntiAliasingSection />
-              <ResolutionSection />
-              <LevelOfDetailSection />
-              <StatsGroup />
+              {studioMode ? (
+                <>
+                  <AdaptiveGroup />
+                  <AntiAliasingSection />
+                  <ResolutionSection />
+                  <LevelOfDetailSection />
+                  <StatsGroup />
+                </>
+              ) : (
+                <PerfReadout />
+              )}
             </Section>
 
-            <Section value="labs" icon={FlaskConical} label="Labs" hidden={!show("labs")}>
+            <Section
+              value="labs"
+              icon={FlaskConical}
+              label="Labs"
+              hidden={!show("labs")}
+              order={orderOf("labs")}
+            >
               <LabsSection />
             </Section>
           </Accordion>
-          {searching && matchedValues.length === 0 && (
+          {searching && matchedAll.length === 0 && (
             <p className="text-foreground/50 px-1 py-6 text-center text-sm">
               No settings match &quot;{query.trim()}&quot;.
             </p>
           )}
+          {searching && otherTabMatches.length > 0 && (
+            <div className="border-foreground/10 mt-2 flex flex-col gap-1 border-t pt-2">
+              {otherTabMatches.map((s) => (
+                <button
+                  key={s.value}
+                  type="button"
+                  onClick={() => setStudioMode(!studioMode)}
+                  className="text-foreground/70 hover:bg-foreground/10 hover:text-foreground flex items-center justify-between gap-2 rounded px-2 py-1.5 text-sm"
+                >
+                  <span>{s.label}</span>
+                  <span className="bg-foreground/10 text-foreground/60 rounded px-1.5 py-0.5 text-[10px] tracking-wide uppercase">
+                    in {studioMode ? "Look" : "Studio"}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </ScrollArea>
 
-      {/* Sticky footer — icon-only actions; labels live in the tooltips. */}
-      <TooltipProvider>
-        <div className="border-foreground/10 flex shrink-0 flex-wrap items-center gap-2 border-t px-4 pt-3 pb-3">
-          <div className="flex flex-wrap items-center gap-1.5">
+      {/* Sticky footer — icon + visible text (2026-09-05: icon-only buttons with a
+          tooltip-only label weren't discoverable on touch; text now shows outright). */}
+      <div className="border-foreground/10 flex shrink-0 flex-wrap items-center gap-2 border-t px-4 pt-3 pb-3">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <FooterAction
+            label="Reset"
+            onClick={() => resetCamera()}
+            className="text-rose-400 hover:bg-rose-400/10 hover:text-rose-300"
+          >
+            <RotateCcw className="size-4" />
+          </FooterAction>
+          {savedExists && (
             <FooterAction
-              label="Reset All"
-              onClick={() => resetCamera()}
-              className="text-rose-400 hover:bg-rose-400/10 hover:text-rose-300"
+              label="Revert"
+              onClick={() => revertToSaved()}
+              className="text-amber-400 hover:bg-amber-400/10 hover:text-amber-300"
             >
-              <RotateCcw className="size-4" />
+              <Undo2 className="size-4" />
             </FooterAction>
-            {savedExists && (
-              <FooterAction
-                label="Revert to Saved"
-                onClick={() => revertToSaved()}
-                className="text-amber-400 hover:bg-amber-400/10 hover:text-amber-300"
-              >
-                <Undo2 className="size-4" />
-              </FooterAction>
-            )}
-            {savedExists && (
-              <FooterAction
-                label="Clear Saved"
-                onClick={() => {
-                  clearSavedConfig();
-                  setSavedExists(false);
-                }}
-                className="text-foreground/55 hover:bg-foreground/10 hover:text-foreground/80"
-              >
-                <Trash2 className="size-4" />
-              </FooterAction>
-            )}
-          </div>
-          <div className="ml-auto flex flex-wrap items-center gap-1.5">
-            <CopyViewLinkButton />
-            <CopyButton />
+          )}
+          {savedExists && (
             <FooterAction
-              label="Save Settings"
-              variant="default"
+              label="Clear"
               onClick={() => {
-                saveCurrentAsDefault();
-                setSavedExists(true);
+                clearSavedConfig();
+                setSavedExists(false);
               }}
-              className="bg-emerald-400 text-black hover:bg-emerald-400/90"
+              className="text-foreground/55 hover:bg-foreground/10 hover:text-foreground/80"
             >
-              <Save className="size-4" />
+              <Trash2 className="size-4" />
             </FooterAction>
-          </div>
+          )}
         </div>
-      </TooltipProvider>
+        <div className="ml-auto flex flex-wrap items-center gap-1.5">
+          <CopyViewLinkButton />
+          <CopyButton />
+          <FooterAction
+            label="Save"
+            variant="default"
+            onClick={() => {
+              saveCurrentAsDefault();
+              setSavedExists(true);
+            }}
+            className="bg-emerald-400 text-black hover:bg-emerald-400/90"
+          >
+            <Save className="size-4" />
+          </FooterAction>
+        </div>
+      </div>
     </div>
   );
 }
 
-// One footer icon button + its hover/focus tooltip (action name only —
-// user 2026-07-02). base-ui's Trigger merges onto the Button via `render`
-// (same idiom as the gauge icons above) so we don't nest <button> in
-// <button>. aria-label mirrors the tooltip text.
+// One footer button: icon + visible text label (2026-09-05, replacing the icon-only
+// + tooltip pattern). aria-label mirrors the visible text.
 function FooterAction({
   label,
   onClick,
@@ -829,22 +977,16 @@ function FooterAction({
   children: ReactNode;
 }) {
   return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <Button
-            variant={variant}
-            size="icon"
-            aria-label={label}
-            onClick={onClick}
-            className={className}
-          >
-            {children}
-          </Button>
-        }
-      />
-      <TooltipContent side="top">{label}</TooltipContent>
-    </Tooltip>
+    <Button
+      variant={variant}
+      size="sm"
+      aria-label={label}
+      onClick={onClick}
+      className={cn("gap-1.5 px-2.5", className)}
+    >
+      {children}
+      {label}
+    </Button>
   );
 }
 
@@ -856,28 +998,20 @@ function CopyButton() {
     setTimeout(() => setCopyState("idle"), 1200);
   };
   return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <Button
-            variant="secondary"
-            size="icon"
-            aria-label="Copy Settings"
-            onClick={onCopy}
-            className="bg-foreground/10 text-foreground hover:bg-foreground/20"
-          >
-            {copyState === "copied" ? (
-              <Check className="size-4 text-emerald-400" />
-            ) : (
-              <Copy className="size-4" />
-            )}
-          </Button>
-        }
-      />
-      <TooltipContent side="top">
-        {copyState === "copied" ? "Copied!" : "Copy Settings"}
-      </TooltipContent>
-    </Tooltip>
+    <Button
+      variant="secondary"
+      size="sm"
+      aria-label="Copy"
+      onClick={onCopy}
+      className="bg-foreground/10 text-foreground hover:bg-foreground/20 gap-1.5 px-2.5"
+    >
+      {copyState === "copied" ? (
+        <Check className="size-4 text-emerald-400" />
+      ) : (
+        <Copy className="size-4" />
+      )}
+      {copyState === "copied" ? "Copied!" : "Copy"}
+    </Button>
   );
 }
 
@@ -891,28 +1025,20 @@ function CopyViewLinkButton() {
     setTimeout(() => setCopyState("idle"), 1200);
   };
   return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <Button
-            variant="secondary"
-            size="icon"
-            aria-label="Copy View Link"
-            onClick={onCopy}
-            className="bg-foreground/10 text-foreground hover:bg-foreground/20"
-          >
-            {copyState === "copied" ? (
-              <Check className="size-4 text-emerald-400" />
-            ) : (
-              <Link2 className="size-4" />
-            )}
-          </Button>
-        }
-      />
-      <TooltipContent side="top">
-        {copyState === "copied" ? "Copied!" : "Copy View Link"}
-      </TooltipContent>
-    </Tooltip>
+    <Button
+      variant="secondary"
+      size="sm"
+      aria-label="Link"
+      onClick={onCopy}
+      className="bg-foreground/10 text-foreground hover:bg-foreground/20 gap-1.5 px-2.5"
+    >
+      {copyState === "copied" ? (
+        <Check className="size-4 text-emerald-400" />
+      ) : (
+        <Link2 className="size-4" />
+      )}
+      {copyState === "copied" ? "Copied!" : "Link"}
+    </Button>
   );
 }
 

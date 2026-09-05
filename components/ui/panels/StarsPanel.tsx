@@ -12,7 +12,7 @@ export function StarsSection() {
   return (
     <>
       <ValueSlider
-        label="size"
+        label="Size"
         value={stars.factor}
         min={0.5}
         max={60}
@@ -20,7 +20,7 @@ export function StarsSection() {
         onChange={(factor) => setStars({ factor })}
       />
       <ValueSlider
-        label="radius"
+        label="Radius"
         value={stars.radius}
         min={500}
         max={30000}
@@ -28,7 +28,7 @@ export function StarsSection() {
         onChange={(radius) => setStars({ radius })}
       />
       <ValueSlider
-        label="depth"
+        label="Depth"
         value={stars.depth}
         min={50}
         max={8000}
@@ -36,7 +36,7 @@ export function StarsSection() {
         onChange={(depth) => setStars({ depth })}
       />
       <ValueSlider
-        label="count"
+        label="Count"
         value={stars.count}
         min={100}
         max={30000}
@@ -46,7 +46,7 @@ export function StarsSection() {
       {/* Twinkle amplitude (σ of the log-normal scintillation). 0 = steady; the shader
           scales it by (sec z)^1.5 so horizon stars twinkle harder than the zenith. */}
       <ValueSlider
-        label="twinkle"
+        label="Twinkle"
         value={stars.twinkle}
         min={0}
         max={3}
@@ -56,7 +56,7 @@ export function StarsSection() {
       {/* Per-star noise timescale range, ms. Lower = faster flicker; the shader adds
           faster octaves on top, so visible flicker is brisker than these numbers. */}
       <RangeSlider
-        label="rate ms"
+        label="Rate ms"
         value={[stars.twinkleMinMs, stars.twinkleMaxMs]}
         min={100}
         max={6000}
@@ -65,7 +65,7 @@ export function StarsSection() {
       />
       {/* Chromatic flash: red/green/blue shimmer, auto-gated to low + bright stars. */}
       <ValueSlider
-        label="chroma"
+        label="Chroma"
         value={stars.twinkleChroma}
         min={0}
         max={1}
@@ -75,7 +75,7 @@ export function StarsSection() {
       {/* #26 meteors: toggle + min/max seconds between streaks. Each fired
           streak rolls the next gap uniformly inside this range. */}
       <div className="flex items-center gap-2 text-xs">
-        <span className="text-foreground/70 w-14 shrink-0">meteors</span>
+        <span className="text-foreground/70 w-14 shrink-0">Meteors</span>
         <Switch
           checked={stars.meteorsEnabled}
           onCheckedChange={(meteorsEnabled) => setStars({ meteorsEnabled })}

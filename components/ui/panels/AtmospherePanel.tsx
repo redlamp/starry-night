@@ -18,8 +18,6 @@ export function FogSection() {
   const haze = useSceneStore((s) => s.haze);
   const setHaze = useSceneStore((s) => s.setHaze);
   const setFogAdjusting = useSceneStore((s) => s.setFogAdjusting);
-  const fogBoundsAlways = useSceneStore((s) => s.fogBoundsAlways);
-  const setFogBoundsAlways = useSceneStore((s) => s.setFogBoundsAlways);
   // Show the in-world bracket rings while dragging near/far; linger briefly
   // after the last change so the rings don't blink out mid-adjust.
   const adjustTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -45,16 +43,8 @@ export function FogSection() {
           aria-label="Toggle scene fog"
         />
       </div>
-      <div className="flex items-center justify-between">
-        <span className="text-foreground/55 text-[10px] tracking-wide uppercase">Show bounds</span>
-        <Switch
-          checked={fogBoundsAlways}
-          onCheckedChange={setFogBoundsAlways}
-          aria-label="Always show the fog boundary walls"
-        />
-      </div>
       <div className="flex items-center gap-2 text-xs">
-        <span className="text-foreground/70 w-14 shrink-0">color</span>
+        <span className="text-foreground/70 w-14 shrink-0">Color</span>
         <input
           type="color"
           value={fog.color}
@@ -65,7 +55,7 @@ export function FogSection() {
         <code className="text-foreground/60 tabular-nums">{fog.color}</code>
       </div>
       <div className="flex items-center gap-2 text-xs">
-        <span className="text-foreground/70 w-14 shrink-0">mode</span>
+        <span className="text-foreground/70 w-14 shrink-0">Mode</span>
         <Select value={fog.mode} onValueChange={(v) => setFog({ mode: v as typeof fog.mode })}>
           <SelectTrigger
             size="sm"
@@ -84,7 +74,7 @@ export function FogSection() {
           {/* near/far are ABSOLUTE world metres from the camera (world-locked haze).
               Dragging shows the in-world boundary walls (FogBoundsMarkers). */}
           <ValueSlider
-            label="near"
+            label="Near"
             value={fog.near}
             min={0}
             max={20000}
@@ -95,7 +85,7 @@ export function FogSection() {
             }}
           />
           <ValueSlider
-            label="far"
+            label="Far"
             value={fog.far}
             min={100}
             max={40000}
@@ -108,7 +98,7 @@ export function FogSection() {
         </>
       ) : (
         <ValueSlider
-          label="amount"
+          label="Amount"
           value={fog.density}
           min={0}
           max={0.9}
@@ -127,7 +117,7 @@ export function FogSection() {
       {haze.enabled ? (
         <>
           <div className="flex items-center gap-2 text-xs">
-            <span className="text-foreground/70 w-14 shrink-0">color</span>
+            <span className="text-foreground/70 w-14 shrink-0">Color</span>
             <input
               type="color"
               value={haze.color}
@@ -137,7 +127,7 @@ export function FogSection() {
             <code className="text-foreground/60 tabular-nums">{haze.color}</code>
           </div>
           <ValueSlider
-            label="bottom"
+            label="Bottom"
             value={haze.bottomY}
             min={-200}
             max={400}
@@ -145,7 +135,7 @@ export function FogSection() {
             onChange={(bottomY) => setHaze({ bottomY })}
           />
           <ValueSlider
-            label="top"
+            label="Top"
             value={haze.topY}
             min={0}
             max={800}
@@ -153,7 +143,7 @@ export function FogSection() {
             onChange={(topY) => setHaze({ topY })}
           />
           <ValueSlider
-            label="strength"
+            label="Strength"
             value={haze.intensity}
             min={0}
             max={2}
@@ -161,7 +151,7 @@ export function FogSection() {
             onChange={(intensity) => setHaze({ intensity })}
           />
           <ValueSlider
-            label="radius"
+            label="Radius"
             value={haze.radius}
             min={500}
             max={6000}
