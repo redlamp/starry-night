@@ -38,10 +38,9 @@ jobs:
         run: bun run format:check
 
       - name: Test
-        # CITY_GOLDEN=skip: scripts/cityGolden.ts is a cross-runtime/cross-OS
-        # determinism trap (Math.sin/cos/atan2/hypot aren't ECMA-262-exact —
-        # see wiki/notes/decision-cross-runtime-determinism.md), not a real
-        # regression on this branch. Skipped in CI only; runs locally by default.
-        env:
-          CITY_GOLDEN: skip
+        # scripts/cityGolden.ts's contract is narrowed to structural properties
+        # confirmed identical across V8 and JavaScriptCore (2026-09-05, see
+        # wiki/notes/decision-cross-runtime-determinism.md), so it runs in CI
+        # like every other gate script. CITY_GOLDEN=skip still exists as a
+        # manual local escape hatch (scripts/test.ts) if new drift ever surfaces.
         run: bun run test

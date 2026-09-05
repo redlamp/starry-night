@@ -1,5 +1,6 @@
 import seedrandom from "seedrandom";
 import { generateTopology, CITY_CENTER, type Topology } from "./topology";
+import { dhypot, datan2 } from "./dmath";
 
 // The city lattice: base grid orientation θ0 + a center-anchored orientation
 // field. Consumed by the tensor field (tensorField.ts) to orient the road grain.
@@ -35,10 +36,17 @@ function dominantHighwayTilt(topo: Topology): number {
     if (hw.closed) continue;
     const a = hw.vertices[0];
     const b = hw.vertices[hw.vertices.length - 1];
-    const len = Math.hypot(b.x - a.x, b.z - a.z);
-    if (len > bestLen) {
+    const len = dhypot(b.x - a.x, b.z - a.z);
+    // Near-ties are not an edge case here — ring-radial's spokes and
+    // crossroads' two highways are BUILT to the same nominal length, so a
+    // hard `>` flips on sub-ULP rounding noise alone (see
+    // wiki/notes/decision-cross-runtime-determinism.md). Require a clear
+    // relative margin before replacing the incumbent; anything within it is
+    // a tie broken by array order (first-seen wins), never by which engine
+    // happened to round a hair higher.
+    if (len > bestLen * (1 + 1e-6)) {
       bestLen = len;
-      let ang = Math.atan2(b.z - a.z, b.x - a.x);
+      let ang = datan2(b.z - a.z, b.x - a.x);
       // A line's direction is invariant under ±π.
       if (ang < 0) ang += Math.PI;
       if (ang >= Math.PI) ang -= Math.PI;
@@ -59,7 +67,7 @@ export function computeLattice(masterSeed: string, driftDeg: number = DEFAULT_DR
   const driftSign = rng() < 0.5 ? 1 : -1;
   const { x: cx, z: cz } = CITY_CENTER;
   const orientationAt = (x: number, z: number): number => {
-    const t = Math.min(1, Math.hypot(x - cx, z - cz) / DRIFT_RADIUS);
+    const t = Math.min(1, dhypot(x - cx, z - cz) / DRIFT_RADIUS);
     // Squared ramp: near-flat at the coherent core, more drift toward the edge.
     return theta0 + driftSign * driftMag * t * t;
   };
