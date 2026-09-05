@@ -2,13 +2,15 @@
 tags:
   - domain/procgen
   - domain/ci-cd
-  - status/open
+  - status/adopted
 ---
 
 # Decision: Cross-Runtime Determinism (City Golden Drift)
 
 **Date**: 2026-09-05
-**Status**: open — CI unblocked with a scoped skip; the underlying fix is not implemented.
+**Status**: adopted — spike/deterministic-math is merged; the city golden's cross-engine
+contract is narrowed to structural properties (see "Contract (2026-09-05)" below). Full
+byte-identity across engines is deferred to a 2.0 gate (see "2.0 gate" below).
 
 ## Problem
 
@@ -229,3 +231,61 @@ this spike's branch vs dev, same engine/Bun): identical for every seed except
 unchanged at 48) — the one seed whose topology hits the ring-radial
 near-tie the fix targets. This is the re-roll the decision note warned about,
 scoped to exactly the seed the bug predicts.
+
+## Contract (2026-09-05)
+
+Owner call: adopt the spike now (merged to `dev` via this branch) rather than
+wait for the full sweep, and narrow `scripts/cityGolden.ts`'s contract to what
+this fix actually delivers instead of the byte-identity header it used to
+claim. What the golden guarantees now, confirmed by a `bun` vs `bunx tsx` sweep
+of all 10 gate1 seeds (`scratch/quantParityProbe.ts`):
+
+- **Structural parity across engines** (the default `check()` mode, gates CI):
+  `buildingCount`, `districtCount`, `roadCount` (arterials + minor streets),
+  `highwayCount`, `orientHash` (the lattice orientation grid), and the sorted
+  per-district building-count distribution. All identical bun vs tsx, all 10
+  seeds.
+- **Quantized geometry parity**, also part of the default contract: building
+  position + footprint (width/depth/rotationY), road polyline vertices, and
+  district centroids, each rounded to the nearest **1 cm** and hashed
+  (`geomHash`). Also identical bun vs tsx at 1 m, 0.1 m, and 0.01 m — every
+  quantum tested — for all 10 seeds; 1 cm is what the golden keeps since it's
+  the finest tested.
+- **NOT in the contract**: `streetlightCount`. It disagreed for `gate1-3`
+  (23665 vs 23667) even with every structural field and the geometry hash
+  matching. Cause: `generateStreetlights`'s de-bunch pass
+  (`STREETLIGHT_MIN_DIST` in `lib/seed/cityGen.ts`) drops a lamp within 11.5 m
+  of an already-kept one — a hard threshold on a continuous distance, the same
+  failure shape as the original `dominantHighwayTilt` tie-break, just in a
+  file the spike didn't touch. Quantizing lamp positions doesn't help: it's
+  the keep/drop *decision* that flips near the threshold, not the position
+  itself landing in a different bucket. Documented here rather than silently
+  dropped so a future full sweep knows to fix this comparison too.
+- **Exact bytes within one engine** (`fullHash`/`buildingsHash`/`roadsHash`)
+  are still real and still guarded — by `scripts/gate1.ts`'s own same-run
+  determinism check (generate twice, compare), not by this file anymore.
+  `scripts/cityGolden.ts --full` prints those hashes against the baseline for
+  local curiosity but never fails the gate; running it cross-engine (`bunx tsx
+  scripts/cityGolden.ts --full` next to `bun run scripts/cityGolden.ts --full`)
+  shows every seed's full/buildings/roads hash differing, which is expected
+  and no longer a failure.
+- CI (`.github/workflows/ci.yml`) runs `scripts/cityGolden.ts` like every
+  other gate script now; the `CITY_GOLDEN=skip` escape hatch in
+  `scripts/test.ts` stays as a manual fallback but nothing sets it
+  automatically. This was verified with a `bun`-vs-`tsx` parity check on
+  Windows, which predicts (but, since CI itself runs `bun` on `ubuntu-latest`
+  JavaScriptCore, does not directly prove) that the narrowed golden also
+  passes there.
+
+## 2.0 gate
+
+The full transcendental sweep — converting the ~99 remaining native
+`Math.sin`/`cos`/`atan2`/`exp`/`hypot`/`pow` call sites across the other ~14
+`lib/seed` files (`cityGen.ts` alone has 28, including its own near-tie-shaped
+hazard in the arterial/highway turn-angle classifier) to `lib/seed/dmath.ts`
+— is deferred to the 2.0 milestone, tracked separately from this note. That
+sweep is what would let `cityGolden.ts` re-adopt full byte-identity
+(`fullHash`/`buildingsHash`/`roadsHash`) as part of the gated contract, and is
+also the only thing that closes the browser-facing version of this bug
+(a seed shared from Safari currently renders a structurally-identical but not
+byte-identical city in Chrome/Edge).
