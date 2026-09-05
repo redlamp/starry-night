@@ -1,12 +1,23 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { BookUser, History, Search, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIdle } from "@/lib/useIdle";
 import { useSceneStore } from "@/lib/state/sceneStore";
 import { DirectorySection, DirectoryBuildRing } from "@/components/ui/DirectoryPanel";
-import { DemographicsPanel } from "@/components/ui/demographics/DemographicsPanel";
 import { IconTip } from "@/components/ui/columns/EntityColumns";
+
+// Recharts (~730 KB) only serves the demographics report, which self-gates on
+// demographicsOpen (default false — see DemographicsPanel) and renders null
+// until opened. Loading it via next/dynamic keeps that weight out of `/`'s
+// first-load JS; the loading fallback is null (not a Skeleton) because the
+// panel is itself invisible by default, so a visible placeholder here would
+// be a new flash of UI that doesn't exist today.
+const DemographicsPanel = dynamic(
+  () => import("@/components/ui/demographics/DemographicsPanel").then((m) => m.DemographicsPanel),
+  { ssr: false, loading: () => null },
+);
 
 // Top-left control dock (user 2026-07-08): [City Directory] [Inspect]
 // [Resume]. Inspect moved here from bottom-right; the directory moved out of
@@ -39,7 +50,7 @@ function DockButton({
         className={cn(
           "flex size-11 items-center justify-center rounded-full border shadow-lg backdrop-blur-md transition-[opacity,background-color,color] duration-700",
           active
-            ? "border-transparent bg-primary text-primary-foreground"
+            ? "bg-primary text-primary-foreground border-transparent"
             : "border-foreground/10 bg-popover/70 text-foreground/85 hover:bg-foreground/10",
           idleFade && !active ? "pointer-events-none opacity-0" : "pointer-events-auto opacity-100",
         )}
@@ -106,16 +117,16 @@ export function ControlDock() {
           // Same lower bound as the entity cards (user 2026-07-27): both stop
           // short of the seed chip so the project's seed stays readable at a
           // glance. See the max-h note in EntityColumns for the 8rem budget.
-          className="border-foreground/10 bg-popover/70 pointer-events-auto fixed top-16 left-3 z-40 flex max-h-[calc(100vh-8rem)] w-[21rem] max-w-[calc(100vw-1.5rem)] flex-col rounded-xl border text-popover-foreground shadow-lg backdrop-blur-md"
+          className="border-foreground/10 bg-popover/70 text-popover-foreground pointer-events-auto fixed top-16 left-3 z-40 flex max-h-[calc(100vh-8rem)] w-[21rem] max-w-[calc(100vw-1.5rem)] flex-col rounded-xl border shadow-lg backdrop-blur-md"
         >
           <DirectoryBuildRing />
-          <div className="flex items-center justify-between border-b border-border/60 px-3 py-2">
+          <div className="border-border/60 flex items-center justify-between border-b px-3 py-2">
             <span className="text-sm font-medium">City Directory</span>
             <button
               type="button"
               onClick={() => setDirectoryOpen(false)}
               aria-label="Close directory"
-              className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+              className="text-muted-foreground hover:bg-muted hover:text-foreground rounded p-1"
             >
               <X className="size-4" />
             </button>
