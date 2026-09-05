@@ -19,6 +19,7 @@ import { spawnSync } from "node:child_process";
 const SCRIPTS = [
   "scripts/gate1.ts",
   "scripts/personaCheck.ts",
+  "scripts/dmathCheck.ts",
   "scripts/cityGolden.ts",
   "scripts/districtOutlineCheck.ts",
   "scripts/roadQueryCheck.ts",
@@ -34,11 +35,12 @@ const results: Result[] = [];
 let failedScript: string | null = null;
 
 for (const script of SCRIPTS) {
-  // CITY_GOLDEN=skip: scripts/cityGolden.ts encodes a byte-identity contract
-  // that Math.sin/cos/atan2/hypot don't guarantee across JS engines/platforms
-  // (see wiki/notes/decision-cross-runtime-determinism.md) — a CI-only escape
-  // hatch so this one known-noisy script doesn't block the gate. Runs locally
-  // by default (the env var is unset unless CI sets it).
+  // CITY_GOLDEN=skip: cityGolden.ts's contract is narrowed (2026-09-05, see
+  // wiki/notes/decision-cross-runtime-determinism.md "Contract") to structural
+  // properties confirmed bun==tsx across engines, so CI runs it by default now.
+  // The flag survives as a manual escape hatch in case a future engine/OS
+  // combination surfaces new drift before the full transcendental sweep (2.0
+  // gate) closes the remaining ~99 call sites — nothing sets it automatically.
   if (script === "scripts/cityGolden.ts" && process.env.CITY_GOLDEN === "skip") {
     console.log(
       "SKIP scripts/cityGolden.ts (cross-runtime drift, see wiki/notes/decision-cross-runtime-determinism.md)",
