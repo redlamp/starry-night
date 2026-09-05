@@ -16,7 +16,14 @@ export const moonVertexShader = /* glsl */ `
 `;
 
 export const moonFragmentShader = /* glsl */ `
-  precision mediump float;
+  // highp (2026-09-05 precision audit): the bayer4 mod-4 reduction (below) already
+  // closed the mediump fp16 overflow that shipped as c6f9335, but this disc covers a
+  // handful of screen pixels — mediump's mobile perf win is unmeasurable here, so
+  // there is no upside to keeping the residual risk that a future edit re-introduces
+  // an unreduced large term. highp is the desktop default anyway (ANGLE/desktop GL
+  // promote mediump to fp32), so this is a mobile-only, needs-a-phone-check change.
+  // See wiki/notes/decision-shader-precision-policy.md.
+  precision highp float;
 
   uniform vec3 uSunDir;      // moon → sun, VIEW space, normalized (encodes the phase)
   uniform vec3 uColor;       // flat lit tone (display space)

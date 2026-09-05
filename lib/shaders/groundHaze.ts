@@ -17,6 +17,11 @@ export const groundHazeVertexShader = /* glsl */ `
 `;
 
 export const groundHazeFragmentShader = /* glsl */ `
+  // mediump kept (2026-09-05 precision audit): vWorldPos.y is a linear (unsquared)
+  // world-space metre value bounded by the haze sphere radius — a few thousand m even
+  // at max city tier and slider — nowhere near fp16's 65504 ceiling. This shader covers
+  // the whole sky below the horizon, so mediump's mobile perf win is real. See
+  // wiki/notes/decision-shader-precision-policy.md.
   precision mediump float;
 
   uniform vec3 uColor;

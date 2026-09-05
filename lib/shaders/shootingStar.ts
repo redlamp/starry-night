@@ -76,7 +76,12 @@ export const shootingStarVertexShader = /* glsl */ `
 `;
 
 export const shootingStarFragmentShader = /* glsl */ `
-  precision mediump float;
+  // highp (2026-09-05 precision audit): no hazard found (gl_PointCoord-bounded math
+  // only), but a streak covers a handful of screen pixels at a time — mediump's mobile
+  // perf win is unmeasurable, so there is no upside to the residual risk. highp is the
+  // desktop default anyway. Needs a phone check. See
+  // wiki/notes/decision-shader-precision-policy.md.
+  precision highp float;
 
   varying float vFade;
 
