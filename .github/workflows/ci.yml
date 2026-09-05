@@ -38,4 +38,10 @@ jobs:
         run: bun run format:check
 
       - name: Test
+        # CITY_GOLDEN=skip: scripts/cityGolden.ts is a cross-runtime/cross-OS
+        # determinism trap (Math.sin/cos/atan2/hypot aren't ECMA-262-exact —
+        # see wiki/notes/decision-cross-runtime-determinism.md), not a real
+        # regression on this branch. Skipped in CI only; runs locally by default.
+        env:
+          CITY_GOLDEN: skip
         run: bun run test
