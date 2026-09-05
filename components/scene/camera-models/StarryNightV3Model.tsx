@@ -55,10 +55,11 @@ import { writeOrbitPose } from "./orbitWriteback";
 //             t                Top-down toggle (in-camera flight, see above)
 //   Touch     1-finger  Move  ·  2-finger (latched)  swipe ←→ Orbit · swipe ↑↓ Tilt · pinch Zoom  ·  double-tap  Pan to (1) / Zoom in (2)
 //
-// Perspective + faked-ortho (via ProjectionBlender), same as v2: parallel-ray picks at
+// Perspective + faked-ortho (via ProjectionBlender): parallel-ray picks at
 // full ortho, orthoSize-based zoom, frame-on-mount + ~10/s pose write-back. Self-gates
-// to orbit. Forked from StarryNightV2Model 2026-07-15 (the registry's models are
-// deliberately self-contained; v2 stays untouched as the fallback).
+// to orbit. Forked from StarryNightV2Model 2026-07-15 (the registry's models were
+// deliberately self-contained, so the fork didn't touch v2's file); v2 itself was
+// retired 2026-09-05 once v3 won out — see wiki/notes/decision-camera-v2-retired.md.
 
 const DEG = Math.PI / 180;
 const ORBIT_RATE = 0.006; // rad per pixel of Shift orbit (~0.34°/px; a ~500px drag ≈ 170°)
@@ -95,7 +96,7 @@ const TAP_ZOOM_ORTHO_SEC = 0.7; // matching ortho size-ramp duration for that gl
 const ORTHO_FOCUS_EASE = (t: number) => t * t * (3 - 2 * t); // smoothstep — flat start so the zoom lags the pan
 // WASD/QE fly-through (SNCv2). Speed scales with on-screen scale so the glide is
 // zoom-constant (Google-Earth style): altitude in perspective, orthoSize × framing in
-// ortho. Tuned so a held key crosses ~1 viewport/sec; snv2.moveSpeed multiplies it.
+// ortho. Tuned so a held key crosses ~1 viewport/sec; snv3.moveSpeed multiplies it.
 const MOVE_CODES = new Set(["KeyW", "KeyA", "KeyS", "KeyD", "KeyQ", "KeyE"]);
 const MOVE_ALT_K = 0.6; // perspective: world units/sec per unit of altitude
 const MOVE_ORTHO_K = 1.3; // ortho: world units/sec per unit of (orthoSize × framing)

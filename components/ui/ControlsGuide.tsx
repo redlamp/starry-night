@@ -174,39 +174,6 @@ const MODEL_GUIDE: Record<CameraModelId, GuideSpec> = {
     // (user 2026-07-16) — a live switch, not just a keycap reference.
     hotkeys: ["drift", "projection", "wireframe", "inspect", "settings"],
   },
-  snv2: {
-    mouse: [
-      { icon: "mouse-left", motion: "all", label: "Rotate & Tilt", affordance: "pin", action: "rotate" },
-      {
-        icon: "mouse-right",
-        motion: "all",
-        label: "Move",
-        sub: "or Shift + LMB",
-        affordance: "move",
-        action: "pan",
-      },
-      {
-        icon: "mouse-both",
-        motion: "all",
-        label: "Look Around",
-        sub: `or ${MOD} + LMB`,
-        affordance: "eye",
-        action: "look",
-      },
-      { icon: "mouse-wheel", motion: "ud", label: "Zoom", action: "zoom" },
-      { icon: "mouse-left", badge: "×2", label: "Zoom In", sub: "double-click", action: "zoomIn" },
-    ],
-    touch: [
-      { icon: "finger-1", motion: "all", label: "Move", action: "pan" },
-      { icon: "pinch", label: "Zoom + Rotate", sub: "two fingers", action: "zoom" },
-    ],
-    keys: [
-      { cap: "W A S D", label: "Move", action: "pan" },
-      { cap: "Q / E", label: "Down / Up" },
-      { cap: "R", label: "Reset Camera", action: "reset" },
-    ],
-    hotkeys: ["projection", "wireframe", "inspect", "settings"],
-  },
   googleearth: {
     mouse: [
       { icon: "mouse-left", motion: "all", label: "Move", sub: "drag the ground", action: "pan" },
@@ -353,7 +320,7 @@ function Rows({ items, active }: { items: Item[]; active: CameraAction | null })
   );
 }
 
-// Keyboard rows (Fly's WASD / E·Q / Shift, snv2's WASD / Q·E / R). No glyph assets for keys, so
+// Keyboard rows (Fly's WASD / E·Q / Shift, snv3's WASD / Q·E / R). No glyph assets for keys, so
 // render keycaps in the same amber style + size as the hotkey switches below (matching keycap
 // column). Rows with an action highlight like the gesture rows do — "Move" lights while gliding,
 // "Reset Camera" for the whole R flight.

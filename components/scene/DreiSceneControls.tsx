@@ -161,7 +161,7 @@ const _camWorld = new THREE.Vector3();
 
 // How far past the ground disc the EYE may travel when panning, as a multiple of the ground-disc
 // radius — keeps the aim on the ground but lets the camera back out to view the "snow globe" from
-// outside. Mirrors StarryNightV2Model's PAN_EYE_REACH_MULT.
+// outside. Mirrors StarryNightV3Model's PAN_EYE_REACH_MULT.
 const PAN_EYE_REACH_MULT = 2.0;
 
 // Ground bounds = the ground disc (Ground.tsx): centre CITY_CENTER, radius = the

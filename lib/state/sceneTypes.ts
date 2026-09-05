@@ -17,7 +17,6 @@ export type CameraModelId =
   | "turntable"
   | "topdown"
   | "fly"
-  | "snv2"
   | "snv3"
   | "googleearth"
   | "dreimap"
@@ -84,8 +83,10 @@ export interface LightSizeConfig {
   curve: [number, number, number, number]; // cubic-bezier drop-off control points
 }
 
-// Starry Night Cam v2 tunables (the drone-style interactive camera). Live-editable in
-// Settings → Orbit → v2, and persisted.
+// Starry Night Cam v2 tunables. The v2 model itself was retired 2026-09-05 (see
+// wiki/notes/decision-camera-v2-retired.md); this type survives only as the base
+// Snv3Config extends — v3 forked v2's rig and kept its knobs (and their Settings →
+// Orbit → v3 UI), so the shape stays live even though nothing reads it as "v2" anymore.
 export interface Snv2Config {
   minDist: number; // closest the camera may get to its target (world metres)
   maxDist: number; // farthest the camera may get (world metres)
@@ -121,7 +122,7 @@ export type TweenRequest = { to: CameraIntent; durationMs: number };
 
 // Snapshot of the model + pose that was active before the `t` hotkey swept into
 // Top-down (#83) — consumed on exit to tween back to the same model and pose
-// (map/snv2/fly exactly; drift/turntable/googleearth/dreimap/dreicamera just seed
+// (map/snv3/fly exactly; drift/turntable/googleearth/dreimap/dreicamera just seed
 // their azimuth from `orbit` and resume their own motion). See TopDownModel.tsx.
 export type TopDownEntry = {
   modelId: CameraModelId;
