@@ -1,4 +1,5 @@
 import seedrandom from "seedrandom";
+import { dsin, dcos } from "./dmath";
 
 // Topology library for the streets-first city generator.
 // Each topology yields 1-3 highway polylines that partition the map and
@@ -116,8 +117,8 @@ function buildCrossroads(rng: () => number, cx: number, cz: number, half: number
   const len = half * 2.4; // overshoot bounds so it reads as cutting through
 
   const lineThrough = (theta: number, perpOffset: number, label: string): Highway => {
-    const ux = Math.cos(theta);
-    const uz = Math.sin(theta);
+    const ux = dcos(theta);
+    const uz = dsin(theta);
     const nx = -uz;
     const nz = ux;
     const px = cx + nx * perpOffset;
@@ -151,7 +152,7 @@ function buildBypass(rng: () => number, cx: number, cz: number, half: number): H
   for (let i = 0; i < vertCount; i++) {
     const t = i / (vertCount - 1);
     const along = -sweepRange * 0.5 + sweepRange * t;
-    const arc = Math.sin(t * Math.PI) * arcAmplitude;
+    const arc = dsin(t * Math.PI) * arcAmplitude;
     let x: number;
     let z: number;
     if (edge === 0) {
@@ -191,14 +192,14 @@ function buildRing(rng: () => number, cx: number, cz: number, half: number): Hig
   const rx = half * (0.8 + rng() * 0.15);
   const rz = half * (0.8 + rng() * 0.15);
   const rotation = (rng() - 0.5) * (Math.PI / 4);
-  const cos = Math.cos(rotation);
-  const sin = Math.sin(rotation);
+  const cos = dcos(rotation);
+  const sin = dsin(rotation);
   const segs = 18;
   const vertices: Array<{ x: number; z: number }> = [];
   for (let i = 0; i < segs; i++) {
     const a = (i / segs) * Math.PI * 2;
-    const lx = Math.cos(a) * rx;
-    const lz = Math.sin(a) * rz;
+    const lx = dcos(a) * rx;
+    const lz = dsin(a) * rz;
     vertices.push({
       x: cx + lx * cos - lz * sin,
       z: cz + lx * sin + lz * cos,
@@ -227,8 +228,8 @@ function buildRingRadial(rng: () => number, cx: number, cz: number, half: number
   const spokes: Highway[] = [];
   for (let i = 0; i < spokeCount; i++) {
     const theta = startAngle + i * angleStep + (rng() - 0.5) * 0.1;
-    const ux = Math.cos(theta);
-    const uz = Math.sin(theta);
+    const ux = dcos(theta);
+    const uz = dsin(theta);
     spokes.push({
       id: `highway-radial-${i}`,
       closed: false,

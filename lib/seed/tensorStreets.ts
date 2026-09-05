@@ -1,6 +1,13 @@
 import seedrandom from "seedrandom";
 import { computeLattice } from "./lattice";
-import { buildTensorField, gridCacheField, alignDir, type TensorField, type Vec2 } from "./tensorField";
+import {
+  buildTensorField,
+  gridCacheField,
+  alignDir,
+  type TensorField,
+  type Vec2,
+} from "./tensorField";
+import { dhypot, dcos, dsin } from "./dmath";
 import type { RoadPoly, RoadTier } from "./streets";
 import { genScale } from "./topology";
 import type { ShapeMask } from "./cityShape";
@@ -107,11 +114,11 @@ function planeNoise(
     const dir = rng() * Math.PI * 2;
     const k = (Math.PI * 2) / (lambdaMin + rng() * (lambdaMax - lambdaMin));
     const phase = rng() * Math.PI * 2;
-    return { ux: Math.cos(dir), uz: Math.sin(dir), k, phase };
+    return { ux: dcos(dir), uz: dsin(dir), k, phase };
   });
   return (x, z) => {
     let v = 0;
-    for (const w of waves) v += Math.sin((x * w.ux + z * w.uz) * w.k + w.phase);
+    for (const w of waves) v += dsin((x * w.ux + z * w.uz) * w.k + w.phase);
     return v / n;
   };
 }
@@ -162,7 +169,7 @@ function catmullRom(ctrl: Vec2[], step: number): Vec2[] {
     const p1 = P[i + 1];
     const p2 = P[i + 2];
     const p3 = P[i + 3];
-    const segLen = Math.hypot(p2.x - p1.x, p2.z - p1.z);
+    const segLen = dhypot(p2.x - p1.x, p2.z - p1.z);
     const n = Math.max(1, Math.round(segLen / step));
     for (let s = i === 0 ? 0 : 1; s <= n; s++) {
       const t = s / n;
@@ -230,7 +237,7 @@ class AnchorIndex {
 function arcWalker(pts: Vec2[]) {
   const cum: number[] = [0];
   for (let i = 1; i < pts.length; i++) {
-    cum[i] = cum[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z);
+    cum[i] = cum[i - 1] + dhypot(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z);
   }
   const len = cum[pts.length - 1] ?? 0;
   const at = (a: number): Vec2 => {
@@ -244,12 +251,15 @@ function arcWalker(pts: Vec2[]) {
     }
     const span = cum[hi] - cum[lo] || 1;
     const f = (t - cum[lo]) / span;
-    return { x: pts[lo].x + (pts[hi].x - pts[lo].x) * f, z: pts[lo].z + (pts[hi].z - pts[lo].z) * f };
+    return {
+      x: pts[lo].x + (pts[hi].x - pts[lo].x) * f,
+      z: pts[lo].z + (pts[hi].z - pts[lo].z) * f,
+    };
   };
   const tangentAt = (a: number): Vec2 => {
     const p0 = at(Math.max(0, a - 6));
     const p1 = at(Math.min(len, a + 6));
-    const d = Math.hypot(p1.x - p0.x, p1.z - p0.z) || 1;
+    const d = dhypot(p1.x - p0.x, p1.z - p0.z) || 1;
     return { x: (p1.x - p0.x) / d, z: (p1.z - p0.z) / d };
   };
   return { len, at, tangentAt };
@@ -286,7 +296,7 @@ function buildSubdivisions(
     if (pts.length < 2) return false;
     const cum: number[] = [0];
     for (let i = 1; i < pts.length; i++) {
-      cum[i] = cum[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z);
+      cum[i] = cum[i - 1] + dhypot(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z);
     }
     const total = cum[pts.length - 1];
     for (let i = 0; i < pts.length; i++) {
@@ -312,12 +322,12 @@ function buildSubdivisions(
     if (!A) continue; // unreachable pod — never build an orphan development
     let dirX = n.x - A.x;
     let dirZ = n.z - A.z;
-    const dLen = Math.hypot(dirX, dirZ);
+    const dLen = dhypot(dirX, dirZ);
     if (dLen < 30) {
       // Pod centred on a road — pick a seeded heading instead.
       const th = rng() * Math.PI * 2;
-      dirX = Math.cos(th);
-      dirZ = Math.sin(th);
+      dirX = dcos(th);
+      dirZ = dsin(th);
     } else {
       dirX /= dLen;
       dirZ /= dLen;
@@ -332,7 +342,7 @@ function buildSubdivisions(
       // Second mouth (fire-code loop collector) when another road is reachable
       // beyond the pod and clearly distinct from A; else a single-entry stick.
       const B0 = anchors.nearest(E.x, E.z, u * 1.3);
-      const useB = B0 && Math.hypot(B0.x - A.x, B0.z - A.z) > u * 0.9 ? B0 : null;
+      const useB = B0 && dhypot(B0.x - A.x, B0.z - A.z) > u * 0.9 ? B0 : null;
       const endP = useB ?? E;
       const bow1 = (rng() - 0.5) * u * 0.5;
       const bow2 = (rng() - 0.5) * u * 0.5;
@@ -341,7 +351,7 @@ function buildSubdivisions(
       const pts = catmullRom([A, m1, C, m2, endP], SUB_STEP);
       const cum: number[] = [0];
       for (let i = 1; i < pts.length; i++) {
-        cum[i] = cum[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z);
+        cum[i] = cum[i - 1] + dhypot(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z);
       }
       const total = cum[pts.length - 1];
       let cut = pts.length;
@@ -367,8 +377,8 @@ function buildSubdivisions(
     if (arcWalker(spine).len < 70) {
       const s = rng() < 0.5 ? 1 : -1;
       const rot = 0.96 * s; // ±55°
-      const c = Math.cos(rot);
-      const sn = Math.sin(rot);
+      const c = dcos(rot);
+      const sn = dsin(rot);
       spine = buildSpine(dirX * c - dirZ * sn, dirX * sn + dirZ * c);
     }
     const walker = arcWalker(spine);
@@ -414,8 +424,8 @@ function buildSubdivisions(
           const len = 130 + rng() * 170;
           const bend = (rng() - 0.5) * 0.5;
           const jit = (rng() - 0.5) * 0.3 * len;
-          const cb = Math.cos(bend);
-          const sb = Math.sin(bend);
+          const cb = dcos(bend);
+          const sb = dsin(bend);
           for (const flip of [1, -1]) {
             const dx = (nx * cb - nz * sb) * flip;
             const dz = (nx * sb + nz * cb) * flip;
@@ -423,8 +433,7 @@ function buildSubdivisions(
             const snap = anchors.nearest(tip.x, tip.z, 80);
             // Snap only to genuinely OTHER geometry — a hit near this very
             // station is just the host again.
-            const end =
-              snap && Math.hypot(snap.x - P.x, snap.z - P.z) > len * 0.62 ? snap : tip;
+            const end = snap && dhypot(snap.x - P.x, snap.z - P.z) > len * 0.62 ? snap : tip;
             const cm = {
               x: P.x + dx * len * 0.5 + t.x * jit,
               z: P.z + dz * len * 0.5 + t.z * jit,
@@ -471,8 +480,8 @@ function buildSubdivisions(
           const len = 52 + rng() * 88;
           const bend = (rng() - 0.5) * 0.7;
           const jit = (rng() - 0.5) * 0.35 * len;
-          const cb = Math.cos(bend);
-          const sb = Math.sin(bend);
+          const cb = dcos(bend);
+          const sb = dsin(bend);
           for (const flip of [1, -1]) {
             const dx = (nx * cb - nz * sb) * flip;
             const dz = (nx * sb + nz * cb) * flip;
@@ -593,8 +602,7 @@ class GridStorage {
   private cells = new Map<number, number[]>();
   constructor(private size: number) {}
   add(p: Vec2) {
-    const k =
-      (Math.floor(p.x / this.size) + 2048) * 4096 + (Math.floor(p.z / this.size) + 2048);
+    const k = (Math.floor(p.x / this.size) + 2048) * 4096 + (Math.floor(p.z / this.size) + 2048);
     const list = this.cells.get(k);
     if (list) list.push(p.x, p.z);
     else this.cells.set(k, [p.x, p.z]);
@@ -652,12 +660,14 @@ function rk4(field: TensorField, p: Vec2, prevDir: Vec2, major: boolean): Vec2 |
   // The arithmetic is identical to the boxed form, so output stays byte-identical.
   const k1 = alignDir(field.sample(p.x, p.z, major), prevDir);
   if (!k1) return null;
-  const k2 = alignDir(field.sample(p.x + (k1.x * DSTEP) / 2, p.z + (k1.z * DSTEP) / 2, major), k1) ?? k1;
-  const k3 = alignDir(field.sample(p.x + (k2.x * DSTEP) / 2, p.z + (k2.z * DSTEP) / 2, major), k2) ?? k2;
+  const k2 =
+    alignDir(field.sample(p.x + (k1.x * DSTEP) / 2, p.z + (k1.z * DSTEP) / 2, major), k1) ?? k1;
+  const k3 =
+    alignDir(field.sample(p.x + (k2.x * DSTEP) / 2, p.z + (k2.z * DSTEP) / 2, major), k2) ?? k2;
   const k4 = alignDir(field.sample(p.x + k3.x * DSTEP, p.z + k3.z * DSTEP, major), k3) ?? k3;
   const dx = (k1.x + 2 * k2.x + 2 * k3.x + k4.x) / 6;
   const dz = (k1.z + 2 * k2.z + 2 * k3.z + k4.z) / 6;
-  const len = Math.hypot(dx, dz);
+  const len = dhypot(dx, dz);
   if (len < 1e-6) return null;
   return { x: dx / len, z: dz / len };
 }
@@ -961,7 +971,11 @@ export function generateTensorStreets(
   let subCuls: Vec2[][] = [];
   if (!fieldOverride) {
     const nodes = sampleSuburbNodes(masterSeed, radial, mask);
-    ({ spines: subSpines, loops: subLoops, culs: subCuls } = buildSubdivisions(
+    ({
+      spines: subSpines,
+      loops: subLoops,
+      culs: subCuls,
+    } = buildSubdivisions(
       masterSeed,
       nodes,
       b,

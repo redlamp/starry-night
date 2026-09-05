@@ -1,6 +1,7 @@
 import seedrandom from "seedrandom";
 import { CITY_CENTER, maxHalfExtent, genScale } from "./topology";
 import type { Lattice } from "./lattice";
+import { dsin, dcos, datan2, dexp, dhypot } from "./dmath";
 
 // Tensor field — the direction field the streets follow (the proper tensor-field
 // road model, after Chen 2008 / ProbableTrain MapGenerator). Pure deterministic
@@ -113,12 +114,12 @@ export function buildTensorField(masterSeed: string, lattice: Lattice): TensorFi
       const fz = cz + (j / (N - 1) - 0.5) * 2 * span;
       let theta = lattice.orientationAt(fx, fz); // base grain
       if (morph === "shear") {
-        const sd = (fx - cx) * Math.cos(shearNormal) + (fz - cz) * Math.sin(shearNormal);
+        const sd = (fx - cx) * dcos(shearNormal) + (fz - cz) * dsin(shearNormal);
         theta += (smoothstep(-shearBand, shearBand, sd) - 0.5) * shearDelta;
       } else {
         // warp + grid: a coherent sinusoidal bend across the field
-        const u = (fx - cx) * Math.cos(waveDir) + (fz - cz) * Math.sin(waveDir);
-        theta += warpAmp * Math.sin((2 * Math.PI * u) / waveLambda + wavePhase);
+        const u = (fx - cx) * dcos(waveDir) + (fz - cz) * dsin(waveDir);
+        theta += warpAmp * dsin((2 * Math.PI * u) / waveLambda + wavePhase);
       }
       theta += (rng() - 0.5) * JITTER;
       const size = span * 0.62;
@@ -130,8 +131,8 @@ export function buildTensorField(masterSeed: string, lattice: Lattice): TensorFi
         size2: size * size,
         decay: 1.3,
         theta,
-        ta: Math.cos(2 * theta),
-        tb: Math.sin(2 * theta),
+        ta: dcos(2 * theta),
+        tb: dsin(2 * theta),
       });
     }
   }
@@ -174,8 +175,8 @@ export function buildTensorField(masterSeed: string, lattice: Lattice): TensorFi
     const kindRoll = rng();
     const squash = 0.55 + rng() * 0.45;
     if (i >= patchCount) continue;
-    const pcx = cx + Math.cos(pAng) * pDist;
-    const pcz = cz + Math.sin(pAng) * pDist;
+    const pcx = cx + dcos(pAng) * pDist;
+    const pcz = cz + dsin(pAng) * pDist;
     const radial = kindRoll < 0.07;
     const theta = lattice.orientationAt(pcx, pcz) + pOffset;
     patches.push({
@@ -183,11 +184,11 @@ export function buildTensorField(masterSeed: string, lattice: Lattice): TensorFi
       cz: pcz,
       size: radial ? pSize * 0.45 : pSize, // a circus is a block, not a district
       squash: radial ? 1 : squash,
-      rca: Math.cos(theta),
-      rsa: Math.sin(theta),
+      rca: dcos(theta),
+      rsa: dsin(theta),
       radial,
-      ta: Math.cos(2 * theta),
-      tb: Math.sin(2 * theta),
+      ta: dcos(2 * theta),
+      tb: dsin(2 * theta),
     });
   }
 
@@ -198,8 +199,8 @@ export function buildTensorField(masterSeed: string, lattice: Lattice): TensorFi
     const size = half * 0.2;
     basis.push({
       kind: "radial",
-      cx: cx + Math.cos(radialAng) * radialRad,
-      cz: cz + Math.sin(radialAng) * radialRad,
+      cx: cx + dcos(radialAng) * radialRad,
+      cz: cz + dsin(radialAng) * radialRad,
       size,
       size2: size * size,
       decay: 3.4,
@@ -220,7 +221,7 @@ export function buildTensorField(masterSeed: string, lattice: Lattice): TensorFi
       const dx = x - f.cx;
       const dz = z - f.cz;
       const d2 = (dx * dx + dz * dz) / f.size2;
-      const w = Math.exp(-f.decay * d2);
+      const w = dexp(-f.decay * d2);
       if (f.kind === "grid") {
         a += f.ta * w;
         b += f.tb * w;
@@ -240,7 +241,7 @@ export function buildTensorField(masterSeed: string, lattice: Lattice): TensorFi
       const dz = z - p.cz;
       const lx = p.rca * dx + p.rsa * dz;
       const lz = (-p.rsa * dx + p.rca * dz) / p.squash;
-      const r = Math.hypot(lx, lz) / p.size;
+      const r = dhypot(lx, lz) / p.size;
       if (r >= 1.15) continue;
       const t = Math.min(1, (1.15 - r) / 0.45);
       const wp = t * t * (3 - 2 * t);
@@ -252,14 +253,14 @@ export function buildTensorField(masterSeed: string, lattice: Lattice): TensorFi
         ta = (dz * dz - dx * dx) / d2;
         tb = (-2 * dx * dz) / d2;
       }
-      const m = Math.hypot(a, b) || 1;
+      const m = dhypot(a, b) || 1;
       a = (a / m) * (1 - wp) + ta * wp;
       b = (b / m) * (1 - wp) + tb * wp;
     }
-    if (Math.hypot(a, b) < 1e-9) return null;
-    let th = 0.5 * Math.atan2(b, a);
+    if (dhypot(a, b) < 1e-9) return null;
+    let th = 0.5 * datan2(b, a);
     if (!major) th += Math.PI / 2;
-    return { x: Math.cos(th), z: Math.sin(th) };
+    return { x: dcos(th), z: dsin(th) };
   };
 
   return { basis, sample };
@@ -294,9 +295,9 @@ export function gridCacheField(
     for (let i = 0; i < M; i++) {
       const v = src.sample(bounds.minX + i * dx, bounds.minZ + j * dz, true); // major eigenvector
       if (v) {
-        const th2 = 2 * Math.atan2(v.z, v.x);
-        A[j * M + i] = Math.cos(th2);
-        B[j * M + i] = Math.sin(th2);
+        const th2 = 2 * datan2(v.z, v.x);
+        A[j * M + i] = dcos(th2);
+        B[j * M + i] = dsin(th2);
       }
     }
   }
@@ -321,9 +322,9 @@ export function gridCacheField(
     const a = A[r0 + i0] * w00 + A[r0 + i1] * w10 + A[r1 + i0] * w01 + A[r1 + i1] * w11;
     const b = B[r0 + i0] * w00 + B[r0 + i1] * w10 + B[r1 + i0] * w01 + B[r1 + i1] * w11;
     if (a * a + b * b < 1e-12) return null;
-    let th = 0.5 * Math.atan2(b, a);
+    let th = 0.5 * datan2(b, a);
     if (!major) th += Math.PI / 2;
-    return { x: Math.cos(th), z: Math.sin(th) };
+    return { x: dcos(th), z: dsin(th) };
   };
   return { basis: src.basis, sample };
 }
