@@ -8,6 +8,10 @@ tags:
 
 # Plan — Camera Refactor & Optimization
 
+**Status 2026-09-05:** partly done. The camera-model registry shipped
+2026-06-28 (see the update note below); P0/P1 hygiene + optimization items
+are still mostly open.
+
 **Date:** 2026-06-27. Source: a 9-agent audit (5 code-map + 4 research) of the
 whole camera subsystem. Companions: [[camera-architecture-and-perf]] (research +
 library internals), [[camera-systems-history]] (timeline), [[plan-drei-camera-migration]]
@@ -16,7 +20,7 @@ library internals), [[camera-systems-history]] (timeline), [[plan-drei-camera-mi
 
 This is a **preparation** doc: current-state analysis + a prioritized, effort/
 risk-tagged plan. Camera is **runtime state**, so none of this touches the
-determinism contract or `gate1` — the risk is in *feel* and persistence, and feel
+determinism contract or `gate1` — the risk is in _feel_ and persistence, and feel
 changes are gated by the user's live test
 ([[feedback_interaction-feel-verification]]), never synthetic measurement.
 
@@ -42,11 +46,11 @@ changes are gated by the user's live test
    `cameraMode !== 'orbit'`). Frozen since 2026-06-07.
 3. **`/intro`** — its own separate drei `<OrbitControls>` turntable.
 
-The migration's *whole point* was to unify these and delete code. Phases 3 (fly →
+The migration's _whole point_ was to unify these and delete code. Phases 3 (fly →
 custom drag-look), 4 (intro unify), 5 (delete legacy + gsap) were never done. **This
 is the headline structural debt.**
 
-### 1.2 Faked-ortho is the architectural keystone — a *decided* trade-off
+### 1.2 Faked-ortho is the architectural keystone — a _decided_ trade-off
 
 Ortho is **not** a real `OrthographicCamera`; it's one `PerspectiveCamera` whose
 `projectionMatrix` is overridden each frame (receding-virtual-eye morph,
@@ -81,7 +85,7 @@ z=−1 and z=+1, ray = far−near) — correct for persp, ortho, and any blend w
 - **The persp↔ortho focal-plane half-height bridge** `Hb = perspK + (oeff−perspK)·blend`
   is **re-derived in 5+ places** (ProjectionBlender + `applyScreenFocus` +
   `panHalfHeight` + ground clamp + readout, and again in 3 spots as
-  `focalScrubScale`/`panHalfHeight`/`wppY`). They *must* agree or render/pin/pan/
+  `focalScrubScale`/`panHalfHeight`/`wppY`). They _must_ agree or render/pin/pan/
   clamp/HUD silently diverge.
 
 ### 1.4 State & render-loop performance
@@ -135,8 +139,9 @@ Effort: **S** ≲½ day · **M** ~1–2 days · **L** multi-day. Feel-affecting 
 need the user's live test before "done".
 
 ### P0 — Hygiene & correctness (S, low risk, do first)
+
 1. **Doc reconciliation** (doc-only): fix the `DreiSceneControls` header; update
-   [[camera-interaction-models]] (DragControls *now* auto-disables; `@use-gesture`
+   [[camera-interaction-models]] (DragControls _now_ auto-disables; `@use-gesture`
    installed), [[camera-lab-to-app-port]] (pan limit shipped), [[camera-systems-history]]
    (rotate model). Cheap, removes active misinformation.
 2. **Fix the hotkey guard** — switch Space/I/Z/U to the shared `isTypingTarget`
@@ -147,13 +152,14 @@ need the user's live test before "done".
    constants — they currently disagree in narrow morph windows.
 
 ### P1 — Optimization (mostly S/M, independent of the big refactor — bankable now)
+
 5. **Ambient FPS throttle in `StarPass`** — accumulate delta, cap the 3 render
    passes to ~30 fps when idle, bypass to full-rate while the camera is active
    (`markCameraActivity`/`dragging`). Single biggest GPU/CPU win; delta-driven
    motion means speed is unchanged. **[VERIFY feel on a real high-refresh panel.]**
 6. **Dirty-flag the per-frame projection work** — skip `updateProjectionMatrix()`
-   + matrix rebuild/invert in `ProjectionBlender` & `StarPass` when {fov, aspect,
-   blend, orthoSize, radius, main-cam transform} are unchanged.
+   - matrix rebuild/invert in `ProjectionBlender` & `StarPass` when {fov, aspect,
+     blend, orthoSize, radius, main-cam transform} are unchanged.
 7. **Gate `applyScreenFocus` + ground-clamp** on a "settling" flag / dirty check so
    the trig is skipped when the camera is idle (sweep paused, no gesture).
 8. **Demote `cameraLive`/`moonLive` to out-of-store singletons** (the `cameraReadout`
@@ -169,6 +175,7 @@ need the user's live test before "done".
     scrub/pan/look scale derivations — single source of truth.
 
 ### P2 — Structural refactor (L; the big one; enables the rest)
+
 12. **Extract an `InputArbiter` / gesture state machine** — one set of pointer
     listeners → dispatch to gesture handlers; retire the ~6 overlapping effects +
     duplicated bail logic; move module-globals into instance refs. **Strongly
@@ -182,6 +189,7 @@ need the user's live test before "done".
     duplicated ortho constants + gsap. Removes a whole parallel implementation.
 
 ### P3 — UX / accessibility (M; can interleave; #15 shippable standalone)
+
 15. **`prefers-reduced-motion`** — default auto-rotate off, make preset/intro tweens
     instant/≤200ms, optionally damp big motion (WCAG 2.2.2/2.3.3).
 16. **Orbit keyboard nav** — arrows = yaw/tilt, +/− = zoom, a reset/north-up key
@@ -193,6 +201,7 @@ need the user's live test before "done".
     3-finger swipe (deck.gl model), replacing the continuous angle-ratio gate.
 
 ### P4 — Lab & cleanup (S/M)
+
 19. **Reconcile or retire `/camera-lab` control math** (now behind production);
     harvest the genuinely reusable assets (`GreyBoxCity`, `FpsMeter`, ref-HUD) to
     shared dev tooling; confirm the route isn't exposed on the public GH-Pages build.
@@ -206,15 +215,15 @@ effort, not a drive-by.
 
 ## Part 4 — Open product decisions (recommendation first)
 
-- **Refactor appetite (P2)?** *Rec:* bank P0+P1 now (safe, high-value); schedule the
+- **Refactor appetite (P2)?** _Rec:_ bank P0+P1 now (safe, high-value); schedule the
   `InputArbiter` + migration-finish as a separate, feel-gated effort. The system
   works and is heavily tuned — don't risk feel for tidiness on the same pass as the
   perf wins.
-- **`/camera-lab` fate?** *Rec:* harvest reusable assets, then retire the diverged
+- **`/camera-lab` fate?** _Rec:_ harvest reusable assets, then retire the diverged
   control math (or demote it to "baseline-comparison only, see DreiSceneControls").
   Confirm it isn't shipping publicly first.
 - **Deterministic camera replay a goal?** If yes, the legacy fly/still
   `performance.now()` sweep timing must move to a deterministic clock; if no, it's
-  fine as runtime-only. *Rec:* not a goal now — note and move on.
-- **Reduced-motion default for auto-rotate?** *Rec:* yes (off under reduced-motion);
+  fine as runtime-only. _Rec:_ not a goal now — note and move on.
+- **Reduced-motion default for auto-rotate?** _Rec:_ yes (off under reduced-motion);
   it's the accessibility-correct default and independent of everything else.

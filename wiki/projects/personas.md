@@ -45,7 +45,7 @@ Standing goal (2026-07-08): character generation at indie-game production qualit
 
 ## Finding people in the world (proposed)
 
-1. **Window-level assignment** — map households to window rows (unit floor ↔ texture row); clicking a *window* (not just a building) opens that household; persona sheet highlights their actual window.
+1. **Window-level assignment** — map households to window rows (unit floor ↔ texture row); clicking a _window_ (not just a building) opens that household; persona sheet highlights their actual window.
 2. **Schedule-driven lights** — drive per-window lit state from resident schedules; author near-miss pairs (his light dies as hers wakes). The Majora's Mask trick, zero text.
 3. **Storylet reveal** — deeper facts unlock on revisit (visit count in runtime state): first click name + hook, later visits add detail/refusal/relation.
 4. **Relation trails** — the one-sided relation line already navigates to the target; add a subtle camera line/arc drawn between the two buildings while both sheets are open.
@@ -60,7 +60,7 @@ Standing goal (2026-07-08): character generation at indie-game production qualit
 5. **Gossip/knowledge implantation** (Talk of the Town) — who knows whom, one deterministic pass; enables "ask the neighbor about X" surfaces.
 6. **Expression-tier audit** (oatmeal gate): expressive-range analysis over a few hundred sheets; grow thin pools (day-shift whyAwake, generic hooks) where repetition shows.
 7. ~~Worker offload of the directory build if first-open hitch shows on low-tier devices~~ — deferred-build + lazy-deep-tier landed first instead (`feat/persona-perf`, 2026-07-10): mount-gate fix + Skeleton behind the directory/columns open gate, plus lazy per-persona `personaFlavor()` and per-building `ensureBuildingStories()`. See [[persona-gen-performance]]. Worker offload remains parked behind re-measurement of the post-lazy cold build.
-8. Persona → traffic/flights tie-ins (the 4 a.m. ferry could *exist*).
+8. Persona → traffic/flights tie-ins (the 4 a.m. ferry could _exist_).
 
 ## Open questions
 
@@ -70,13 +70,12 @@ Standing goal (2026-07-08): character generation at indie-game production qualit
 
 ## Status moved from built-in memory, 2026-09-03
 
-
 Standing goal set 2026-07-08: build the seeded human-persona generation system
 (branch `feat/personas`, worktree `C:\workspace\starry-night-personas`, off
 `fable`) to a production level "befitting a well-received indie game" — keep
 researching, testing, iterating until it's there.
 
-**Quality bar / references**: Tom Francis' *Heat Signature* (procedural
+**Quality bar / references**: Tom Francis' _Heat Signature_ (procedural
 characters with basic story hooks; the story and motivation live in the
 player's mind), No Man's Sky, and other procgen titles. The system should
 provoke the same player-side storytelling: hooks, tensions, relationships that
@@ -123,3 +122,8 @@ still running from their worktrees — personas :7911 on feat/personas, heli
 worktree now checked out on fable, :7912); delete branches + worktrees after
 the user's live pass. A stale .git/index.lock from the session-start
 gate-blocked `branch -f` was diagnosed and cleared before the dev merge.
+
+**2026-09-05 update:** portrait stub shipped in the card
+(`PersonaPortrait.tsx`); generative portraits (#100, a parts-based procedural
+face generator with heritable features) on hold. Iteration backlog item 3,
+"Schedule → window lights," now has a plan: [[plan-night-shift-lighting]].

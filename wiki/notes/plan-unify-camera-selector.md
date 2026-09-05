@@ -1,11 +1,15 @@
 ---
 tags:
   - domain/3d
-  - status/open
+  - status/superseded
   - scope/m2
 ---
 
 # Plan — Unify the Camera Selector (one dropdown)
+
+**Status 2026-09-05:** superseded by [[decision-camera-v3-continuous-modes]]
+(Cam v3, 2026-07-15), which folded modes into one continuous camera rather
+than a unified selector over the old mode/model axes.
 
 **Date:** 2026-06-28. Companions: [[decision-camera-model-registry]] (the registry this
 extends), [[plan-drei-camera-migration]] (the migration this finishes), [[camera-systems-history]],
@@ -19,7 +23,7 @@ There are **two overlapping selection axes**, which is confusing:
 - `cameraModel` (`map | drift | turntable`) — a **separate** selector, shown only in Orbit.
 
 "Orbit" is really just the umbrella for the three orbit models; **Top-down** is an
-orbit *framing* (north-up, aspect-fit) not a distinct controller; **Fly** is a
+orbit _framing_ (north-up, aspect-fit) not a distinct controller; **Fly** is a
 separate (legacy) controller; **Still** is legacy/capture-only. So picking "Drift"
 takes two controls (Orbit tab → Drift), the two axes can disagree, and "Orbit" +
 "Still" are leaky concepts.
@@ -45,7 +49,7 @@ Camera ▾
 
 ## Two-stage rollout
 
-### Stage A — unified dropdown over the *existing* axes (low-risk, ship first)
+### Stage A — unified dropdown over the _existing_ axes (low-risk, ship first)
 
 Pure presentation: replace the mode Tabs **and** the Map/Drift/Turntable selector with
 one Select. Each option maps to today's state via the existing `cameraView` helpers — no
@@ -55,7 +59,7 @@ internal refactor:
 - **Top-down** → the existing enter-top-down (orbit + north-up fit)
 - **Fly** → `enterFly()`
 
-The active option is *derived* from `(cameraMode, orbitRestore, cameraModel)`:
+The active option is _derived_ from `(cameraMode, orbitRestore, cameraModel)`:
 fly → "fly"; orbit+orbitRestore≠null → "topdown"; else → `cameraModel`. This delivers
 the UX immediately and is reversible.
 
@@ -75,13 +79,13 @@ the UX immediately and is reversible.
 
 ## Decisions to settle (recommendation first)
 
-- **Top-down: model or preset?** → *Rec:* an entry-framing of the orbit rig, surfaced as
+- **Top-down: model or preset?** → _Rec:_ an entry-framing of the orbit rig, surfaced as
   its own dropdown entry (not a wholly separate controller).
-- **Still in the UI?** → *Rec:* drop it from the selector; keep `still` for capture only.
-- **Fly on touch?** → *Rec:* keep desktop-only (migration already decided mobile uses
+- **Still in the UI?** → _Rec:_ drop it from the selector; keep `still` for capture only.
+- **Fly on touch?** → _Rec:_ keep desktop-only (migration already decided mobile uses
   orbit); on touch, hide Fly or fall back.
 - **Keybinds:** today F/G/T switch mode. Keep per-camera keys (or a cycle) in the unified
-  world? → *Rec:* keep F (fly) + T (top-down) + maybe a key to cycle orbit models.
+  world? → _Rec:_ keep F (fly) + T (top-down) + maybe a key to cycle orbit models.
 - **Grouping/labels** in the Select (Orbit group vs flat list).
 
 ## Risk / verification

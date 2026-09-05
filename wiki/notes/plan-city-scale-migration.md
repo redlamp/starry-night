@@ -2,12 +2,15 @@
 tags:
   - domain/city-gen
   - domain/stack
-  - status/open
+  - status/adopted
   - scope/m3-plus
   - origin/verification-gate
 ---
 
 # Plan: City-Scale Migration (generate-at-max + crop) — #14
+
+**Status 2026-09-05:** shipped. #14 closed; all seven steps below are closed
+(checklist ticked to match).
 
 **Date:** 2026-06-03 · **Branch:** ~~`spike/city-scale`~~ **promoted spike → dev → main**
 (spike pruned). **Implements:** [[decision-additive-growth-citygen]] · MAX = **Metro 6 km (half 3000)**.
@@ -18,8 +21,8 @@ tags:
 > gate1 PASS + golden reblessed + cross-crop PASS. **Remaining: Step 5 (camera/look follow
 > the crop) + fog #54 (now scoped for camera mobility) — do together; Step 6 (lazy
 > materialisation + per-tile culling); Step 7 (traffic streams, optional).**
-**Source:** the `citygen-extent-audit` workflow (79 coupling sites, 14 rng-count breakers,
-23 gen constants, 15 crop, 7 camera) + an adversarial completeness critic (11 more).
+> **Source:** the `citygen-extent-audit` workflow (79 coupling sites, 14 rng-count breakers,
+> 23 gen constants, 15 crop, 7 camera) + an adversarial completeness critic (11 more).
 
 ## The spine
 
@@ -31,7 +34,7 @@ tags:
   - **WORLD-BOUNDS** (far plane, ground disc, star-dome radius) → follow MAX (never reveal an edge).
   - **LOOK / CAMERA** (fog near/far, haze, resting camera distance, ortho size) → follow the **crop**, not MAX. Atmosphere is look, not bounds.
 - **Generation runs once at MAX, mask-free; the crop is a post-filter.** Never pass the crop
-  mask into `generateTensorStreets` *or* `fillTensorBuildings` (a leaked mask shifts the RNG
+  mask into `generateTensorStreets` _or_ `fillTensorBuildings` (a leaked mask shifts the RNG
   draw sequence → re-rolls the core). Materialisation (meshes/instances) crops; generation never does.
 
 ## Design decisions (made 2026-06-03)
@@ -39,7 +42,7 @@ tags:
 1. **GEN_SCALE separate from CITY_SCALE** (above).
 2. **Lattice ramp keyed off a FIXED reference length** (not `half`): re-express
    `orientationAt` `t = dist/ORIENT_DRIFT_RADIUS` (= 1500) so the field is extent-invariant
-   *and* preserves today's City exactly (ramp saturates past the old radius). Critic #9 — the
+   _and_ preserves today's City exactly (ramp saturates past the old radius). Critic #9 — the
    single most likely golden-snapshot failure.
 3. **`building.id` + `windowSeed` from a quantized world anchor** (not walk-order index/inline
    draw); `fillTensorBuildings` always on the full MAX road set. Critic #1/#2.
@@ -52,42 +55,42 @@ tags:
 ## Ordered steps (gate1 + golden after each)
 
 - [x] **Step 1 — baseline.** `scripts/cityGolden.ts` (capture/check); golden captured for
-  gate1-0..9 BEFORE any change. Added `MAX_HALF_EXTENT=3000` + `GEN_SCALE` to topology.ts
-  (unwired). gate1 + golden + tsc green. ✅
+      gate1-0..9 BEFORE any change. Added `MAX_HALF_EXTENT=3000` + `GEN_SCALE` to topology.ts
+      (unwired). gate1 + golden + tsc green. ✅
 - [x] **Step 2 — pin GEN domain to MAX.** ✅ Re-keyed off GEN_SCALE/MAX: `generateTopology`
-  half → MAX (cascades to the road bbox + district raster via `topo.halfExtent`), tensorField
-  half + N, tensorStreets MAX_PTS, district NET_GRID_STEPS. Lattice ramp → fixed
-  `DRIFT_RADIUS=1500` (decision 2: preserves the core grain, extent-invariant — not keyed to
-  half/MAX/crop). tsc clean.
+      half → MAX (cascades to the road bbox + district raster via `topo.halfExtent`), tensorField
+      half + N, tensorStreets MAX_PTS, district NET_GRID_STEPS. Lattice ramp → fixed
+      `DRIFT_RADIUS=1500` (decision 2: preserves the core grain, extent-invariant — not keyed to
+      half/MAX/crop). tsc clean.
 - [x] **Step 2b — gate1's own coupling.** ✅ slack → `MAX_HALF_EXTENT*1.1`; lattice scan box →
-  ±MAX about CITY_CENTER (critic #3). Cross-crop assert added as `cityGolden.ts crosscrop`
-  (kept separate so gate1 stays a per-seed gate; fold into gate1 once stable).
+      ±MAX about CITY_CENTER (critic #3). Cross-crop assert added as `cityGolden.ts crosscrop`
+      (kept separate so gate1 stays a per-seed gate; fold into gate1 once stable).
 - [x] **Step 3 — rng-count breakers: DROPPED (validated unnecessary).** `crosscrop` PROVES
-  cross-crop invariance holds from Step 2 alone — 0.5⊂1.0⊂2.0 are byte-identical subsets across
-  5 seeds (1406⊂6064⊂22138, …). Because gen runs at FIXED MAX and the crop is a pure
-  post-filter, the rng-count couplings (which only bite when the gen *extent* changes) never
-  fire. The per-cell rewrite is now a FUTURE option only if true lazy *chunked* gen (don't gen
-  off-crop, for memory) is ever wanted. **Its place is taken by a DISCIPLINE (critic #1/#2):
-  `fillTensorBuildings` + `generateTensorStreets` MUST always run on the full MAX domain, never
-  a cropped set — enforced by guard/comment in Step 6.**
+      cross-crop invariance holds from Step 2 alone — 0.5⊂1.0⊂2.0 are byte-identical subsets across
+      5 seeds (1406⊂6064⊂22138, …). Because gen runs at FIXED MAX and the crop is a pure
+      post-filter, the rng-count couplings (which only bite when the gen _extent_ changes) never
+      fire. The per-cell rewrite is now a FUTURE option only if true lazy _chunked_ gen (don't gen
+      off-crop, for memory) is ever wanted. **Its place is taken by a DISCIPLINE (critic #1/#2):
+      `fillTensorBuildings` + `generateTensorStreets` MUST always run on the full MAX domain, never
+      a cropped set — enforced by guard/comment in Step 6.**
 - [x] **Step 4 — circle crop slider spans City→Metro.** ✅ Crop slider max 1.4→2.0 (1.0 ≈ City
-  core, 2.0 ≈ full Metro disc; circle R = CITY_HALF_EXTENT·scale). **Kept `square` = un-cropped
-  full Metro field** (also gate1's full-coverage test artifact) — crop via `circle` (app default).
-  The critic's "square can't crop" gap is resolved by "use circle to crop." No gen change
-  (golden/gate1 unaffected); slider re-filters the cached MAX city (grow = reveal, never re-roll —
-  proven by crosscrop + Step-2 verify). Helper text + makeShapeMask doc corrected. tsc clean.
-- [ ] **Step 5 — camera/look follow the crop (VISUAL — collaborate with the user; can't verify blind).**
-  cameraView.ts:38 H, DEFAULT_ORBIT.radius
-  (sceneStore:98), DEFAULT_ORTHO_SIZE (:264) → crop radius. **Fog near/far, haze, stars/moon
-  (sceneStore:113,120-124,162-179) → crop or literal, NOT doubled MAX** (critic #10 — tracked as #54). Keep zoom
-  clamps (CameraControls:73-74,85-86), Scene far (Scene.tsx:47), ground disc keyed off MAX.
-  Vertical/height values stay unscaled (#47). PlanView BOTH half usages (PlanView:68 + the
-  gridN=70 sample loop :84-99) — critic #11.
-- [ ] **Step 6 — lazy building materialisation.** InstancedMesh per cropped lot, evict/rebuild
-  from seed-only MAX positions (InstancedCity:84). Atlas: pack once at MAX (critic #5).
-  Per-region culling, drop `frustumCulled=false` for chunks (critic #11).
-- [ ] **Step 7 — traffic per-segment streams** (optional sparkle). MAX_CARS vs Metro demand
-  (critic #6): raise cap or accept non-subset.
+      core, 2.0 ≈ full Metro disc; circle R = CITY_HALF_EXTENT·scale). **Kept `square` = un-cropped
+      full Metro field** (also gate1's full-coverage test artifact) — crop via `circle` (app default).
+      The critic's "square can't crop" gap is resolved by "use circle to crop." No gen change
+      (golden/gate1 unaffected); slider re-filters the cached MAX city (grow = reveal, never re-roll —
+      proven by crosscrop + Step-2 verify). Helper text + makeShapeMask doc corrected. tsc clean.
+- [x] **Step 5 — camera/look follow the crop (VISUAL — collaborate with the user; can't verify blind).**
+      cameraView.ts:38 H, DEFAULT_ORBIT.radius
+      (sceneStore:98), DEFAULT_ORTHO_SIZE (:264) → crop radius. **Fog near/far, haze, stars/moon
+      (sceneStore:113,120-124,162-179) → crop or literal, NOT doubled MAX** (critic #10 — tracked as #54). Keep zoom
+      clamps (CameraControls:73-74,85-86), Scene far (Scene.tsx:47), ground disc keyed off MAX.
+      Vertical/height values stay unscaled (#47). PlanView BOTH half usages (PlanView:68 + the
+      gridN=70 sample loop :84-99) — critic #11.
+- [x] **Step 6 — lazy building materialisation.** InstancedMesh per cropped lot, evict/rebuild
+      from seed-only MAX positions (InstancedCity:84). Atlas: pack once at MAX (critic #5).
+      Per-region culling, drop `frustumCulled=false` for chunks (critic #11).
+- [x] **Step 7 — traffic per-segment streams** (optional sparkle). MAX_CARS vs Metro demand
+      (critic #6): raise cap or accept non-subset.
 
 ## Regression guards (in gate1 + cityGolden)
 
@@ -116,12 +119,13 @@ stream (`:96`, sparkle). Plus critic: building id/windowSeed (cityGen.ts:543/637
 ## Risks (from the audit)
 
 Float determinism at the extent change (lattice `t*t` ramp — decision 2 the fix);
-absolute-band district character is a *look* change at MAX (visual check + maybe re-tune);
+absolute-band district character is a _look_ change at MAX (visual check + maybe re-tune);
 Metro one-time gen cost ~2.25× (off-thread per #44 — verify); square can't crop (Step 4);
 camera default-vs-zoom-range split must not invert; MAX_CARS < Metro demand (Step 7).
 
 **MEASURED (Step 2):** gen at MAX ≈ **4 s/city** (15 gens / 59 s wall), full Metro ≈ **22k
 buildings**. The field `sample()` is O(N²) — 256 bases summed per call.
+
 - **NOT a live-slider problem:** heavy gen (`buildTensorRoads`/`fillTensorBuildings`) is cached
   **per seed** (ignores scale); the crop is a cheap post-filter. So the slider RE-FILTERS the
   cached full city — it does NOT re-gen. The 4 s is one-time per seed, off the mount thread (#44).

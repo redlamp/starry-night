@@ -29,14 +29,14 @@ If a request conflicts with the PRD or a `decision-*.md` note, surface the confl
 
 ## Git workflow
 
-**Branches**: `main` ← `dev` ← `feat/*`. Feature off `dev`; delete after merge. Fable-model sessions branch `feat/*` off `fable` instead and merge back into `fable`; `fable` → `dev` needs the usual ship signal. Stay on the current feature branch — a new `feat/*` only when the domain shifts (camera → fog → wiki) or the user closes the concept.
+**Branches**: `main` ← `dev` ← `feat/*`. Feature off `dev`; delete after merge. All sessions, any model, use this chain; the `fable` branch is retired history (2026-09-05, `wiki/notes/decision-fable-branch-retired.md`), never route through it. Stay on the current feature branch — a new `feat/*` only when the domain shifts (camera → fog → wiki) or the user closes the concept.
 **Merge styles** (2026-06-05): feature → dev with `--no-ff`; dev → main with `--ff-only` (main = bookmark on dev's line; tag main per promotion). If `--ff-only` refuses, main has commits dev lacks — back-merge main into dev first, never force.
 **Direct-to-main**: CI/hotfix only, and back-merge into dev the same session.
 **Deploy source**: `main`.
 
 ### Commit, merge, push
 
-- Default on `dev` and its feature branches: do not commit — leave changes uncommitted and report what changed. Commit only on a user signal ("ship it", "commit it", "next", "move on", "yes, commit"). On `fable` and `feat/*` off it, commit per task without waiting; the signal rule applies to merging into `dev`.
+- Default on `dev` and its feature branches: do not commit — leave changes uncommitted and report what changed. Commit only on a user signal ("ship it", "commit it", "next", "move on", "yes, commit"). Agents working in their own worktree commit there per task; the signal rule applies to merging into `dev`.
 - Merge & push run on the same kind of signal as commit — no preview-and-wait dance. A clear ship signal ("ship it", "ready to share", "push it", "merge to main / dev") authorizes the whole chain through push; take it end-to-end without re-confirming each step.
 - Only `--force` / `-f` is hard-gated by `.claude/hooks/git-gate.sh`. Surface a force op, get explicit approval, then prefix that one command with `GIT_GATE_BYPASS=1`.
 - Pushing `main` deploys via the GitHub Pages workflow (outward-facing), so don't push it without a signal that covers shipping ("ship / share / deploy / push" all do).

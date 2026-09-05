@@ -1,0 +1,1299 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Portrait Style Probe - Starry Night</title>
+    <style>
+      :root {
+        --bg: #0b0f16;
+        --panel: #121824;
+        --line: #1f2a3a;
+        --ink: #e6edf7;
+        --dim: #8ea0b8;
+        --accent: #f0b45a;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font: 15px/1.55 ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+        padding: 28px clamp(16px, 4vw, 48px) 96px;
+      }
+      h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: -0.01em; }
+      h2 { font-size: 15px; margin: 36px 0 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--dim); }
+      p.lede { color: var(--dim); margin: 0 0 24px; max-width: 68ch; }
+      .controls {
+        display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+        padding: 14px 16px; background: var(--panel);
+        border: 1px solid var(--line); border-radius: 10px; margin-bottom: 8px;
+      }
+      label { font-size: 13px; color: var(--dim); display: flex; align-items: center; gap: 8px; }
+      input[type="text"] {
+        background: #0a0e15; color: var(--ink); border: 1px solid var(--line);
+        border-radius: 6px; padding: 7px 10px; font: inherit; font-size: 14px; width: 190px;
+      }
+      button {
+        background: #1b2536; color: var(--ink); border: 1px solid var(--line);
+        border-radius: 6px; padding: 7px 14px; font: inherit; font-size: 14px; cursor: pointer;
+      }
+      button:hover { border-color: var(--accent); }
+      .styles { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(272px, 1fr)); }
+      .tile {
+        background: var(--panel); border: 1px solid var(--line);
+        border-radius: 10px; padding: 14px; text-align: center;
+      }
+      /* Canvases are shown at their intrinsic pixel size. Letting CSS scale a
+         1-bit dither pattern is what produces moire - the pattern beats against
+         the resample grid. Fixed size, nearest-neighbour, no resampling. */
+      .tile canvas {
+        width: 240px; height: 240px; display: block; margin: 0 auto;
+        border-radius: 6px; image-rendering: pixelated;
+      }
+      .tile .name { margin-top: 10px; font-size: 14px; font-weight: 600; }
+      .tile .desc { font-size: 13px; color: var(--dim); margin-top: 2px; }
+      .sheet { display: grid; grid-template-columns: repeat(auto-fill, 64px); gap: 8px; }
+      .sheet canvas { width: 64px; height: 64px; border-radius: 4px; display: block; image-rendering: pixelated; }
+      .row48 { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+      .row48 canvas { width: 48px; height: 48px; border-radius: 3px; image-rendering: pixelated; }
+      .card {
+        display: flex; gap: 14px; align-items: flex-start; max-width: 460px;
+        background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px;
+      }
+      .card canvas, .card svg { width: 96px; height: 96px; border-radius: 6px; flex: none; }
+      .card .who { font-size: 15px; font-weight: 600; }
+      .card .meta { font-size: 13px; color: var(--dim); }
+      .card .hook { font-size: 13px; margin-top: 8px; }
+      .note { color: var(--dim); font-size: 13px; max-width: 72ch; margin: 8px 0 0; }
+      .tabs { display: flex; gap: 6px; margin: 18px 0 4px; border-bottom: 1px solid var(--line); }
+      .tab {
+        background: none; border: none; border-bottom: 2px solid transparent;
+        border-radius: 0; padding: 9px 14px; color: var(--dim); cursor: pointer; font-size: 14px;
+      }
+      .tab:hover { color: var(--ink); }
+      .tab.is-active { color: var(--ink); border-bottom-color: var(--accent); }
+
+      /* The pedigree is absolutely positioned on a known grid so the connector
+         SVG can be drawn from computed coordinates instead of measured ones. */
+      .pedigree { position: relative; margin-top: 14px; overflow-x: auto; }
+      .pedigree-inner { position: relative; }
+      .pedigree svg { position: absolute; inset: 0; pointer-events: none; }
+      .person { position: absolute; width: 104px; text-align: center; }
+      .person canvas { width: 104px; height: 104px; border-radius: 6px; display: block; }
+      .person .who { font-size: 13px; margin-top: 6px; }
+      .person .carried { font-size: 11px; color: var(--dim); line-height: 1.35; margin-top: 2px; }
+      .person .chips { display: flex; gap: 3px; justify-content: center; margin-top: 5px; }
+      .person .chip {
+        width: 16px; height: 16px; border-radius: 3px; border: 1px solid rgba(255,255,255,0.18);
+      }
+      .gen-label {
+        position: absolute; font-size: 12px; letter-spacing: 0.08em;
+        text-transform: uppercase; color: var(--dim);
+      }
+
+      .swatches { display: grid; grid-template-columns: repeat(32, 1fr); gap: 2px; max-width: 780px; }
+      .swatches div { aspect-ratio: 1; border-radius: 2px; }
+
+      .row-strip { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; margin-top: 12px; }
+      .row-strip figure { margin: 0; text-align: center; }
+      .row-strip canvas { display: block; border-radius: 6px; }
+      .row-strip figcaption { font-size: 12px; color: var(--dim); margin-top: 5px; }
+      .morph-row { display: flex; gap: 12px; align-items: center; margin-top: 12px; }
+      .morph-row .rowlabel { width: 132px; font-size: 13px; color: var(--dim); flex: none; }
+      .morph-row canvas { display: block; border-radius: 6px; }
+    </style>
+  </head>
+  <body>
+    <h1>Portrait Style Probe</h1>
+    <p class="lede">
+      Four candidate directions for resident portraits, all drawn from the same seeded genome so you can
+      compare the same face across treatments. Everything here is generated in code - no image files.
+      This is a shape-and-treatment probe, not final art: the point is to judge legibility, silhouette,
+      and how the styles survive 48px next to 240px.
+    </p>
+
+    <div class="controls">
+      <label>Seed <input type="text" id="seed" value="fairhaven" /></label>
+      <button id="reroll">Reroll</button>
+      <label>Contact sheet style
+        <select id="sheetStyle">
+          <option value="line">Line Art</option>
+          <option value="flat">Flat Vector</option>
+          <option value="mac">Compact Mac</option>
+          <option value="dither">1-Bit Dither</option>
+        </select>
+      </label>
+      <label>Palette
+        <select id="paletteMode">
+          <option value="natural">Natural</option>
+          <option value="mac256">Mac OS 256</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="tabs" role="tablist">
+      <button class="tab is-active" data-tab="portraits" role="tab">Portraits</button>
+      <button class="tab" data-tab="palette" role="tab">Mac OS 256 Palette</button>
+      <button class="tab" data-tab="morph" role="tab">Morph Axes</button>
+    </div>
+
+    <section id="tab-portraits">
+    <h2>One Resident, Four Treatments</h2>
+    <div class="styles" id="styles"></div>
+
+    <h2>On A Character Card</h2>
+    <div class="card" id="card"></div>
+
+    <h2>Inheritance - Three Generations</h2>
+    <p class="note">
+      Continuous genes (jaw width, eye spacing, nose length, skin value) blend toward the midparent with
+      a bell-shaped deviation. Categorical genes (head shape, hair style, hair colour, eye shape) are
+      diploid: each person carries two alleles and passes one at random, so a grandparent's trait can sit
+      hidden in a parent and resurface in a grandchild. Carried-but-not-expressed alleles are listed under
+      each face. Accessories, shirt and tilt are personal, never inherited.
+    </p>
+    <div class="pedigree" id="pedigree"></div>
+
+    <h2>Contact Sheet - 48 Residents At 64px</h2>
+    <p class="note">
+      The repetition test. Scan for twins. If two faces read as the same person at this size the part
+      library is too small or the silhouette layer is not doing enough work.
+    </p>
+    <div class="sheet" id="sheet"></div>
+
+    <h2>Silhouette Test At 48px</h2>
+    <p class="note">
+      Flat black on card background, interior detail removed. If these are not distinguishable from each
+      other, no amount of interior linework will save the small size.
+    </p>
+    <div class="row48" id="silhouettes"></div>
+    </section>
+
+    <section id="tab-palette" hidden>
+      <h2>Colour Lineage</h2>
+      <p class="note">
+        Skin, hair and shirt each carry a continuous RGB gene that blends midparent-style, then snaps to
+        the nearest palette entry at render time. A child of a red parent and a blue parent comes out
+        purple - quantized, but recognisably descended from both. Hair additionally rejects any entry
+        within 48 luminance of the skin it sits on, which is what stops pale-on-pale reading as a bald
+        head. Switch Palette to "Mac OS 256" to see it on the portraits themselves.
+      </p>
+      <div class="pedigree" id="palettePedigree"></div>
+
+      <h2>The Palette</h2>
+      <p class="note">
+        The classic Mac OS 8-bit system palette: a 6x6x6 colour cube on the levels 255/204/153/102/51/0,
+        then 10-step pure red, green, blue and grey ramps on the multiples of 17 the cube skips.
+        216 + 40 = 256. Hover a swatch for its index and hex.
+      </p>
+      <div class="swatches" id="swatches"></div>
+    </section>
+
+    <section id="tab-morph" hidden>
+      <h2>The Axis Alone</h2>
+      <p class="note">
+        One mouth path, interpolated from a thin line to full lips. These are not two shapes: the line
+        is the lip shape with both contours collapsed onto each other, so the two share an identical
+        command sequence and only the numbers differ. That is the whole requirement for interpolation,
+        and it is the constraint a Figma file has to satisfy on export.
+      </p>
+      <div class="row-strip" id="mouthStrip"></div>
+
+      <h2>On A Face</h2>
+      <p class="note">Same genome, same everything else, only the lip weight moving.</p>
+      <div class="row-strip" id="mouthFaces"></div>
+
+      <h2>Combined With Proportion</h2>
+      <p class="note">
+        The lip axis crossed with the proportion cues that carry a masculine or feminine read (jaw
+        width, brow weight, brow height). The axes are independent: a heavy jaw with full lips and a
+        narrow jaw with a line mouth are both reachable, which is what stops the morph from smuggling
+        in a gender assumption.
+      </p>
+      <div id="morphGrid"></div>
+    </section>
+
+    <script>
+      // ---------------------------------------------------------------------
+      // Seeded RNG. FNV-1a hash into mulberry32 - same shape as the real
+      // system's named streams, kept self-contained for the probe.
+      // ---------------------------------------------------------------------
+      function hash(str) {
+        let h = 2166136261 >>> 0;
+        for (let i = 0; i < str.length; i++) {
+          h ^= str.charCodeAt(i);
+          h = Math.imul(h, 16777619) >>> 0;
+        }
+        return h >>> 0;
+      }
+      function rngFrom(str) {
+        let a = hash(str);
+        return function () {
+          a |= 0; a = (a + 0x6d2b79f5) | 0;
+          let t = Math.imul(a ^ (a >>> 15), 1 | a);
+          t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+          return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+        };
+      }
+      const pick = (r, arr) => arr[Math.floor(r() * arr.length)];
+      const range = (r, lo, hi) => lo + r() * (hi - lo);
+      const irange = (r, lo, hi) => Math.floor(range(r, lo, hi + 1));
+
+      // ---------------------------------------------------------------------
+      // Palette. Skin tones are authored values, evenly spaced in perceived
+      // lightness - not a hue rotation of one base tone.
+      // ---------------------------------------------------------------------
+      const SKIN = ["#f3d3bd", "#e8bd9a", "#d29b76", "#b5794f", "#8d5a39", "#66412a", "#472d1d"];
+      const HAIR = ["#1a1512", "#2f2018", "#4a3121", "#6b4a2a", "#8a6b3a", "#b08e55", "#9a9a9a", "#d8d3c8"];
+      const SHIRT = ["#2b3a52", "#3d3348", "#42403a", "#2f4a45", "#4a3535", "#37425c"];
+
+      // ---------------------------------------------------------------------
+      // The classic Mac OS 8-bit system palette, reconstructed: a 6x6x6 colour
+      // cube on the levels {255,204,153,102,51,0}, then 10-step pure red,
+      // green, blue and grey ramps on the multiples of 17 the cube skips.
+      // 216 + 40 = 256.
+      // ---------------------------------------------------------------------
+      const MAC256 = (() => {
+        const out = [];
+        const cube = [255, 204, 153, 102, 51, 0];
+        for (const r of cube) for (const g of cube) for (const b of cube) out.push([r, g, b]);
+        const ramp = [238, 221, 187, 170, 136, 119, 85, 68, 34, 17];
+        for (const v of ramp) out.push([v, 0, 0]);
+        for (const v of ramp) out.push([0, v, 0]);
+        for (const v of ramp) out.push([0, 0, v]);
+        for (const v of ramp) out.push([v, v, v]);
+        return out;
+      })();
+
+      const hex3 = ([r, g, b]) =>
+        "#" + [r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("");
+      const lum3 = ([r, g, b]) => 0.2126 * r + 0.7152 * g + 0.0722 * b;
+
+      // Nearest palette entry by squared RGB distance. `avoid` lets the caller
+      // reject entries too close in luminance to something already placed -
+      // this is the contrast rule that stops pale hair on pale skin reading as
+      // a bald head.
+      function snapMac(rgb, avoidLum) {
+        let best = 0, bestD = Infinity;
+        for (let i = 0; i < MAC256.length; i++) {
+          const c = MAC256[i];
+          if (avoidLum !== undefined && Math.abs(lum3(c) - avoidLum) < 48) continue;
+          const d = (c[0] - rgb[0]) ** 2 + (c[1] - rgb[1]) ** 2 + (c[2] - rgb[2]) ** 2;
+          if (d < bestD) { bestD = d; best = i; }
+        }
+        return best;
+      }
+
+      // ---------------------------------------------------------------------
+      // Morph targets. Every target for a slot shares ONE command template and
+      // differs only in the numbers - which is exactly the constraint SVG path
+      // interpolation imposes, and exactly what a Figma file has to guarantee
+      // on export. The "thin line" mouth is not a different shape: it is the
+      // full-lip shape with the two lip contours collapsed onto each other, so
+      // the two remain structurally identical and can be interpolated.
+      //
+      // Coordinates are in a unit box: x is +/-1 of mouth half-width, y is in
+      // lip units, positive downward.
+      // ---------------------------------------------------------------------
+      const MOUTH_TPL = "M # # C # # # # # # C # # # # # # C # # # # # # C # # # # # # Z";
+
+      // left corner | -> centre top | -> right corner | -> centre bottom | -> back
+      const MOUTH_LINE = [
+        -1, 0,
+        -0.55, -0.05, -0.25, -0.06, 0, -0.06,
+        0.25, -0.06, 0.55, -0.05, 1, 0,
+        0.55, 0.05, 0.25, 0.06, 0, 0.06,
+        -0.25, 0.06, -0.55, 0.05, -1, 0,
+      ];
+      const MOUTH_FULL = [
+        -1, 0,
+        -0.60, -0.62, -0.22, -0.62, 0, -0.28,
+        0.22, -0.62, 0.60, -0.62, 1, 0,
+        0.62, 0.32, 0.30, 0.64, 0, 0.64,
+        -0.30, 0.64, -0.62, 0.32, -1, 0,
+      ];
+
+      // Corner and near-corner y indices, used to swing the mouth line into a
+      // smile or a frown after the morph without needing a third target.
+      const MOUTH_CORNER_Y = [1, 13];
+      const MOUTH_NEAR_Y = [3, 11, 15, 23];
+
+      function lerpNums(a, b, t) {
+        const out = new Array(a.length);
+        for (let i = 0; i < a.length; i++) out[i] = a[i] + (b[i] - a[i]) * t;
+        return out;
+      }
+
+      function fillTpl(tpl, nums) {
+        let i = 0;
+        return tpl.replace(/#/g, () => nums[i++].toFixed(3));
+      }
+
+      function mouthNums(g) {
+        const n = lerpNums(MOUTH_LINE, MOUTH_FULL, g.lipFullness);
+        const lift = g.mouthCurve * 1.3;
+        for (const i of MOUTH_CORNER_Y) n[i] += lift;
+        for (const i of MOUTH_NEAR_Y) n[i] += lift * 0.7;
+        return n;
+      }
+
+      // Returns a Path2D already placed on the face.
+      function mouthPath2D(a, g, my) {
+        const p = new Path2D(fillTpl(MOUTH_TPL, mouthNums(g)));
+        const out = new Path2D();
+        out.addPath(p, new DOMMatrix()
+          .translate(a.cx, my)
+          .scaleNonUniform(a.headW * g.mouthWidth, a.headH * (g.lipUnit ?? 0.105)));
+        return out;
+      }
+
+      // Late genes, drawn after everything else so adding them left every
+      // earlier value untouched.
+      const LATE = { lipFullness: [0, 1] };
+
+      // Arbitrary colour genes. Meaningless in Natural mode, but inherited
+      // regardless so a lineage keeps its colours across a mode switch. Stored
+      // as continuous RGB and snapped to the palette at render time, so a child
+      // of a red parent and a blue parent comes out purple - quantized, but
+      // recognisably descended from both.
+      const MACGENE = {
+        skinR: [0, 255], skinG: [0, 255], skinB: [0, 255],
+        hairR: [0, 255], hairG: [0, 255], hairB: [0, 255],
+        shirtR: [0, 255], shirtG: [0, 255], shirtB: [0, 255],
+      };
+
+      // ---------------------------------------------------------------------
+      // The genome. Every field is an index or a normalized slider. This is
+      // the shape the real implementation would derive from persona streams
+      // and hand to the renderer - the renderer never rolls dice itself.
+      // ---------------------------------------------------------------------
+      // Continuous genes: [lo, hi]. Everything here is a fraction of head width
+      // or head height, never of the canvas - otherwise features drift off the
+      // face as the head shape changes. Blended midparent-style in children.
+      const CONT = {
+        jawWidth: [0.78, 1.14],
+        chinPoint: [0.0, 1.0],
+        browHeight: [0.38, 0.48],
+        browWeight: [0.6, 2.2],
+        browAngle: [-0.16, 0.16],
+        eyeSpacing: [0.21, 0.28],  // x headW, from centre
+        eyeSize: [0.085, 0.125],   // x headW
+        noseLength: [0.13, 0.20],  // x headH
+        noseWidth: [0.07, 0.12],   // x headW
+        mouthWidth: [0.17, 0.27],  // x headW
+        mouthCurve: [-0.35, 0.25],
+        earSize: [0.060, 0.085],   // x headH
+        hairline: [0.14, 0.30],
+      };
+      // Diploid categorical genes: each carries two alleles. Index 0 is the one
+      // expressed; index 1 is carried silently and can surface in a grandchild.
+      // This is what makes a face skip a generation the way real ones do.
+      const DIP = { headShape: 4, eyeShape: 3, hairStyle: 8, hair: HAIR.length };
+
+      const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
+
+      // Traits that are the individual's own, never inherited: accessories the
+      // person chose, the shirt they happen to be wearing, head tilt.
+      function personal(r) {
+        return {
+          facialHair: r() < 0.28 ? irange(r, 1, 3) : 0,
+          glasses: r() < 0.22 ? irange(r, 1, 2) : 0,
+          shirt: irange(r, 0, SHIRT.length - 1),
+          tilt: range(r, -0.04, 0.04),
+        };
+      }
+
+      function genome(seed) {
+        const r = rngFrom(seed);
+        const g = {};
+        for (const k in CONT) g[k] = range(r, CONT[k][0], CONT[k][1]);
+        for (const k in DIP) g[k] = [irange(r, 0, DIP[k] - 1), irange(r, 0, DIP[k] - 1)];
+        // Skin is polygenic, not a single allele - a continuous value that
+        // rounds to a palette step. Two mid-tone parents cannot produce a child
+        // outside their range, which a naive dominant/recessive model allows.
+        g.skinValue = range(r, 0, SKIN.length - 1);
+        Object.assign(g, personal(r));
+        // Drawn last so adding the palette layer left every earlier value -
+        // and so every face in the natural-mode screenshots - untouched.
+        for (const k in MACGENE) g[k] = range(r, MACGENE[k][0], MACGENE[k][1]);
+        for (const k in LATE) g[k] = range(r, LATE[k][0], LATE[k][1]);
+        return g;
+      }
+
+      // Meiosis: a parent passes one of its two alleles at random.
+      const meiose = (r, pair) => pair[r() < 0.5 ? 0 : 1];
+
+      function childGenome(seed, ma, pa) {
+        const r = rngFrom(seed);
+        const g = {};
+        // Continuous: midparent value plus a deviation. Sum-of-three keeps the
+        // spread bell-shaped, so most children land close to the parent average
+        // and the occasional one is a visible outlier.
+        for (const k in CONT) {
+          const [lo, hi] = CONT[k];
+          const mid = (ma[k] + pa[k]) / 2;
+          g[k] = clamp(mid + (r() + r() + r() - 1.5) * (hi - lo) * 0.26, lo, hi);
+        }
+        // Categorical: one allele from each parent, order randomised so which
+        // one expresses is its own coin flip.
+        for (const k in DIP) {
+          const a = meiose(r, ma[k]);
+          const b = meiose(r, pa[k]);
+          g[k] = r() < 0.5 ? [a, b] : [b, a];
+        }
+        g.skinValue = clamp(
+          (ma.skinValue + pa.skinValue) / 2 + (r() + r() + r() - 1.5) * 0.55,
+          0, SKIN.length - 1
+        );
+        Object.assign(g, personal(r));
+        // Palette colours blend in RGB, so a lineage drifts rather than
+        // snapping between two ancestral colours.
+        for (const k in MACGENE) {
+          const [lo, hi] = MACGENE[k];
+          g[k] = clamp((ma[k] + pa[k]) / 2 + (r() + r() + r() - 1.5) * 42, lo, hi);
+        }
+        // Morph weights are continuous genes like any other: midparent blend
+        // plus deviation. This is the payoff of path morphing over swapping
+        // discrete parts - a lip shape can actually be inherited by degree.
+        for (const k in LATE) {
+          const [lo, hi] = LATE[k];
+          g[k] = clamp((ma[k] + pa[k]) / 2 + (r() + r() + r() - 1.5) * (hi - lo) * 0.26, lo, hi);
+        }
+        return g;
+      }
+
+      // What the renderer actually reads: expressed alleles only, with colours
+      // already resolved to hex so the renderer never touches a palette.
+      function expressed(g, mode) {
+        const e = {
+          ...g,
+          headShape: g.headShape[0],
+          eyeShape: g.eyeShape[0],
+          hairStyle: g.hairStyle[0],
+          hair: g.hair[0],
+          skin: Math.round(g.skinValue),
+        };
+        if (mode === "mac256") {
+          e.macSkin = snapMac([g.skinR, g.skinG, g.skinB]);
+          e.macHair = snapMac([g.hairR, g.hairG, g.hairB], lum3(MAC256[e.macSkin]));
+          e.macShirt = snapMac([g.shirtR, g.shirtG, g.shirtB]);
+          e.skinHex = hex3(MAC256[e.macSkin]);
+          e.hairHex = hex3(MAC256[e.macHair]);
+          e.shirtHex = hex3(MAC256[e.macShirt]);
+        } else {
+          e.skinHex = SKIN[e.skin];
+          e.hairHex = HAIR[e.hair];
+          e.shirtHex = SHIRT[g.shirt];
+        }
+        return e;
+      }
+
+      // ---------------------------------------------------------------------
+      // Shared construction grid. Every part is drawn against these anchors so
+      // any combination of parts lines up. S = canvas size, all coords are
+      // fractions of S.
+      // ---------------------------------------------------------------------
+      function anchors(g, S) {
+        const cx = S * 0.5;
+        const headTop = S * 0.16;
+        const headBot = S * 0.70;
+        const headH = headBot - headTop;
+        const headW = headH * (0.70 + (g.jawWidth - 0.96) * 0.35);
+        return { cx, headTop, headBot, headH, headW, eyeY: headTop + headH * g.browHeight + headH * 0.08 };
+      }
+
+      // Draw the bust as filled shapes on a 2D context. `mode` switches between
+      // a full-tone render (used by the dither and CRT passes) and flat fills.
+      function drawBust(ctx, g, S, mode) {
+        const a = anchors(g, S);
+        const skin = g.skinHex;
+        const hairCol = g.hairHex;
+
+        ctx.save();
+        ctx.translate(a.cx, S * 0.5);
+        ctx.rotate(g.tilt);
+        ctx.translate(-a.cx, -S * 0.5);
+
+        // Shoulders
+        ctx.fillStyle = g.shirtHex;
+        ctx.beginPath();
+        ctx.moveTo(a.cx - S * 0.42, S);
+        ctx.quadraticCurveTo(a.cx - S * 0.34, S * 0.78, a.cx - S * 0.15, S * 0.72);
+        ctx.lineTo(a.cx + S * 0.15, S * 0.72);
+        ctx.quadraticCurveTo(a.cx + S * 0.34, S * 0.78, a.cx + S * 0.42, S);
+        ctx.closePath();
+        ctx.fill();
+
+        // Neck
+        ctx.fillStyle = shade(skin, -0.14);
+        ctx.fillRect(a.cx - a.headW * 0.18, a.headBot - a.headH * 0.08, a.headW * 0.36, S * 0.12);
+
+        // Ears, tucked at the head edge so the head outline overdraws them
+        ctx.fillStyle = shade(skin, -0.08);
+        for (const s of [-1, 1]) {
+          ctx.beginPath();
+          ctx.ellipse(a.cx + s * a.headW * 0.47, a.eyeY + a.headH * 0.05,
+            a.headH * g.earSize * 0.62, a.headH * g.earSize, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // Head. Shape index changes the silhouette, not just the width.
+        ctx.fillStyle = skin;
+        ctx.beginPath();
+        headPath(ctx, a, g);
+        ctx.fill();
+
+        // Cheek/jaw shading gives the dither pass something to work with
+        if (mode === "tone") {
+          const grad = ctx.createLinearGradient(a.cx - a.headW * 0.5, 0, a.cx + a.headW * 0.55, 0);
+          grad.addColorStop(0, "rgba(0,0,0,0.30)");
+          grad.addColorStop(0.42, "rgba(0,0,0,0.0)");
+          grad.addColorStop(1, "rgba(0,0,0,0.24)");
+          ctx.save();
+          ctx.beginPath(); headPath(ctx, a, g); ctx.clip();
+          ctx.fillStyle = grad;
+          ctx.fillRect(0, 0, S, S);
+          ctx.restore();
+        }
+
+        // Hair. Drawn as a silhouette mass over the skull, style-indexed.
+        ctx.fillStyle = hairCol;
+        hairPath(ctx, a, g, S);
+
+        // Brows
+        ctx.strokeStyle = shade(hairCol, -0.12);
+        ctx.lineWidth = Math.max(1, S * 0.006 * g.browWeight);
+        ctx.lineCap = "round";
+        const eyeDx = a.headW * g.eyeSpacing;
+        const eyeR = a.headW * g.eyeSize;
+        for (const s of [-1, 1]) {
+          const bx = a.cx + s * eyeDx;
+          const by = a.eyeY - a.headH * 0.10;
+          ctx.beginPath();
+          ctx.moveTo(bx - eyeR * 1.35, by + s * g.browAngle * a.headH * 0.14);
+          ctx.lineTo(bx + eyeR * 1.15, by - s * g.browAngle * a.headH * 0.14);
+          ctx.stroke();
+        }
+
+        // Eyes
+        for (const s of [-1, 1]) {
+          const ex = a.cx + s * eyeDx;
+          ctx.fillStyle = "#f4f1ea";
+          ctx.beginPath();
+          if (g.eyeShape === 0) ctx.ellipse(ex, a.eyeY, eyeR, eyeR * 0.58, 0, 0, Math.PI * 2);
+          else if (g.eyeShape === 1) ctx.ellipse(ex, a.eyeY, eyeR * 0.92, eyeR * 0.44, 0, 0, Math.PI * 2);
+          else ctx.ellipse(ex, a.eyeY, eyeR * 0.9, eyeR * 0.72, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = "#161014";
+          ctx.beginPath();
+          ctx.arc(ex, a.eyeY, eyeR * 0.52, 0, Math.PI * 2);
+          ctx.fill();
+          // Upper lid: cuts the sclera down so the eye reads as an eye rather
+          // than a googly disc. Costs one stroke, buys most of the realism.
+          ctx.strokeStyle = shade(skin, -0.34);
+          ctx.lineWidth = Math.max(1, eyeR * 0.20);
+          ctx.beginPath();
+          ctx.moveTo(ex - eyeR * 1.02, a.eyeY - eyeR * 0.18);
+          ctx.quadraticCurveTo(ex, a.eyeY - eyeR * 0.86, ex + eyeR * 1.02, a.eyeY - eyeR * 0.18);
+          ctx.stroke();
+        }
+
+        // Nose - a shadow plane rather than an outline
+        const noseY = a.eyeY + a.headH * g.noseLength;
+        const noseW = a.headW * g.noseWidth;
+        ctx.fillStyle = shade(skin, -0.16);
+        ctx.beginPath();
+        ctx.moveTo(a.cx - noseW, noseY);
+        ctx.quadraticCurveTo(a.cx - noseW * 0.2, noseY + a.headH * 0.022, a.cx + noseW * 0.5, noseY);
+        ctx.lineTo(a.cx + noseW * 0.06, a.eyeY + a.headH * 0.02);
+        ctx.closePath();
+        ctx.fill();
+
+        // Mouth - a filled morph between a thin line and full lips, not a
+        // stroke, so the same path serves both ends of the axis.
+        const mouthW = a.headW * g.mouthWidth;
+        const my = noseY + a.headH * 0.135;
+        ctx.fillStyle = shade(skin, -0.38);
+        ctx.fill(mouthPath2D(a, g, my));
+
+        // Facial hair
+        if (g.facialHair) {
+          ctx.fillStyle = hairCol;
+          ctx.globalAlpha = 0.92;
+          if (g.facialHair === 1) {
+            ctx.fillRect(a.cx - mouthW * 0.85, my - a.headH * 0.075, mouthW * 1.7, a.headH * 0.038);
+          } else {
+            ctx.save();
+            ctx.beginPath(); headPath(ctx, a, g); ctx.clip();
+            ctx.beginPath();
+            ctx.ellipse(a.cx, my + S * 0.03, a.headW * 0.46, a.headH * (g.facialHair === 3 ? 0.30 : 0.20), 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+            ctx.fillStyle = skin;
+            ctx.beginPath();
+            ctx.ellipse(a.cx, my - a.headH * 0.012, mouthW * 0.9, a.headH * 0.045, 0, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          ctx.globalAlpha = 1;
+        }
+
+        // Glasses
+        if (g.glasses) {
+          const lensR = eyeR * 1.55;
+          ctx.strokeStyle = g.glasses === 1 ? "#20242c" : "#6d5638";
+          ctx.lineWidth = Math.max(1, a.headW * 0.020);
+          for (const s of [-1, 1]) {
+            ctx.beginPath();
+            ctx.ellipse(a.cx + s * eyeDx, a.eyeY, lensR, lensR * 0.84, 0, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+          ctx.beginPath();
+          ctx.moveTo(a.cx - eyeDx + lensR, a.eyeY);
+          ctx.lineTo(a.cx + eyeDx - lensR, a.eyeY);
+          ctx.stroke();
+          for (const s of [-1, 1]) {
+            ctx.beginPath();
+            ctx.moveTo(a.cx + s * (eyeDx + lensR), a.eyeY);
+            ctx.lineTo(a.cx + s * a.headW * 0.5, a.eyeY + a.headH * 0.02);
+            ctx.stroke();
+          }
+        }
+
+        ctx.restore();
+      }
+
+      function headPath(ctx, a, g) {
+        const { cx, headTop, headBot, headW, headH } = a;
+        const hw = headW * 0.5;
+        const chin = headBot - headH * g.chinPoint * 0.06;
+        ctx.moveTo(cx, headTop);
+        if (g.headShape === 1) {
+          // squarer
+          ctx.lineTo(cx + hw, headTop + headH * 0.20);
+          ctx.lineTo(cx + hw * 0.94, chin - headH * 0.14);
+          ctx.quadraticCurveTo(cx + hw * 0.72, chin, cx, chin);
+          ctx.quadraticCurveTo(cx - hw * 0.72, chin, cx - hw * 0.94, chin - headH * 0.14);
+          ctx.lineTo(cx - hw, headTop + headH * 0.20);
+        } else if (g.headShape === 2) {
+          // round
+          ctx.quadraticCurveTo(cx + hw * 1.06, headTop + headH * 0.06, cx + hw, headTop + headH * 0.45);
+          ctx.quadraticCurveTo(cx + hw * 0.92, chin, cx, chin);
+          ctx.quadraticCurveTo(cx - hw * 0.92, chin, cx - hw, headTop + headH * 0.45);
+          ctx.quadraticCurveTo(cx - hw * 1.06, headTop + headH * 0.06, cx, headTop);
+        } else if (g.headShape === 3) {
+          // long
+          ctx.quadraticCurveTo(cx + hw * 0.96, headTop + headH * 0.04, cx + hw * 0.88, headTop + headH * 0.5);
+          ctx.quadraticCurveTo(cx + hw * 0.62, chin + headH * 0.03, cx, chin + headH * 0.04);
+          ctx.quadraticCurveTo(cx - hw * 0.62, chin + headH * 0.03, cx - hw * 0.88, headTop + headH * 0.5);
+          ctx.quadraticCurveTo(cx - hw * 0.96, headTop + headH * 0.04, cx, headTop);
+        } else {
+          // oval
+          ctx.quadraticCurveTo(cx + hw, headTop + headH * 0.02, cx + hw, headTop + headH * 0.42);
+          ctx.quadraticCurveTo(cx + hw * 0.86, chin, cx, chin);
+          ctx.quadraticCurveTo(cx - hw * 0.86, chin, cx - hw, headTop + headH * 0.42);
+          ctx.quadraticCurveTo(cx - hw, headTop + headH * 0.02, cx, headTop);
+        }
+        ctx.closePath();
+      }
+
+      // The skull, grown a little. Hair is drawn as this shape clipped at the
+      // hairline, so a cap can never sit lower or wider than the head it is on.
+      // Path segments are transformed as they are added, so the path survives
+      // the restore() and can be used for clip() afterwards.
+      function skullPath(ctx, a, g, grow) {
+        ctx.save();
+        ctx.translate(a.cx, a.headBot);
+        ctx.scale(grow, grow);
+        ctx.translate(-a.cx, -a.headBot);
+        ctx.beginPath();
+        headPath(ctx, a, g);
+        ctx.restore();
+      }
+
+      // Hairline shapes, drawn left to right across the skull. Each returns the
+      // fill region between the top of the frame and the hairline curve; the
+      // skull clip does the rest of the work.
+      function hairlineRegion(ctx, a, g, hl) {
+        const { cx, headW, headH, headTop } = a;
+        const hw = headW * 0.5;
+        const top = headTop - headH * 0.5;
+        ctx.beginPath();
+        ctx.moveTo(cx - hw * 1.6, top);
+        ctx.lineTo(cx + hw * 1.6, top);
+        ctx.lineTo(cx + hw * 1.6, hl);
+        switch (g.hairStyle) {
+          case 1: // side part - high on one side, sweeping down to the other
+            ctx.quadraticCurveTo(cx + hw * 0.2, hl - headH * 0.05, cx - hw * 0.3, hl + headH * 0.05);
+            ctx.quadraticCurveTo(cx - hw * 1.1, hl + headH * 0.13, cx - hw * 1.6, hl + headH * 0.06);
+            break;
+          case 5: // receding - deep temple notches, widow's peak in the middle
+            ctx.quadraticCurveTo(cx + hw * 0.75, hl + headH * 0.20, cx + hw * 0.30, hl + headH * 0.03);
+            ctx.quadraticCurveTo(cx, hl - headH * 0.06, cx - hw * 0.30, hl + headH * 0.03);
+            ctx.quadraticCurveTo(cx - hw * 0.75, hl + headH * 0.20, cx - hw * 1.6, hl);
+            break;
+          case 7: // shaved - hairline sits low, drawn faint by the caller
+            ctx.quadraticCurveTo(cx, hl + headH * 0.16, cx - hw * 1.6, hl);
+            break;
+          default: // an even hairline with a slight downward curve at centre
+            ctx.quadraticCurveTo(cx, hl + headH * 0.11, cx - hw * 1.6, hl);
+        }
+        ctx.closePath();
+      }
+
+      function hairPath(ctx, a, g, S) {
+        const { cx, headTop, headW, headH } = a;
+        const hw = headW * 0.5;
+        // Hairline measured from the crown, so it tracks the top of the head
+        // rather than floating at a fixed fraction of the canvas.
+        const hl = headTop + headH * (g.hairStyle === 5 ? g.hairline * 0.9 + 0.10 : g.hairline * 0.6 + 0.04);
+
+        // Masses that legitimately sit outside the skull: length, volume, buns.
+        ctx.beginPath();
+        switch (g.hairStyle) {
+          case 2: // long, falling past the jaw on both sides
+            ctx.moveTo(cx - hw * 1.14, a.headBot + headH * 0.20);
+            ctx.quadraticCurveTo(cx - hw * 1.24, hl, cx - hw * 0.55, hl - headH * 0.04);
+            ctx.lineTo(cx + hw * 0.55, hl - headH * 0.04);
+            ctx.quadraticCurveTo(cx + hw * 1.24, hl, cx + hw * 1.14, a.headBot + headH * 0.20);
+            ctx.quadraticCurveTo(cx + hw * 1.02, a.headBot - headH * 0.10, cx + hw * 0.94, hl + headH * 0.10);
+            ctx.lineTo(cx - hw * 0.94, hl + headH * 0.10);
+            ctx.quadraticCurveTo(cx - hw * 1.02, a.headBot - headH * 0.10, cx - hw * 1.14, a.headBot + headH * 0.20);
+            break;
+          case 3: // volume, standing proud of the skull all round
+            ctx.ellipse(cx, headTop + headH * 0.14, hw * 1.24, headH * 0.36, 0, 0, Math.PI * 2);
+            break;
+          case 4: // bun above the crown
+            ctx.arc(cx, headTop - headH * 0.06, headH * 0.13, 0, Math.PI * 2);
+            break;
+          case 6: // bob, ending around mid-cheek
+            ctx.moveTo(cx - hw * 1.12, headTop + headH * 0.62);
+            ctx.quadraticCurveTo(cx - hw * 1.20, hl, cx - hw * 0.55, hl - headH * 0.04);
+            ctx.lineTo(cx + hw * 0.55, hl - headH * 0.04);
+            ctx.quadraticCurveTo(cx + hw * 1.20, hl, cx + hw * 1.12, headTop + headH * 0.62);
+            ctx.quadraticCurveTo(cx + hw * 0.96, headTop + headH * 0.34, cx + hw * 0.92, hl + headH * 0.10);
+            ctx.lineTo(cx - hw * 0.92, hl + headH * 0.10);
+            ctx.quadraticCurveTo(cx - hw * 0.96, headTop + headH * 0.34, cx - hw * 1.12, headTop + headH * 0.62);
+            break;
+          // 0 crop, 1 side part, 5 receding, 7 shaved: cap only, no outside mass.
+        }
+        ctx.closePath();
+        ctx.fill();
+
+        // The cap: skull silhouette, grown slightly, clipped at the hairline.
+        ctx.save();
+        if (g.hairStyle === 7) ctx.globalAlpha = 0.42; // shaved reads as shadow
+        skullPath(ctx, a, g, 1.045);
+        ctx.clip();
+        hairlineRegion(ctx, a, g, hl);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      function shade(hex, amt) {
+        const n = parseInt(hex.slice(1), 16);
+        const f = (v) => Math.max(0, Math.min(255, Math.round(v + 255 * amt)));
+        return `rgb(${f((n >> 16) & 255)},${f((n >> 8) & 255)},${f(n & 255)})`;
+      }
+
+      // ---------------------------------------------------------------------
+      // Treatments
+      // ---------------------------------------------------------------------
+      // Explicit 8x8 ordered matrix. Written out rather than generated - the
+      // recursive construction is easy to get subtly wrong, and a wrong matrix
+      // reads as "the dither looks a bit off" instead of failing loudly.
+      const BAYER8 = [
+        [0, 32, 8, 40, 2, 34, 10, 42],
+        [48, 16, 56, 24, 50, 18, 58, 26],
+        [12, 44, 4, 36, 14, 46, 6, 38],
+        [60, 28, 52, 20, 62, 30, 54, 22],
+        [3, 35, 11, 43, 1, 33, 9, 41],
+        [51, 19, 59, 27, 49, 17, 57, 25],
+        [15, 47, 7, 39, 13, 45, 5, 37],
+        [63, 31, 55, 23, 61, 29, 53, 21],
+      ].map((row) => row.map((v) => (v + 0.5) / 64));
+
+      function makeCanvas(size) {
+        const c = document.createElement("canvas");
+        const dpr = 1; // pixel-exact: the dither pattern must not be resampled
+        c.width = size * dpr;
+        c.height = size * dpr;
+        return c;
+      }
+
+      // A. 1-bit dithered dossier photo. Render tone, then threshold against an
+      // ordered Bayer matrix at native resolution.
+      function renderDither(g, size, opts = {}) {
+        const internal = opts.internal || size;
+        const c = makeCanvas(internal);
+        const ctx = c.getContext("2d");
+        // Light enough that the background thresholds to solid white instead of
+        // a 50% checker - a dithered backdrop reads as noise, not as paper.
+        ctx.fillStyle = "#eef1e9";
+        ctx.fillRect(0, 0, internal, internal);
+        drawBust(ctx, g, internal, "tone");
+        const img = ctx.getImageData(0, 0, internal, internal);
+        const d = img.data;
+        for (let y = 0; y < internal; y++) {
+          for (let x = 0; x < internal; x++) {
+            const i = (y * internal + x) * 4;
+            const lum = (0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]) / 255;
+            const t = BAYER8[y & 7][x & 7];
+            const on = lum > t ? 255 : 0;
+            d[i] = on === 255 ? 232 : 18;
+            d[i + 1] = on === 255 ? 236 : 22;
+            d[i + 2] = on === 255 ? 224 : 28;
+            d[i + 3] = 255;
+          }
+        }
+        ctx.putImageData(img, 0, 0);
+        return c;
+      }
+
+      // B. Flat vector ID badge. No tone, no dither - flat fills only.
+      function renderFlat(g, size) {
+        const c = makeCanvas(size);
+        const ctx = c.getContext("2d");
+        ctx.fillStyle = "#cbd5e1";
+        ctx.fillRect(0, 0, size, size);
+        drawBust(ctx, g, size, "flat");
+        return c;
+      }
+
+      // C. Compact Mac. The 9-inch all-in-one screen: black pixels on paper
+      // white, no colour at all. Same 1-bit threshold as (A), but presented as
+      // a CRT rather than a photo - faint scanlines and a soft corner falloff.
+      const MAC_PAPER = [242, 241, 236];
+      const MAC_INK = [18, 17, 15];
+
+      function renderMac(g, size) {
+        const c = makeCanvas(size);
+        const ctx = c.getContext("2d");
+        ctx.fillStyle = "#f2f1ec";
+        ctx.fillRect(0, 0, size, size);
+        drawBust(ctx, g, size, "tone");
+
+        const img = ctx.getImageData(0, 0, size, size);
+        const d = img.data;
+        for (let y = 0; y < size; y++) {
+          for (let x = 0; x < size; x++) {
+            const i = (y * size + x) * 4;
+            const lum = (0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]) / 255;
+            const on = lum > BAYER8[y & 7][x & 7];
+            const c3 = on ? MAC_PAPER : MAC_INK;
+            d[i] = c3[0]; d[i + 1] = c3[1]; d[i + 2] = c3[2]; d[i + 3] = 255;
+          }
+        }
+        ctx.putImageData(img, 0, 0);
+
+        // Scanlines and falloff sit ON the 1-bit image rather than being
+        // dithered with it, so they read as the screen and not as texture.
+        ctx.fillStyle = "rgba(90,88,80,0.16)";
+        for (let y = 0; y < size; y += 3) ctx.fillRect(0, y, size, 1);
+        const v = ctx.createRadialGradient(
+          size / 2, size / 2, size * 0.30, size / 2, size / 2, size * 0.78);
+        v.addColorStop(0, "rgba(120,118,108,0)");
+        v.addColorStop(1, "rgba(120,118,108,0.34)");
+        ctx.fillStyle = v;
+        ctx.fillRect(0, 0, size, size);
+        return c;
+      }
+
+      // F. HyperCard line art. Strokes only over paper, no fills.
+      function renderLine(g, size) {
+        const c = makeCanvas(size);
+        const ctx = c.getContext("2d");
+        const a = anchors(g, size);
+        ctx.fillStyle = "#eae7dd";
+        ctx.fillRect(0, 0, size, size);
+        ctx.strokeStyle = "#14110d";
+        ctx.lineWidth = Math.max(1.2, size * 0.011);
+        ctx.lineJoin = "round";
+        ctx.lineCap = "round";
+
+        ctx.save();
+        ctx.translate(a.cx, size * 0.5); ctx.rotate(g.tilt); ctx.translate(-a.cx, -size * 0.5);
+
+        // shoulders
+        ctx.beginPath();
+        ctx.moveTo(a.cx - size * 0.40, size);
+        ctx.quadraticCurveTo(a.cx - size * 0.32, size * 0.79, a.cx - size * 0.14, size * 0.73);
+        ctx.moveTo(a.cx + size * 0.40, size);
+        ctx.quadraticCurveTo(a.cx + size * 0.32, size * 0.79, a.cx + size * 0.14, size * 0.73);
+        ctx.stroke();
+
+        ctx.beginPath(); headPath(ctx, a, g); ctx.stroke();
+
+        // hair as outline, filled solid black - the silhouette carries it
+        ctx.fillStyle = "#14110d";
+        hairPath(ctx, a, g, size);
+
+        // eyes as filled dots, brows as strokes
+        const eyeDx = a.headW * g.eyeSpacing;
+        const eyeR = a.headW * g.eyeSize;
+        for (const s of [-1, 1]) {
+          const ex = a.cx + s * eyeDx;
+          ctx.beginPath();
+          ctx.arc(ex, a.eyeY, eyeR * 0.40, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.moveTo(ex - eyeR * 1.3, a.eyeY - a.headH * 0.10);
+          ctx.lineTo(ex + eyeR * 1.1, a.eyeY - a.headH * 0.10 - s * g.browAngle * a.headH * 0.14);
+          ctx.stroke();
+        }
+
+        // nose + mouth as single strokes
+        const noseY = a.eyeY + a.headH * g.noseLength;
+        const noseW = a.headW * g.noseWidth;
+        ctx.beginPath();
+        ctx.moveTo(a.cx + noseW * 0.06, a.eyeY + a.headH * 0.02);
+        ctx.lineTo(a.cx - noseW, noseY);
+        ctx.quadraticCurveTo(a.cx - noseW * 0.2, noseY + a.headH * 0.022, a.cx + noseW * 0.5, noseY);
+        ctx.stroke();
+
+        // Line art strokes the same morphed outline rather than filling it.
+        const my = noseY + a.headH * 0.135;
+        ctx.stroke(mouthPath2D(a, g, my));
+
+        // cross-hatch on the shadow side instead of a tone ramp
+        ctx.save();
+        ctx.beginPath(); headPath(ctx, a, g); ctx.clip();
+        ctx.lineWidth = Math.max(0.6, size * 0.003);
+        ctx.globalAlpha = 0.30;
+        // Hatching follows the jaw rather than covering a rectangle, so it
+        // reads as shading on the cheek instead of a patch stuck on the face.
+        for (let i = 0; i < 10; i++) {
+          const x = a.cx + a.headW * 0.26 + i * a.headW * 0.055;
+          ctx.beginPath();
+          ctx.moveTo(x, a.eyeY + a.headH * 0.02);
+          ctx.lineTo(x - a.headH * 0.26, a.headBot + a.headH * 0.02);
+          ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+        ctx.restore();
+        ctx.restore();
+        return c;
+      }
+
+      // Silhouette only - flat black head + hair + accessory mass.
+      function renderSilhouette(g, size) {
+        const c = makeCanvas(size);
+        const ctx = c.getContext("2d");
+        const a = anchors(g, size);
+        ctx.fillStyle = "#121824";
+        ctx.fillRect(0, 0, size, size);
+        ctx.save();
+        ctx.translate(a.cx, size * 0.5); ctx.rotate(g.tilt); ctx.translate(-a.cx, -size * 0.5);
+        ctx.fillStyle = "#e6edf7";
+        ctx.beginPath();
+        ctx.moveTo(a.cx - size * 0.40, size);
+        ctx.quadraticCurveTo(a.cx - size * 0.32, size * 0.79, a.cx - size * 0.14, size * 0.73);
+        ctx.lineTo(a.cx + size * 0.14, size * 0.73);
+        ctx.quadraticCurveTo(a.cx + size * 0.32, size * 0.79, a.cx + size * 0.40, size);
+        ctx.closePath(); ctx.fill();
+        ctx.beginPath(); headPath(ctx, a, g); ctx.fill();
+        hairPath(ctx, a, g, size);
+        if (g.glasses) {
+          const lensR = a.headW * g.eyeSize * 1.55;
+          ctx.lineWidth = Math.max(1, a.headW * 0.04);
+          ctx.strokeStyle = "#e6edf7";
+          for (const s of [-1, 1]) {
+            ctx.beginPath();
+            ctx.ellipse(a.cx + s * a.headW * g.eyeSpacing, a.eyeY, lensR, lensR * 0.84, 0, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+        }
+        ctx.restore();
+        return c;
+      }
+
+      const RENDER = { line: renderLine, flat: renderFlat, mac: renderMac, dither: renderDither };
+      const STYLE_META = [
+        ["line", "Line Art", "Strokes and cross-hatch on paper. HyperCard clip art."],
+        ["flat", "Flat Vector", "Flat fills, no tone. Kare icon discipline."],
+        ["mac", "Compact Mac", "1-bit black on paper white, 9-inch screen falloff."],
+        ["dither", "1-Bit Dither", "Tone render, Bayer threshold. Obra Dinn lineage."],
+      ];
+
+      // ---------------------------------------------------------------------
+      // Wiring
+      // ---------------------------------------------------------------------
+      // Every renderer reads expressed alleles only - it never sees the carried
+      // half of the genome, and never rolls a die of its own.
+      const draw = (style, g, size, mode) => RENDER[style](expressed(g, mode), size);
+
+      const HAIR_NAMES = ["crop", "side part", "long", "volume", "bun", "receding", "bob", "fuzz"];
+      const HEAD_NAMES = ["oval", "square", "round", "long"];
+
+      function carriedLine(g) {
+        const bits = [];
+        if (g.headShape[1] !== g.headShape[0]) bits.push(HEAD_NAMES[g.headShape[1]] + " head");
+        if (g.hairStyle[1] !== g.hairStyle[0]) bits.push(HAIR_NAMES[g.hairStyle[1]]);
+        if (g.hair[1] !== g.hair[0]) bits.push("hair " + (g.hair[1] + 1));
+        return bits.length ? "carries: " + bits.join(", ") : "carries: nothing hidden";
+      }
+
+      // Pedigree geometry. Fixed so the connectors can be drawn from computed
+      // coordinates rather than measured DOM boxes, which avoids a layout pass
+      // and keeps the lines correct at any zoom.
+      const PED = { pw: 104, slot: 148, face: 104, block: 186, row: 244, top: 24, padX: 58 };
+
+      function personEl(g, label, style, mode, cx, top, showChips) {
+        const el = document.createElement("div");
+        el.className = "person";
+        el.style.left = cx - PED.pw / 2 + "px";
+        el.style.top = top + "px";
+        el.appendChild(draw(style, g, PED.face, mode));
+        const w = document.createElement("div"); w.className = "who"; w.textContent = label;
+        el.appendChild(w);
+        if (showChips) {
+          const e = expressed(g, "mac256");
+          const chips = document.createElement("div");
+          chips.className = "chips";
+          for (const [name, idx] of [["skin", e.macSkin], ["hair", e.macHair], ["shirt", e.macShirt]]) {
+            const chip = document.createElement("div");
+            chip.className = "chip";
+            chip.style.background = hex3(MAC256[idx]);
+            chip.title = `${name}: index ${idx} ${hex3(MAC256[idx])}`;
+            chips.appendChild(chip);
+          }
+          el.appendChild(chips);
+        } else {
+          const c = document.createElement("div");
+          c.className = "carried"; c.textContent = carriedLine(g);
+          el.appendChild(c);
+        }
+        return el;
+      }
+
+      const svgEl = (name, attrs) => {
+        const n = document.createElementNS("http://www.w3.org/2000/svg", name);
+        for (const k in attrs) n.setAttribute(k, attrs[k]);
+        return n;
+      };
+
+      function buildPedigree(rootId, seed, style, mode, showChips) {
+        const root = document.getElementById(rootId);
+        root.innerHTML = "";
+        const inner = document.createElement("div");
+        inner.className = "pedigree-inner";
+        root.appendChild(inner);
+
+        const gp = ["ga", "gb", "gc", "gd"].map((k) => genome(seed + "::gp::" + k));
+        const parents = [
+          childGenome(seed + "::pa", gp[0], gp[1]),
+          childGenome(seed + "::pb", gp[2], gp[3]),
+        ];
+        const kids = [0, 1, 2].map((i) => childGenome(seed + "::kid::" + i, parents[0], parents[1]));
+
+        // Column centres. Grandparents occupy four slots; each parent sits at
+        // the midpoint of their own parents; children spread about the couple.
+        const gx = [0, 1, 2, 3].map((i) => PED.padX + i * PED.slot);
+        const px = [(gx[0] + gx[1]) / 2, (gx[2] + gx[3]) / 2];
+        const midParents = (px[0] + px[1]) / 2;
+        const kx = [midParents - PED.slot, midParents, midParents + PED.slot];
+
+        const rowTop = (i) => PED.top + i * PED.row;
+        const width = gx[3] + PED.padX + PED.pw / 2;
+        const height = rowTop(2) + PED.block + 20;
+        inner.style.width = width + "px";
+        inner.style.height = height + "px";
+
+        const svg = svgEl("svg", { width, height, viewBox: `0 0 ${width} ${height}` });
+        inner.appendChild(svg);
+        const line = (x1, y1, x2, y2) =>
+          svg.appendChild(svgEl("line", {
+            x1, y1, x2, y2, stroke: "#3a4a63", "stroke-width": 1.5, "stroke-linecap": "round",
+          }));
+
+        // One couple's descent: stubs down from each partner, a bar joining
+        // them, a drop to the sibling bus, then a riser into each child.
+        function descent(ax, bx, genIndex, childXs) {
+          const yBot = rowTop(genIndex) + PED.block;
+          const yBar = yBot + 16;
+          const yNext = rowTop(genIndex + 1);
+          const yBus = yNext - 20;
+          line(ax, yBot, ax, yBar);
+          line(bx, yBot, bx, yBar);
+          line(ax, yBar, bx, yBar);
+          const mid = (ax + bx) / 2;
+          line(mid, yBar, mid, yBus);
+          if (childXs.length > 1) {
+            line(Math.min(...childXs), yBus, Math.max(...childXs), yBus);
+          }
+          for (const cx of childXs) line(cx, yBus, cx, yNext);
+        }
+
+        descent(gx[0], gx[1], 0, [px[0]]);
+        descent(gx[2], gx[3], 0, [px[1]]);
+        descent(px[0], px[1], 1, kx);
+
+        const labels = ["Grandparents", "Parents", "Children"];
+        labels.forEach((text, i) => {
+          const lab = document.createElement("div");
+          lab.className = "gen-label";
+          lab.textContent = text;
+          lab.style.left = "0px";
+          lab.style.top = rowTop(i) - 18 + "px";
+          inner.appendChild(lab);
+        });
+
+        const place = (g, label, cx, gen) =>
+          inner.appendChild(personEl(g, label, style, mode, cx, rowTop(gen), showChips));
+
+        place(gp[0], "Maternal 1", gx[0], 0);
+        place(gp[1], "Maternal 2", gx[1], 0);
+        place(gp[2], "Paternal 1", gx[2], 0);
+        place(gp[3], "Paternal 2", gx[3], 0);
+        place(parents[0], "Mother", px[0], 1);
+        place(parents[1], "Father", px[1], 1);
+        kids.forEach((k, i) => place(k, "Child " + (i + 1), kx[i], 2));
+      }
+
+      function buildSwatches() {
+        const el = document.getElementById("swatches");
+        if (el.childElementCount) return; // static, build once
+        MAC256.forEach((c, i) => {
+          const d = document.createElement("div");
+          d.style.background = hex3(c);
+          d.title = `index ${i} - ${hex3(c)}`;
+          el.appendChild(d);
+        });
+      }
+
+      // The morph target on its own, drawn large so the shape change is
+      // readable independently of the face it sits on.
+      function renderMouthOnly(t, size) {
+        const c = makeCanvas(size);
+        const ctx = c.getContext("2d");
+        ctx.fillStyle = "#eae7dd";
+        ctx.fillRect(0, 0, size, size);
+        // Scaled for the strip only: the lip unit is a fraction of head height
+        // on a real face, which is far too small to read in isolation.
+        const fake = { lipFullness: t, mouthCurve: 0, mouthWidth: 1, lipUnit: 1 };
+        const a = { cx: size / 2, headW: size * 0.38, headH: size * 0.22 };
+        ctx.fillStyle = "#14110d";
+        ctx.fill(mouthPath2D(a, fake, size / 2));
+        return c;
+      }
+
+      const MORPH_STOPS = [0, 0.25, 0.5, 0.75, 1];
+
+      function buildMorphTab(seed, style, mode) {
+        const base = genome(seed + "::morph");
+
+        const strip = document.getElementById("mouthStrip");
+        strip.innerHTML = "";
+        for (const t of [0, 0.17, 0.33, 0.5, 0.67, 0.83, 1]) {
+          const fig = document.createElement("figure");
+          fig.appendChild(renderMouthOnly(t, 96));
+          const cap = document.createElement("figcaption");
+          cap.textContent = t.toFixed(2);
+          fig.appendChild(cap);
+          strip.appendChild(fig);
+        }
+
+        const faces = document.getElementById("mouthFaces");
+        faces.innerHTML = "";
+        for (const t of MORPH_STOPS) {
+          const fig = document.createElement("figure");
+          fig.appendChild(draw(style, { ...base, lipFullness: t }, 132, mode));
+          const cap = document.createElement("figcaption");
+          cap.textContent = "lip " + t.toFixed(2);
+          fig.appendChild(cap);
+          faces.appendChild(fig);
+        }
+
+        // Proportion presets. Only the cues the research names as carrying the
+        // masculine/feminine read move here - nothing else.
+        const PRESETS = [
+          ["Narrow jaw, light brow", { jawWidth: 0.82, browWeight: 0.8, browHeight: 0.46, chinPoint: 0.2 }],
+          ["Wide jaw, heavy brow", { jawWidth: 1.12, browWeight: 2.1, browHeight: 0.40, chinPoint: 0.8 }],
+        ];
+        const grid = document.getElementById("morphGrid");
+        grid.innerHTML = "";
+        for (const [label, over] of PRESETS) {
+          const row = document.createElement("div");
+          row.className = "morph-row";
+          const lab = document.createElement("div");
+          lab.className = "rowlabel"; lab.textContent = label;
+          row.appendChild(lab);
+          for (const t of MORPH_STOPS) {
+            row.appendChild(draw(style, { ...base, ...over, lipFullness: t }, 116, mode));
+          }
+          grid.appendChild(row);
+        }
+      }
+
+      function build() {
+        const seed = document.getElementById("seed").value || "seed";
+        const sheetStyle = document.getElementById("sheetStyle").value;
+        const mode = document.getElementById("paletteMode").value;
+
+        const g = genome(seed + "::0");
+        const styles = document.getElementById("styles");
+        styles.innerHTML = "";
+        for (const [key, name, desc] of STYLE_META) {
+          const tile = document.createElement("div");
+          tile.className = "tile";
+          tile.appendChild(draw(key, g, 240, mode));
+          const n = document.createElement("div"); n.className = "name"; n.textContent = name;
+          const d = document.createElement("div"); d.className = "desc"; d.textContent = desc;
+          tile.appendChild(n); tile.appendChild(d);
+          styles.appendChild(tile);
+        }
+
+        const card = document.getElementById("card");
+        card.innerHTML = "";
+        card.appendChild(draw(sheetStyle, g, 96, mode));
+        const who = document.createElement("div");
+        who.innerHTML =
+          '<div class="who">Marisol Okonjo-Reyes</div>' +
+          '<div class="meta">34 - night auditor - Alder Heights</div>' +
+          '<div class="hook">Keeps a spare key to a flat she has not lived in for six years.</div>';
+        card.appendChild(who);
+
+        buildPedigree("pedigree", seed, sheetStyle, mode, false);
+
+        const sheet = document.getElementById("sheet");
+        sheet.innerHTML = "";
+        for (let i = 0; i < 48; i++) {
+          sheet.appendChild(draw(sheetStyle, genome(seed + "::" + i), 64, mode));
+        }
+
+        const sil = document.getElementById("silhouettes");
+        sil.innerHTML = "";
+        for (let i = 0; i < 24; i++) {
+          sil.appendChild(renderSilhouette(expressed(genome(seed + "::" + i), mode), 48));
+        }
+
+        // Palette tab. Always Flat Vector with chips - the point is the colour,
+        // and the 1-bit treatments would throw it away.
+        buildSwatches();
+        buildPedigree("palettePedigree", seed, "flat", "mac256", true);
+        buildMorphTab(seed, sheetStyle, mode);
+      }
+
+      const TAB_IDS = ["portraits", "palette", "morph"];
+      for (const btn of document.querySelectorAll(".tab")) {
+        btn.addEventListener("click", () => {
+          for (const b of document.querySelectorAll(".tab")) b.classList.toggle("is-active", b === btn);
+          for (const id of TAB_IDS) {
+            document.getElementById("tab-" + id).hidden = btn.dataset.tab !== id;
+          }
+        });
+      }
+      document.getElementById("paletteMode").addEventListener("change", build);
+
+      document.getElementById("reroll").addEventListener("click", () => {
+        const cur = document.getElementById("seed").value;
+        const n = (parseInt(cur.replace(/\D/g, ""), 10) || 0) + 1;
+        document.getElementById("seed").value = cur.replace(/\d+$/, "") + n;
+        build();
+      });
+      document.getElementById("seed").addEventListener("input", build);
+      document.getElementById("sheetStyle").addEventListener("change", build);
+      build();
+    </script>
+  </body>
+</html>

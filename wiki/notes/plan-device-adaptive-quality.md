@@ -7,6 +7,10 @@ tags:
 
 # Plan — Device-Adaptive Quality (#53)
 
+**Status 2026-09-05:** partly done. #53 closed and the tiering/DPR-ramp
+machinery shipped; #85 (verify the adaptive ramp on low-spec devices, decide
+the mobile default) is still open.
+
 Agent-scoped 2026-06-23. Mobile now in scope (past v1). Companion: GitHub #53.
 
 ## Key finding: most of it already EXISTS but is default-OFF and unverified
@@ -25,9 +29,10 @@ Agent-scoped 2026-06-23. Mobile now in scope (past v1). Companion: GitHub #53.
   16000 mismatch.
 
 ## Work (wiring + activation, not greenfield)
+
 1. **`?quality=` URL param** in `CaptureBoot.tsx` (PRD-promised; manual override + escape hatch).
 2. **Run device-fit once at boot** (guarded by a new transient `qualityUserSet` flag + no `?quality=`
-   + no saved tier) — today it only fires on manual enable.
+   - no saved tier) — today it only fires on manual enable.
 3. **Reconcile** `CEIL_DPR` = `min(devicePixelRatio, QUALITY_TIERS[tier].dprMax)`; fix the 24000-vs-16000
    star-count mismatch.
 4. **Extend detection**: fold `probeGpu`→`probeCaps` (add `MAX_TEXTURE_SIZE`, webgl2, deviceMemory,
@@ -38,15 +43,18 @@ Agent-scoped 2026-06-23. Mobile now in scope (past v1). Companion: GitHub #53.
    sustained low fps, back up on headroom (separate hysteresis from DPR). Respect `qualityUserSet`.
 
 ## Files
+
 `lib/perf/deviceTier.ts`, `components/scene/AdaptiveQuality.tsx`, `components/scene/CaptureBoot.tsx`,
 `lib/state/sceneStore.ts` (+ `qualityUserSet`), `components/ui/CameraPanel.tsx` (show class + reason),
 new `lib/perf/applyDeviceFit.ts`.
 
 ## Determinism: clean
+
 Perf/DPR/crop are render-only (never seed inputs). `performance.now()` for FPS is fine — it drives
 DPR/crop/tier (Zustand runtime), not the seeded generator or per-window shader state.
 
 ## Verification (no device farm)
+
 Unit-test `suggestTier`/`classifyGpu` (fixture renderer strings → expected tier). DevTools GPU/CPU
 throttle + DPR pin to force the ramp; stub `probeCaps` to a Pixel-6/integrated string; Chrome device
 toolbar for coarse-pointer/mobile-UA + high DPR. Real Pixel-6 pass is the final fillrate gate

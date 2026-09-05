@@ -49,3 +49,5 @@ reference notes that describe how the running system behaves.
 
 - [[deferred-followups]] — watchlist of upstream-gated / parked fixes (R3F 10 Clock, KTX2, bloom tier gating, CI gate, stars tier mismatch); add to it when closing an issue as "gated on X"
 - [[light-sprite-sizing-survey]] — the five light-point systems (streetlights/traffic/flights/helis/beacons): sizing mechanisms, ortho-blend interaction, and the shared-attenuation fix shape
+- [[plan-light-distance-model-v2]] — **2026-07-27 plan:** why the shipped #99 Lights panel reads wrong (curve X is size-relative-to-ceiling, not distance) + the fix set: distance-keyed log axis from the frustum height, absolute per-family px bounds, flux conservation below the size floor, fold #52's LOD into one axis
+- [[plan-night-shift-lighting]] — **2026-09-05 proposal (greenlit for a lab):** the modern lighting mode under perpetual night: a window is lit because someone is awake; latent-tier awake hash (no persona-directory coupling), stationary churn so the far-field twin stays valid, motive-as-light, "left on" fill, `/window-lab` approach 5 as the venue

@@ -4,7 +4,7 @@ Map of Content for external references that shape direction.
 
 ## Visual references
 
-- [[after-dark-starry-night-original]] — YT capture of the original Berkeley Systems *After Dark* "Starry Night" Mac screensaver; the primary homage anchor (ambient behaviour + pacing)
+- [[after-dark-starry-night-original]] — YT capture of the original Berkeley Systems _After Dark_ "Starry Night" Mac screensaver; the primary homage anchor (ambient behaviour + pacing)
 - [[city-life-montages]] — curated montages that establish a city as a living organism beyond the main story: the GITS (1995) New Port City anchor + anime, the "city symphony" film genre (Berlin/Vertov/Koyaanisqatsi), live-action (Blade Runner, Drive), and games (Night City, Kamurocho). Maps each "aliveness" lever onto our scene
 - [[cyberpunk-visual-treatment]] — glowing-translucent-cube / "hacking the Gibson" treatment ideas: Marathon login-rewards card + Hackers (1995) "City of Text" flythrough, with a feasibility sketch (fresnel rim + edge-glow + duotone in-shader; additive glow layer vs. real bloom; the InstancedMesh-transparency crux)
 - [[night-sky-reference-real]] — #26 research pass: Bortle skyglow color/extent, magnitude-band star counts + 2.512× brightness law, elevation-driven twinkle, moon 21.84° halo physics, moonlit-sky behavior
@@ -36,6 +36,8 @@ Map of Content for external references that shape direction.
 - [[procgen-character-design-games]] — how shipped games make procgen characters players care about: Heat Signature (sparse personal missions), Nemesis (recognition + continuity + authored voice), RimWorld (two-beat backstories, incapabilities), Watch Dogs Legion (the rich-data/generic-voice failure), DF/Wildermyth/CK3; 15 distilled principles for the persona system
 - [[apophenia-engine]] — the story layer's design thesis: generate evidence with deliberate gaps, not stories; Sylvester/Kuleshov grounding + the five enforcement mechanisms + the Owen Taylor example
 - [[procgen-character-theory-literature]] — the academic/theory beat: Talk of the Town & Bad News (belief facets, knowledge implantation, story sifting), Prom Week/CiF, Oz Project, Grinblat's domain word + generate-then-rationalize, Compton's oatmeal/fanfic test, Emily Short's storylets, SSA cohort-dated names + the stereotype traps; top-10 ranked actions
+- [[procgen-face-generation]] — the resident-portrait layer (2026-07-28, status/open): prior art on part-based face systems (Obra Dinn, Papers Please, Shadows of Doubt, Mii, Wildermyth, CK3), four candidate style directions with a live code-drawn probe, palette/silhouette discipline, the skin-tone-independence rule, a diploid heritability model for the family tree, and the DiceBear Figma-to-JSON pipeline finding
+- [[family-tree-chart-conventions]] — genogram/hourglass chart research behind FamilyTree v3 (couple/union line conventions, stability across re-rooting, lineage color coding); conclusions adopted in `components/ui/columns/FamilyTree.tsx`
 - [[persona-gen-performance]] — #93 growth (23.5k→39.4k) blew the directory build to 2246 ms cold, exposed a mount-time hook-gating bug; internal pipeline profile (56k seedrandom instantiations, eager story weave) + external best practice survey (tiered/lazy population records, sfc32 vs ARC4, derived-stream determinism, scheduling/worker/memory patterns); grounds the feat/persona-perf deferred-build + lazy-deep-tier round
 
 ## Interaction / camera references
