@@ -50,6 +50,7 @@ import { COMMUTE_COLORS, CONNECTION_COLOR } from "@/components/scene/CommuteArc"
 import { useEntityIndexes } from "./entityData";
 import { FamilyTree } from "./FamilyTree";
 import { GenderIcon } from "./genderIcon";
+import { PersonaPortrait } from "./PersonaPortrait";
 import { IconTip } from "./EntityColumns";
 import {
   PROFESSION_ICONS,
@@ -381,9 +382,17 @@ export function PersonaColumn({
           buttons, so select-none doesn't apply — set it explicitly for
           drag-select). */}
         <div className="flex min-w-0 cursor-text flex-col gap-0.5 select-text">
-          {story.epithet && (
-            <span className="text-muted-foreground truncate text-base italic">{story.epithet}</span>
-          )}
+          {/* Portrait row: the stub tile (PersonaPortrait) with the epithet
+            beside it. The fact grid stays full-width below so its nowrap
+            cells keep their room. */}
+          <div className="flex min-w-0 items-center gap-3 pb-1">
+            <PersonaPortrait persona={persona} size={56} />
+            {story.epithet && (
+              <span className="text-muted-foreground min-w-0 truncate text-base italic">
+                {story.epithet}
+              </span>
+            )}
+          </div>
           {/* Two-column fact grid (user 2026-07-11): Gender|Age, DOB|Time,
             Height|T-Shirt, ID|In City. Each cell spreads label left / value
             right (justify-between + nowrap) so no fact ever wraps; the
