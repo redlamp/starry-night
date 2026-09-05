@@ -22,30 +22,30 @@ export function SearchResults({
 }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="shrink-0 border-b border-border px-4 py-2 text-xs text-muted-foreground">
+      <div className="border-border text-muted-foreground shrink-0 border-b px-4 py-2 text-xs">
         {totalMatches} {totalMatches === 1 ? "match" : "matches"} for &ldquo;{query}&rdquo; across
         all pools
       </div>
       <ScrollArea className="min-h-0 flex-1">
         {hits.length === 0 ? (
-          <p className="px-4 py-10 text-center text-sm text-muted-foreground">
+          <p className="text-muted-foreground px-4 py-10 text-center text-sm">
             No entries match &ldquo;{query}&rdquo;.
           </p>
         ) : (
-          <ul className="divide-y divide-border">
+          <ul className="divide-border divide-y">
             {hits.map((hit) => (
               <li key={`${hit.poolId}-${hit.index}`}>
                 <button
                   type="button"
                   onClick={() => onSelectHit(hit)}
-                  className="flex w-full items-start gap-2.5 px-4 py-2 text-left hover:bg-muted/40"
+                  className="hover:bg-muted/40 flex w-full items-start gap-2.5 px-4 py-2 text-left"
                 >
-                  <Badge variant="outline" className="mt-0.5 shrink-0 font-mono text-[10px]">
+                  <Badge variant="outline" className="mt-0.5 shrink-0 font-mono text-xs">
                     {hit.poolLabel}
                   </Badge>
                   <span
                     className={cn(
-                      "min-w-0 flex-1 truncate text-sm text-foreground",
+                      "text-foreground min-w-0 flex-1 truncate text-sm",
                       hit.status === "cut" && "text-muted-foreground line-through",
                     )}
                   >
@@ -53,7 +53,7 @@ export function SearchResults({
                   </span>
                   <Badge
                     variant="outline"
-                    className="mt-0.5 shrink-0 font-mono text-[10px] font-normal text-muted-foreground select-all"
+                    className="text-muted-foreground mt-0.5 shrink-0 font-mono text-xs font-normal select-all"
                   >
                     {hit.entryId}
                   </Badge>
@@ -70,7 +70,7 @@ export function SearchResults({
           </ul>
         )}
         {totalMatches > hits.length && (
-          <p className="px-4 py-3 text-xs text-muted-foreground">
+          <p className="text-muted-foreground px-4 py-3 text-xs">
             {totalMatches - hits.length} more not shown
           </p>
         )}

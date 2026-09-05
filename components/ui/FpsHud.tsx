@@ -14,9 +14,10 @@ export function FpsHud() {
     perf.fps >= 55 ? "text-emerald-300" : perf.fps >= 35 ? "text-amber-300" : "text-rose-400";
   return (
     // Positioned by the page's bottom-left HUD stack (2026-07-26) — no own offsets.
-    <div className="pointer-events-none relative rounded bg-black/55 px-2 py-1 font-mono text-xs backdrop-blur-sm">
+    // Popover tokens (presentation batch item 1) so the theme toggle reaches it.
+    <div className="border-foreground/10 bg-popover/70 text-foreground pointer-events-none relative rounded border px-2 py-1 font-mono text-xs backdrop-blur-sm">
       <span className={`${color} tabular-nums`}>{Math.round(perf.fps)} fps</span>
-      <span className="text-foreground/50 tabular-nums"> · {perf.calls} calls</span>
+      <span className="text-muted-foreground tabular-nums"> · {perf.calls} calls</span>
     </div>
   );
 }

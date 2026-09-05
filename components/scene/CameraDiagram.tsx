@@ -53,7 +53,7 @@ export function CameraDiagram({
 
   const body =
     mode === "fly" ? (
-      <div className="flex h-[150px] items-center justify-center px-4 text-center text-[10px] leading-snug text-zinc-500">
+      <div className="flex h-[150px] items-center justify-center px-4 text-center text-xs leading-snug text-zinc-500">
         fly mode — free camera, no focal pivot.
         <br />
         Switch to an orbit method to see the geometry.
@@ -72,18 +72,18 @@ export function CameraDiagram({
       )}
     >
       <div className="flex items-center justify-between px-2.5 pt-1.5 pb-1">
-        <span className="font-mono text-[10px] tracking-wider text-zinc-400 uppercase">side view</span>
+        <span className="font-mono text-xs tracking-wider text-zinc-400 uppercase">side view</span>
         {onToggleProjection ? (
           <button
             type="button"
             onClick={onToggleProjection}
             title="Tap to toggle projection (P)"
-            className="pointer-events-auto -my-1 rounded px-1.5 py-1 font-mono text-[10px] text-teal-300 underline decoration-dotted underline-offset-2 hover:bg-white/5 hover:text-teal-200 active:bg-white/10"
+            className="pointer-events-auto -my-1 rounded px-1.5 py-1 font-mono text-xs text-teal-300 underline decoration-dotted underline-offset-2 hover:bg-white/5 hover:text-teal-200 active:bg-white/10"
           >
             {data.parallel ? "orthographic" : "perspective"}
           </button>
         ) : (
-          <span className="font-mono text-[10px] text-teal-300">
+          <span className="font-mono text-xs text-teal-300">
             {data.parallel ? "orthographic" : "perspective"}
           </span>
         )}
@@ -92,7 +92,7 @@ export function CameraDiagram({
         <div className="flex items-center justify-end px-2.5 pb-0.5">
           <span
             className={cn(
-              "font-mono text-[10px]",
+              "font-mono text-xs",
               // Amber = skyline; sky-blue = aerial (user 2026-07-26).
               regime === "skyline" ? "text-amber-300" : "text-sky-300",
             )}
@@ -119,7 +119,7 @@ function FramingGauges({ data }: { data: CamReadout }) {
   const t = hi > lo ? Math.max(0, Math.min(1, (cur - lo) / (hi - lo))) : 1;
   const tiltPct = Math.round((data.tilt ?? 1) * 100);
   return (
-    <div className="space-y-1 border-t border-zinc-700/60 px-2.5 pt-1.5 pb-2 font-mono text-[9px]">
+    <div className="space-y-1 border-t border-zinc-700/60 px-2.5 pt-1.5 pb-2 font-mono text-xs">
       <div className="flex items-center gap-1.5">
         <span className="w-9 shrink-0 text-zinc-500">Scr Y</span>
         <span className="w-7 shrink-0 text-right text-zinc-600 tabular-nums">{lo.toFixed(2)}</span>
@@ -234,8 +234,8 @@ function Diagram({ data }: { data: CamReadout }) {
   // Extra right padding (beyond PAD) so the right-edge sky/ground labels clear the figure + the fY label.
   const padR = 48;
   const sc = Math.min((W - PAD - padR) / spanH, (H - 2 * PAD) / spanY);
-  const offX = PAD + ((W - PAD - padR) - spanH * sc) / 2;
-  const offY = PAD + ((H - 2 * PAD) - spanY * sc) / 2;
+  const offX = PAD + (W - PAD - padR - spanH * sc) / 2;
+  const offY = PAD + (H - 2 * PAD - spanY * sc) / 2;
   const X = (h: number) => offX + (h - minH) * sc;
   const Y = (y: number) => H - offY - (y - minY) * sc;
   const sx = (p: P) => X(p.h);
@@ -330,24 +330,75 @@ function Diagram({ data }: { data: CamReadout }) {
       {/* view axis: camera → view-centre (solid, neutral) + the projection PAST it (dashed) in the
           TARGET colour — soil-brown if it heads to the ground, sky-blue if it rises into the sky. The
           focal/pivot is drawn separately below; it sits off this centre line by the Screen-Y offset. */}
-      <line x1={sx(C)} y1={sy(C)} x2={sx(Ac)} y2={sy(Ac)} stroke="#cbd5e1" strokeWidth={1.4} strokeOpacity={0.8} />
-      <line x1={sx(Ac)} y1={sy(Ac)} x2={sx(ext)} y2={sy(ext)} stroke={axisColor} strokeWidth={1.4} strokeDasharray="3 3" strokeOpacity={0.95} />
+      <line
+        x1={sx(C)}
+        y1={sy(C)}
+        x2={sx(Ac)}
+        y2={sy(Ac)}
+        stroke="#cbd5e1"
+        strokeWidth={1.4}
+        strokeOpacity={0.8}
+      />
+      <line
+        x1={sx(Ac)}
+        y1={sy(Ac)}
+        x2={sx(ext)}
+        y2={sy(ext)}
+        stroke={axisColor}
+        strokeWidth={1.4}
+        strokeDasharray="3 3"
+        strokeOpacity={0.95}
+      />
 
       {/* horizon reference at the camera + elevation arc */}
-      <line x1={cx} y1={cy} x2={cx + aR + 14} y2={cy} stroke="#a1a1aa" strokeWidth={1} strokeDasharray="2 3" strokeOpacity={0.7} />
+      <line
+        x1={cx}
+        y1={cy}
+        x2={cx + aR + 14}
+        y2={cy}
+        stroke="#a1a1aa"
+        strokeWidth={1}
+        strokeDasharray="2 3"
+        strokeOpacity={0.7}
+      />
       <path d={arc} fill="none" stroke="#fbbf24" strokeWidth={1.4} />
       <text x={aLabel.x} y={aLabel.y + 3} className="fill-amber-300 font-mono" fontSize={9}>
         {data.elev.toFixed(0)}°
       </text>
 
       {/* camera clearance above ground (the clamp keeps this ≥ 0) */}
-      <line x1={cx} y1={cy} x2={cx} y2={groundYpx} stroke={camColor} strokeWidth={1} strokeDasharray="2 2" strokeOpacity={0.7} />
-      <text x={cx - 4} y={camToGroundMidY} textAnchor="end" className="font-mono" fontSize={8} fill={camColor}>
+      <line
+        x1={cx}
+        y1={cy}
+        x2={cx}
+        y2={groundYpx}
+        stroke={camColor}
+        strokeWidth={1}
+        strokeDasharray="2 2"
+        strokeOpacity={0.7}
+      />
+      <text
+        x={cx - 4}
+        y={camToGroundMidY}
+        textAnchor="end"
+        className="font-mono"
+        fontSize={8}
+        fill={camColor}
+      >
         {Math.round(clearance)}
       </text>
 
       {/* focal plumb to ground + focal-Y label */}
-      <line x1={sx(F)} y1={sy(F)} x2={sx(Fg)} y2={sy(Fg)} stroke="#7dd3fc" strokeWidth={1} strokeDasharray="2 2" strokeOpacity={0.6} />
+      <line
+        x1={sx(F)}
+        y1={sy(F)}
+        x2={sx(Fg)}
+        y2={sy(Fg)}
+        stroke="#7dd3fc"
+        strokeWidth={1}
+        strokeDasharray="2 2"
+        strokeOpacity={0.6}
+      />
       <circle cx={sx(Fg)} cy={sy(Fg)} r={2} fill="#7dd3fc" />
       {Math.abs(focalY) > 6 && (
         <text
@@ -362,7 +413,13 @@ function Diagram({ data }: { data: CamReadout }) {
       )}
 
       {/* distance label along the view axis */}
-      <text x={dMid.x} y={dMid.y - 4} textAnchor="middle" className="fill-zinc-300 font-mono" fontSize={8}>
+      <text
+        x={dMid.x}
+        y={dMid.y - 4}
+        textAnchor="middle"
+        className="fill-zinc-300 font-mono"
+        fontSize={8}
+      >
         d {Math.round(dist)}
       </text>
 
@@ -371,7 +428,14 @@ function Diagram({ data }: { data: CamReadout }) {
 
       {/* camera glyph */}
       <circle cx={cx} cy={cy} r={4.5} fill={camColor} stroke="#0a0f17" strokeWidth={1} />
-      <text x={cx} y={cy - 8} textAnchor="middle" className="font-mono" fontSize={8} fill={camColor}>
+      <text
+        x={cx}
+        y={cy - 8}
+        textAnchor="middle"
+        className="font-mono"
+        fontSize={8}
+        fill={camColor}
+      >
         cam
       </text>
     </svg>

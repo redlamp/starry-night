@@ -428,7 +428,7 @@ export function PersonaColumn({
                   type="button"
                   onClick={() => push({ kind: "district", id: persona.homeDistrictId })}
                   {...hover.district(persona.homeDistrictId)}
-                  className="hover:underline"
+                  className="focus-visible:ring-ring/50 rounded-sm hover:underline focus-visible:ring-3 focus-visible:outline-none"
                 >
                   {homeDistrictName}
                 </button>
@@ -440,7 +440,7 @@ export function PersonaColumn({
                   type="button"
                   onClick={() => push({ kind: "building", id: persona.homeBuildingId })}
                   {...hover.persona(persona.homeBuildingId, persona.householdIndex)}
-                  className="hover:underline"
+                  className="focus-visible:ring-ring/50 rounded-sm hover:underline focus-visible:ring-3 focus-visible:outline-none"
                 >
                   {homeAddressLine}
                 </button>
@@ -668,7 +668,7 @@ export function PersonaColumn({
                           type="button"
                           onClick={() => push({ kind: "company", id: workPlace.id })}
                           {...hover.company(workPlace.buildingId, workPlace.id)}
-                          className="hover:underline"
+                          className="focus-visible:ring-ring/50 rounded-sm hover:underline focus-visible:ring-3 focus-visible:outline-none"
                         >
                           {workPlace.name}
                         </button>
@@ -678,7 +678,7 @@ export function PersonaColumn({
                           type="button"
                           onClick={() => push({ kind: "district", id: workDistrictId })}
                           {...hover.district(workDistrictId)}
-                          className="hover:underline"
+                          className="focus-visible:ring-ring/50 rounded-sm hover:underline focus-visible:ring-3 focus-visible:outline-none"
                         >
                           {workDistrictName}
                         </button>
@@ -688,7 +688,7 @@ export function PersonaColumn({
                           type="button"
                           onClick={() => push({ kind: "building", id: workBuildingId })}
                           {...hover.building(workBuildingId)}
-                          className="hover:underline"
+                          className="focus-visible:ring-ring/50 rounded-sm hover:underline focus-visible:ring-3 focus-visible:outline-none"
                         >
                           {workAddressLine}
                         </button>
@@ -718,7 +718,7 @@ export function PersonaColumn({
                       type="button"
                       onClick={() => push({ kind: "district", id: workDistrictId })}
                       {...hover.district(workDistrictId)}
-                      className="hover:underline"
+                      className="focus-visible:ring-ring/50 rounded-sm hover:underline focus-visible:ring-3 focus-visible:outline-none"
                     >
                       {workDistrictName}
                     </button>
@@ -731,7 +731,7 @@ export function PersonaColumn({
                         type="button"
                         onClick={() => push({ kind: "building", id: school.buildingId })}
                         {...hover.building(school.buildingId)}
-                        className="hover:underline"
+                        className="focus-visible:ring-ring/50 rounded-sm hover:underline focus-visible:ring-3 focus-visible:outline-none"
                       >
                         {workAddressLine}
                       </button>
@@ -740,7 +740,7 @@ export function PersonaColumn({
                       type="button"
                       onClick={() => push({ kind: "company", id: school.id })}
                       {...hover.company(school.buildingId, school.id)}
-                      className="hover:underline"
+                      className="focus-visible:ring-ring/50 rounded-sm hover:underline focus-visible:ring-3 focus-visible:outline-none"
                     >
                       {school.name}
                     </button>
@@ -777,7 +777,7 @@ export function PersonaColumn({
                         <button
                           type="button"
                           onClick={() => push({ kind: "company", id: alma.id })}
-                          className="hover:underline"
+                          className="focus-visible:ring-ring/50 rounded-sm hover:underline focus-visible:ring-3 focus-visible:outline-none"
                         >
                           {alma.name}
                         </button>
@@ -819,7 +819,7 @@ export function PersonaColumn({
                       type="button"
                       onClick={() => push({ kind: "persona", id: partner.id })}
                       {...hover.persona(partner.homeBuildingId, partner.householdIndex)}
-                      className="hover:underline"
+                      className="focus-visible:ring-ring/50 rounded-sm hover:underline focus-visible:ring-3 focus-visible:outline-none"
                     >
                       {partner.fullName}
                     </button>
@@ -862,7 +862,7 @@ export function PersonaColumn({
                       type="button"
                       onClick={() => push({ kind: "persona", id: link.personaId })}
                       {...hover.persona(relative.homeBuildingId, relative.householdIndex)}
-                      className="hover:bg-foreground/10 -mx-1 flex flex-wrap items-baseline justify-between gap-x-4 rounded px-1 text-left text-base"
+                      className="hover:bg-foreground/10 focus-visible:ring-ring/50 -mx-1 flex flex-wrap items-baseline justify-between gap-x-4 rounded-sm px-1 text-left text-base focus-visible:ring-3 focus-visible:outline-none"
                     >
                       <span className="text-muted-foreground shrink-0 capitalize">{link.role}</span>
                       <span className="ml-auto max-w-full min-w-0 text-right break-words">
@@ -903,7 +903,7 @@ export function PersonaColumn({
               <button
                 type="button"
                 onClick={() => push({ kind: "persona", id: story.relation!.targetId })}
-                className="text-left text-base hover:underline"
+                className="focus-visible:ring-ring/50 rounded-sm text-left text-base hover:underline focus-visible:ring-3 focus-visible:outline-none"
               >
                 {story.relation.line}
               </button>

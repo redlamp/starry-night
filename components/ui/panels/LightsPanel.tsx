@@ -18,11 +18,10 @@ export function LightsHeaderActions() {
   return (
     <div className="flex items-center gap-1">
       <HelpHint>
-        How the city&apos;s point lights (cars, streetlights, aircraft, beacons) size and dim
-        with camera distance. Glow scales every light&apos;s bloom; the curve shapes the
-        drop-off from close (right) to far (left); Floor/Ceiling scale each family&apos;s
-        pixel bounds; Brightness follow makes far lights dim as they shrink. Reset restores
-        this section only.
+        How the city&apos;s point lights (cars, streetlights, aircraft, beacons) size and dim with
+        camera distance. Glow scales every light&apos;s bloom; the curve shapes the drop-off from
+        close (right) to far (left); Floor/Ceiling scale each family&apos;s pixel bounds; Brightness
+        follow makes far lights dim as they shrink. Reset restores this section only.
       </HelpHint>
       <IconTip label="Reset Lights">
         <Button
@@ -102,9 +101,9 @@ function CurveEditor() {
       <span className="text-foreground/40 flex items-center gap-1 text-xs tracking-wide uppercase">
         drop-off curve
         <HelpHint>
-          Maps geometric size (left = far away, right = close up) to displayed size. Drag
-          the two handles. A bowed-up curve keeps far lights bigger for longer (glare
-          feel); the straight diagonal is pure geometry.
+          Maps geometric size (left = far away, right = close up) to displayed size. Drag the two
+          handles. A bowed-up curve keeps far lights bigger for longer (glare feel); the straight
+          diagonal is pure geometry.
         </HelpHint>
       </span>
       <svg
@@ -117,7 +116,15 @@ function CurveEditor() {
         onPointerCancel={onPointerUp}
       >
         {/* reference diagonal (pure geometric shrink) */}
-        <line x1={ax} y1={ay} x2={bx} y2={by} stroke="currentColor" opacity={0.15} strokeDasharray="3 3" />
+        <line
+          x1={ax}
+          y1={ay}
+          x2={bx}
+          y2={by}
+          stroke="currentColor"
+          opacity={0.15}
+          strokeDasharray="3 3"
+        />
         {/* control-point stems */}
         <line x1={ax} y1={ay} x2={p1x} y2={p1y} stroke="currentColor" opacity={0.25} />
         <line x1={bx} y1={by} x2={p2x} y2={p2y} stroke="currentColor" opacity={0.25} />
@@ -141,11 +148,9 @@ function CurveEditor() {
           onPointerDown={onHandleDown}
         />
       </svg>
-      <span className="text-foreground/40 flex justify-between font-mono text-[10px]">
+      <span className="text-foreground/40 flex justify-between font-mono text-xs">
         <span>far</span>
-        <span>
-          {curve.map((v) => v.toFixed(2)).join(", ")}
-        </span>
+        <span>{curve.map((v) => v.toFixed(2)).join(", ")}</span>
         <span>close</span>
       </span>
     </div>

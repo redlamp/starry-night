@@ -24,7 +24,13 @@ import { AuthorContent, StatusContent } from "./controls";
 // (both render the SAME AuthorContent/StatusContent markup — user 2026-07-12).
 const OPTION_PADDING = "pl-2.5";
 
-function AuthorSelect({ value, onChange }: { value: Authorship; onChange: (v: Authorship) => void }) {
+function AuthorSelect({
+  value,
+  onChange,
+}: {
+  value: Authorship;
+  onChange: (v: Authorship) => void;
+}) {
   return (
     <Select value={value} onValueChange={(v) => onChange(v as Authorship)}>
       <SelectTrigger size="sm" className="w-full">
@@ -41,7 +47,13 @@ function AuthorSelect({ value, onChange }: { value: Authorship; onChange: (v: Au
   );
 }
 
-function StatusSelect({ value, onChange }: { value: ReviewStatus; onChange: (v: ReviewStatus) => void }) {
+function StatusSelect({
+  value,
+  onChange,
+}: {
+  value: ReviewStatus;
+  onChange: (v: ReviewStatus) => void;
+}) {
   return (
     <Select value={value} onValueChange={(v) => onChange(v as ReviewStatus)}>
       <SelectTrigger size="sm" className="w-full">
@@ -132,7 +144,7 @@ export function EntryRow({
     <tr
       id={id}
       className={cn(
-        "group border-b border-border transition-colors duration-700 hover:bg-muted/40",
+        "group border-border hover:bg-muted/40 border-b transition-colors duration-700",
         isCut && "opacity-60",
         flash && "bg-accent/60",
       )}
@@ -147,13 +159,13 @@ export function EntryRow({
           aria-label={`Select entry ${entryId}`}
         />
       </td>
-      <td className="px-2 py-2 text-right align-top text-xs tabular-nums text-muted-foreground">
+      <td className="text-muted-foreground px-2 py-2 text-right align-top text-xs tabular-nums">
         {index === null ? "+" : index}
       </td>
       <td className="min-w-0 px-2 py-2 align-top">
         <Badge
           variant="outline"
-          className="mb-1 font-mono text-[10px] font-normal text-muted-foreground select-all"
+          className="text-muted-foreground mb-1 font-mono text-xs font-normal select-all"
         >
           {entryId}
         </Badge>
@@ -173,7 +185,7 @@ export function EntryRow({
                 cancel();
               }
             }}
-            className="w-full resize-none rounded-md border border-ring bg-background px-2 py-1 text-sm text-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+            className="border-ring bg-background text-foreground focus-visible:ring-ring/50 w-full resize-none rounded-md border px-2 py-1 text-sm outline-none focus-visible:ring-3"
           />
         ) : (
           <div
@@ -192,13 +204,13 @@ export function EntryRow({
           </div>
         )}
         {isAdded && !isEditing && (
-          <div className="flex items-center gap-1 px-2 pt-0.5 text-xs text-muted-foreground">
+          <div className="text-muted-foreground flex items-center gap-1 px-2 pt-0.5 text-xs">
             <Copy className="size-3" aria-hidden />
             New — duplicated, not yet shippable
           </div>
         )}
         {isModified && !isEditing && (
-          <div className="flex items-center gap-1 px-2 pt-0.5 text-xs text-muted-foreground">
+          <div className="text-muted-foreground flex items-center gap-1 px-2 pt-0.5 text-xs">
             <Pencil className="size-3" aria-hidden />
             Modified
           </div>
@@ -224,7 +236,9 @@ export function EntryRow({
             </Tooltip>
           )}
           <Tooltip>
-            <TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={onDuplicate} />}>
+            <TooltipTrigger
+              render={<Button variant="ghost" size="icon-xs" onClick={onDuplicate} />}
+            >
               <Copy />
               <span className="sr-only">Duplicate</span>
             </TooltipTrigger>

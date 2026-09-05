@@ -290,7 +290,7 @@ export function WindowProfilesSection() {
       </TooltipProvider>
       {shown.map((arch) => (
         <div key={arch} className="flex flex-col gap-1.5">
-          <div className="text-foreground/55 pt-1 text-[10px] tracking-wide uppercase">
+          <div className="text-foreground/55 pt-1 text-xs tracking-wide uppercase">
             {ARCHETYPE_LABELS[arch]}
           </div>
           <RangeSlider

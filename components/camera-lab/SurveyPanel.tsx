@@ -21,17 +21,15 @@ function RatingRow({
 }) {
   return (
     <div className="flex items-center justify-between gap-2">
-      <span className="text-[11px] text-zinc-400">{label}</span>
+      <span className="text-xs text-zinc-400">{label}</span>
       <div className="flex gap-0.5">
         {[1, 2, 3, 4, 5].map((n) => (
           <button
             key={n}
             type="button"
             onClick={() => onPick(n)}
-            className={`h-5 w-5 rounded text-[10px] tabular-nums transition-colors ${
-              value === n
-                ? "bg-teal-500 text-black"
-                : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
+            className={`h-5 w-5 rounded text-xs tabular-nums transition-colors ${
+              value === n ? "bg-teal-500 text-black" : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700"
             }`}
             title={value === n ? "click again to clear" : `rate ${n}`}
           >
@@ -97,7 +95,7 @@ export function SurveyPanel({
 
   return (
     <div className="flex flex-col gap-2.5">
-      <div className="text-[11px] leading-snug text-zinc-500">
+      <div className="text-xs leading-snug text-zinc-500">
         Rate <span className="text-zinc-300">{method.name}</span> after running the test tasks.
         Click a number; click it again to clear.
       </div>
@@ -114,16 +112,16 @@ export function SurveyPanel({
         onChange={(e) => onNotes(method.id, e.target.value)}
         placeholder={`Notes on ${method.name}… (what felt good / bad, vs other methods)`}
         rows={3}
-        className="w-full resize-y rounded border border-zinc-700 bg-zinc-900/80 p-2 text-[11px] text-zinc-200 placeholder:text-zinc-600 focus:border-teal-600 focus:outline-none"
+        className="w-full resize-y rounded border border-zinc-700 bg-zinc-900/80 p-2 text-xs text-zinc-200 placeholder:text-zinc-600 focus:border-teal-600 focus:outline-none"
       />
 
-      <div className="mt-1 text-[11px] text-zinc-500">Overall notes (all methods)</div>
+      <div className="mt-1 text-xs text-zinc-500">Overall notes (all methods)</div>
       <textarea
         value={feedback.globalNotes}
         onChange={(e) => onGlobalNotes(e.target.value)}
         placeholder="Cross-cutting thoughts, a ranking, what to ship…"
         rows={3}
-        className="w-full resize-y rounded border border-zinc-700 bg-zinc-900/80 p-2 text-[11px] text-zinc-200 placeholder:text-zinc-600 focus:border-teal-600 focus:outline-none"
+        className="w-full resize-y rounded border border-zinc-700 bg-zinc-900/80 p-2 text-xs text-zinc-200 placeholder:text-zinc-600 focus:border-teal-600 focus:outline-none"
       />
 
       <div className="grid grid-cols-2 gap-2">
@@ -134,7 +132,7 @@ export function SurveyPanel({
           Download
         </Button>
       </div>
-      <p className="text-[10px] leading-snug text-zinc-600">
+      <p className="text-xs leading-snug text-zinc-600">
         Saved in this browser automatically. Copy + paste the JSON to Claude (works on any device),
         or Download it (lands in Downloads, which Claude can read) for review.
       </p>

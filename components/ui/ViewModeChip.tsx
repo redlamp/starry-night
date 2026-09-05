@@ -66,12 +66,14 @@ export function ViewModeChip() {
       <div
         key={shown.nonce}
         className={cn(
-          "animate-in fade-in slide-in-from-top-2 rounded-full border px-3 py-1 text-xs font-medium shadow-lg backdrop-blur-md duration-300",
-          // Amber = skyline; sky-blue = aerial (the sky association, user 2026-07-26).
-          shown.skyline
-            ? "border-amber-300/40 bg-amber-950/60 text-amber-200"
-            : "border-sky-300/40 bg-sky-950/60 text-sky-200",
+          // Popover tokens (presentation batch item 1) so the theme toggle reaches
+          // this chip; the hue distinction still rides an inline oklch pair (amber
+          // = skyline, sky-blue = aerial — the sky association, user 2026-07-26).
+          "border-popover-foreground/10 bg-popover/70 animate-in fade-in slide-in-from-top-2 rounded-full border px-3 py-1 text-xs font-medium shadow-lg backdrop-blur-md duration-300 motion-reduce:transition-none",
         )}
+        style={{
+          color: shown.skyline ? "oklch(0.79 0.14 75)" : "oklch(0.78 0.12 230)",
+        }}
       >
         {shown.skyline ? "Skyline View" : "Aerial View"}
       </div>

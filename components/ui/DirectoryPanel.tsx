@@ -526,12 +526,17 @@ export function DirectorySection() {
     () =>
       bundle && trimmedQuery
         ? bundle.searchIndex.filter(
-            (n) => (kindFilter === "all" || n.kind === kindFilter) && n.lower.includes(trimmedQuery),
+            (n) =>
+              (kindFilter === "all" || n.kind === kindFilter) && n.lower.includes(trimmedQuery),
           )
         : [],
     [bundle, trimmedQuery, kindFilter],
   );
-  const pagedMatches = usePagedRows(allMatches, MAX_SEARCH_RESULTS, `${trimmedQuery}::${kindFilter}`);
+  const pagedMatches = usePagedRows(
+    allMatches,
+    MAX_SEARCH_RESULTS,
+    `${trimmedQuery}::${kindFilter}`,
+  );
 
   // Reverse hover (review 2026-07-25 4.x): the scene's DistrictHover writes the
   // same hoverDistrictId these rows set. Mirror "the districts list is visible"
@@ -719,7 +724,7 @@ export function DirectorySection() {
                 type="button"
                 onClick={() => openResult(entry)}
                 className={cn(
-                  "hover:bg-foreground/10 -mx-1 flex items-center justify-between gap-2 rounded px-1 text-left text-sm",
+                  "hover:bg-foreground/10 focus-visible:ring-ring/50 -mx-1 flex items-center justify-between gap-2 rounded-sm px-1 text-left text-sm focus-visible:ring-3 focus-visible:outline-none",
                   isSelected(entry.kind, entry.id) && "bg-primary/15",
                 )}
               >
@@ -939,7 +944,7 @@ export function DirectorySection() {
                             type="button"
                             onClick={() => goToBuilding(b.buildingId)}
                             className={cn(
-                              "hover:bg-foreground/10 -mx-1 flex items-baseline justify-between gap-2 rounded px-1 text-left text-sm",
+                              "hover:bg-foreground/10 focus-visible:ring-ring/50 -mx-1 flex items-baseline justify-between gap-2 rounded-sm px-1 text-left text-sm focus-visible:ring-3 focus-visible:outline-none",
                               isSelected("building", String(b.buildingId)) && "bg-primary/15",
                             )}
                           >
@@ -1172,7 +1177,9 @@ function CompaniesView({
       <ScrollArea className="-mr-3 flex min-h-0 flex-col overflow-hidden **:data-[slot=scroll-area-viewport]:h-auto **:data-[slot=scroll-area-viewport]:min-h-0">
         <div className="flex flex-col gap-0.5 pr-4">
           {total === 0 && (
-            <div className="text-muted-foreground px-1 text-sm">No companies match the filters.</div>
+            <div className="text-muted-foreground px-1 text-sm">
+              No companies match the filters.
+            </div>
           )}
           {visible.map((row) => (
             <button
@@ -1180,7 +1187,7 @@ function CompaniesView({
               type="button"
               onClick={() => onOpen(row.id)}
               className={cn(
-                "hover:bg-foreground/10 -mx-1 flex items-center justify-between gap-2 rounded px-1 text-left text-sm",
+                "hover:bg-foreground/10 focus-visible:ring-ring/50 -mx-1 flex items-center justify-between gap-2 rounded-sm px-1 text-left text-sm focus-visible:ring-3 focus-visible:outline-none",
                 isSelected("company", row.id) && "bg-primary/15",
               )}
             >
@@ -1238,7 +1245,7 @@ function StreetsView({
               type="button"
               onClick={() => onOpen(row.id)}
               className={cn(
-                "hover:bg-foreground/10 -mx-1 flex items-center justify-between gap-2 rounded px-1 text-left text-sm",
+                "hover:bg-foreground/10 focus-visible:ring-ring/50 -mx-1 flex items-center justify-between gap-2 rounded-sm px-1 text-left text-sm focus-visible:ring-3 focus-visible:outline-none",
                 isSelected("street", row.id) && "bg-primary/15",
               )}
             >
@@ -1287,7 +1294,7 @@ function BuildingsView({
               type="button"
               onClick={() => onOpen(row.id)}
               className={cn(
-                "hover:bg-foreground/10 -mx-1 flex items-center justify-between gap-2 rounded px-1 text-left text-sm",
+                "hover:bg-foreground/10 focus-visible:ring-ring/50 -mx-1 flex items-center justify-between gap-2 rounded-sm px-1 text-left text-sm focus-visible:ring-3 focus-visible:outline-none",
                 isSelected("building", String(row.id)) && "bg-primary/15",
               )}
             >
@@ -1341,7 +1348,7 @@ function PeopleView({
               type="button"
               onClick={() => onOpen(row.id)}
               className={cn(
-                "hover:bg-foreground/10 -mx-1 flex items-baseline justify-between gap-2 rounded px-1 text-left text-sm",
+                "hover:bg-foreground/10 focus-visible:ring-ring/50 -mx-1 flex items-baseline justify-between gap-2 rounded-sm px-1 text-left text-sm focus-visible:ring-3 focus-visible:outline-none",
                 isSelected("person", row.id) && "bg-primary/15",
               )}
             >
@@ -1449,7 +1456,7 @@ function ResidentMarquee({
                       type="button"
                       tabIndex={copy === 1 ? -1 : 0}
                       onClick={() => onOpen(p.id)}
-                      className="text-muted-foreground hover:text-foreground pr-5 text-xs whitespace-nowrap transition-colors"
+                      className="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 rounded-sm pr-5 text-xs whitespace-nowrap transition-colors focus-visible:ring-3 focus-visible:outline-none"
                     >
                       {p.fullName}
                     </button>

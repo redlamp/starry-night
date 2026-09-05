@@ -66,7 +66,7 @@ export function BuildingColumn({ id, part }: { id: number; part: "pinned" | "res
           <button
             type="button"
             onClick={() => push({ kind: "district", id: district.id })}
-            className="flex items-center gap-1.5 text-left text-sm font-medium hover:underline"
+            className="focus-visible:ring-ring/50 flex items-center gap-1.5 rounded-sm text-left text-sm font-medium hover:underline focus-visible:ring-3 focus-visible:outline-none"
             style={{ color: district.color }}
           >
             <MapPin className="size-4 shrink-0" />
@@ -79,7 +79,7 @@ export function BuildingColumn({ id, part }: { id: number; part: "pinned" | "res
           <button
             type="button"
             onClick={() => push({ kind: "street", id: address.roadId })}
-            className="text-muted-foreground -mt-1 text-left text-sm hover:underline"
+            className="text-muted-foreground focus-visible:ring-ring/50 -mt-1 rounded-sm text-left text-sm hover:underline focus-visible:ring-3 focus-visible:outline-none"
           >
             {address.number} {address.street}
           </button>
@@ -142,7 +142,7 @@ export function BuildingColumn({ id, part }: { id: number; part: "pinned" | "res
 
               {companies.length > 0 && (
                 <div className="flex flex-col gap-0.5">
-                  <div className="text-muted-foreground text-[11px] tracking-wide uppercase">
+                  <div className="text-muted-foreground text-xs tracking-wide uppercase">
                     Companies
                   </div>
                   {companies.map((biz) => (
@@ -152,7 +152,7 @@ export function BuildingColumn({ id, part }: { id: number; part: "pinned" | "res
                       onClick={() => push({ kind: "company", id: biz.id })}
                       onMouseEnter={() => setHoveredTenant({ buildingId: id, businessId: biz.id })}
                       onMouseLeave={() => setHoveredTenant(null)}
-                      className="hover:bg-foreground/10 -mx-1 flex items-center justify-between gap-2 rounded px-1 text-left text-sm"
+                      className="hover:bg-foreground/10 focus-visible:ring-ring/50 -mx-1 flex items-center justify-between gap-2 rounded-sm px-1 text-left text-sm focus-visible:ring-3 focus-visible:outline-none"
                     >
                       <span className="truncate">{biz.name}</span>
                       <Badge variant="outline" className="shrink-0 capitalize">
@@ -167,7 +167,7 @@ export function BuildingColumn({ id, part }: { id: number; part: "pinned" | "res
 
               {households.length > 0 && (
                 <div className="flex flex-col gap-1.5">
-                  <div className="text-muted-foreground flex items-baseline justify-between text-[11px] tracking-wide uppercase">
+                  <div className="text-muted-foreground flex items-baseline justify-between text-xs tracking-wide uppercase">
                     <span>Residents</span>
                     <span>Age</span>
                   </div>
@@ -192,7 +192,7 @@ export function BuildingColumn({ id, part }: { id: number; part: "pinned" | "res
                         {hh.unit && (
                           <Badge
                             variant="outline"
-                            className="shrink-0 px-1.5 py-0 text-[10px] font-normal"
+                            className="shrink-0 px-1.5 py-0 text-xs font-normal"
                           >
                             Unit {hh.unit}
                           </Badge>
@@ -207,7 +207,7 @@ export function BuildingColumn({ id, part }: { id: number; part: "pinned" | "res
                               key={pid}
                               type="button"
                               onClick={() => push({ kind: "persona", id: pid })}
-                              className="hover:bg-foreground/10 -mx-1 flex items-baseline justify-between gap-2 rounded px-1 text-left text-sm"
+                              className="hover:bg-foreground/10 focus-visible:ring-ring/50 -mx-1 flex items-baseline justify-between gap-2 rounded-sm px-1 text-left text-sm focus-visible:ring-3 focus-visible:outline-none"
                             >
                               <span className="truncate">
                                 {persona.givenName} {persona.familyName}

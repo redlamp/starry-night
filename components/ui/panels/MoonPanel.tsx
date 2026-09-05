@@ -125,7 +125,7 @@ export function MoonSection() {
         step={0.02}
         onChange={(edgeSharpness) => setMoon({ edgeSharpness })}
       />
-      <div className="text-foreground/55 pt-1 text-[10px] tracking-wide uppercase">Halo</div>
+      <div className="text-foreground/55 pt-1 text-xs tracking-wide uppercase">Halo</div>
       <ValueSlider
         label="Size ×"
         value={halo.radiusMul}

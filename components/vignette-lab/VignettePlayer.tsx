@@ -374,7 +374,7 @@ export function VignettePlayer() {
       <LabSidebar open={sidebarOpen} onOpenChange={setSidebarOpen} width={360}>
         <div className="flex items-center justify-between">
           <h1 className="text-sm font-semibold">Vignette Lab</h1>
-          <span className="text-muted-foreground font-mono text-[10px]">{vignette.seed}</span>
+          <span className="text-muted-foreground font-mono text-xs">{vignette.seed}</span>
         </div>
 
         <LabSection title="Playback">
@@ -414,7 +414,7 @@ export function VignettePlayer() {
               }}
               onValueCommitted={() => setScrubbing(false)}
             />
-            <div className="text-muted-foreground flex justify-between font-mono text-[10px]">
+            <div className="text-muted-foreground flex justify-between font-mono text-xs">
               <span>{fmt(uiTime)}</span>
               <span>
                 Shot {index + 1}/{vignette.shots.length} · {shot.label}

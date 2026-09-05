@@ -35,7 +35,7 @@ export function AntiAliasingSection() {
         />
       }
     >
-      <div className="text-foreground/40 text-[10px]">
+      <div className="text-foreground/40 text-xs">
         MSAA (header) reloads the view; edge AA is live.
       </div>
       <ValueSlider
@@ -109,7 +109,7 @@ export function LevelOfDetailSection() {
         />
       }
     >
-      <div className="text-foreground/40 text-[10px]">Window distance-wash (header toggle)</div>
+      <div className="text-foreground/40 text-xs">Window distance-wash (header toggle)</div>
       <ValueSlider
         label="LOD near"
         value={wa.lodNear}
@@ -200,20 +200,18 @@ export function AdaptiveGroup() {
         />
       }
     >
-      <div className="text-foreground/40 text-[10px]">
+      <div className="text-foreground/40 text-xs">
         Boot device-fit picks the starting tier + radius for this GPU; the runtime monitor then
         steps DPR to hold fps. Strong GPUs stay full. Picking a tier locks both off.
       </div>
       {fit?.applied && (
-        <div className="text-foreground/55 text-[10px] leading-snug">
+        <div className="text-foreground/55 text-xs leading-snug">
           Device fit: <span className="text-foreground/80">{fit.cls}</span> → tier{" "}
           <span className="text-foreground/80">{fit.tier}</span>. {fit.reason}
         </div>
       )}
       {qualityUserSet && (
-        <div className="text-[10px] text-amber-300/70">
-          Tier locked by your pick — auto-fit off.
-        </div>
+        <div className="text-xs text-amber-300/70">Tier locked by your pick — auto-fit off.</div>
       )}
     </SubGroup>
   );
@@ -232,9 +230,9 @@ export function StatsGroup() {
     perf.fps >= 55 ? "text-emerald-300" : perf.fps >= 35 ? "text-amber-300" : "text-rose-400";
   return (
     <SubGroup label="Stats">
-      <div className="text-foreground/40 text-[10px]">
-        Live readout. Set the header to &quot;stats&quot; for the floating overlay (+ boot timeline · long
-        tasks).
+      <div className="text-foreground/40 text-xs">
+        Live readout. Set the header to &quot;stats&quot; for the floating overlay (+ boot timeline
+        · long tasks).
       </div>
       <div className="text-foreground/70 grid grid-cols-[5rem_1fr] gap-1 font-mono text-xs">
         <div>dpr cap</div>
@@ -280,7 +278,7 @@ export function PerfDisplayToggle() {
     <div
       role="group"
       aria-label="Performance display"
-      className="bg-background/40 flex rounded-md p-0.5 text-[11px]"
+      className="bg-background/40 flex rounded-md p-0.5 text-xs"
     >
       {opts.map((o) => (
         <button

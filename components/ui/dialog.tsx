@@ -49,7 +49,7 @@ function DialogContent({ className, children, ...props }: React.ComponentPropsWi
     <div
       data-slot="dialog-content"
       className={cn(
-        "relative flex flex-col rounded-lg border border-zinc-700 bg-[#0b1020] shadow-2xl",
+        "bg-popover text-popover-foreground border-border relative flex flex-col rounded-lg border shadow-2xl",
         "focus:outline-none",
         className,
       )}
@@ -65,7 +65,7 @@ function DialogClose({ className, ...props }: DialogPrimitive.Close.Props) {
     <DialogPrimitive.Close
       data-slot="dialog-close"
       className={cn(
-        "absolute top-3 right-3 z-10 rounded p-1 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400",
+        "text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-ring absolute top-3 right-3 z-10 rounded p-1 transition-colors focus:outline-none focus-visible:ring-2",
         className,
       )}
       {...props}
@@ -77,7 +77,7 @@ function DialogTitle({ className, ...props }: DialogPrimitive.Title.Props) {
   return (
     <DialogPrimitive.Title
       data-slot="dialog-title"
-      className={cn("font-mono text-xs text-zinc-400", className)}
+      className={cn("text-muted-foreground font-mono text-xs", className)}
       {...props}
     />
   );

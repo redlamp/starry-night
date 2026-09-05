@@ -1,17 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { useSceneStore } from "@/lib/state/sceneStore";
 import { usePersonaDirectoryDeferred } from "@/lib/hooks/usePersonaDirectory";
 import { generateCity } from "@/lib/seed/cityGen";
-import { FloatingPanel } from "@/components/ui/FloatingPanel";
+import { FloatingPanel, CARD } from "@/components/ui/FloatingPanel";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -112,7 +106,7 @@ function DemographicsReport({ onClose }: { onClose: () => void }) {
     <FloatingPanel title="Demographics" onClose={onClose} defaultWidth={400} defaultHeight={620}>
       <div className="flex min-h-0 flex-1 flex-col">
         {/* Pinned controls: header stats + scope + district. */}
-        <div className="flex shrink-0 flex-col gap-2.5 border-b border-border/60 p-3 tabular-nums">
+        <div className="border-border/60 flex shrink-0 flex-col gap-2.5 border-b p-3 tabular-nums">
           {!data ? (
             <Skeleton className="h-12 w-full" />
           ) : (
@@ -260,13 +254,20 @@ function PyramidTooltip({
     ["Women", C.women, row.women],
   ];
   return (
-    <div className="border-border/60 bg-popover text-popover-foreground grid min-w-[8rem] gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs shadow-xl">
+    // CARD recipe (presentation batch item 2) — a reading surface, not HUD chrome.
+    <div
+      className={`text-popover-foreground grid min-w-[8rem] gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs ${CARD}`}
+    >
       <div className="font-medium">Age {label}</div>
       <div className="grid gap-1">
         {entries.map(([name, color, value]) => (
           <div key={name} className="flex items-center justify-between gap-3">
             <span className="flex items-center gap-1.5">
-              <span aria-hidden className="size-2.5 shrink-0 rounded-[2px]" style={{ backgroundColor: color }} />
+              <span
+                aria-hidden
+                className="size-2.5 shrink-0 rounded-[2px]"
+                style={{ backgroundColor: color }}
+              />
               <span className="text-muted-foreground">{name}</span>
             </span>
             <span className="text-foreground font-medium tabular-nums">{fmt(value)}</span>
@@ -297,16 +298,33 @@ function AgePyramid({ data, approx }: { data: DemographicsData; approx: boolean 
     <ChartContainer config={PYRAMID_CONFIG} className="aspect-auto h-[280px] w-full">
       <BarChart data={rows} layout="vertical" stackOffset="sign" margin={{ left: 4, right: 4 }}>
         <CartesianGrid horizontal={false} strokeDasharray="3 3" />
-        <XAxis type="number" tickFormatter={(v) => compact(Math.abs(v))} tickLine={false} axisLine={false} />
+        <XAxis
+          type="number"
+          tickFormatter={(v) => compact(Math.abs(v))}
+          tickLine={false}
+          axisLine={false}
+        />
         <YAxis type="category" dataKey="band" width={34} tickLine={false} axisLine={false} />
         {/* isAnimationActive=false everywhere: bar-morph tweens read as cells
             jumping between rows on filter/scope changes, and the animated
             tooltip lags the cursor (user 2026-07-18). */}
         <ChartTooltip isAnimationActive={false} content={<PyramidTooltip approx={approx} />} />
         <Bar dataKey="nbL" stackId="a" fill="var(--color-nonbinary)" isAnimationActive={false} />
-        <Bar dataKey="menNeg" stackId="a" fill="var(--color-menNeg)" radius={2} isAnimationActive={false} />
+        <Bar
+          dataKey="menNeg"
+          stackId="a"
+          fill="var(--color-menNeg)"
+          radius={2}
+          isAnimationActive={false}
+        />
         <Bar dataKey="nbR" stackId="a" fill="var(--color-nonbinary)" isAnimationActive={false} />
-        <Bar dataKey="women" stackId="a" fill="var(--color-women)" radius={2} isAnimationActive={false} />
+        <Bar
+          dataKey="women"
+          stackId="a"
+          fill="var(--color-women)"
+          radius={2}
+          isAnimationActive={false}
+        />
       </BarChart>
     </ChartContainer>
   );
@@ -347,10 +365,19 @@ function CategoryBars({
           <>
             <CartesianGrid vertical={false} strokeDasharray="3 3" />
             <XAxis dataKey="label" tickLine={false} axisLine={false} />
-            <YAxis type="number" tickFormatter={compact} tickLine={false} axisLine={false} width={36} />
+            <YAxis
+              type="number"
+              tickFormatter={compact}
+              tickLine={false}
+              axisLine={false}
+              width={36}
+            />
           </>
         )}
-        <ChartTooltip isAnimationActive={false} content={<ChartTooltipContent formatter={fmtVal} />} />
+        <ChartTooltip
+          isAnimationActive={false}
+          content={<ChartTooltipContent formatter={fmtVal} />}
+        />
         <Bar dataKey="count" fill="var(--color-count)" radius={3} isAnimationActive={false} />
       </BarChart>
     </ChartContainer>
