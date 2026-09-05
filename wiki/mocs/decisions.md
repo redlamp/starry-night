@@ -65,6 +65,7 @@ Map of Content for architectural and product decisions. Each decision is an atom
 - [[decision-heli-spline-tours]] — **Helicopter tours as closed Catmull-Rom splines (#89 v3, 2026-07-08):** one closed centripetal spline per tour (not per-hop bezier), continuous curvature through every stop
 - [[decision-listed-residents-term]] — **"listed" residents:** the directory's detailed personas are the _listed_ sample of a full-capacity city derived from the buildings (~326k pop at 6 km); company `totalHeadcount` promoted to display data; `approxCount` display rounding
 - [[design-bus-routes]] — **design, no code:** recovered road graph → seeded per-line routes → ribbon overlay → `lineServing(home, work)` commuter assignment; 3 phases, 6 open questions pending user answers
+- [[decision-card-front-is-the-person]] — **Card front is the person (2026-09-05):** resident card pinned header reorders to portrait/epithet → gender+pronouns+age → whyAwake → Home; the DOB/Time/Height/T-Shirt/ID/In City fact grid and astrology/MBTI badges move behind Details; building card gets a matching Occupants collapsible for its companies/households lists; driven by Andy Zawadzki's playtest ("so much information," "T-Shirt size feels like noise")
 
 ## Workflow and product (2026-09-05)
 
