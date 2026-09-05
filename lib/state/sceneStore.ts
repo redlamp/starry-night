@@ -128,7 +128,6 @@ import type {
   OrbitConfig,
   DriftConfig,
   LightSizeConfig,
-  Snv2Config,
   Snv3Config,
   TurntableConfig,
   TweenRequest,
@@ -146,7 +145,6 @@ import {
   DEFAULT_ORBIT,
   DEFAULT_DRIFT,
   DEFAULT_LIGHT_SIZE,
-  DEFAULT_SNV2,
   DEFAULT_SNV3,
   DEFAULT_TURNTABLE,
   DEFAULT_MOON,
@@ -254,7 +252,6 @@ type AnySettingEntry =
   | SettingEntry<"cameraModel">
   | SettingEntry<"drift">
   | SettingEntry<"lightSize">
-  | SettingEntry<"snv2">
   | SettingEntry<"snv3">
   | SettingEntry<"turntable">
   | SettingEntry<"orbitRestore">
@@ -336,7 +333,6 @@ export const SETTINGS_REGISTRY: AnySettingEntry[] = [
   { key: "cameraModel", defaultValue: "snv3" as const, persist: true },
   { key: "drift", defaultValue: DEFAULT_DRIFT, persist: true },
   { key: "lightSize", defaultValue: DEFAULT_LIGHT_SIZE, persist: true },
-  { key: "snv2", defaultValue: DEFAULT_SNV2, persist: true },
   { key: "snv3", defaultValue: DEFAULT_SNV3, persist: true },
   { key: "turntable", defaultValue: DEFAULT_TURNTABLE, persist: true },
   { key: "orbitRestore", defaultValue: null as SceneState["orbitRestore"], persist: false },
@@ -474,8 +470,6 @@ type SceneState = {
   // #99 light-sprite sizing (Settings → Lights).
   lightSize: LightSizeConfig;
   setLightSize: (patch: Partial<LightSizeConfig>) => void;
-  snv2: Snv2Config;
-  setSnv2: (patch: Partial<Snv2Config>) => void;
   snv3: Snv3Config;
   setSnv3: (patch: Partial<Snv3Config>) => void;
   // Cam v3 drift ACTIVITY (2026-07-16) — runtime tier, never persisted / never in
@@ -1043,7 +1037,6 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   cameraModel: "snv3",
   drift: DEFAULT_DRIFT,
   lightSize: DEFAULT_LIGHT_SIZE,
-  snv2: DEFAULT_SNV2,
   snv3: DEFAULT_SNV3,
   turntable: DEFAULT_TURNTABLE,
   cameraIntent: DEFAULT_INTENT,
@@ -1258,7 +1251,6 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setCameraModel: (cameraModel) => set({ cameraModel }),
   setDrift: (patch) => set((s) => ({ drift: { ...s.drift, ...patch } })),
   setLightSize: (patch) => set((s) => ({ lightSize: { ...s.lightSize, ...patch } })),
-  setSnv2: (patch) => set((s) => ({ snv2: { ...s.snv2, ...patch } })),
   setSnv3: (patch) => set((s) => ({ snv3: { ...s.snv3, ...patch } })),
   driftMode: false,
   setDriftMode: (driftMode) => set({ driftMode }),

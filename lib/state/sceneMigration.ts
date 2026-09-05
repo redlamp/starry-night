@@ -17,7 +17,6 @@ import type {
   CameraModelId,
   DriftConfig,
   LightSizeConfig,
-  Snv2Config,
   Snv3Config,
   TurntableConfig,
   WindowRange,
@@ -33,7 +32,6 @@ import {
   DEFAULT_LOD,
   DEFAULT_WINDOW_AA,
   DEFAULT_FACADE,
-  DEFAULT_SNV2,
   DEFAULT_SNV3,
   DEFAULT_FOG,
 } from "./sceneDefaults";
@@ -124,7 +122,6 @@ export type SavedConfig = {
   cameraModel?: CameraModelId;
   drift?: DriftConfig;
   lightSize?: LightSizeConfig; // #99 light-sprite sizing (optional — older saves lack it)
-  snv2?: Snv2Config;
   snv3?: Snv3Config;
   turntable?: TurntableConfig;
   orbitPaused?: boolean;
@@ -259,7 +256,14 @@ export function readSavedConfig(): SavedConfig | null {
     if (parsed.stars) parsed.stars = { ...DEFAULT_STARS, ...parsed.stars };
     if (parsed.windowAA) parsed.windowAA = { ...DEFAULT_WINDOW_AA, ...parsed.windowAA };
     if (parsed.facade) parsed.facade = { ...DEFAULT_FACADE, ...parsed.facade };
-    if (parsed.snv2) parsed.snv2 = { ...DEFAULT_SNV2, ...parsed.snv2 };
+    // 2026-09-05 (V2 retired, see wiki/notes/decision-camera-v2-retired.md): v2 was the
+    // registered fallback model; v3 (its fork) is now the only interactive drone camera. A
+    // save that had v2 selected switches to v3, and any lingering v2 tuning block is dropped
+    // — v3 has its own `snv3` block (below) and never read `snv2`.
+    if ((parsed as Record<string, unknown>).cameraModel === "snv2") {
+      parsed.cameraModel = "snv3";
+    }
+    delete (parsed as Record<string, unknown>).snv2;
     if (parsed.snv3) {
       // 2026-07-16 rename: the persisted flag autoDrift became idleDrift when the
       // manual drift MODE split off (runtime driftMode). Carry the old preference.

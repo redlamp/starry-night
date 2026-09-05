@@ -5,7 +5,6 @@ import { DriftModel } from "./DriftModel";
 import { TurntableModel } from "./TurntableModel";
 import { TopDownModel } from "./TopDownModel";
 import { FlyModel } from "./FlyModel";
-import { StarryNightV2Model } from "./StarryNightV2Model";
 import { StarryNightV3Model } from "./StarryNightV3Model";
 import { GoogleEarthModel } from "./GoogleEarthModel";
 import { DreiMapControlsModel } from "./DreiMapControlsModel";
@@ -20,7 +19,6 @@ import { DreiCameraControlsModel } from "./DreiCameraControlsModel";
 // store / catalog / registry can't silently drift apart.
 export const CAMERA_MODEL_COMPONENTS: Record<CameraModelId, ComponentType> = {
   map: DreiSceneControls,
-  snv2: StarryNightV2Model,
   snv3: StarryNightV3Model,
   drift: DriftModel,
   turntable: TurntableModel,

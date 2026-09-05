@@ -129,7 +129,7 @@ export function Scene() {
     };
   }, []);
 
-  // Boot-time-only camera position (#56 crop-follow): StarryNightV2Model's mount
+  // Boot-time-only camera position (#56 crop-follow): StarryNightV3Model's mount
   // effect immediately re-poses the live camera to this same scaled hero shot, so
   // this only matters for the very first painted frame — computed once so a reload
   // never flashes the un-scaled framing before that effect corrects it. Horizontal-
