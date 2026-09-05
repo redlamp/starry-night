@@ -495,12 +495,11 @@ export function PersonaColumn({
         </CollapsibleTrigger>
         <CollapsiblePanel>
           <div className="flex flex-col gap-1.5 pt-1.5">
-            {/* Two-column fact grid (user 2026-07-11, relocated 2026-09-05):
-              DOB|Time, Height|T-Shirt, ID|In City. Each cell spreads label
-              left / value right (justify-between + nowrap) so no fact ever
-              wraps. 1.25fr/1fr — the left column carries the longer values
-              (DOB, ID) — a hair more width keeps them on one line. */}
-            <div className="grid grid-cols-[1.25fr_1fr] gap-x-4 gap-y-0.5 text-base">
+            {/* ID block (user 2026-07-11 fact grid, relocated 2026-09-05):
+              one fact per row, label left / value right, so nothing clips at
+              the Details panel's narrower width (the two-column form cut
+              "11:59 PM" and "Born here" once it moved off the header). */}
+            <div className="grid grid-cols-1 gap-y-0.5 text-base">
               {/* DOB and Time as two neat fields (user 2026-07-11, round 3) —
                 they stay separate seeded numbers rather than a Date object
                 (a real Date would drag timezone semantics into the fiction);
