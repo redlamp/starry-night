@@ -43,16 +43,17 @@ The dev server runs on http://localhost:7827.
 
 ### Scripts
 
-| Command | What it does |
-| --- | --- |
-| `bun dev` | Dev server (Turbopack, port 7827) |
-| `bun run build` | Production build |
-| `bun run start` | Serve the production build |
-| `bun run lint` | ESLint |
-| `bun run format` | Prettier write (`bun run format:check` to verify) |
-| `bunx tsc --noEmit` | TypeScript check |
-| `bun run capture` | Headless scene capture for stills |
-| `bun run scripts/gate1.ts` | Generator verification suite |
+| Command                    | What it does                                          |
+| -------------------------- | ----------------------------------------------------- |
+| `bun dev`                  | Dev server (Turbopack, port 7827)                     |
+| `bun run build`            | Production build                                      |
+| `bun run start`            | Serve the production build                            |
+| `bun run lint`             | ESLint                                                |
+| `bun run format`           | Prettier write (`bun run format:check` to verify)     |
+| `bunx tsc --noEmit`        | TypeScript check                                      |
+| `bun run capture`          | Headless scene capture for stills                     |
+| `bun run test`             | Deterministic gate scripts (no server/browser needed) |
+| `bun run scripts/gate1.ts` | Generator verification suite                          |
 
 ## Routes
 
@@ -60,6 +61,13 @@ The dev server runs on http://localhost:7827.
 - `/plan` - top-down city-planning overlay (roads, districts, density bands, population heat map)
 - `/tensor` - the road-shaping tensor field
 - `/palette` - colour and material reference
+- `/intro` - the city on a Mac Plus CRT
+- `/camera-lab` - grey-box bench comparing camera control methods on desktop and mobile
+- `/drei-lab` - spike testing drei's `CameraControls` against the app's current camera behaviour
+- `/window-lab` - isolated bench for trying new window/facade lighting approaches side by side
+- `/writing-lab` - content-review workbench over the generated name and flavour-text pools
+
+The lab routes are also reachable in-app from Settings > Labs.
 
 ## Project layout
 
