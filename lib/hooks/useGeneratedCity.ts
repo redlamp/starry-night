@@ -6,6 +6,7 @@ import { sketchKey } from "@/lib/seed/citySketch";
 import { generateCityInWorker } from "@/lib/workers/cityGenClient";
 import { fingerprintCurrent } from "@/lib/seed/bundleFingerprint";
 import { getBundle, putBundle } from "@/lib/cache/bundleStore";
+import { atlasFingerprint, primeAtlas } from "@/lib/cache/atlasStore";
 import { mark, genCycleStart, genCycleEnd } from "@/lib/perf/bootTrace";
 import { useSceneStore } from "@/lib/state/sceneStore";
 import type { CityShapeSetting } from "@/lib/seed/cityShape";
@@ -140,7 +141,16 @@ export function useGeneratedCity(seed: string, shape: CityShapeSetting): { ready
     if (warmedKeys.has(key)) return; // (1) already warm in-memory — nothing to do
     let cancelled = false;
     let cancelFallback: (() => void) | null = null;
-    const finish = () => {
+    // Atlas warm-up (InstancedCity's packed-window cache, see
+    // lib/cache/atlasStore.ts) rides along with the bundle warm-up: kicked off
+    // here so its one IDB round-trip runs CONCURRENTLY with the bundle read
+    // below, rather than InstancedCity paying it separately after mount (that
+    // used to show a frame with no buildings). `ready` only flips once both
+    // have settled.
+    const atlasReady = primeAtlas(atlasFingerprint(seed, shape));
+    const finish = async () => {
+      await atlasReady;
+      if (cancelled) return;
       mark("gen:ready"); // city available → consumers mount; cascade wakes it in
       warmedKeys.add(key);
       setState({ key, ready: true });
@@ -149,7 +159,7 @@ export function useGeneratedCity(seed: string, shape: CityShapeSetting): { ready
       // The store subscriptions have already mirrored tier / sketch / deviation /
       // density into the gen modules, so the prime keys match this bundle.
       primeCityCaches(seed, shape, MAX_SCALE, bundle);
-      finish();
+      void finish();
     };
     // Sync fallback — the pre-#59 path: one cold generateCity on an idle
     // callback. Fine at Town/City cost; only the worker makes Metro painless.
@@ -158,7 +168,7 @@ export function useGeneratedCity(seed: string, shape: CityShapeSetting): { ready
         if (cancelled) return;
         generateCity(seed, shape, MAX_SCALE); // warms cityGen's cache + the shared field
         genCycleEnd("sync");
-        finish();
+        void finish();
       });
 
     // Resolution order, all converging on primeCityCaches → finish():

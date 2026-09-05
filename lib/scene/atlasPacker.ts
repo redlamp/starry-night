@@ -28,6 +28,14 @@ export type PackResult = {
 
 const ATLAS_WIDTH = 1024;
 
+// Schema/output version for the STORED packed atlas (lib/cache/atlasStore.ts).
+// Bump whenever this packer's output shape changes (e.g. ATLAS_WIDTH, the
+// shelf-pack order/algorithm) OR the upstream painter's pixel output changes
+// (lib/seed/lightingGen.ts's generateWindowTexture, including calibration
+// constants like SCENE_WB_GAIN) — either invalidates a stored atlas even
+// though the CityBundle fingerprint it's keyed alongside is unchanged.
+export const ATLAS_VERSION = 1;
+
 export function packWindowAtlas(items: PackInput[]): PackResult {
   // Sort tallest-first for tighter shelf packing.
   const sorted = [...items].sort((a, b) => b.rows - a.rows);

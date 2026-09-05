@@ -23,11 +23,7 @@ import {
   type Archetype,
   type Building,
 } from "@/lib/seed/cityGen";
-import {
-  type CityShapeSetting,
-  resolveCityShape,
-  cropRadiusThreshold,
-} from "@/lib/seed/cityShape";
+import { type CityShapeSetting, resolveCityShape, cropRadiusThreshold } from "@/lib/seed/cityShape";
 import { CITY_CENTER, maxHalfExtent } from "@/lib/seed/topology";
 import {
   correlationModeFor,
@@ -35,8 +31,14 @@ import {
   facadeGlowFor,
   generateWindowTexture,
 } from "@/lib/seed/lightingGen";
-import { packWindowAtlas, type PackInput } from "@/lib/scene/atlasPacker";
+import { packWindowAtlas, type PackInput, type PackResult } from "@/lib/scene/atlasPacker";
 import { meanLitStats } from "@/lib/scene/windowStats";
+import {
+  putAtlas,
+  atlasFingerprint,
+  atlasMemCache,
+  type AtlasRecord,
+} from "@/lib/cache/atlasStore";
 import { buildingPopulation } from "@/lib/seed/population";
 import { kelvinToColor } from "@/lib/color/kelvin";
 import { cityVertexShader, cityFragmentShader } from "@/lib/shaders/cityInstanced";
@@ -155,11 +157,23 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
   // prefix within each tile, same recompaction path as frustum re-entry) so a
   // crop notch never rebuilds a mesh, atlas, or window texture. See
   // wiki/notes/plan-overnight-agents-2026-07-05.md #70.
+
+  // Atlas cache key: the same fingerprint the CityBundle is keyed under (see
+  // useGeneratedCity.ts), prefixed with ATLAS_VERSION — see
+  // lib/cache/atlasStore.ts. This mount only ever happens once the CityBundle
+  // warm-up has flipped `ready` (Scene.tsx's cityReady gate), and that same
+  // warm-up primes atlasMemCache before flipping ready — so buildMeshes below
+  // always finds a resolved cache entry (hit or miss) here without waiting on
+  // IndexedDB itself. A same-session seed/shape change that somehow bypasses
+  // the warm path just falls through buildMeshes' own cache-miss branch and
+  // paints synchronously (never an empty return — see buildMeshes below).
+  const atlasFp = useMemo(() => atlasFingerprint(masterSeed, cityShape), [masterSeed, cityShape]);
+
   const { entries, maxRadius, idToBuilding, districtColorById } = useMemo(() => {
     void citySize; // tier drives the module-level gen extent (#58) — a switch must rebuild
     void citySketch; // a registered sketch is a different city (#40) — likewise
-    return buildMeshes(masterSeed, cityShape);
-  }, [masterSeed, cityShape, citySize, citySketch]);
+    return buildMeshes(masterSeed, cityShape, atlasFp);
+  }, [masterSeed, cityShape, citySize, citySketch, atlasFp]);
   const meshes = useMemo(() => entries.map((e) => e.mesh), [entries]);
   // #70: resolved shape ("auto" is a seeded coin flip per masterSeed) —
   // memoised so the per-frame crop-threshold read below doesn't re-run
@@ -706,6 +720,7 @@ export function InstancedCity({ masterSeed }: { masterSeed: string }) {
 function buildMeshes(
   masterSeed: string,
   shape: CityShapeSetting,
+  atlasFp: string,
 ): {
   entries: TiledMesh[];
   maxRadius: number;
@@ -754,22 +769,46 @@ function buildMeshes(
     districtColorById.set(d.id, displayColor(d.color));
   }
 
-  // 1. Generate per-building window pixels. While the data is in hand, fold
-  // each building's cells into the hybrid far-field statistics (#82) — see
-  // lib/scene/windowStats for the weighting.
-  const meanLitById = new Map<number, [number, number, number, number]>();
-  const windowItems: PackInput[] = buildings.map((b) => {
-    const tex = generateWindowTexture(masterSeed, b);
-    const data = tex.texture.image.data as Uint8Array;
-    meanLitById.set(b.id, meanLitStats(data, tex.cols * tex.rows));
-    // We have what we need from the DataTexture wrapper; let the GPU upload happen
-    // through the atlas instead.
-    tex.texture.dispose();
-    return { id: b.id, cols: tex.cols, rows: tex.rows, data };
-  });
-
-  // 2. Pack into shared atlas.
-  const pack = packWindowAtlas(windowItems);
+  // 1. Per-building window pixels, packed into a shared atlas, folding each
+  // building's cells into the hybrid far-field statistics (#82) along the way
+  // — see lib/scene/windowStats for the weighting. This is the ~190ms paint +
+  // ~10ms pack (Metro tier); a warm-cache hit (atlasMemCache already resolved
+  // for this fingerprint — primed by useGeneratedCity's warm-up before
+  // InstancedCity mounts, see lib/cache/atlasStore.ts) skips straight to a
+  // cached `pack`/`meanLitById` instead of repainting. A miss with no prime
+  // recorded (bypassed the warm path) falls through to the paint below rather
+  // than ever returning an empty result.
+  let meanLitById: Map<number, [number, number, number, number]>;
+  let pack: PackResult;
+  const cachedAtlas = atlasMemCache.get(atlasFp);
+  if (cachedAtlas) {
+    meanLitById = cachedAtlas.meanLitById;
+    pack = cachedAtlas;
+  } else {
+    meanLitById = new Map<number, [number, number, number, number]>();
+    const windowItems: PackInput[] = buildings.map((b) => {
+      const tex = generateWindowTexture(masterSeed, b);
+      const data = tex.texture.image.data as Uint8Array;
+      meanLitById.set(b.id, meanLitStats(data, tex.cols * tex.rows));
+      // We have what we need from the DataTexture wrapper; let the GPU upload happen
+      // through the atlas instead.
+      tex.texture.dispose();
+      return { id: b.id, cols: tex.cols, rows: tex.rows, data };
+    });
+    pack = packWindowAtlas(windowItems);
+    // Remember in-memory for any same-session remount at this fingerprint,
+    // and persist to IndexedDB for the NEXT page load. putAtlas is fire-and-
+    // forget (fails soft, see atlasStore.ts) — this build never waits on it.
+    const record: AtlasRecord = {
+      atlas: pack.atlas,
+      width: pack.width,
+      height: pack.height,
+      entries: pack.entries,
+      meanLitById,
+    };
+    atlasMemCache.set(atlasFp, record);
+    void putAtlas(atlasFp, record);
+  }
   const atlasTex = new THREE.DataTexture(pack.atlas, pack.width, pack.height, THREE.RGBAFormat);
   atlasTex.minFilter = THREE.NearestFilter;
   atlasTex.magFilter = THREE.NearestFilter;
@@ -914,7 +953,9 @@ function buildMeshes(
           uPickPosition: { value: new THREE.Vector3(PICK_SENTINEL, PICK_SENTINEL, PICK_SENTINEL) },
           // #87 click-to-select: world-space centre of the SELECTED building,
           // or PICK_SENTINEL when nothing is selected. Fed per-frame (see useFrame).
-          uSelectPosition: { value: new THREE.Vector3(PICK_SENTINEL, PICK_SENTINEL, PICK_SENTINEL) },
+          uSelectPosition: {
+            value: new THREE.Vector3(PICK_SENTINEL, PICK_SENTINEL, PICK_SENTINEL),
+          },
         },
       ]),
       fog: true,
@@ -959,7 +1000,9 @@ function buildMeshes(
           // #87 click-to-select — see the matching uSelectPosition comment on
           // the city material above; uSelectColor is the distinct cool-blue
           // stroke colour (vs uOutlineColor's #69 hover cream).
-          uSelectPosition: { value: new THREE.Vector3(PICK_SENTINEL, PICK_SENTINEL, PICK_SENTINEL) },
+          uSelectPosition: {
+            value: new THREE.Vector3(PICK_SENTINEL, PICK_SENTINEL, PICK_SENTINEL),
+          },
           uSelectColor: { value: SELECT_COLOR },
           uOutlineWhole: { value: 0 }, // #87: 1 = whole-mesh (archetype hover), 0 = pick-only
           // #69 hairline floor — uHairlinePx is a fixed constant (device px);
