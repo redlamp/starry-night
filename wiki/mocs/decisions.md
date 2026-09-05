@@ -68,3 +68,7 @@ Map of Content for architectural and product decisions. Each decision is an atom
 - [[decision-fable-branch-retired]] — `fable` frozen as history; feat/<name> off dev for every session and model, replacing the model-scoped routing
 - [[decision-prd-replacement]] — PRD replaced by `docs/charter.md`, the [[product]] map, and a GitHub 2.0 milestone
 - [[decision-interaction-modes]] — (open) spatial-first vs browse-first vs toggle for the scene/directory split; recommends spatial-first
+
+## Perf & bundling
+
+- [[decision-shared-vendor-chunk]] — **(deferred, 2026-09-05)** investigated a reported per-route three.js duplication (three ~530 KB copies across `/`, `/intro`, `/camera-lab`); on dev's post-camera-v2-retirement tip the duplication no longer reproduces - Turbopack already shares one instance of three's core chunks across every route that uses it; no config change made
