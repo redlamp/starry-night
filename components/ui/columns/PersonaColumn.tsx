@@ -59,10 +59,19 @@ import {
   EDUCATION_ICON_COLOR,
 } from "./workplaceIcons";
 
-// Column port of the old PersonaPanel. Ordering is a hard design rule
-// (re-cut 2026-07-10): badges → whyAwake → stats → family →
-// wasIs/detail/refusal/relation → hook, and the sheet always ENDS on the
-// hook, unresolved. Facts lead; the flavour prose gathers below Family.
+// Column port of the old PersonaPanel. Ordering is a hard design rule,
+// re-cut again 2026-09-05 (Andy's 2026-07-18 playtest: "so much information
+// that I don't know what's important" / "T-Shirt size feels like noise" —
+// see wiki/user-research/2026-07-18-andy-zawadzki-playtest.md; decision:
+// wiki/notes/decision-card-front-is-the-person.md). The front of the card is
+// the PERSON, not the form: pinned header reads portrait + epithet, then
+// gender/pronouns + age on one line, then whyAwake — the line that actually
+// explains the lit window, so it leads over the civic facts — then Home.
+// Everything else (the DOB/Time/Height/T-Shirt/ID/In City fact grid, the
+// astrology/MBTI badges, Work/Education/Relationship) is a fiction device
+// that lives behind the Details disclosure. Family stays its own disclosure
+// below Details; wasIs/detail/refusal/relation gather next, and the sheet
+// always ENDS on the hook, unresolved.
 // Trait badges explain themselves on hover (user 2026-07-08): western sign,
 // Chinese sign, MBTI.
 
@@ -372,19 +381,15 @@ export function PersonaColumn({
   const alma = almaMater;
 
   if (part === "pinned") {
-    const born = `${MONTHS[persona.birthday.month - 1]} ${persona.birthday.day}, ${persona.birthday.year}`;
     return (
       <>
-        {/* Header (user 2026-07-11): epithet, then the details in this exact
-          order — gender line, DOB + birth time with age in parens, Height +
-          Build side by side, ID. Minor-only fields (height/build) drop out;
-          née rides the card title. The whole block is selectable (spans, not
-          buttons, so select-none doesn't apply — set it explicitly for
-          drag-select). */}
-        <div className="flex min-w-0 cursor-text flex-col gap-0.5 select-text">
+        {/* Header (re-cut 2026-09-05, see the file-top rule comment): the
+          person leads, the form follows. The whole block is selectable
+          (spans, not buttons, so select-none doesn't apply — set it
+          explicitly for drag-select). */}
+        <div className="flex min-w-0 cursor-text flex-col gap-1.5 select-text">
           {/* Portrait row: the stub tile (PersonaPortrait) with the epithet
-            beside it. The fact grid stays full-width below so its nowrap
-            cells keep their room. */}
+            beside it. */}
           <div className="flex min-w-0 items-center gap-3 pb-1">
             <PersonaPortrait persona={persona} size={56} />
             {story.epithet && (
@@ -393,168 +398,61 @@ export function PersonaColumn({
               </span>
             )}
           </div>
-          {/* Two-column fact grid (user 2026-07-11): Gender|Age, DOB|Time,
-            Height|T-Shirt, ID|In City. Each cell spreads label left / value
-            right (justify-between + nowrap) so no fact ever wraps; the
-            gender icon + pronouns are their own label. In City lives HERE,
-            not in the Details rows. */}
-          {/* 1.25fr/1fr (user 2026-07-11): the left column carries the longer
-            values (DOB, ID) — a hair more width keeps them on one line. */}
-          <div className="grid grid-cols-[1.25fr_1fr] gap-x-4 gap-y-0.5 text-base">
-            <span className="text-muted-foreground inline-flex items-center gap-1.5">
-              <GenderIcon identity={persona.genderIdentity} className="size-5 shrink-0" />
-              {persona.pronouns}
+          {/* One line: gender icon + pronouns, then age (user/owner
+            2026-09-05) — "he/him · 69". Everything else that used to ride
+            this header (DOB, Time, Height, T-Shirt, ID, In City) moved to
+            the Details fact grid below. */}
+          <span className="text-muted-foreground inline-flex items-center gap-1.5 text-base">
+            <GenderIcon identity={persona.genderIdentity} className="size-5 shrink-0" />
+            <span>
+              {persona.pronouns} · <span className="text-foreground">{persona.age}</span>
             </span>
-            <span className="flex items-baseline justify-between gap-2">
-              <span className="text-muted-foreground">Age</span>
-              <span>{persona.age}</span>
-            </span>
-            {/* DOB and Time as two neat fields (user 2026-07-11, round 3) —
-              they stay separate seeded numbers rather than a Date object
-              (a real Date would drag timezone semantics into the fiction);
-              the formatter composes what display needs. */}
-            <span className="flex items-baseline justify-between gap-2">
-              <span className="text-muted-foreground">DOB</span>
-              <span className="whitespace-nowrap">{born}</span>
-            </span>
-            <span className="flex items-baseline justify-between gap-2">
-              <span className="text-muted-foreground">Time</span>
-              <span className="whitespace-nowrap">
-                {formatTime(flavor.birthHour, flavor.birthMinute)}
-              </span>
-            </span>
-            {flavor.heightCm && (
-              <span className="flex items-baseline justify-between gap-2">
-                <span className="text-muted-foreground">Height</span>
-                <span className="whitespace-nowrap">{formatHeight(flavor.heightCm)}</span>
-              </span>
-            )}
-            {flavor.build && (
-              <span className="flex items-baseline justify-between gap-2">
-                <span className="text-muted-foreground">T-Shirt</span>
-                <span>{flavor.build}</span>
-              </span>
-            )}
-            <span className="flex items-baseline justify-between gap-2">
-              <span className="text-muted-foreground">ID</span>
-              <span className="font-mono">{flavor.civicId}</span>
-            </span>
-            <span className="flex items-baseline justify-between gap-2">
-              <span className="text-muted-foreground">In City</span>
-              <span className="whitespace-nowrap">
-                {persona.bornHere ? "Born here" : `${persona.yearsInCity} yrs`}
-              </span>
-            </span>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-1.5">
-          {/* Trait badges explain themselves on hover (shadcn hover cards,
-            user 2026-07-08) — birthday context on the sun sign, animal +
-            element on the Chinese sign, nickname + read on the MBTI type. */}
-          {/* Badge anatomy (user 2026-07-11): astrology glyphs at emoji size
-            (text-base + emoji presentation), sign names as 2-letter
-            abbreviations. Hover cards read at text-base with the big three
-            (Sun/Moon/Rising) each carrying their sign emoji. */}
-          <HoverCard>
-            <HoverCardTrigger
-              render={
-                <Badge variant="outline" className="cursor-help text-sm">
-                  <span className="text-base leading-none">
-                    {signEmoji(persona.westernSign.name)}
-                  </span>{" "}
-                  {persona.westernSign.name.slice(0, 2)}
-                </Badge>
-              }
-            />
-            <HoverCardContent className="w-72 text-base">
-              {/* The big three each read as emoji-marked headings (☀️/🌙/🌅 +
-                sign emoji) with their DETAILS on the line below (user
-                2026-07-11) — no trailing "· descriptor" on the heading. */}
-              <div className="font-medium">
-                <span className="text-lg leading-none">
-                  ☀️ {signEmoji(persona.westernSign.name)}
-                </span>{" "}
-                {persona.westernSign.name} Sun
-              </div>
-              <div className="text-muted-foreground text-sm">
-                {persona.westernSign.element} · {persona.westernSign.modality} · born{" "}
-                {persona.birthday.month}/{persona.birthday.day}
-              </div>
-              <p className="mt-1.5">{WESTERN_SIGN_TRAITS[persona.westernSign.name]}</p>
-              <div className="border-border mt-2 border-t pt-2">
-                {/* Sub head on its OWN line under each of the big three (user
-                  2026-07-11) — never continued off the heading. */}
-                <div className="font-medium">
-                  <span className="text-base leading-none">🌙 {signEmoji(flavor.moonSign)}</span>{" "}
-                  {flavor.moonSign} Moon
-                </div>
-                <div className="text-muted-foreground text-sm">the inner weather</div>
-                <div>{MOON_SIGN_TRAITS[flavor.moonSign]}</div>
-                <div className="mt-1.5 font-medium">
-                  <span className="text-base leading-none">🌅 {signEmoji(flavor.risingSign)}</span>{" "}
-                  {flavor.risingSign} Rising
-                </div>
-                <div className="text-muted-foreground text-sm">the first impression</div>
-                <div>{RISING_SIGN_TRAITS[flavor.risingSign]}</div>
-              </div>
-            </HoverCardContent>
-          </HoverCard>
-          <HoverCard>
-            <HoverCardTrigger
-              render={
-                <Badge variant="outline" className="cursor-help text-sm">
-                  <span className="text-base leading-none">
-                    {ELEMENT_EMOJI[persona.chineseSign.element]}{" "}
-                    {CHINESE_ANIMAL_GLYPHS[persona.chineseSign.animal]}
-                  </span>
-                </Badge>
-              }
-            />
-            <HoverCardContent className="w-72 text-base">
-              {/* Layout (user 2026-07-11): header, born year, then two glyph-led
-                lines — animal-year description (without renaming the animal)
-                and element description. */}
-              <div className="font-medium">
-                <span className="text-lg leading-none">
-                  {CHINESE_ANIMAL_GLYPHS[persona.chineseSign.animal]}
-                </span>{" "}
-                Year of the {persona.chineseSign.animal}
-              </div>
-              <div className="text-muted-foreground text-sm">born {persona.birthday.year}</div>
-              <p className="mt-1.5">
-                <span className="text-base leading-none">
-                  {CHINESE_ANIMAL_GLYPHS[persona.chineseSign.animal]}
-                </span>{" "}
-                {capitalize(CHINESE_ANIMAL_TRAITS[persona.chineseSign.animal])}.
-              </p>
-              <p className="mt-1">
-                <span className="text-base leading-none">
-                  {ELEMENT_EMOJI[persona.chineseSign.element]}
-                </span>{" "}
-                {capitalize(CHINESE_ELEMENT_TRAITS[persona.chineseSign.element])}.
-              </p>
-            </HoverCardContent>
-          </HoverCard>
-          <HoverCard>
-            <HoverCardTrigger
-              render={
-                <Badge variant="outline" className="cursor-help text-sm">
-                  {flavor.mbtiNickname.replace(/^The /, "")}
-                </Badge>
-              }
-            />
-            <HoverCardContent className="w-72 text-base">
-              <div className="font-medium">
-                {flavor.mbti} · {flavor.mbtiNickname}
-              </div>
-              <p className="mt-1.5">{MBTI_DESCRIPTIONS[flavor.mbti]}</p>
-            </HoverCardContent>
-          </HoverCard>
+          </span>
+          {/* whyAwake pinned as the third element (2026-09-05): it's the
+            line that explains the lit window, so it leads over the civic-ID
+            facts rather than trailing after Family. Plain text-base, no
+            italics — the hook at the very end of the card keeps italics as
+            its own signal. */}
+          {story.whyAwake && <p className="text-base">{story.whyAwake}</p>}
+          {/* Home moved up from Details (2026-09-05) — same two-line form
+            (district / address), each its own click target. */}
+          <StatRow
+            icon={Home}
+            iconTint={HOME_ICON_COLOR}
+            iconAction={() => flyTo(persona.homeBuildingId)}
+            iconLabel="Fly Home"
+            label="Home"
+            top={
+              homeDistrictName && (
+                <button
+                  type="button"
+                  onClick={() => push({ kind: "district", id: persona.homeDistrictId })}
+                  {...hover.district(persona.homeDistrictId)}
+                  className="hover:underline"
+                >
+                  {homeDistrictName}
+                </button>
+              )
+            }
+            bottom={
+              homeAddressLine && (
+                <button
+                  type="button"
+                  onClick={() => push({ kind: "building", id: persona.homeBuildingId })}
+                  {...hover.persona(persona.homeBuildingId, persona.householdIndex)}
+                  className="hover:underline"
+                >
+                  {homeAddressLine}
+                </button>
+              )
+            }
+          />
         </div>
       </>
     );
   }
+
+  const born = `${MONTHS[persona.birthday.month - 1]} ${persona.birthday.day}, ${persona.birthday.year}`;
 
   const commuteRow = persona.commute && workBuildingId !== undefined && (
     <StatRow
@@ -584,48 +482,172 @@ export function PersonaColumn({
 
   return (
     <>
-      {/* Row order (user 2026-07-11): Home → Commute → Work (adults only:
-          Profession + Work) → Education (students fold their school here as
-          a single row; adults get level + alma mater) → Relationship. In City
-          moved into the pinned header's fact grid. The whole stack lives
-          under a "Details" disclosure. */}
+      {/* Row order (re-cut 2026-09-05): the "ID" fact grid (DOB, Time,
+          Height, T-Shirt, ID, In City — the civic-fiction facts that used to
+          pin the header) leads Details, then the astrology/MBTI badges, then
+          Commute → Work (adults only: Profession + Work) → Education
+          (students fold their school here as a single row; adults get level
+          + alma mater) → Relationship. Home moved OUT to the pinned header.
+          The whole stack lives under a "Details" disclosure. */}
       <Collapsible open={cardDetailsOpen} onOpenChange={setCardDetailsOpen}>
         <CollapsibleTrigger className="text-muted-foreground text-base font-medium">
           Details
         </CollapsibleTrigger>
         <CollapsiblePanel>
           <div className="flex flex-col gap-1.5 pt-1.5">
-            <StatRow
-              icon={Home}
-              iconTint={HOME_ICON_COLOR}
-              iconAction={() => flyTo(persona.homeBuildingId)}
-              iconLabel="Fly Home"
-              label="Home"
-              top={
-                homeDistrictName && (
-                  <button
-                    type="button"
-                    onClick={() => push({ kind: "district", id: persona.homeDistrictId })}
-                    {...hover.district(persona.homeDistrictId)}
-                    className="hover:underline"
-                  >
-                    {homeDistrictName}
-                  </button>
-                )
-              }
-              bottom={
-                homeAddressLine && (
-                  <button
-                    type="button"
-                    onClick={() => push({ kind: "building", id: persona.homeBuildingId })}
-                    {...hover.persona(persona.homeBuildingId, persona.householdIndex)}
-                    className="hover:underline"
-                  >
-                    {homeAddressLine}
-                  </button>
-                )
-              }
-            />
+            {/* Two-column fact grid (user 2026-07-11, relocated 2026-09-05):
+              DOB|Time, Height|T-Shirt, ID|In City. Each cell spreads label
+              left / value right (justify-between + nowrap) so no fact ever
+              wraps. 1.25fr/1fr — the left column carries the longer values
+              (DOB, ID) — a hair more width keeps them on one line. */}
+            <div className="grid grid-cols-[1.25fr_1fr] gap-x-4 gap-y-0.5 text-base">
+              {/* DOB and Time as two neat fields (user 2026-07-11, round 3) —
+                they stay separate seeded numbers rather than a Date object
+                (a real Date would drag timezone semantics into the fiction);
+                the formatter composes what display needs. */}
+              <span className="flex items-baseline justify-between gap-2">
+                <span className="text-muted-foreground">DOB</span>
+                <span className="whitespace-nowrap">{born}</span>
+              </span>
+              <span className="flex items-baseline justify-between gap-2">
+                <span className="text-muted-foreground">Time</span>
+                <span className="whitespace-nowrap">
+                  {formatTime(flavor.birthHour, flavor.birthMinute)}
+                </span>
+              </span>
+              {flavor.heightCm && (
+                <span className="flex items-baseline justify-between gap-2">
+                  <span className="text-muted-foreground">Height</span>
+                  <span className="whitespace-nowrap">{formatHeight(flavor.heightCm)}</span>
+                </span>
+              )}
+              {flavor.build && (
+                <span className="flex items-baseline justify-between gap-2">
+                  <span className="text-muted-foreground">T-Shirt</span>
+                  <span>{flavor.build}</span>
+                </span>
+              )}
+              <span className="flex items-baseline justify-between gap-2">
+                <span className="text-muted-foreground">ID</span>
+                <span className="font-mono">{flavor.civicId}</span>
+              </span>
+              <span className="flex items-baseline justify-between gap-2">
+                <span className="text-muted-foreground">In City</span>
+                <span className="whitespace-nowrap">
+                  {persona.bornHere ? "Born here" : `${persona.yearsInCity} yrs`}
+                </span>
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {/* Trait badges explain themselves on hover (shadcn hover cards,
+                user 2026-07-08) — birthday context on the sun sign, animal +
+                element on the Chinese sign, nickname + read on the MBTI type.
+                Relocated into Details 2026-09-05 — the front of the card is
+                the person, not the fiction device. */}
+              {/* Badge anatomy (user 2026-07-11): astrology glyphs at emoji size
+                (text-base + emoji presentation), sign names as 2-letter
+                abbreviations. Hover cards read at text-base with the big three
+                (Sun/Moon/Rising) each carrying their sign emoji. */}
+              <HoverCard>
+                <HoverCardTrigger
+                  render={
+                    <Badge variant="outline" className="cursor-help text-sm">
+                      <span className="text-base leading-none">
+                        {signEmoji(persona.westernSign.name)}
+                      </span>{" "}
+                      {persona.westernSign.name.slice(0, 2)}
+                    </Badge>
+                  }
+                />
+                <HoverCardContent className="w-72 text-base">
+                  {/* The big three each read as emoji-marked headings (☀️/🌙/🌅 +
+                    sign emoji) with their DETAILS on the line below (user
+                    2026-07-11) — no trailing "· descriptor" on the heading. */}
+                  <div className="font-medium">
+                    <span className="text-lg leading-none">
+                      ☀️ {signEmoji(persona.westernSign.name)}
+                    </span>{" "}
+                    {persona.westernSign.name} Sun
+                  </div>
+                  <div className="text-muted-foreground text-sm">
+                    {persona.westernSign.element} · {persona.westernSign.modality} · born{" "}
+                    {persona.birthday.month}/{persona.birthday.day}
+                  </div>
+                  <p className="mt-1.5">{WESTERN_SIGN_TRAITS[persona.westernSign.name]}</p>
+                  <div className="border-border mt-2 border-t pt-2">
+                    {/* Sub head on its OWN line under each of the big three (user
+                      2026-07-11) — never continued off the heading. */}
+                    <div className="font-medium">
+                      <span className="text-base leading-none">
+                        🌙 {signEmoji(flavor.moonSign)}
+                      </span>{" "}
+                      {flavor.moonSign} Moon
+                    </div>
+                    <div className="text-muted-foreground text-sm">the inner weather</div>
+                    <div>{MOON_SIGN_TRAITS[flavor.moonSign]}</div>
+                    <div className="mt-1.5 font-medium">
+                      <span className="text-base leading-none">
+                        🌅 {signEmoji(flavor.risingSign)}
+                      </span>{" "}
+                      {flavor.risingSign} Rising
+                    </div>
+                    <div className="text-muted-foreground text-sm">the first impression</div>
+                    <div>{RISING_SIGN_TRAITS[flavor.risingSign]}</div>
+                  </div>
+                </HoverCardContent>
+              </HoverCard>
+              <HoverCard>
+                <HoverCardTrigger
+                  render={
+                    <Badge variant="outline" className="cursor-help text-sm">
+                      <span className="text-base leading-none">
+                        {ELEMENT_EMOJI[persona.chineseSign.element]}{" "}
+                        {CHINESE_ANIMAL_GLYPHS[persona.chineseSign.animal]}
+                      </span>
+                    </Badge>
+                  }
+                />
+                <HoverCardContent className="w-72 text-base">
+                  {/* Layout (user 2026-07-11): header, born year, then two glyph-led
+                    lines — animal-year description (without renaming the animal)
+                    and element description. */}
+                  <div className="font-medium">
+                    <span className="text-lg leading-none">
+                      {CHINESE_ANIMAL_GLYPHS[persona.chineseSign.animal]}
+                    </span>{" "}
+                    Year of the {persona.chineseSign.animal}
+                  </div>
+                  <div className="text-muted-foreground text-sm">born {persona.birthday.year}</div>
+                  <p className="mt-1.5">
+                    <span className="text-base leading-none">
+                      {CHINESE_ANIMAL_GLYPHS[persona.chineseSign.animal]}
+                    </span>{" "}
+                    {capitalize(CHINESE_ANIMAL_TRAITS[persona.chineseSign.animal])}.
+                  </p>
+                  <p className="mt-1">
+                    <span className="text-base leading-none">
+                      {ELEMENT_EMOJI[persona.chineseSign.element]}
+                    </span>{" "}
+                    {capitalize(CHINESE_ELEMENT_TRAITS[persona.chineseSign.element])}.
+                  </p>
+                </HoverCardContent>
+              </HoverCard>
+              <HoverCard>
+                <HoverCardTrigger
+                  render={
+                    <Badge variant="outline" className="cursor-help text-sm">
+                      {flavor.mbtiNickname.replace(/^The /, "")}
+                    </Badge>
+                  }
+                />
+                <HoverCardContent className="w-72 text-base">
+                  <div className="font-medium">
+                    {flavor.mbti} · {flavor.mbtiNickname}
+                  </div>
+                  <p className="mt-1.5">{MBTI_DESCRIPTIONS[flavor.mbti]}</p>
+                </HoverCardContent>
+              </HoverCard>
+            </div>
             {commuteRow}
             {/* Work — adults only, Profession folded IN (user 2026-07-11):
                 one green row, profession-category icon, title on the header
@@ -867,29 +889,28 @@ export function PersonaColumn({
         </>
       )}
 
-      {/* whyAwake moves below Details + Family (user 2026-07-11): facts first,
-          then the line that explains the lit window, then the rest of the
-          flavour, ending on the hook. */}
-      {(story.whyAwake || story.wasIs || story.detail || story.refusal || story.relation) && (
-        <Separator />
-      )}
-      {story.whyAwake && <p className="text-base">{story.whyAwake}</p>}
-
+      {/* whyAwake moved to the pinned header (2026-09-05) — it no longer
+          gates this separator. The remaining flavour (wasIs/detail/refusal/
+          relation) still gathers below Details + Family, ending on the
+          hook. */}
       {(story.wasIs || story.detail || story.refusal || story.relation) && (
-        <div className="flex flex-col gap-1">
-          {story.wasIs && <p className="text-base">{story.wasIs}</p>}
-          {story.detail && <p className="text-base">{story.detail}</p>}
-          {story.refusal && <p className="text-base">{story.refusal}</p>}
-          {story.relation && (
-            <button
-              type="button"
-              onClick={() => push({ kind: "persona", id: story.relation!.targetId })}
-              className="text-left text-base hover:underline"
-            >
-              {story.relation.line}
-            </button>
-          )}
-        </div>
+        <>
+          <Separator />
+          <div className="flex flex-col gap-1">
+            {story.wasIs && <p className="text-base">{story.wasIs}</p>}
+            {story.detail && <p className="text-base">{story.detail}</p>}
+            {story.refusal && <p className="text-base">{story.refusal}</p>}
+            {story.relation && (
+              <button
+                type="button"
+                onClick={() => push({ kind: "persona", id: story.relation!.targetId })}
+                className="text-left text-base hover:underline"
+              >
+                {story.relation.line}
+              </button>
+            )}
+          </div>
+        </>
       )}
 
       <Separator />
