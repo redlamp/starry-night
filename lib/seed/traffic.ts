@@ -2,6 +2,16 @@ import seedrandom from "seedrandom";
 import { generateCity } from "./cityGen";
 import { buildPopulationField } from "./population";
 import type { CityShapeSetting } from "./cityShape";
+import type { RoadPoly } from "./streets";
+import {
+  buildRoadGraph,
+  buildArcTable,
+  tangentAtArc,
+  verticesFromArcForward,
+  verticesFromArcBackward,
+  truncateToLength,
+  type RoadEndpointTouches,
+} from "./roadGraph";
 
 // Deterministic car head/tail-light placement (research strand D). Each "car" is
 // a point pinned to ONE road segment; it slides start→end via the shader using
@@ -15,16 +25,23 @@ import type { CityShapeSetting } from "./cityShape";
 // fract()-loop. Minor-tier (rural/suburban street) cars are sparse enough that
 // the independent-per-macro-segment loop reads as an obvious short stretch of
 // road re-driven forever. Those get a "journey" instead: one instance per
-// macro-segment of the ORIGINAL polyline, all sharing one clock (aPhase +
-// aSpeed) and a per-instance visibility WINDOW (aWinStart/aWinEnd, a fraction
-// of that shared cycle) so exactly one segment is "occupied" at a time as the
-// window sweeps start→end, followed by a seeded dark respawn gap
+// macro-segment of a CONCATENATED multi-road polyline, all sharing one clock
+// (aPhase + aSpeed) and a per-instance visibility WINDOW (aWinStart/aWinEnd, a
+// fraction of that shared cycle) so exactly one segment is "occupied" at a
+// time as the window sweeps start→end, followed by a seeded dark respawn gap
 // (aWinEnd..1 of the cycle). aRoadEnd carries the road's traverse fraction of
 // the full cycle so the shader can fade in/out at the JOURNEY's start/end
 // rather than at every macro-segment join. Legacy (highway/arterial) instances
 // set aWinStart=0, aWinEnd=1, aRoadEnd=1 — the window math then degenerates
-// exactly to the original single-segment fract() loop. See
-// wiki/notes/decision-* (traffic rural journeys, #57) for the shape.
+// exactly to the original single-segment fract() loop.
+//
+// #57 v3 (2026-09-05) — a journey no longer pins to ONE road: at that road's
+// far end it walks lib/seed/roadGraph.ts's proximity graph onto a connected
+// minor road (straightest continuation, never an immediate U-turn), repeating
+// for a seeded 3-6 roads or until a dead end, then concatenating the whole
+// walk into ONE polyline before chunking — so a rural car crosses onto a
+// differently-named street instead of looping the same stretch forever. See
+// wiki/notes/decision-traffic-journeys.md.
 
 export type TrafficData = {
   count: number;
@@ -41,6 +58,11 @@ export type TrafficData = {
   aWinEnd: Float32Array; // n  — this instance's visibility window end (cycle fraction 0..1)
   aRoadEnd: Float32Array; // n  — journey's traverse-fraction of the full cycle (1 = legacy, no gap)
   maxRadius: number; // furthest car from city centre — normalises the center-out wake
+  // #57 v3 — one entry per MINOR-tier journey actually emitted (debug /
+  // scripts/trafficJourneyCheck.ts only; empty contributes nothing to the
+  // rendered scene). Legacy highway/arterial cars aren't journeys and don't
+  // appear here.
+  journeyStats: Array<{ roads: number; lenM: number }>;
 };
 
 type Vert = { x: number; z: number };
@@ -158,6 +180,15 @@ type RawSeg = {
   roadLen: number; // this road's total chord length, sum of all its macro-segments (m)
 };
 
+type TrafficSegmentsResult = {
+  segs: RawSeg[];
+  // Minor-road polylines + the roadId `collect` assigned each one (or -1 if
+  // skipped as degenerate) — index-parallel to `city.streets`. Feeds the #57 v3
+  // road-graph journey walk in buildTraffic; buildTrafficDensity ignores these.
+  minorRoads: RoadPoly[];
+  minorRoadIds: number[];
+};
+
 // Shared macro-segment builder — the SAME chunking + population-busyness logic
 // buildTraffic uses to place cars, factored out so the traffic-density debug
 // overlay can compute each segment's EXPECTED density from the identical inputs
@@ -168,16 +199,16 @@ function buildTrafficSegments(
   shape: CityShapeSetting,
   shapeScale: number,
   popCoupling: number,
-): RawSeg[] {
+): TrafficSegmentsResult {
   const city = generateCity(masterSeed, shape, shapeScale);
   const pop = popCoupling > 0 ? buildPopulationField(masterSeed, shape, shapeScale) : null;
 
   const segs: RawSeg[] = [];
   let nextRoadId = 0;
-  const collect = (verts: Vert[], tier: Tier) => {
+  const collect = (verts: Vert[], tier: Tier): number => {
     const cfg = tierCfg(tier);
     const baseMult = tierMul[tier];
-    if (verts.length < 2) return;
+    if (verts.length < 2) return -1;
     const roadId = nextRoadId++;
     const roadStart = segs.length;
     let startIdx = 0;
@@ -207,11 +238,12 @@ function buildTrafficSegments(
     // macro-segment just pushed for this road (roadLen is the same for all of
     // them — only cumLen varies).
     for (let k = roadStart; k < segs.length; k++) segs[k].roadLen = cum;
+    return roadId;
   };
   for (const h of city.topology.highways) collect(h.vertices, "highway");
   for (const a of city.arterials) collect(a.vertices, "arterial");
-  for (const s of city.streets) collect(s.vertices, "minor");
-  return segs;
+  const minorRoadIds = city.streets.map((s) => collect(s.vertices, "minor"));
+  return { segs, minorRoads: city.streets, minorRoadIds };
 }
 
 // One macro-segment's EXPECTED car count (pre-MAX_CARS-cap) — the intended
@@ -253,7 +285,7 @@ export function buildTrafficDensity(
   shapeScale = 1,
   popCoupling = 1,
 ): TrafficDensityField {
-  const segs = buildTrafficSegments(masterSeed, tierMul, shape, shapeScale, popCoupling);
+  const { segs } = buildTrafficSegments(masterSeed, tierMul, shape, shapeScale, popCoupling);
   const raws = segs.map((s) => segExpected(s, density));
   // Per-metre intensity (count / length) drives the COLOUR — otherwise a long
   // highway chord always out-colours a short busy downtown block purely on
@@ -297,6 +329,31 @@ const GAP_RANGE_SEC = 3.5; // → 0.5..4.0 s dark between passes
 const CONCURRENT_SHORT_M = 150; // below this: at most 1 car
 const CONCURRENT_LONG_M = 350; // at/above this: up to 3 (between: up to 2)
 
+// #57 v3 — road-graph journey walk (see lib/seed/roadGraph.ts header for the
+// epsilon rationale: measured against real generator output, not a literal
+// "few metres" — 45m catches most real touches while staying under the
+// same-family street separation floor (ST_DTEST = 54m in tensorStreets.ts) so
+// two parallel, non-touching streets can't misconnect).
+const JOURNEY_LINK_EPSILON = 45;
+// Skip a candidate continuation shorter than this — a touch landing a metre
+// or two from the other road's OWN endpoint would otherwise offer a
+// near-zero-length "hop" back the way the car just came.
+const JOURNEY_MIN_HOP_M = 15;
+// Roads per journey: seeded 3..6 (a dead end can still cut this short).
+const JOURNEY_MIN_ROADS = 3;
+const JOURNEY_ROAD_SPAN = 4; // 3 + floor(rng()*4) → 3..6 inclusive
+// A continuation hop's landing point is a road ENDPOINT touch, so "continue
+// onto it" means travelling to ITS far end — fine for a short subdivision
+// loop/cul, but the tensor-field global-grid streets run well past 1km, and
+// blindly driving one to its own end (measured: pushed mean journey length
+// past 2.5-3.8km, hard-capping total car instances at MAX_CARS on 2 of 3
+// spot-check seeds). Cap a CONTINUATION leg's distance so a long connecting
+// road is cruised for a while, not driven end-to-end; the journey simply ends
+// there rather than hopping again from an arbitrary mid-road point (there's
+// no real junction to reason about at a cap cut). The STARTING road is exempt
+// — it's driven in full, same as before #57 v3.
+const JOURNEY_LEG_CAP_M = 200;
+
 export function buildTraffic(
   masterSeed: string,
   density = 1,
@@ -310,7 +367,13 @@ export function buildTraffic(
   popCoupling = 1, // 0 = uniform (old look), 1 = fully population-driven
 ): TrafficData {
   const rng = seedrandom(`${masterSeed}::traffic`);
-  const segs = buildTrafficSegments(masterSeed, { ...tierMul }, shape, shapeScale, popCoupling);
+  const { segs, minorRoads, minorRoadIds } = buildTrafficSegments(
+    masterSeed,
+    { ...tierMul },
+    shape,
+    shapeScale,
+    popCoupling,
+  );
 
   // First pass: expected cars per segment (∝ length × tier density × population
   // busyness × lanes). Computed for ALL segments up front so the MAX_CARS budget is
@@ -440,17 +503,18 @@ export function buildTraffic(
     }
   }
 
-  // --- #57: minor-tier journeys -------------------------------------------
+  // --- #57 v3: minor-tier multi-road journeys -----------------------------
   // Rural/suburban streets are sparse enough (~0.008 cars/m, further thinned
-  // by the population-busyness coupling) that the old independent-car-per-
-  // 55m-chunk scheme reads as a short looping stretch: whichever macro-
-  // segment wins the draw shows a car endlessly re-driving just that chunk.
-  // Fix: regroup a street's macro-segments back into its ORIGINAL polyline
-  // ("road") and give it, in expectation, the same total car-time as before —
-  // but as one or more "journeys" that traverse the FULL road end-to-end on a
-  // shared clock (shared aPhase + aSpeed across every macro-segment of that
-  // journey), then sit dark for a seeded respawn gap. One GPU point instance
-  // per macro-segment per journey (no new textures); each instance's
+  // by the population-busyness coupling) that a car confined to ONE road —
+  // even the whole original polyline, not just a 55m chunk — is visibly
+  // looping the same named street forever once it recycles. Fix: at the
+  // road's far end, walk lib/seed/roadGraph.ts's proximity graph onto a
+  // connected minor road (straightest continuation, never an immediate
+  // U-turn), repeat for a seeded 3-6 roads or until a dead end, then
+  // concatenate the whole walk into ONE polyline and chunk THAT — so the
+  // shared-clock + visibility-window machinery below is unchanged from v2,
+  // it just runs over a longer, multi-road polyline. One GPU point instance
+  // per macro-segment of the journey (no new textures); each instance's
   // aWinStart/aWinEnd gate WHEN in the shared cycle it's the "occupied"
   // segment (lib/shaders/traffic.ts).
   const roadGroups = new Map<number, number[]>(); // roadId -> seg indices, road order
@@ -461,7 +525,136 @@ export function buildTraffic(
     else roadGroups.set(segs[i].roadId, [i]);
   }
 
-  for (const idxs of roadGroups.values()) {
+  // roadId -> index into `minorRoads`/`minorRoadIds`/`graph` (built in lockstep
+  // by buildTrafficSegments, so every roadId with a non-empty roadGroups entry
+  // is guaranteed to resolve here).
+  const roadIdToMinorIdx = new Map<number, number>();
+  for (let k = 0; k < minorRoadIds.length; k++) {
+    if (minorRoadIds[k] >= 0) roadIdToMinorIdx.set(minorRoadIds[k], k);
+  }
+  const graph: RoadEndpointTouches[] = buildRoadGraph(minorRoads, JOURNEY_LINK_EPSILON);
+  const arcTables = minorRoads.map((r) => buildArcTable(r.vertices));
+  const minorCfg = tierCfg("minor"); // fixed for every road in a journey (#57 v3)
+  const journeyStats: Array<{ roads: number; lenM: number }> = [];
+
+  // Arrival heading at a road's far end, travelling either start→end
+  // (forward) or end→start (!forward).
+  function headingAtFarEnd(minorIdx: number, forward: boolean): { x: number; z: number } {
+    const verts = minorRoads[minorIdx].vertices;
+    const cum = arcTables[minorIdx];
+    if (forward) return tangentAtArc(verts, cum, cum[cum.length - 1] ?? 0);
+    const t = tangentAtArc(verts, cum, 0);
+    return { x: -t.x, z: -t.z };
+  }
+
+  // Deterministic pick of the next road at a junction: straightest heading
+  // change among the roads touching the far end, excluding the road the
+  // journey just arrived on (never an immediate U-turn) and any candidate
+  // whose remaining length is too short to count as a real continuation.
+  function pickNextHop(
+    minorIdx: number,
+    forward: boolean,
+    cameFromIdx: number,
+  ): { minorIdx: number; continueForward: boolean; arcM: number; remaining: number } | null {
+    const touches = forward ? graph[minorIdx].end : graph[minorIdx].start;
+    const arrival = headingAtFarEnd(minorIdx, forward);
+    let best:
+      | { minorIdx: number; continueForward: boolean; arcM: number; remaining: number; score: number }
+      | null = null;
+    for (const touch of touches) {
+      if (touch.roadIndex === cameFromIdx) continue;
+      const otherVerts = minorRoads[touch.roadIndex].vertices;
+      const otherCum = arcTables[touch.roadIndex];
+      const otherLen = otherCum[otherCum.length - 1] ?? 0;
+      for (const continueForward of [true, false]) {
+        const remaining = continueForward ? otherLen - touch.arcM : touch.arcM;
+        if (remaining < JOURNEY_MIN_HOP_M) continue;
+        const enter = tangentAtArc(otherVerts, otherCum, touch.arcM);
+        const entryHeading = continueForward ? enter : { x: -enter.x, z: -enter.z };
+        const score = arrival.x * entryHeading.x + arrival.z * entryHeading.z;
+        if (!best || score > best.score || (score === best.score && touch.roadIndex < best.minorIdx)) {
+          best = { minorIdx: touch.roadIndex, continueForward, arcM: touch.arcM, remaining, score };
+        }
+      }
+    }
+    return best;
+  }
+
+  // Walk the graph from a granted starting road, concatenating each hop's
+  // sub-polyline (already oriented in travel order) into one journey. Returns
+  // the roads visited too, purely for scripts/trafficJourneyCheck.ts stats.
+  function buildJourney(
+    startMinorIdx: number,
+    startForward: boolean,
+    maxRoads: number,
+  ): { verts: Vert[]; roadCount: number } {
+    const startVerts = minorRoads[startMinorIdx].vertices;
+    const verts: Vert[] = startForward ? [...startVerts] : [...startVerts].reverse();
+    let curIdx = startMinorIdx;
+    let curForward = startForward;
+    let cameFrom = -1;
+    let roadCount = 1;
+    while (roadCount < maxRoads) {
+      const hop = pickNextHop(curIdx, curForward, cameFrom);
+      if (!hop) break;
+      const otherVerts = minorRoads[hop.minorIdx].vertices;
+      const otherCum = arcTables[hop.minorIdx];
+      const piece = hop.continueForward
+        ? verticesFromArcForward(otherVerts, otherCum, hop.arcM)
+        : verticesFromArcBackward(otherVerts, otherCum, hop.arcM);
+      const capped = hop.remaining > JOURNEY_LEG_CAP_M;
+      verts.push(...(capped ? truncateToLength(piece, JOURNEY_LEG_CAP_M) : piece));
+      roadCount++;
+      // A capped leg stops mid-road — there's no real junction to reason
+      // about at the cut, so the journey ends here rather than hopping again.
+      if (capped) break;
+      cameFrom = curIdx;
+      curIdx = hop.minorIdx;
+      curForward = hop.continueForward;
+    }
+    return { verts, roadCount };
+  }
+
+  // Re-chunk a (possibly multi-road) journey polyline with the SAME
+  // CHUNK/MIN_SEG rule buildTrafficSegments uses per-road, so a journey's
+  // macro-segments are geometrically identical in character to a single
+  // road's — just spanning the concatenated path instead of one polyline.
+  function chunkJourney(verts: Vert[]): { chunks: RawSeg[]; totalLen: number } {
+    const chunks: RawSeg[] = [];
+    let startIdx = 0;
+    let accum = 0;
+    let cum = 0;
+    for (let i = 1; i < verts.length; i++) {
+      accum += Math.hypot(verts[i].x - verts[i - 1].x, verts[i].z - verts[i - 1].z);
+      const last = i === verts.length - 1;
+      if (accum >= CHUNK || last) {
+        const a = verts[startIdx];
+        const b = verts[i];
+        const len = Math.hypot(b.x - a.x, b.z - a.z);
+        if (len >= MIN_SEG) {
+          chunks.push({
+            ax: a.x,
+            az: a.z,
+            bx: b.x,
+            bz: b.z,
+            len,
+            cfg: minorCfg,
+            mult: 1,
+            tier: "minor",
+            roadId: -1,
+            cumLen: cum,
+            roadLen: 0,
+          });
+          cum += len;
+        }
+        startIdx = i;
+        accum = 0;
+      }
+    }
+    return { chunks, totalLen: cum };
+  }
+
+  for (const [roadId, idxs] of roadGroups) {
     const roadLen = segs[idxs[0]].roadLen;
     if (roadLen <= 0) continue;
     let roadExpected = 0;
@@ -471,7 +664,10 @@ export function buildTraffic(
     // is per-road, and Bernoulli-rounded exactly like the legacy per-segment
     // draw. Busier areas grant more roads; remote roads mostly stay dark. Once
     // granted, the concurrent count below (not this magnitude) sets how many
-    // cars run — so a quiet granted road still gets a lively 1–3.
+    // cars run — so a quiet granted road still gets a lively 1–3. The
+    // START of a journey is still gated per-road like this; CONTINUATIONS
+    // onto connected roads below are not separately gated (a car already in
+    // motion doesn't need fresh permission to keep driving).
     const grantProb = roadExpected / idxs.length;
     let grant = Math.floor(grantProb);
     if (rng() < grantProb - grant) grant += 1;
@@ -482,23 +678,34 @@ export function buildTraffic(
     const cap = roadLen < CONCURRENT_SHORT_M ? 1 : roadLen < CONCURRENT_LONG_M ? 2 : 3;
     const concurrent = 1 + Math.floor(rng() * cap);
 
-    const cfg = segs[idxs[0]].cfg;
-    for (let j = 0; j < concurrent; j++) {
-      // MAX_CARS backstop: each car costs one instance per macro-segment of its
-      // road — stop adding cars once that would bust the cap rather than
-      // truncate one mid-road (which would visibly clip it short of the end).
-      if (emitted + idxs.length > MAX_CARS) break;
+    const startMinorIdx = roadIdToMinorIdx.get(roadId);
+    // Invariant: minorRoadIds is built by the SAME collect() calls that
+    // populated roadGroups' roadIds, so this is always found — the guard is
+    // defensive only (skip rather than crash on a mapping that can't occur).
+    if (startMinorIdx === undefined) continue;
 
+    for (let j = 0; j < concurrent; j++) {
       const dir = rng() < 0.5 ? 1 : -1;
-      const laneIdx = Math.floor(rng() * cfg.lanes);
-      const off = (cfg.laneHalf + laneIdx * cfg.laneWidth) * dir;
-      const speedMps = cfg.speed * (0.75 + rng() * 0.5);
+      const laneIdx = Math.floor(rng() * minorCfg.lanes);
+      const off = (minorCfg.laneHalf + laneIdx * minorCfg.laneWidth) * dir;
+      const speedMps = minorCfg.speed * (0.75 + rng() * 0.5);
+      const roadCap = JOURNEY_MIN_ROADS + Math.floor(rng() * JOURNEY_ROAD_SPAN);
+
+      const journey = buildJourney(startMinorIdx, dir > 0, roadCap);
+      const { chunks, totalLen } = chunkJourney(journey.verts);
+      if (chunks.length === 0 || totalLen <= 0) continue;
+      // MAX_CARS backstop: each car costs one instance per macro-segment of
+      // its journey — stop adding cars once that would bust the cap rather
+      // than truncate one mid-journey (which would visibly clip it short).
+      if (emitted + chunks.length > MAX_CARS) break;
+      journeyStats.push({ roads: journey.roadCount, lenM: totalLen });
+
       // Respawn gap in absolute seconds → cycle fraction. cycleSec = time to
-      // drive the road once + the dark gap; roadEndFrac is the traverse's share
-      // of that cycle; cycleLen is the virtual full-cycle distance the window
-      // maths index into (= speed × cycleSec, so winEnd of the last segment
-      // lands exactly on roadEndFrac).
-      const traverseSec = roadLen / speedMps;
+      // drive the journey once + the dark gap; roadEndFrac is the traverse's
+      // share of that cycle; cycleLen is the virtual full-cycle distance the
+      // window maths index into (= speed × cycleSec, so winEnd of the last
+      // segment lands exactly on roadEndFrac).
+      const traverseSec = totalLen / speedMps;
       const gapSec = GAP_MIN_SEC + rng() * GAP_RANGE_SEC;
       const cycleSec = traverseSec + gapSec;
       const roadEndFrac = traverseSec / cycleSec;
@@ -511,24 +718,23 @@ export function buildTraffic(
       const reveal = rng();
       const size = CAR_LIGHT_SIZE * (0.85 + rng() * 0.3);
 
-      for (const i of idxs) {
-        const s = segs[i];
-        const dx = (s.bx - s.ax) / s.len;
-        const dz = (s.bz - s.az) / s.len;
+      for (const c of chunks) {
+        const dx = (c.bx - c.ax) / c.len;
+        const dz = (c.bz - c.az) / c.len;
+        // Perpendicular to the journey's OWN travel direction (already baked
+        // into chunk a→b order by buildJourney/chunkJourney) — no per-chunk
+        // dir flip needed here; `off`'s sign (from `dir` above) fixes which
+        // side of the centreline this car keeps for the whole trip.
         const px = -dz;
         const pz = dx;
-        const sx = (dir > 0 ? s.ax : s.bx) + px * off;
-        const sz = (dir > 0 ? s.az : s.bz) + pz * off;
-        const ex = (dir > 0 ? s.bx : s.ax) + px * off;
-        const ez = (dir > 0 ? s.bz : s.az) + pz * off;
-        // Distance already travelled BEFORE this segment, in this journey's
-        // direction — forward reads cumLen off the road start; reversed
-        // reads it off the road end (mirrored), so consecutive-in-time
-        // segments always hand off at a shared window boundary regardless
-        // of which way the journey drives the polyline.
-        const before = dir > 0 ? s.cumLen : roadLen - s.cumLen - s.len;
-        const winStart = before / cycleLen;
-        const winEnd = (before + s.len) / cycleLen;
+        const sx = c.ax + px * off;
+        const sz = c.az + pz * off;
+        const ex = c.bx + px * off;
+        const ez = c.bz + pz * off;
+        // cumLen is already arc length from the JOURNEY's own start (not a
+        // single road's), since chunkJourney chunks the concatenated polyline.
+        const winStart = c.cumLen / cycleLen;
+        const winEnd = (c.cumLen + c.len) / cycleLen;
         emit(sx, sz, ex, ez, phase, journeySpeed, head, tail, headFlag, reveal, size, winStart, winEnd, roadEndFrac);
       }
     }
@@ -549,5 +755,6 @@ export function buildTraffic(
     aWinEnd: Float32Array.from(aWinEnd),
     aRoadEnd: Float32Array.from(aRoadEnd),
     maxRadius,
+    journeyStats,
   };
 }
