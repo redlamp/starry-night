@@ -1,10 +1,15 @@
 ---
 tags:
   - domain/3d
-  - status/open
+  - status/superseded
 ---
 
 # Plan: Migrate Camera Controls to drei (unify `/` + `/intro`)
+
+**Status 2026-09-05:** superseded by [[decision-camera-v3-continuous-modes]]
+(Cam v3, 2026-07-15). Phases 1-2 (orbit core + transitions) shipped
+2026-06-13; phases 3-5 (fly, intro unify, cleanup) never landed — Cam v3
+folded modes into one continuous camera instead of finishing this migration.
 
 **Date:** 2026-06-08 · **Status:** planned, not started
 
@@ -17,7 +22,7 @@ shipped to `/dev`). `/` runs a bespoke 736-line `components/scene/CameraControls
 (especially touch) identical everywhere and deletes a pile of custom code.
 
 The camera is **runtime state**, not seed-derived, so none of this touches the
-determinism contract or `gate1`. The risk is in *feel* and the WYSIWYG-save
+determinism contract or `gate1`. The risk is in _feel_ and the WYSIWYG-save
 persistence (`cameraIntent`), not in generation.
 
 ## Decisions (2026-06-08)
@@ -38,7 +43,7 @@ persistence (`cameraIntent`), not in generation.
    `PointerLockControls` needs a click + hides the cursor. This is ≈ `/`'s
    existing UE5 fly, drag-gated instead of pointer-locked. Validated in `/drei-lab`.
    - **Fly is desktop-only; mobile uses orbit** (confirmed 2026-06-08). Verified
-     in three-stdlib that *none* of drei's fly controllers move on touch —
+     in three-stdlib that _none_ of drei's fly controllers move on touch —
      locomotion is keyboard-only (`FlyControls` drag-looks but can't move,
      `FirstPersonControls`/`PointerLockControls` are mouse/pointer-lock only).
      **Pinch-to-fly is dropped** (was `/`'s only touch-locomotion hack). Mobile
@@ -62,7 +67,7 @@ swap (`OrbitControls` → `CameraControls`) and the `ScreenRig`/snow-globe hando
 ## Phased rollout
 
 Everything stays behind the existing **Zustand store API** — panels, Save/Reset,
-and the seed/gen path don't change; only the controls *implementation* swaps.
+and the seed/gen path don't change; only the controls _implementation_ swaps.
 Each phase is independently shippable (to `/dev` first).
 
 0. **Spike** — add `camera-controls`; drop a `<CameraControls>` into a throwaway
@@ -82,9 +87,9 @@ Each phase is independently shippable (to `/dev` first).
 
 ## Phase 1 — build sequence (in progress, 2026-06-08)
 
-The crux is a **data-flow inversion**. Today the store *is* the source of truth:
+The crux is a **data-flow inversion**. Today the store _is_ the source of truth:
 `components/scene/CameraControls.tsx` reads `orbit.{azimuthDeg,elevationDeg,radius,
-lookAtY,centerX,centerZ}` every frame and *derives* the camera. drei
+lookAtY,centerX,centerZ}` every frame and _derives_ the camera. drei
 `<CameraControls>` makes the **camera authoritative** (imperative); the store has
 to sync on discrete events instead of driving per-frame.
 
@@ -93,6 +98,7 @@ old controller, so `/` is 100% untouched.** The flag swaps in the new
 `DreiSceneControls` for opt-in feel-testing. Old controller stays until Phase 5.
 
 Mapping (old orbit ↔ camera-controls spherical), verified against `OrbitConfig`:
+
 - `azimuthAngle = azimuthDeg` (both are `atan2(x, z)`; 0 = +Z)
 - `polarAngle = (90° − elevationDeg)` (elevation above horizon → polar from +Y)
 - `distance = radius`; `target = (centerX, lookAtY, centerZ)`
@@ -104,6 +110,7 @@ write `orbit` (suppressing the store→camera effect via the ref); slider/preset
 edits to `orbit` push store→camera via `setLookAt`.
 
 Sub-steps (each compiles + feel-tested at `/?controls=drei` before the next):
+
 - **A — orbit core (this step):** mount drei `<CameraControls>` behind the flag;
   store↔camera sync; auto-revolution + `Space` pause; throttled `cameraLive`
   readback. Fly/still/projection NOT ported yet (flip the flag off for those).
@@ -118,7 +125,7 @@ Sub-steps (each compiles + feel-tested at `/?controls=drei` before the next):
 
 - **Input model** (feel-tested live): desktop **LMB = ground-anchored pan**
   (Google grab-the-earth), **RMB = rotate + tilt** (Google uses Ctrl+LMB),
-  **wheel + pinch = zoom toward the cursor / pinch-point** in *both* projections
+  **wheel + pinch = zoom toward the cursor / pinch-point** in _both_ projections
   (shared `zoomToPoint` pins the ground point; ortho scales `orthoSize`, perspective
   dollies), **double-click = zoom in toward the point**. Touch is **fully custom** (camera-controls touch off,
   so it's ortho-correct and we own the directions): 1-finger ground pan, 2-finger
@@ -130,11 +137,11 @@ Sub-steps (each compiles + feel-tested at `/?controls=drei` before the next):
 - **Ortho is faked** (see below), so the anchored pan builds a **parallel ortho
   ray by hand** (matching `ProjectionBlender`'s frustum) — `setFromCamera` would
   give a diverging perspective ray on the ortho-matrix'd perspective camera.
-- **Projection model (Phase 2) = approach A — KEEP the single `PerspectiveCamera`
-  + `ProjectionBlender` morph.** We do *not* swap to a real `OrthographicCamera`.
-  Trade-off accepted: a real ortho camera would give native raycast + `camera.zoom`
-  (no manual ortho ray / `orthoSize` handling), but it loses the smooth persp↔ortho
-  morph, which we want to keep. The manual ortho handling is contained.
+- \*\*Projection model (Phase 2) = approach A — KEEP the single `PerspectiveCamera`
+  - `ProjectionBlender` morph.\** We do *not\* swap to a real `OrthographicCamera`.
+    Trade-off accepted: a real ortho camera would give native raycast + `camera.zoom`
+    (no manual ortho ray / `orthoSize` handling), but it loses the smooth persp↔ortho
+    morph, which we want to keep. The manual ortho handling is contained.
 
 ## Risks
 

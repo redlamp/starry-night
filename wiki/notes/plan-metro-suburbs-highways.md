@@ -8,6 +8,11 @@ tags:
 
 # Plan: Metro Scale + Suburbs + Highway Crossings
 
+**Status 2026-09-05:** partly done. Suburbs (Stage 0) shipped via
+[[plan-suburb-node-fields]] (#49, 2026-06-08). Highway corridor stages
+(Stage 1/3/4) were never built past the rejected geometry-first spike —
+still wanted, tied to a future traffic v3.
+
 **Date:** 2026-06-02
 **Drives:** #14 (city scale), #13 (highways/interchanges), + a new suburbs issue.
 **Grounded in:** [[highway-network-references]], [[map-layout-references]], [[plan-city-scale-tiers]], [[city-planning-references]], [[decision-tensor-field-roads]].
@@ -22,27 +27,27 @@ where they cross. Each idea reinforces the others:
 - The density gradient is **research-true** (arterial spacing widens <1 mi core → 5 mi
   fringe), **perf-friendly** (sparse periphery ≠ 4× buildings when extent grows), and
   a **night-view win** (bright core, dim sprawl, dark gaps = the real city-from-a-plane
-  look). User: *"it's okay to have undeveloped areas, as well as suburban areas."*
+  look). User: _"it's okay to have undeveloped areas, as well as suburban areas."_
 - Freeways **need** the larger extent to host a believable ~1 mi interchange cadence;
   at today's 3 km City tier only ~1–2 interchanges fit edge-to-edge.
 - Freeway **crossings** (perpendicular / off-angle) are where interchanges live, and
   they sit naturally in the **periphery**, not downtown (cheap-land history; beltway×
-  radial). User: *"something perpendicular or off-angle… outside the downtown area."*
+  radial). User: _"something perpendicular or off-angle… outside the downtown area."_
 
 ## Three density bands (radial, seed-jittered — not a clean bullseye)
 
-| Band | Character | Buildings | Roads | Lighting |
-|---|---|---|---|---|
-| **Urban core** | dense grid, tall archetypes | high density, small blocks | tight grid + arterials | continuous, bright |
-| **Suburban ring** | curvilinear "kidney-bean" subdivisions | low density, big curvy blocks | **tighter-grain field + wider street spacing** | sparse |
-| **Rural / boonies** | open, occasional cluster or lone structure | very sparse → near-zero | **highways + sparse local streets; arterials suppressed** | very dark, key points only |
-| **Undeveloped fringe** | empty land the city hasn't reached | none | a highway may pass through; otherwise empty | unlit |
+| Band                   | Character                                  | Buildings                     | Roads                                                     | Lighting                   |
+| ---------------------- | ------------------------------------------ | ----------------------------- | --------------------------------------------------------- | -------------------------- |
+| **Urban core**         | dense grid, tall archetypes                | high density, small blocks    | tight grid + arterials                                    | continuous, bright         |
+| **Suburban ring**      | curvilinear "kidney-bean" subdivisions     | low density, big curvy blocks | **tighter-grain field + wider street spacing**            | sparse                     |
+| **Rural / boonies**    | open, occasional cluster or lone structure | very sparse → near-zero       | **highways + sparse local streets; arterials suppressed** | very dark, key points only |
+| **Undeveloped fringe** | empty land the city hasn't reached         | none                          | a highway may pass through; otherwise empty               | unlit                      |
 
 The transition follows the (irregular) **district** layout, not a perfect radius — so
 the core→suburb→rural→fringe fade reads organic. Density is a per-district scalar
 derived from district centroid radius + seed jitter, mapped to band thresholds.
 
-**Road tier by band (the rural rule).** Arterials are the *urban* backbone — they
+**Road tier by band (the rural rule).** Arterials are the _urban_ backbone — they
 taper out as density drops. So the outer bands are **crossed by highways and sparse
 local streets, but few-to-no arterials** (user: rural areas are "run through by highway
 or streets, but less likely to have arterials"). Highways span every band (they're the
@@ -58,9 +63,9 @@ but pair two knobs that pull opposite ways:**
 - **Field directional grain** (basis `size` ↓ / count ↑ / `waviness` ↑) → roads curve
   more per unit length. Want this **tighter/wavier** in suburbs → crescents & loops.
 - **Street separation** (`ST_DSEP`) → want this **WIDER** in suburbs → fewer, bigger
-  curvy blocks. Real suburbs are curvy *and* coarse (cul-de-sacs), not a dense tangle.
+  curvy blocks. Real suburbs are curvy _and_ coarse (cul-de-sacs), not a dense tangle.
 
-Tighten the *field*, loosen the *spacing*. Clean to implement: the field basis is
+Tighten the _field_, loosen the _spacing_. Clean to implement: the field basis is
 already spatially localized (`{kind, cx, cz, size, decay}` summed in
 `lib/seed/tensorField.ts`), so **add extra high-waviness, small-`size` bases in the
 periphery ring** — the core is untouched and determinism holds.
@@ -86,9 +91,9 @@ The first Stage-1 spike (`feat/highway-crossings`) was reviewed live and **rejec
 generator model** — it read as "child's-drawing" city planning.
 
 **Why the spike failed (geometry-first).** `generateFreeways` drew freeways from
-`centerX/centerZ/half` *only* — primitives (2–3 chords through a near-centre point + one
+`centerX/centerZ/half` _only_ — primitives (2–3 chords through a near-centre point + one
 circle arc) with **zero knowledge of the city fabric** (districts, density, arterial
-grid). A real network is a *response* to the land; the spike laid a *shape over* it. The
+grid). A real network is a _response_ to the land; the spike laid a _shape over_ it. The
 beltway was an unanchored decorative arc bypassing nothing; the radials connected no
 destinations (chords overshooting the bbox, then clipped); crossings were "wherever two
 abstract lines met," with the ~1 mi cadence applied as cosmetic thinning. The macro
@@ -96,20 +101,22 @@ topology was **vibes** because the topology research was unsettled (old Open Q#1
 now closed in [[highway-network-references]] §6/§7.
 
 **User design constraints (2026-06-03 review):**
-- **Highways belong OUTSIDE the densest blocks** — realism (bypass rationale, §6) *and* an
+
+- **Highways belong OUTSIDE the densest blocks** — realism (bypass rationale, §6) _and_ an
   on-app **visibility** win (a freeway buried in downtown is hard to see).
 - **Perpendicular freeway crossings with interchanges connecting them** are the target read.
-- **OK to bulldoze a block** for an interchange (holds for a *service* diamond/parclo; a
+- **OK to bulldoze a block** for an interchange (holds for a _service_ diamond/parclo; a
   full **cloverleaf is a 350–400 m superblock**, §7 — metro-scale, not a single block).
 - **Cloverleaf is the desired aesthetic** for the system crossing — the spike's
   `buildInterchangeRamps` cloverleaf glyph (4 quarter-loops) is good; **keep it**.
 
 **Rebuild = corridor model (built at the #14 scale spike, per §6 tiers):**
+
 1. **Route, don't draw.** Freeways = corridors between **metro-edge gateways**, routed
    **tangent to / skirting the dense core** along **low-density district seams** using the
    tensor-field grain — not chords through the centre.
-2. **Co-generate.** Lay the freeway corridor first; arterials/streets *respond* (feed
-   interchanges, grade-separate elsewhere). A crossing then *means* "an arterial needs the
+2. **Co-generate.** Lay the freeway corridor first; arterials/streets _respond_ (feed
+   interchanges, grade-separate elsewhere). A crossing then _means_ "an arterial needs the
    other side," not "two lines intersected."
 3. **Straight mainlines, deliberate curves** — mostly tangent + occasional large-radius
    bends at corridor turns (§4 radii), not a constant gentle bow on every spoke.
@@ -126,13 +133,13 @@ scale-independent prerequisite — **now done**.
 
 ## Stages (cheap/novel first; perf spend gated)
 
-| Stage | What | Cost | Verify |
-|---|---|---|---|
-| **0 Suburbs** | radial density gradient (core/suburb/undeveloped) + per-district curvilinear character (localized tight-grain bases + wider spacing + sparse lighting) | cheap, current 3 km | gate1 + visual |
-| **1 Crossings** | freeway polylines (radial ± partial beltway) → detect crossings → angle-aware interchange modules, periphery-biased | cheap, scale-free | gate1 + top-down |
-| **2 Perf** | Web-Worker gen + per-tile frustum culling ([[plan-city-scale-tiers]] roadmap #1–2) | real | profile |
-| **3 Scale** | extent → **City-plus (~4 km, half≈2000)** — retune camera-as-multiples-of-half | medium | gate1 + visual |
-| **4 Freeways@scale** | fold crossings in at scale + tiered night lighting (CFL/CIL/PIL, high-mast clusters at cores) | medium | visual |
+| Stage                | What                                                                                                                                                   | Cost                | Verify           |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------- | ---------------- |
+| **0 Suburbs**        | radial density gradient (core/suburb/undeveloped) + per-district curvilinear character (localized tight-grain bases + wider spacing + sparse lighting) | cheap, current 3 km | gate1 + visual   |
+| **1 Crossings**      | freeway polylines (radial ± partial beltway) → detect crossings → angle-aware interchange modules, periphery-biased                                    | cheap, scale-free   | gate1 + top-down |
+| **2 Perf**           | Web-Worker gen + per-tile frustum culling ([[plan-city-scale-tiers]] roadmap #1–2)                                                                     | real                | profile          |
+| **3 Scale**          | extent → **City-plus (~4 km, half≈2000)** — retune camera-as-multiples-of-half                                                                         | medium              | gate1 + visual   |
+| **4 Freeways@scale** | fold crossings in at scale + tiered night lighting (CFL/CIL/PIL, high-mast clusters at cores)                                                          | medium              | visual           |
 
 Stages 0 and 1 are independent enough to build in parallel worktrees; they both touch
 `cityGen.ts`, so expect a non-trivial merge at integration (acceptable, done deliberately).
@@ -141,7 +148,7 @@ Stages 0 and 1 are independent enough to build in parallel worktrees; they both 
 
 - **Extent target — DECIDED 2026-06-03: Metro 6 km (half 3000)** as the MAX gen extent
   under [[decision-additive-growth-citygen]] (generate-at-max + crop). The intimate-skyline
-  soul is preserved by the *crop* (default view), not by limiting MAX — so we take the full
+  soul is preserved by the _crop_ (default view), not by limiting MAX — so we take the full
   Metro headroom (rural/fringe, core-skirting highways, suburbs all need periphery) and let
   the slider crop down. Reversible (one constant).
 - **Perf gate before scaling:** do not grow extent past ~City-plus until the Worker +
@@ -154,7 +161,7 @@ Stages 0 and 1 are independent enough to build in parallel worktrees; they both 
   proposal ("large generative field, build only the crop, defer/purge the rest"). It
   sidesteps the genuinely-hard globals found in the code audit — long-streamline road seam
   coherence, the global district flood-fill, and the global distance-to-centre character
-  re-ranking — by computing the full layout once and only *hiding* parts. Also fixes
+  re-ranking — by computing the full layout once and only _hiding_ parts. Also fixes
   seed-portability. Truly-infinite chunking (Option A) is the future upgrade, not needed
   for v1. **This unblocks the scale spike.**
 - **Highways spike (`feat/highway-crossings`) — REJECTED as a generator model**
@@ -174,7 +181,7 @@ wrong building + lamp texture). Comments gathered reviewing it, to fold into the
   buildings; varied block sizes + winding (see the suburban archetype taxonomy, captured
   separately).
 - **Streetlights.** Suburbs read as **unlit / too dim**, and the core→residential
-  transition reads as a *dimming* gradient — wrong lever. Cause: lamp keep-curve floor
+  transition reads as a _dimming_ gradient — wrong lever. Cause: lamp keep-curve floor
   (0.18) **plus** the suburb street-sep ramp → far fewer minor streets → far fewer lamps.
   Rebuild rules:
   - **(a) Constant brightness** across bands — do NOT dim lamps toward the edge.
@@ -203,7 +210,7 @@ wrong building + lamp texture). Comments gathered reviewing it, to fold into the
   character more across seeds.
 - **Rural / fringe band — gated on the SCALE spike.** Couldn't see it at 3 km; needs a
   larger extent before rural/fringe reads. That's a **separate spike** (city scale, #14);
-  do the suburbs rebuild *at that scale*, not at 3 km.
+  do the suburbs rebuild _at that scale_, not at 3 km.
 
 ## Determinism contract (every gen stage)
 

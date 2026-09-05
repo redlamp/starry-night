@@ -1,0 +1,667 @@
+<title>Road to Starry Night 2.0</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&family=Silkscreen&display=swap">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b1020;
+    --bg-2: #121a34;
+    --bg-3: #1a2447;
+    --ink: #ebe8dd;
+    --ink-2: #a9ab9f;
+    --ink-3: #6f7389;
+    --line: #26305a;
+    --amber: #f2b24a;
+    --amber-dim: #7a5a22;
+    --cool: #7fb2ff;
+    --good: #6fcf97;
+    --warn: #f2b24a;
+    --crit: #ff7b6b;
+    --display: "Bricolage Grotesque", "Helvetica Neue", Arial, sans-serif;
+    --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+    --mono: "IBM Plex Mono", Consolas, "Courier New", monospace;
+    --pixel: "Silkscreen", "IBM Plex Mono", monospace;
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      color-scheme: light;
+      --bg: #eef0f5; --bg-2: #ffffff; --bg-3: #e2e6f0;
+      --ink: #171b2e; --ink-2: #545a74; --ink-3: #8a90a8; --line: #d3d8e6;
+      --amber: #b8760f; --amber-dim: #e5c993; --cool: #2f66c9;
+      --good: #1f8a4c; --warn: #b8760f; --crit: #c8402d;
+    }
+  }
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --bg: #eef0f5; --bg-2: #ffffff; --bg-3: #e2e6f0;
+    --ink: #171b2e; --ink-2: #545a74; --ink-3: #8a90a8; --line: #d3d8e6;
+    --amber: #b8760f; --amber-dim: #e5c993; --cool: #2f66c9;
+    --good: #1f8a4c; --warn: #b8760f; --crit: #c8402d;
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0b1020; --bg-2: #121a34; --bg-3: #1a2447;
+    --ink: #ebe8dd; --ink-2: #a9ab9f; --ink-3: #6f7389; --line: #26305a;
+    --amber: #f2b24a; --amber-dim: #7a5a22; --cool: #7fb2ff;
+    --good: #6fcf97; --warn: #f2b24a; --crit: #ff7b6b;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: var(--body); font-size: 16px; line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--cool); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  a:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+  code { font-family: var(--mono); font-size: 0.88em; background: var(--bg-3); padding: 0.05em 0.35em; border-radius: 3px; }
+
+  .shell { display: grid; grid-template-columns: 220px minmax(0, 760px); gap: 48px; max-width: 1080px; margin: 0 auto; padding: 40px 24px 96px; }
+  @media (max-width: 900px) { .shell { grid-template-columns: minmax(0, 1fr); gap: 24px; padding: 24px 16px 64px; } .side { position: static !important; } }
+
+  .side { position: sticky; top: 24px; align-self: start; }
+  .side nav { display: flex; flex-direction: column; gap: 2px; margin-top: 18px; }
+  .side nav a { color: var(--ink-2); font-size: 14px; padding: 5px 8px; border-left: 2px solid transparent; }
+  .side nav a:hover { color: var(--ink); text-decoration: none; border-left-color: var(--line); }
+  .stamp {
+    display: inline-block; font-family: var(--pixel); font-size: 11px; letter-spacing: 0.02em;
+    color: var(--amber); border: 1px solid var(--amber-dim); padding: 6px 8px 4px; border-radius: 2px;
+    background: var(--bg-2);
+  }
+  .stamp b { color: var(--ink); font-weight: 400; }
+  .side .meta { color: var(--ink-3); font-size: 12.5px; margin-top: 14px; line-height: 1.5; font-family: var(--mono); }
+
+  h1 { font-family: var(--display); font-weight: 700; font-size: clamp(34px, 5vw, 52px); line-height: 1.02; letter-spacing: -0.02em; margin: 0 0 14px; text-wrap: balance; }
+  h2 { font-family: var(--display); font-weight: 600; font-size: 26px; letter-spacing: -0.01em; margin: 56px 0 10px; text-wrap: balance; }
+  h3 { font-family: var(--display); font-weight: 600; font-size: 18px; margin: 28px 0 6px; }
+  .eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 8px; }
+  .lede { font-size: 19px; line-height: 1.45; color: var(--ink); max-width: 60ch; margin: 0 0 8px; }
+  p { max-width: 68ch; margin: 0 0 12px; }
+  ul, ol { max-width: 68ch; padding-left: 22px; margin: 0 0 12px; }
+  li { margin: 0 0 6px; }
+  li::marker { color: var(--ink-3); }
+  strong { font-weight: 600; }
+  .muted { color: var(--ink-2); }
+
+  .verdict { background: var(--bg-2); border: 1px solid var(--line); border-left: 3px solid var(--amber); padding: 20px 22px; margin: 22px 0 8px; }
+  .verdict .big { font-family: var(--display); font-size: 40px; font-weight: 700; line-height: 1; letter-spacing: -0.02em; margin: 0 0 6px; }
+  .verdict .big span { color: var(--amber); }
+  .verdict p { margin: 8px 0 0; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 0; }
+  .chip { font-family: var(--mono); font-size: 12.5px; padding: 5px 9px; border: 1px solid var(--line); border-radius: 3px; color: var(--ink-2); background: var(--bg); font-variant-numeric: tabular-nums; }
+  .chip b { color: var(--ink); font-weight: 500; }
+  .chip.good b { color: var(--good); } .chip.warn b { color: var(--warn); } .chip.crit b { color: var(--crit); }
+
+  .tablewrap { overflow-x: auto; margin: 10px 0 18px; border: 1px solid var(--line); border-radius: 4px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14.5px; min-width: 520px; table-layout: auto; }
+  th { text-align: left; font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); padding: 10px 12px; border-bottom: 1px solid var(--line); background: var(--bg-2); font-weight: 500; }
+  td { padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:last-child td { border-bottom: 0; }
+  td.k { font-weight: 500; min-width: 11em; max-width: 22em; }
+  td code { white-space: nowrap; }
+
+  /* status as a lit window */
+  .w { display: inline-block; width: 11px; height: 14px; border-radius: 1px; vertical-align: -2px; margin-right: 7px; border: 1px solid var(--line); background: var(--bg); }
+  .w.on { background: var(--amber); border-color: var(--amber); box-shadow: 0 0 6px color-mix(in srgb, var(--amber) 60%, transparent); }
+  .w.half { background: linear-gradient(180deg, var(--amber) 0 50%, var(--bg) 50% 100%); border-color: var(--amber-dim); }
+  .w.cool { background: var(--cool); border-color: var(--cool); }
+  .w.x { background: repeating-linear-gradient(135deg, var(--ink-3) 0 1px, transparent 1px 4px); }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px 20px; font-size: 13px; color: var(--ink-2); margin: 6px 0 12px; }
+  .legend span { white-space: nowrap; }
+
+  .sev { display: inline-block; font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; padding: 2px 6px; border-radius: 2px; margin-right: 8px; vertical-align: 1px; }
+  .sev.high { color: var(--crit); border: 1px solid var(--crit); }
+  .sev.med { color: var(--warn); border: 1px solid var(--warn); }
+  .sev.low { color: var(--ink-3); border: 1px solid var(--line); }
+
+  .finding { padding: 12px 0; border-bottom: 1px solid var(--line); max-width: 72ch; }
+  .finding:last-child { border-bottom: 0; }
+  .finding .t { font-weight: 600; }
+  .finding p { margin: 4px 0 0; color: var(--ink-2); font-size: 15px; }
+
+  .q { border: 1px solid var(--line); background: var(--bg-2); border-radius: 4px; padding: 14px 16px; margin: 0 0 12px; max-width: 72ch; }
+  .q .t { font-weight: 600; display: flex; gap: 10px; align-items: flex-start; }
+  .q .t input { margin-top: 5px; accent-color: var(--amber); }
+  .q p { margin: 6px 0 0 26px; font-size: 15px; color: var(--ink-2); }
+  .q p b { color: var(--ink); font-weight: 600; }
+  .q textarea { display: block; width: 100%; margin: 10px 0 0 26px; max-width: calc(100% - 26px); resize: vertical; min-height: 34px;
+    font: inherit; font-size: 14px; line-height: 1.45; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 3px; padding: 6px 8px; }
+  .q.general textarea { margin-left: 0; max-width: 100%; }
+  .q textarea::placeholder { color: var(--ink-3); }
+  .q textarea:focus { border-color: var(--amber-dim); outline: none; }
+  .ann { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: start; margin-top: 10px; }
+  .ann label { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 12px; color: var(--ink-2); white-space: nowrap; padding-top: 6px; }
+  .ann input, .mark input { accent-color: var(--amber); }
+  .ann textarea, .noterow textarea { width: 100%; resize: vertical; min-height: 32px; font: inherit; font-size: 14px; line-height: 1.45; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 3px; padding: 5px 8px; }
+  .ann textarea::placeholder, .noterow textarea::placeholder { color: var(--ink-3); }
+  .ann textarea:focus, .noterow textarea:focus { border-color: var(--amber-dim); outline: none; }
+  .finding .ann { max-width: 72ch; }
+  .verdict .ann { margin-top: 14px; }
+  td.mark { white-space: nowrap; width: 1%; }
+  td.mark input { vertical-align: middle; margin-right: 6px; }
+  .notebtn { font: inherit; font-family: var(--mono); font-size: 11px; color: var(--ink-2); background: transparent; border: 1px solid var(--line); border-radius: 3px; padding: 2px 7px; cursor: pointer; }
+  .notebtn:hover { color: var(--ink); border-color: var(--ink-3); }
+  .notebtn.has { color: var(--amber); border-color: var(--amber-dim); }
+  tr.noterow td { background: var(--bg-2); padding: 6px 12px 10px; }
+  .sync { font-family: var(--mono); font-size: 12px; color: var(--ink-3); margin: -4px 0 14px; }
+  .sync.on { color: var(--good); } .sync.off { color: var(--warn); }
+
+  .phase { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 16px; padding: 18px 0; border-top: 1px solid var(--line); max-width: 76ch; }
+  .phase:last-of-type { border-bottom: 1px solid var(--line); }
+  .phase .n { font-family: var(--display); font-weight: 700; font-size: 22px; line-height: 1.1; }
+  .phase .n small { display: block; font-family: var(--mono); font-weight: 400; font-size: 12px; color: var(--ink-3); margin-top: 4px; }
+  .phase h3 { margin: 0 0 4px; }
+  .phase .goal { color: var(--ink-2); font-size: 15px; margin: 0 0 8px; }
+  .phase ul { margin: 0; font-size: 15px; }
+  .phase .gate { font-size: 13.5px; color: var(--ink-2); margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); }
+  .phase .gate b { color: var(--amber); font-weight: 600; font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em; }
+
+  .note { font-size: 13.5px; color: var(--ink-3); margin-top: 24px; max-width: 72ch; }
+  @media (prefers-reduced-motion: no-preference) { .w.half { animation: flick 3.2s steps(1) infinite; } @keyframes flick { 0%,62%,68%,100% { opacity: 1; } 63%,67% { opacity: .35; } } }
+</style>
+
+<div class="shell">
+  <aside class="side">
+    <span class="stamp">SEED <b>dev@bc107eb</b></span>
+    <nav>
+      <a href="#verdict">Where we are</a>
+      <a href="#ledger">The v1 ledger</a>
+      <a href="#unwritten">The unwritten v2</a>
+      <a href="#missed">What was missed</a>
+      <a href="#reconsider">What to reconsider</a>
+      <a href="#labs">Labs and scripts</a>
+      <a href="#health">Health and gates</a>
+      <a href="#structure">Structure and speed</a>
+      <a href="#plan">The road to 2.0</a>
+      <a href="#versioning">Versioning</a>
+    </nav>
+    <div class="meta">review 2026-09-05<br>main v2026.07.27<br>dev +9 unshipped<br>four audits, sonnet</div>
+  </aside>
+
+  <main>
+    <p class="eyebrow">Project review</p>
+    <h1>Road to Starry Night 2.0</h1>
+    <p class="sync" id="sync" aria-live="polite">Connecting to the shared store…</p>
+    <p class="lede">Version 1 shipped in June and the project kept building past its own spec for two months. The features of a second generation are in the tree. The paperwork, the gates, and the one milestone that was always half-open are not.</p>
+
+    <section id="verdict">
+      <div class="verdict">
+        <p class="eyebrow">Where we are</p>
+        <p class="big">Call it <span>1.8</span></p>
+        <p>The PRD's four v1 milestones are done and mostly exceeded. Since then the city went metro-scale with tensor-field roads and suburbs, gained residents with families and story hooks, air and road traffic, a Mac-Plus intro, click-to-inspect, and a continuous camera. That is a second product, not a point release. It is not 2.0 yet because nothing says what 2.0 is, the window-dynamics milestone is still "infrastructure ready, not user-facing" three months on, and the one playtest's deepest findings were never acted on.</p>
+        <p class="muted">The tags are dates, the package says 0.1.0, and nothing in the product states a version. The number above is a judgment, and the last section proposes a scheme so the next one is not.</p>
+        <p class="muted"><b>Direction from the read-through (09-05):</b> stay in 1.x releases for now. 2.0 is the plan, not the next tag. The PRD is a stale instrument; the Paper phase below offers a replacement rather than a rewrite.</p>
+      </div>
+      <div class="chips">
+        <span class="chip">last deploy <b>2026-07-27</b></span>
+        <span class="chip">last commit <b>2026-09-03</b></span>
+        <span class="chip warn">issues closed Aug <b>0</b> (May 29, Jun 26, Jul 27)</span>
+        <span class="chip">open issues <b>11</b></span>
+        <span class="chip good">gates <b>4 of 5</b> pass</span>
+        <span class="chip crit">format:check <b>330 files</b></span>
+        <span class="chip">source <b>~65k lines</b></span>
+      </div>
+    </section>
+
+    <section id="ledger">
+      <h2>The v1 ledger</h2>
+      <p>Every item the May PRD promised, read against the code today. Status is drawn the way the city draws it.</p>
+      <div class="legend">
+        <span><i class="w on"></i>done</span>
+        <span><i class="w half"></i>partial</span>
+        <span><i class="w cool"></i>superseded by a better design</span>
+        <span><i class="w"></i>not started</span>
+        <span><i class="w x"></i>dropped</span>
+      </div>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Milestone</th><th>Status</th><th>Reality</th></tr></thead>
+        <tbody>
+          <tr><td class="k">M1 Still frame</td><td><i class="w on"></i>Done</td><td>Exceeded. Sky went deep navy with a gradient; orbit and flicker landed on top.</td></tr>
+          <tr><td class="k">M2 Window dynamics</td><td><i class="w half"></i>Partial</td><td>Flicker is shader math on (windowSeed, uTime), which is the correct design. No user-facing window behavior beyond the Windows panel. The PRD status table has said "not yet fully user-facing" since July 2. Nothing has moved it.</td></tr>
+          <tr><td class="k">M3 Distant orbit</td><td><i class="w cool"></i>Superseded</td><td>Not one orbit but a camera-model registry, then Cam v3's continuous modes.</td></tr>
+          <tr><td class="k">M4 Seed sharing</td><td><i class="w on"></i>Done</td><td>Hash seed URL, SeedControls, a quality panel, and device-adaptive tiers the PRD never asked for.</td></tr>
+        </tbody>
+      </table></div>
+
+      <h3>PRD backlog and open questions</h3>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Item</th><th>Status</th><th>Where</th></tr></thead>
+        <tbody>
+          <tr><td class="k">Distance fog</td><td><i class="w on"></i>Done</td><td>FogTicker, fogBounds shader, density bands</td></tr>
+          <tr><td class="k">Atmospheric haze</td><td><i class="w on"></i>Done</td><td>GroundHaze</td></tr>
+          <tr><td class="k">Street and traffic lighting</td><td><i class="w on"></i>Done</td><td>Streetlights, Traffic, rural traffic v2</td></tr>
+          <tr><td class="k">Aircraft blinker</td><td><i class="w on"></i>Done, expanded</td><td>Flight routes with live caps, plus helicopters on spline tours</td></tr>
+          <tr><td class="k">Hover-for-resident</td><td><i class="w on"></i>Done, expanded</td><td>Full persona system, family trees, directory drill</td></tr>
+          <tr><td class="k">Mobile support</td><td><i class="w half"></i>Partial</td><td>Device tiers and touch gestures exist. The mobile default is undecided (#85). The PRD still lists mobile as a non-goal.</td></tr>
+          <tr><td class="k">In-city camera positions</td><td><i class="w half"></i>Partial</td><td>Fly and top-down exist. No street-level or rooftop framing.</td></tr>
+          <tr><td class="k">Traffic lights</td><td><i class="w half"></i>Unclear</td><td>No intersection rhythm distinct from Traffic</td></tr>
+          <tr><td class="k">Modern lighting mode</td><td><i class="w"></i>Not started</td><td>Residents going to bed, offices powering down. No ModeToggle exists. This is the same feature as closing M2.</td></tr>
+          <tr><td class="k">Day/night cycle</td><td><i class="w"></i>Not started</td><td></td></tr>
+          <tr><td class="k">Billboards and signage</td><td><i class="w"></i>Not started</td><td></td></tr>
+          <tr><td class="k">Vignette system</td><td><i class="w"></i>Not started</td><td>The intro is adjacent but not this</td></tr>
+          <tr><td class="k">Supabase</td><td><i class="w x"></i>Dropped</td><td>Static export on GitHub Pages. Correct call, never recorded as a decision.</td></tr>
+        </tbody>
+      </table></div>
+      <p class="muted">Non-goals silently walked back, all in good ways: no interactivity, no mobile, no character models, no persistence. The non-goals section is now actively misleading and needs rewriting rather than annotating.</p>
+    </section>
+
+    <section id="unwritten">
+      <h2>The unwritten v2</h2>
+      <p>Shipped between June and July with no spec above the level of decision notes. Together these are the second product. Naming it is the first step toward a full-number release.</p>
+      <div class="tablewrap"><table>
+        <thead><tr><th>System</th><th>What it is</th><th>Decision note</th></tr></thead>
+        <tbody>
+          <tr><td class="k">Metro city-gen</td><td>Tensor-field roads, districts from network closure, suburbs on node fields, density gradient on absolute distance, about 15,900 buildings at the metro tier, generate-at-max and crop</td><td>tensor-field-roads, additive-growth-citygen, density-gradient-model</td></tr>
+          <tr><td class="k">Personas</td><td>Seeded residents and businesses: names by decade cohort, families, professions, story hooks, addresses; directory with Miller columns; writing lab for the content pools</td><td>persona-architecture, entity-columns, listed-residents-term</td></tr>
+          <tr><td class="k">Camera v3</td><td>Continuous modes with skyline regime, drag ownership, gimbal and focus tracking, touch gestures, compass HUD</td><td>camera-v3-continuous-modes, camera-model-registry</td></tr>
+          <tr><td class="k">Sky and air</td><td>Flights with class altitudes, helicopter tours, moon phases with earthshine, scintillation, shooting stars</td><td>moon-celestial-model, heli-spline-tours, flights-live-caps</td></tr>
+          <tr><td class="k">Inspect and pick</td><td>Any-side building picking, district selection, wireframe cages, cards</td><td>inspect-focus-selection</td></tr>
+          <tr><td class="k">Intro</td><td>The city on a Mac Plus CRT with a one-bit dither chain</td><td>intro-mac-viewport</td></tr>
+          <tr><td class="k">Lights</td><td>Unified five-emitter light sizing from the projection matrix (#99)</td><td>plan-light-distance-model-v2 (draft, unimplemented)</td></tr>
+          <tr><td class="k">Adaptive quality</td><td>Device tier detection, quality tiers from Truck Stop to Metropolis</td><td>plan-device-adaptive-quality</td></tr>
+        </tbody>
+      </table></div>
+      <p>The thesis these add up to is already in the PRD's emotional register: a city where people live. v1 proved the still frame. 2.0 should prove the city is inhabited: residents you can find in the world, windows that follow their lives, and a camera that serves both the toy and the directory.</p>
+    </section>
+
+    <section id="missed">
+      <h2>What was missed</h2>
+      <p>Things the record says are open, in flight, or done that reality disagrees with.</p>
+
+      <div class="finding"><span class="sev high">HIGH</span><span class="t">The Andy playtest's tier 2 and 3 findings were synthesized and then dropped.</span>
+        <p>Tier 1 (camera feel, skyline band) shipped within a day. The deeper findings, an interaction-mode split between spatial toy and directory browse, information hierarchy, and engagement, were never filed as issues. The July 27 daily lists them as unfiled. Six weeks later nothing moved. This is the single most substantive open thread in the project.</p></div>
+
+      <div class="finding"><span class="sev high">HIGH</span><span class="t">M2 has been "not yet user-facing" since the PRD was annotated on July 2.</span>
+        <p>The personas project names "schedule drives window lights" as its biggest-payoff backlog item. That is M2's modern lighting mode and nobody has connected the two. One feature closes a v1 milestone and pays off the persona system at once.</p></div>
+
+      <div class="finding"><span class="sev high">HIGH</span><span class="t">No CI gate exists on anything but deploy.</span>
+        <p>The Pages workflow builds and deploys. Lint, typecheck, format, gate1 and personaCheck run only by hand. A red gate can merge and deploy silently. This has sat on the deferred list since the July 2 survey.</p></div>
+
+      <div class="finding"><span class="sev med">MED</span><span class="t">The wiki index says four things are in flight that shipped weeks ago.</span>
+        <p>#14 city-scale migration (closed, with three checklist steps still unticked), the drei camera migration ("not started", though phases 1 and 2 shipped June 13 and Cam v3 superseded the rest), personas on a branch that no longer exists, and persona-presence "active" though both threads merged. The daily list skips ten July logs. The link to the v1 still-frame project note points at a file that does not exist.</p></div>
+
+      <div class="finding"><span class="sev med">MED</span><span class="t">Two load-bearing decisions are invisible from the decisions map.</span>
+        <p>Entity columns (the whole card selection model) and helicopter spline tours are adopted but unlinked. Family-tree chart conventions is missing from the research map.</p></div>
+
+      <div class="finding"><span class="sev med">MED</span><span class="t">A July 27 session was never committed.</span>
+        <p>The light-distance-model v2 plan, the face-generation research, the portrait style probe, and the matching MOC edits sit uncommitted and complete. Two more commits on dev are unpushed. Main has not deployed since July 27, so the moon-on-mobile fix and the card layout are the only visible things from the last six weeks.</p></div>
+
+      <div class="finding"><span class="sev med">MED</span><span class="t">The lights panel reads wrong to you and the fix is only a plan.</span>
+        <p>Your July 27 feedback (close at top-left, far at bottom-right) produced a well-formed A-to-G plan and no code.</p></div>
+
+      <div class="finding"><span class="sev low">LOW</span><span class="t">README documents four of nine routes.</span>
+        <p>Intro, camera lab, drei lab, window lab and writing lab are reachable from Settings, Labs but invisible to a reader.</p></div>
+
+      <div class="finding"><span class="sev low">LOW</span><span class="t">Deferred watchlist has one stale row and no owner.</span>
+        <p>The #56/#70 crop-verification row refers to issues closed in July. The stars 120k-vs-24k tier mismatch and the ground apron sized to max tier are still open with no home.</p></div>
+    </section>
+
+    <section id="reconsider">
+      <h2>What to reconsider</h2>
+      <p>Decisions that are yours. Each has my recommendation. Tick the ones you agree with and add a note where you disagree or want a different shape. Every finding, phase, and table row on this page takes a mark and a note too. All of it saves to the page's shared store, and Claude reads it back from the session.</p>
+
+      <div class="q"><label class="t"><input type="checkbox" data-k="fable">Fable branch routing</label>
+        <p>The fable branch is 35 commits behind dev, 0 ahead, and has had no commits since July 27. It exists for attribution, and the merge history already preserves that whether or not new work routes through it. Now that Fable is the everyday model, the detour costs a merge per feature and a rule that other sessions keep breaking. <b>Recommend:</b> freeze fable as history, route everything feat/* off dev. This contradicts a standing project rule, so it is your call, not mine.</p></div>
+
+      <div class="q"><label class="t"><input type="checkbox" data-k="modern">Modern lighting mode: commit or drop</label>
+        <p>Untouched since May. It is the natural home for persona schedules driving windows. <b>Recommend:</b> commit, and make it the centerpiece of 2.0. If you drop it, close M2 formally in the PRD instead of leaving it half-open. <b>09-05:</b> greenlit as a lab experiment. Proposal: plan-night-shift-lighting in the wiki.</p></div>
+
+      <div class="q"><label class="t"><input type="checkbox" data-k="mode-split">Interaction-mode split: spatial toy vs directory browse</label>
+        <p>Andy's deepest finding. The app currently serves both from one surface. <b>Recommend:</b> a decision note before any more camera or card work, then a second playtest to check it.</p></div>
+
+      <div class="q"><label class="t"><input type="checkbox" data-k="portraits">Portraits before presence?</label>
+        <p>The most recent work is face-generation research (#100). The persona-presence plan still has tenant highlighting unverified in-app and storefront clustering deferred. Portraits are a 2.x feature with real research momentum. <b>Recommend:</b> finish presence first. Keep the probe, park #100 until 2.0 tags.</p></div>
+
+      <div class="q"><label class="t"><input type="checkbox" data-k="v2cam">Retire the V2 camera model</label>
+        <p>StarryNightV2Model is 1,205 lines beside V3's 2,229. The July 27 daily flags "v2 camera model on old mapping" as open. <b>Recommend:</b> retire V2 once #98 skyline ergonomics lands, and split V3 while you are in there.</p></div>
+
+      <div class="q"><label class="t"><input type="checkbox" data-k="highways">Highway corridors: drop the rest of the metro plan</label>
+        <p>Suburbs shipped. The highway-corridor stages of plan-metro-suburbs-highways were never built and #13 closed on a rejected spike. <b>Recommend:</b> mark the plan partly superseded and drop corridors unless bus routes (#91) need them.</p></div>
+
+      <div class="q"><label class="t"><input type="checkbox" data-k="tests">Testing: wrap, do not migrate</label>
+        <p>There are no test files and no runner. There are 47 scripts, of which about a dozen are real assertion gates (gate1 20/20, personaCheck 17/17, cityGolden, and friends). <b>Recommend:</b> a single "bun run test" that runs the gate scripts, wired into CI. No vitest migration for 2.0.</p></div>
+
+      <div class="q"><label class="t"><input type="checkbox" data-k="branches">Stale branches</label>
+        <p>feature/road-reveal has 15 unmerged commits from June; feat/figma has 7 that belong to another repo; two worktree-agent branches are fully merged. <b>Recommend:</b> delete figma and the worktree branches, and either land or archive-tag road-reveal.</p></div>
+
+      <div class="q"><label class="t"><input type="checkbox" data-k="mobile">Mobile default (#85)</label>
+        <p>Hardware-blocked since July. <b>Recommend:</b> decide from the device-tier table without the low-spec device: default to the tier below what tier detection picks on coarse pointers, and revisit when hardware is available.</p></div>
+
+      <h3>Anything else</h3>
+      <div class="q general">
+        <textarea data-note="general" rows="4" placeholder="Reactions to the plan, the phases, or the version call."></textarea>
+      </div>
+    </section>
+
+    <section id="labs">
+      <h2>Labs and scripts</h2>
+      <p>The lab pattern is healthy. Every forked lab has a wiki note saying what was ported and what was not. The forks that were not forks (plan, tensor, writing lab) build on the real store and generators, so they carry no port debt.</p>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Route</th><th>Lines</th><th>Last touch</th><th>Ported?</th><th>Verdict</th></tr></thead>
+        <tbody>
+          <tr><td class="k">/plan</td><td>883</td><td>2026-06-06</td><td>Real data view</td><td>Keep</td></tr>
+          <tr><td class="k">/tensor</td><td>537</td><td>2026-06-06</td><td>Feeds the live generator</td><td>Keep</td></tr>
+          <tr><td class="k">/palette</td><td>663</td><td>2026-05-31</td><td>Reference lookup</td><td>Keep</td></tr>
+          <tr><td class="k">/writing-lab</td><td>~2,200</td><td>2026-07-08</td><td>Live authoring tool, Spine 2 merged</td><td>Keep</td></tr>
+          <tr><td class="k">/intro</td><td>~2,220</td><td>2026-06-07</td><td>A destination, not a bench</td><td>Keep, cluster parked (#71 to #74)</td></tr>
+          <tr><td class="k">/window-lab</td><td>~2,500</td><td>2026-07-03</td><td>Atlas+SDF shipped as hybrid mode</td><td>Keep, and reopen as the Night Shift lab (approach 5). Archive here meant keep for reference, never delete.</td></tr>
+          <tr><td class="k">/camera-lab</td><td>~2,400</td><td>2026-06-20</td><td>5 of 7 mechanics ported; near-horizon pan cap and matrix groundHit still lab-only</td><td>Archive after pan cap lands</td></tr>
+          <tr><td class="k">/drei-lab</td><td>~680</td><td>2026-06-08</td><td>Validated SNv2, superseded by the registry</td><td>Archive</td></tr>
+        </tbody>
+      </table></div>
+      <h3>Scripts (47, one wired to package.json)</h3>
+      <ul>
+        <li><strong>Gates, keep and wire:</strong> gate1, cityGolden, personaCheck, districtOutlineCheck, roadQueryCheck, principalCheck, heliSplineCheck, tierSanity, tileCullSanity, verifyPlanTier, verifyDeviceTier, verifyProjectionSizeInvariance.</li>
+        <li><strong>Capture, keep:</strong> capture, captureIntro, cdpShot, cdpConsole, renderPlanPng, renderFields, blockZoom.</li>
+        <li><strong>One-off verifies, keep as a library:</strong> the verify* interaction checks, mostly intro bugs.</li>
+        <li><strong>Prune, investigations closed:</strong> sketchCityPlan, sketchCitySmoke, sketchField, sketchTrace, analyzeDistricts, highwayPlan, moireGym, moireMetric, profileGen, profileTileCull, scanCoplanar, shaderCheck, workerSmoke, embedModelCredit.</li>
+      </ul>
+    </section>
+
+    <section id="health">
+      <h2>Health and gates</h2>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Gate</th><th>Result</th><th>Detail</th></tr></thead>
+        <tbody>
+          <tr><td class="k">lint</td><td><i class="w on"></i>Pass</td><td>0 errors, 0 warnings</td></tr>
+          <tr><td class="k">typecheck</td><td><i class="w on"></i>Pass</td><td>clean</td></tr>
+          <tr><td class="k">build</td><td><i class="w on"></i>Pass</td><td>12 static pages, 6.7s compile</td></tr>
+          <tr><td class="k">gate1</td><td><i class="w on"></i>Pass</td><td>20 seeds, determinism, streets, lattice</td></tr>
+          <tr><td class="k">personaCheck</td><td><i class="w on"></i>Pass</td><td>17 of 17 (two checks added since the 15 in memory)</td></tr>
+          <tr><td class="k">format:check</td><td><i class="w x"></i>Fail</td><td>330 files, about 45% wiki markdown, rest thin across app code</td></tr>
+          <tr><td class="k">determinism grep</td><td><i class="w on"></i>Clean</td><td>Every Math.random, Date.now, performance.now hit is UI reroll, lab counter, or camera timing. None feeds generation.</td></tr>
+          <tr><td class="k">CI</td><td><i class="w"></i>None</td><td>Deploy only, on push to main</td></tr>
+        </tbody>
+      </table></div>
+      <ul>
+        <li><strong>Five files over 1,500 lines:</strong> StarryNightV3Model 2,229; personas 1,822; DreiSceneControls 1,730; sceneStore 1,634; cityGen 1,591.</li>
+        <li><strong>Majors behind:</strong> TypeScript 6 to 7, ESLint 9 to 10, @types/node 25 to 26. Three.js 0.184 to 0.185 is effectively a major too. Everything else is minor.</li>
+        <li><strong>Git:</strong> dev is 9 ahead of main, 2 of those unpushed. Main matches origin.</li>
+      </ul>
+    </section>
+
+    <section id="structure">
+      <h2>Structure and speed</h2>
+      <p>Added after the first read, from two further audits: one on where the big files should split, one on where the time and memory go. Numbers were measured on dev at the metro tier, not estimated, unless marked.</p>
+
+      <h3>Where the time goes</h3>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Phase</th><th>Cold</th><th>Cached?</th></tr></thead>
+        <tbody>
+          <tr><td class="k">generateCity</td><td>790 to 870 ms (roads 260 to 290, districts 60 to 120, buildings 440 to 480)</td><td>Yes, IndexedDB</td></tr>
+          <tr><td class="k">Window atlas paint and pack</td><td>190 ms + 10 ms, 1024×1024 RGBA, 64% packed</td><td>No, every load</td></tr>
+          <tr><td class="k">City names and addresses</td><td>232 ms</td><td>No, every load</td></tr>
+          <tr><td class="k">Persona directory</td><td>341 ms headless (wiki recorded 1,376 ms in-browser in July), 39,413 residents</td><td>No, sliced over idle after a 3 s settle</td></tr>
+          <tr><td class="k">Per frame</td><td>16 draw calls, 355k triangles, three render submits (stars, haze, main), tile-cull recompaction 0% still and 0.6% in drift</td><td></td></tr>
+          <tr><td class="k">GPU textures</td><td>9.3 MB, both window atlases; 1.4 MB of that is packing waste</td><td></td></tr>
+          <tr><td class="k">First-load JS on /</td><td>3.11 MB, of which 732 KB is recharts loaded for a panel not shown at boot</td><td></td></tr>
+        </tbody>
+      </table></div>
+      <p class="muted">The per-frame code is in good shape: every frame loop reads the store directly instead of subscribing, uniform writes are change-gated, and steady state allocates nothing. The boot tracer exists but no number has ever been recorded from it.</p>
+
+      <h3>Speed: do these first</h3>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Change</th><th>Payoff</th><th>Risk</th></tr></thead>
+        <tbody>
+          <tr><td class="k">Lazy-load the demographics panel</td><td>About 730 KB, 23%, off the first load of /</td><td>Low</td></tr>
+          <tr><td class="k">Cache the window atlas beside the city bundle</td><td>About 200 ms off every warm visit</td><td>Low</td></tr>
+          <tr><td class="k">Real 2D bin packing for the atlas</td><td>Up to 2.8 MB GPU and proportional upload time</td><td>Low, byte-diffable</td></tr>
+          <tr><td class="k">Audit hardcoded mediump in five sky shaders</td><td>Closes the mobile precision bug class behind the moon fix</td><td>Low, verify on a phone</td></tr>
+          <tr><td class="k">One shared three.js chunk across routes</td><td>About 500 KB not refetched per route; three copies ship today</td><td>Medium, Turbopack config</td></tr>
+          <tr><td class="k">Hoist cell math out of the grazing-facade 4-tap loop</td><td>ALU where drift angles need it; worst case is five atlas samples per fragment</td><td>Medium, gate with the moiré metric</td></tr>
+          <tr><td class="k">Persist the finished persona directory</td><td>Removes the 341 ms cold cost on repeat visits</td><td>Medium, versioning maps and relations</td></tr>
+          <tr><td class="k">Merge the haze pass into the main render</td><td>One fewer clear and submit per frame</td><td>Low, capture first</td></tr>
+        </tbody>
+      </table></div>
+
+      <h3>Structure: split these first</h3>
+      <p>The dependency direction holds: the seed layer never imports React, state, or components, and every large file is clean on the determinism grep. Two boundary leaks: the mesh builder calls city generation and window painting from inside a component memo, and the Lights panel imports a curve sampler from the shader layer.</p>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Extraction</th><th>Why</th><th>Value / Risk</th></tr></thead>
+        <tbody>
+          <tr><td class="k">Shared camera geometry for V2 and V3 models</td><td>Ground hit, zoom-about-point, zoom-at-cursor, disc clamp are 95% duplicated with 15 copied constants; about 200 lines. V2 is live as the registered fallback</td><td>High / Low</td></tr>
+          <tr><td class="k">Mesh builder out of InstancedCity</td><td>430-line pure function of seed and shape, no closures, same call site</td><td>High / Low</td></tr>
+          <tr><td class="k">DirectoryPanel views and paged-rows hook</td><td>Four independent view components and a generic hook in one file</td><td>High / Low</td></tr>
+          <tr><td class="k">Persona trait helpers and staff tracker</td><td>Zero shared state. Leave the directory build generator whole: one closure across six passes whose draw order is the contract</td><td>Med / Low</td></tr>
+          <tr><td class="k">sceneStore into slices</td><td>Camera, atmosphere, city-gen, selection, debug, ambient; registry and reset/save/revert stay central. One store instance</td><td>Med / Low</td></tr>
+          <tr><td class="k">One spatial-hash primitive</td><td>Three files reimplement the same packed-integer grid key</td><td>Med / Low</td></tr>
+          <tr><td class="k">Held back: V3 drift and gesture rig, DreiSceneControls mutable state, the city shader</td><td>Timing-sensitive, already scoped in the June camera plan, and documented-intentional duplication respectively</td><td>Later</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+
+    <section id="plan">
+      <h2>The road to 2.0</h2>
+      <p>Five phases. Each ends at a gate that must be true before the next starts. Session counts are rough and assume the delegation pattern that built July.</p>
+
+      <div class="phase">
+        <div class="n">0<small>1 session</small></div>
+        <div>
+          <h3>Sweep</h3>
+          <p class="goal">Clear the six-week backlog so the record matches the tree, then ship what is on dev.</p>
+          <ul>
+            <li>Commit the July 27 leftovers and push dev.</li>
+            <li>Regenerate the wiki index; close the four stale "Active" entries; tick or strike the plan checklists; add the two missing decision links and the research link; fix the dead v1-still-frame link.</li>
+            <li>README routes: list all nine, or point at Settings, Labs as the index.</li>
+            <li>Add "bun run test" wrapping the gate scripts. Add a CI job on dev pushes: lint, typecheck, format:check, test.</li>
+            <li>Format burn-down in one commit. Prune the closed-investigation scripts. Delete figma and worktree branches; decide road-reveal.</li>
+            <li>Stamp package.json at 1.8.0. Merge dev to main, tag, deploy.</li>
+          </ul>
+          <p class="gate"><b>GATE</b> CI green on dev. Main deployed and tagged. Wiki index has no entry older than its reality.</p>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="n">1<small>1 to 2 sessions</small></div>
+        <div>
+          <h3>Paper</h3>
+          <p class="goal">Say what 2.0 is before building toward it.</p>
+          <ul>
+            <li>Archive docs/PRD.md as v1-historical. Instead of a PRD v2, three lighter instruments: a one-page <strong>charter</strong> in docs (thesis, non-goals, quality bars, the version rule), a <strong>product map</strong> in the wiki that links the decision notes as the living spec, and a GitHub <strong>milestone</strong> holding the 2.0 gate issues. Agents and people read decision notes and issues already; a long spec document is the thing nobody reopens.</li>
+            <li>File Andy's tier 2 and 3 findings as issues under a playtest label.</li>
+            <li>Decision notes: interaction-mode split, fable branch routing. Modern lighting is now a proposal: plan-night-shift-lighting in the wiki, with the window lab as its venue (approach 5).</li>
+            <li>Move the stale deferred rows into issues or delete them.</li>
+          </ul>
+          <p class="gate"><b>GATE</b> PRD v2 merged. Every open thread in the wiki has a GitHub issue or a decision note.</p>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="n">2<small>3 to 5 sessions</small></div>
+        <div>
+          <h3>Inhabited windows</h3>
+          <p class="goal">Close M2 and pay off personas with the same feature.</p>
+          <ul>
+            <li>Persona schedules drive window state: residents to bed, offices down on district curves, storefronts on main-street hours. Shader-side from (windowSeed, uTime, schedule texture), never stored.</li>
+            <li>Classic and modern toggle in the Windows panel, classic as the After Dark default.</li>
+            <li>Verify tenant highlighting in-app and flip persona-presence to shipped. Face-aware storefront clustering if cheap.</li>
+            <li>Light distance model v2, steps A to G from the plan, so the Lights panel reads as a falloff.</li>
+          </ul>
+          <p class="gate"><b>GATE</b> A seed at night visibly changes over ten minutes. Selecting a resident lights their unit. Capture, gate1 and personaCheck byte-identical for existing outputs.</p>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="n">3<small>2 to 3 sessions</small></div>
+        <div>
+          <h3>Feel</h3>
+          <p class="goal">Finish the camera and mobile threads that July left half-tuned.</p>
+          <ul>
+            <li>#98 skyline regime ergonomics; compass tilt maximum; retire the V2 camera model; split V3.</li>
+            <li>Near-horizon pan cap ported from camera lab, closing that lab.</li>
+            <li>#85 mobile default: mid tier on coarse pointers (decided 09-05). Ground apron sized to the project max tier.</li>
+            <li>Traffic v3: route cars through intersections instead of per-road loops. Fixes the rural looping you see today, and it is the prerequisite for traffic lights.</li>
+          </ul>
+          <p class="gate"><b>GATE</b> Your live drag test passes on desktop and one phone. No synthetic claims.</p>
+        </div>
+      </div>
+
+      <div class="phase">
+        <div class="n">4<small>1 session plus a playtest</small></div>
+        <div>
+          <h3>Playtest 2 and tag</h3>
+          <p class="goal">Check the interaction-mode decision with a second person, then call it.</p>
+          <ul>
+            <li>Second playtest against the tier 2 and 3 issues. Fix what is cheap; file the rest as 2.x.</li>
+            <li>package.json 2.0.0, tag, deploy, README hero re-shot from the new build.</li>
+          </ul>
+          <p class="gate"><b>GATE</b> 2.0.0 on main. Deferred: #100 portraits, #91 bus routes, #97 demographics, #60 build page, the intro cluster, day/night, signage.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="versioning">
+      <h2>Versioning</h2>
+      <p>Keep the date tags. They are the ship log and the one-per-day rule works. Add a milestone number that the product itself states.</p>
+      <ul>
+        <li><strong>package.json carries semver</strong> and bumps only at milestones: 1.8.0 at the end of the sweep, 2.0.0 at the end of phase 4. Point releases between are optional.</li>
+        <li><strong>Tags stay vYYYY.MM.DD</strong> and mark deploys. A milestone tag (v2.0.0) is added alongside the date tag on the day it ships.</li>
+        <li><strong>The seed chip shows the version</strong> next to the seed, so a shared screenshot says which city and which build.</li>
+        <li><strong>A full number means a new PRD.</strong> 3.0 gets written down before it gets built.</li>
+      </ul>
+      <p class="note">Method: four Sonnet audits (PRD versus code, labs and scripts, wiki staleness, gates and health) run in parallel on dev at bc107eb, read and reconciled here. Gates were run, not inferred. Line counts and issue counts are as of 2026-09-05. Nothing in the tree was modified.</p>
+    </section>
+  </main>
+</div>
+
+<script>
+  (function () {
+    // One shared document holds every mark: { <key>: {checked, note} }.
+    // Keys: decisions use their data-k; everything else keys on a slug of
+    // its own title text. Claude reads it back with read_db on
+    // review/decisions. localStorage is the fallback when the shared store
+    // is unavailable (a saved copy, no viewer).
+    var KEY = 'sn-review-2026-09-05';
+    var syncEl = document.getElementById('sync');
+    var state = {};
+    var docRef = null;
+    var timers = {};
+    var fields = []; // {key, box, ta, row, btn}
+
+    function slug(t) { return t.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48); }
+    // Older saves stored bare booleans; normalize to {checked, note} objects.
+    function norm(obj) {
+      var out = {};
+      Object.keys(obj || {}).forEach(function (k) {
+        var v = obj[k];
+        if (k === 'updatedAt') return;
+        if (typeof v === 'boolean') out[k] = { checked: v };
+        else if (v && typeof v === 'object') out[k] = Object.assign({}, v);
+      });
+      return out;
+    }
+    function entry(k) { if (!state[k] || typeof state[k] !== 'object') state[k] = {}; return state[k]; }
+    function localLoad() { try { state = norm(JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) { state = {}; } }
+    function localSave() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+    function setSync(text, cls) { if (syncEl) { syncEl.textContent = text; syncEl.className = 'sync ' + (cls || ''); } }
+
+    function persist() {
+      localSave();
+      if (!docRef) return;
+      var body = JSON.parse(JSON.stringify(state));
+      body.updatedAt = new Date().toISOString();
+      docRef.set(body).then(function () { setSync('Saved to the shared store', 'on'); })
+        .catch(function (e) { setSync('Save failed (' + (e && e.code || 'unknown') + '), kept locally', 'off'); });
+    }
+    function bind(key, box, ta) {
+      var f = { key: key, box: box, ta: ta };
+      fields.push(f);
+      if (box) box.addEventListener('change', function () { entry(key).checked = box.checked; persist(); });
+      if (ta) ta.addEventListener('input', function () {
+        entry(key).note = ta.value; localSave();
+        clearTimeout(timers[key]); timers[key] = setTimeout(persist, 600);
+      });
+      return f;
+    }
+    // A control strip: [Agree] checkbox + note field.
+    function strip(key, label) {
+      var wrap = document.createElement('div'); wrap.className = 'ann';
+      var lab = document.createElement('label');
+      var box = document.createElement('input'); box.type = 'checkbox';
+      lab.appendChild(box); lab.appendChild(document.createTextNode(label || 'Agree'));
+      var ta = document.createElement('textarea'); ta.rows = 1; ta.placeholder = 'Note or question';
+      wrap.appendChild(lab); wrap.appendChild(ta);
+      bind(key, box, ta);
+      return wrap;
+    }
+
+    // 1. Decisions: existing checkbox, add the note.
+    document.querySelectorAll('.q input[type="checkbox"][data-k]').forEach(function (b) {
+      var q = b.closest('.q');
+      var ta = document.createElement('textarea'); ta.rows = 1; ta.placeholder = 'Note or question';
+      q.appendChild(ta);
+      bind(b.dataset.k, b, ta);
+    });
+    // 2. General notes box.
+    document.querySelectorAll('textarea[data-note]').forEach(function (t) { bind(t.dataset.note, null, t); });
+    // 3. Findings.
+    document.querySelectorAll('.finding').forEach(function (f) {
+      var t = f.querySelector('.t'); if (!t) return;
+      f.appendChild(strip('finding-' + slug(t.textContent), 'Agree'));
+    });
+    // 4. Phases.
+    document.querySelectorAll('.phase').forEach(function (ph) {
+      var h = ph.querySelector('h3'); var body = ph.children[1]; if (!h || !body) return;
+      body.appendChild(strip('phase-' + slug(h.textContent), 'Agree'));
+    });
+    // 5. Versioning bullets and the verdict.
+    document.querySelectorAll('#versioning > ul > li').forEach(function (li) {
+      var b = li.querySelector('strong'); if (!b) return;
+      li.appendChild(strip('version-' + slug(b.textContent), 'Agree'));
+    });
+    var verdict = document.querySelector('.verdict');
+    if (verdict) verdict.appendChild(strip('verdict-1-8', 'Agree with 1.8'));
+    // 6. Table rows: a trailing Mark cell; the note lives in a row beneath.
+    document.querySelectorAll('.tablewrap table').forEach(function (table) {
+      var section = table.closest('section'); var sid = section ? section.id : 'tbl';
+      var head = table.querySelector('thead tr');
+      if (head) { var th = document.createElement('th'); th.textContent = 'Mark'; head.appendChild(th); }
+      var cols = head ? head.children.length : 1;
+      table.querySelectorAll('tbody tr').forEach(function (tr) {
+        var first = tr.querySelector('td'); if (!first) return;
+        var key = sid + '-' + slug(first.textContent);
+        var td = document.createElement('td'); td.className = 'mark';
+        var box = document.createElement('input'); box.type = 'checkbox'; box.title = 'Agree';
+        var btn = document.createElement('button'); btn.type = 'button'; btn.textContent = 'Note'; btn.className = 'notebtn';
+        td.appendChild(box); td.appendChild(btn); tr.appendChild(td);
+        var noteRow = document.createElement('tr'); noteRow.className = 'noterow'; noteRow.hidden = true;
+        var ntd = document.createElement('td'); ntd.colSpan = cols;
+        var ta = document.createElement('textarea'); ta.rows = 1; ta.placeholder = 'Note or question';
+        ntd.appendChild(ta); noteRow.appendChild(ntd);
+        tr.parentNode.insertBefore(noteRow, tr.nextSibling);
+        btn.addEventListener('click', function () { noteRow.hidden = !noteRow.hidden; if (!noteRow.hidden) ta.focus(); });
+        var f = bind(key, box, ta); f.row = noteRow; f.btn = btn;
+      });
+    });
+
+    function render() {
+      fields.forEach(function (f) {
+        var e = entry(f.key);
+        if (f.box) f.box.checked = !!e.checked;
+        if (f.ta) { var v = e.note || ''; if (document.activeElement !== f.ta && f.ta.value !== v) f.ta.value = v; }
+        if (f.row && (e.note || '').trim()) f.row.hidden = false;
+        if (f.btn) f.btn.classList.toggle('has', !!(e.note || '').trim());
+      });
+    }
+
+    localLoad();
+    render();
+
+    if (!(window.claude && window.claude.use)) { setSync('Saved in this browser only', 'off'); return; }
+    window.claude.use('db').then(function (db) {
+      if (!db) { setSync('Shared store unavailable here. Saved in this browser only', 'off'); return; }
+      docRef = db.doc('review/decisions');
+      docRef.onSnapshot(function (snap) {
+        if (snap.exists) {
+          state = norm(snap.data()); localSave(); render();
+          setSync('Synced with the shared store', 'on');
+        } else {
+          setSync('Shared store ready', 'on');
+          if (Object.keys(state).length) persist();
+        }
+      }, function (e) { setSync('Shared store error (' + (e && e.code || 'unknown') + '). Saved in this browser only', 'off'); docRef = null; });
+    }).catch(function () { setSync('Saved in this browser only', 'off'); });
+  })();
+</script>

@@ -7,10 +7,10 @@ Map of Content for architectural and product decisions. Each decision is an atom
 - [[decision-prd-v1-architecture]] — PRD shape, rendering strategy, state model, scope
 - [[decision-streets-of-rage-direction]] — Streets of Rage 1991 intro adopted as primary direct visual anchor
 - [[decision-1-unit-equals-1-meter]] — World units = meters, with derived archetype dimensions
-- [[decision-district-based-city-layout]] — City composes from rotated districts with own grid angles and characters *(superseded)*
-- [[decision-streets-first-city-generation]] — Streets-first hybrid: highways and arterials drawn first, districts form between them, blocks/lots emerge from network closure *(road mechanism partially superseded)*
+- [[decision-district-based-city-layout]] — City composes from rotated districts with own grid angles and characters _(superseded)_
+- [[decision-streets-first-city-generation]] — Streets-first hybrid: highways and arterials drawn first, districts form between them, blocks/lots emerge from network closure _(road mechanism partially superseded)_
 - [[plan-grid-first-rework]] — (superseded) staged implementation plan for the grid-first rework (flag-gated lattice.ts stages 0–7, A/B harness on `/plan`); superseded when tensor-field roads became the default model
-- [[decision-grid-first-city-generation]] — Grid-first rework: coherent grid substrate, patchwork via center-anchored orientation field, continuous seam streets, arterials = heavy grid lines (kills the radial starburst), zone-driven hybrid fill *(geometry superseded)*
+- [[decision-grid-first-city-generation]] — Grid-first rework: coherent grid substrate, patchwork via center-anchored orientation field, continuous seam streets, arterials = heavy grid lines (kills the radial starburst), zone-driven hybrid fill _(geometry superseded)_
 - [[decision-tensor-field-roads]] — **Tensor-field streets-first (current model):** roads = streamlines of a grid-basis tensor field, criss-cross arterials + streets, one promoted highway, occasional roundabout, buildings line the frontage; default city generator
 - [[decision-network-aligned-districts]] — **Districts follow the arterials:** raster flood-fill with arterials/highway as hard walls (minor streets passable), slivers merged; replaces free-floating Voronoi on the tensor path; one shared field across buildings + all overlays
 - [[decision-additive-growth-citygen]] — **Additive growth = generate-at-max + crop:** fix gen at a constant MAX extent (extent-invariant core), drive the size slider as a crop only, materialise buildings lazily within the crop; sidesteps road seam-coherence / global district re-ranking; unblocks the #14 scale spike
@@ -43,7 +43,7 @@ Map of Content for architectural and product decisions. Each decision is an atom
 - [[decision-github-pages-deploy]] — Static export to GitHub Pages on every push to main
 - [[decision-merge-styles]] — **Merge styles:** feature → dev `--no-ff` (bubble per feature), dev → main `--ff-only` + tag (main = bookmark on dev, zero graph lanes); direct-to-main = CI/hotfix only, back-merged same session
 - [[decision-fable-branch-model-scope]] — **`fable` is model-scoped (2026-07-05):** reserved for Fable-model work (`feat/*` off `fable`); other models (Opus, etc.) use `feat/*` off `dev` and never route through `fable`; no feature branches hang off `fable` between Fable sessions
-- [[decision-debug-panel-architecture]] — IA + master toggle + save / reset / copy values *(superseded)*
+- [[decision-debug-panel-architecture]] — IA + master toggle + save / reset / copy values _(superseded)_
 - [[decision-settings-sidebar-shadcn]] — shadcn rewire: full-height sidebar, multi-open accordion, light/grey/dark theme tokens
 - [[settings-ia-evaluation]] — settings-panel IA evaluation + five layout proposals (A–E); Option D built and reverted; v2 direction = vertical grouped + Basic/Advanced toggle + search
 
@@ -57,5 +57,13 @@ Map of Content for architectural and product decisions. Each decision is an atom
 
 ## Personas & directory (2026-07-18 round)
 
-- [[decision-listed-residents-term]] — **"listed" residents:** the directory's detailed personas are the *listed* sample of a full-capacity city derived from the buildings (~326k pop at 6 km); company `totalHeadcount` promoted to display data; `approxCount` display rounding
+- [[decision-entity-columns]] — **Miller-columns drill (2026-07-08):** unifies district/building/company/persona/street detail into one progressive-disclosure system (side/deck/collapsed display states), replacing `BuildingInfoPanel` + `PersonaPanel`
+- [[decision-heli-spline-tours]] — **Helicopter tours as closed Catmull-Rom splines (#89 v3, 2026-07-08):** one closed centripetal spline per tour (not per-hop bezier), continuous curvature through every stop
+- [[decision-listed-residents-term]] — **"listed" residents:** the directory's detailed personas are the _listed_ sample of a full-capacity city derived from the buildings (~326k pop at 6 km); company `totalHeadcount` promoted to display data; `approxCount` display rounding
 - [[design-bus-routes]] — **design, no code:** recovered road graph → seeded per-line routes → ribbon overlay → `lineServing(home, work)` commuter assignment; 3 phases, 6 open questions pending user answers
+
+## Workflow and product (2026-09-05)
+
+- [[decision-fable-branch-retired]] — `fable` frozen as history; feat/<name> off dev for every session and model, replacing the model-scoped routing
+- [[decision-prd-replacement]] — PRD replaced by `docs/charter.md`, the [[product]] map, and a GitHub 2.0 milestone
+- [[decision-interaction-modes]] — (open) spatial-first vs browse-first vs toggle for the scene/directory split; recommends spatial-first

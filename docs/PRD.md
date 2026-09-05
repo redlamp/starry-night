@@ -6,6 +6,8 @@ A modernized homage to the Berkeley Systems After Dark "Starry Night" screensave
 
 ## Status
 
+> **Historical (2026-09-05).** This document is the v1 record and is no longer maintained. The thesis, bars, and version rule now live in `docs/charter.md`; the living spec is the product map at `wiki/mocs/product.md` and the decision notes it links.
+
 This is the v1 spec, written May 2026. v1 shipped. The living record of what was actually
 built - architecture decisions, superseded approaches, and current system state - is in
 `wiki/notes/fable-codebase-survey-2026-07-02.md` and the `wiki/notes/decision-*.md` notes

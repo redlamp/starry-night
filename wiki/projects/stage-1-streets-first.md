@@ -1,8 +1,21 @@
-# Stage 1 — Streets-First City Generation
+---
+tags:
+  - domain/city-gen
+  - status/superseded
+  - scope/m2
+---
+
+# Stage 1 — Streets-First City Generation _(superseded)_
+
+**Superseded 2026-09-05** — the city generator moved on through grid-first
+([[decision-grid-first-city-generation]]) and then to tensor-field streets
+([[decision-tensor-field-roads]], the current default generator). This plan
+documents Stage 1 of the original streets-first model; kept for history, not
+an active migration target.
 
 Implementation plan for Stage 1 of the streets-first grammar locked in [[decision-streets-first-city-generation]].
 
-**Status**: implemented on `arch/city-planning` (2026-05-26), awaiting arch→dev merge
+**Status (historical)**: implemented on `arch/city-planning` (2026-05-26)
 **Scope**: M2 (city iteration), unblocks Stage 2/3
 **Branch convention**: feature branches off `arch/city-planning`, merged `--no-ff`, then arch→dev
 
@@ -29,7 +42,7 @@ All five PRs landed on `arch/city-planning` as separate `--no-ff` feature branch
 3. **District shells** derived from highway + map-edge partition (replaces hardcoded `DISTRICTS` array)
 4. **District character assignment** with identity (Downtown / Subcentre) + silhouette template for high-rise
 5. **Per-cluster `coreProximity` field** replaces the global `downtownBias` ellipse
-6. **Existing block-and-stripe generator** runs *inside* district shells (proper polygon-aware) until Stage 2 replaces it with lot subdivision
+6. **Existing block-and-stripe generator** runs _inside_ district shells (proper polygon-aware) until Stage 2 replaces it with lot subdivision
 7. **District naming** — cardinal + character + stable ID
 8. **`/plan` route** — top-down ortho grid of 12–20 seeds, layered visualization (highways, arterials, district fills, zones, streetlights, building footprints)
 9. **Districts + Roads panels** — minimum viable, wire into existing shadcn sidebar
@@ -94,6 +107,7 @@ See [[decision-streets-first-city-generation]] §Stage 1 verification — two-ga
 **Gate 1**: quantitative asserts (no overlaps, no corridor violations, district count matches topology).
 
 **Gate 2**: two-pass eyeball.
+
 - Pass A: `/plan` route grid, confirm grammar correctness across 12–20 seeds
 - Pass B: orbit-view capture of same seeds, confirm ≥16/20 seeds feel categorically different
 
@@ -101,7 +115,7 @@ See [[decision-streets-first-city-generation]] §Stage 1 verification — two-ga
 
 ## Dependencies / risks
 
-- **Polygon subdivision algorithm choice** — Stage 2 uses recursive halving with per-district regularity. The Stage 1 placeholder (existing block-and-stripe inside district shells) is *not* what Stage 2 ships — accept that some Stage 1 visual texture will change in Stage 2. Tell the still-frame reviewer.
+- **Polygon subdivision algorithm choice** — Stage 2 uses recursive halving with per-district regularity. The Stage 1 placeholder (existing block-and-stripe inside district shells) is _not_ what Stage 2 ships — accept that some Stage 1 visual texture will change in Stage 2. Tell the still-frame reviewer.
 - **`/palette` route precedent** — `/plan` follows the same throwaway-but-useful pattern. Don't over-engineer; this route earns its keep by verification, not production polish.
 - **Streetlight density spike** — per-tier + per-zone rules + arterial bias may multiply streetlight count substantially over current. Profile draw-call budget (PRD §4.1 says <50 total scene); streetlights stay one InstancedMesh.
 - **`coreProximity` field on `Building`** — preserve determinism. Computed from district centroid + cluster centre, not from camera or runtime state.
