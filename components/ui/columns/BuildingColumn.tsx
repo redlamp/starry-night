@@ -3,6 +3,7 @@
 import { MapPin } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleTrigger, CollapsiblePanel } from "@/components/ui/collapsible";
 import { Separator } from "@/components/ui/separator";
 import { useSceneStore } from "@/lib/state/sceneStore";
 import { focusBuilding, unfocusBuilding } from "@/lib/scene/focusBuilding";
@@ -20,11 +21,15 @@ export function BuildingColumn({ id, part }: { id: number; part: "pinned" | "res
   const focusedBuildingId = useSceneStore((s) => s.focusedBuildingId);
   const masterSeed = useSceneStore((s) => s.masterSeed);
   const setHoveredTenant = useSceneStore((s) => s.setHoveredTenant);
+  // Occupants disclosure — same shared-across-instances idiom as the
+  // resident card's cardDetailsOpen (2026-09-05).
+  const cardOccupantsOpen = useSceneStore((s) => s.cardOccupantsOpen);
+  const setCardOccupantsOpen = useSceneStore((s) => s.setCardOccupantsOpen);
   const indexes = useEntityIndexes();
   const building = indexes.buildingById.get(id);
   if (!building) {
     return part === "pinned" ? null : (
-      <div className="text-sm text-muted-foreground">Building not found.</div>
+      <div className="text-muted-foreground text-sm">Building not found.</div>
     );
   }
 
@@ -41,153 +46,186 @@ export function BuildingColumn({ id, part }: { id: number; part: "pinned" | "res
 
   if (part === "pinned") {
     return (
-    <>
-      <div className="flex items-center justify-between gap-2">
-        <Badge variant="secondary">{ARCHETYPE_LABELS[building.archetype]}</Badge>
-        <IconTip label={isFocused ? "Unfocus" : "Focus"}>
-          <Button
-            variant={isFocused ? "default" : "secondary"}
-            size="icon-sm"
-            onClick={() => (isFocused ? unfocusBuilding() : focusBuilding(building))}
-            aria-label={isFocused ? "Unfocus this building" : "Focus this building"}
-            aria-pressed={isFocused}
+      <>
+        <div className="flex items-center justify-between gap-2">
+          <Badge variant="secondary">{ARCHETYPE_LABELS[building.archetype]}</Badge>
+          <IconTip label={isFocused ? "Unfocus" : "Focus"}>
+            <Button
+              variant={isFocused ? "default" : "secondary"}
+              size="icon-sm"
+              onClick={() => (isFocused ? unfocusBuilding() : focusBuilding(building))}
+              aria-label={isFocused ? "Unfocus this building" : "Focus this building"}
+              aria-pressed={isFocused}
+            >
+              <MapPin />
+            </Button>
+          </IconTip>
+        </div>
+
+        {district && (
+          <button
+            type="button"
+            onClick={() => push({ kind: "district", id: district.id })}
+            className="flex items-center gap-1.5 text-left text-sm font-medium hover:underline"
+            style={{ color: district.color }}
           >
-            <MapPin />
-          </Button>
-        </IconTip>
-      </div>
-
-      {district && (
-        <button
-          type="button"
-          onClick={() => push({ kind: "district", id: district.id })}
-          className="flex items-center gap-1.5 text-left text-sm font-medium hover:underline"
-          style={{ color: district.color }}
-        >
-          <MapPin className="size-4 shrink-0" />
-          <span className="truncate">
-            {indexes.names.districtNames.get(district.id) ?? district.displayName}
-          </span>
-        </button>
-      )}
-      {address && (
-        <button
-          type="button"
-          onClick={() => push({ kind: "street", id: address.roadId })}
-          className="-mt-1 text-left text-sm text-muted-foreground hover:underline"
-        >
-          {address.number} {address.street}
-        </button>
-      )}
-
-      <div className="flex flex-col gap-1">
-        {population > 0 && (
-          <ColumnStat label="Est. Population" value={`~${population.toLocaleString()}`} />
+            <MapPin className="size-4 shrink-0" />
+            <span className="truncate">
+              {indexes.names.districtNames.get(district.id) ?? district.displayName}
+            </span>
+          </button>
         )}
-        {households.length > 0 && (
+        {address && (
+          <button
+            type="button"
+            onClick={() => push({ kind: "street", id: address.roadId })}
+            className="text-muted-foreground -mt-1 text-left text-sm hover:underline"
+          >
+            {address.number} {address.street}
+          </button>
+        )}
+
+        <div className="flex flex-col gap-1">
+          {population > 0 && (
+            <ColumnStat label="Est. Population" value={`~${population.toLocaleString()}`} />
+          )}
+          {households.length > 0 && (
+            <ColumnStat
+              label="Listed"
+              value={`${households.reduce((sum, hh) => sum + hh.memberIds.length, 0)} residents · ${households.length} ${households.length === 1 ? "household" : "households"}`}
+            />
+          )}
           <ColumnStat
-            label="Listed"
-            value={`${households.reduce((sum, hh) => sum + hh.memberIds.length, 0)} residents · ${households.length} ${households.length === 1 ? "household" : "households"}`}
+            label="Height"
+            value={`${Math.round(building.height)} m · ${building.floors} floors`}
           />
-        )}
-        <ColumnStat label="Height" value={`${Math.round(building.height)} m · ${building.floors} floors`} />
-        <ColumnStat
-          label="Footprint"
-          value={`${Math.round(building.width)} × ${Math.round(building.depth)} m`}
-          muted
-        />
-      </div>
-    </>
+          <ColumnStat
+            label="Footprint"
+            value={`${Math.round(building.width)} × ${Math.round(building.depth)} m`}
+            muted
+          />
+        </div>
+      </>
     );
   }
+
+  // Trigger label carries occupant counts (2026-09-05) so the closed state
+  // still says something rather than a bare "Occupants".
+  const occupantsSummary = [
+    companies.length > 0
+      ? `${companies.length} ${companies.length === 1 ? "company" : "companies"}`
+      : null,
+    households.length > 0
+      ? `${households.length} ${households.length === 1 ? "household" : "households"}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <>
       <div className="flex flex-col gap-1.5">
-        <div className="text-sm font-medium">Occupants</div>
-        {siftLine && <div className="text-sm italic text-muted-foreground">{siftLine}</div>}
-        {companies.length === 0 && households.length === 0 && (
-          <div className="text-sm text-muted-foreground">Nobody&apos;s home tonight.</div>
-        )}
+        {siftLine && <div className="text-muted-foreground text-sm italic">{siftLine}</div>}
+        {/* Companies + households/residents live behind a disclosure
+            (2026-09-05, same idiom as the resident card's Details) — the
+            pinned stats above are the front of the card, the occupant lists
+            are the form. */}
+        <Collapsible open={cardOccupantsOpen} onOpenChange={setCardOccupantsOpen}>
+          <CollapsibleTrigger className="text-muted-foreground text-sm font-medium">
+            Occupants{occupantsSummary && ` · ${occupantsSummary}`}
+          </CollapsibleTrigger>
+          <CollapsiblePanel>
+            <div className="flex flex-col gap-1.5 pt-1.5">
+              {companies.length === 0 && households.length === 0 && (
+                <div className="text-muted-foreground text-sm">Nobody&apos;s home tonight.</div>
+              )}
 
-        {companies.length > 0 && (
-          <div className="flex flex-col gap-0.5">
-            <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
-              Companies
-            </div>
-            {companies.map((biz) => (
-              <button
-                key={biz.id}
-                type="button"
-                onClick={() => push({ kind: "company", id: biz.id })}
-                onMouseEnter={() => setHoveredTenant({ buildingId: id, businessId: biz.id })}
-                onMouseLeave={() => setHoveredTenant(null)}
-                className="-mx-1 flex items-center justify-between gap-2 rounded px-1 text-left text-sm hover:bg-foreground/10"
-              >
-                <span className="truncate">{biz.name}</span>
-                <Badge variant="outline" className="shrink-0 capitalize">
-                  {biz.kind}
-                </Badge>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {companies.length > 0 && households.length > 0 && <Separator className="my-0.5" />}
-
-        {households.length > 0 && (
-          <div className="flex flex-col gap-1.5">
-            <div className="flex items-baseline justify-between text-[11px] uppercase tracking-wide text-muted-foreground">
-              <span>Residents</span>
-              <span>Age</span>
-            </div>
-            {households.map((hh) => (
-              <div
-                key={`${hh.buildingId}:${hh.index}`}
-                className="flex flex-col gap-0.5"
-                onMouseEnter={() => setHoveredTenant({ buildingId: hh.buildingId, householdIndex: hh.index })}
-                onMouseLeave={() => setHoveredTenant(null)}
-              >
-                {/* Unit right-aligned in the row, like the ages column
-                    (user 2026-07-08). Pilled so it reads as metadata, distinct
-                    from the plain-text ages below (user 2026-07-10). Family
-                    name reads as a section label: ALL CAPS, one size down,
-                    two shades darker (user 2026-07-27). */}
-                <div className="flex items-baseline justify-between gap-2">
-                  <span className="text-foreground/60 truncate text-xs font-medium tracking-wide uppercase">
-                    {hh.label}
-                  </span>
-                  {hh.unit && (
-                    <Badge variant="outline" className="shrink-0 px-1.5 py-0 text-[10px] font-normal">
-                      Unit {hh.unit}
-                    </Badge>
-                  )}
+              {companies.length > 0 && (
+                <div className="flex flex-col gap-0.5">
+                  <div className="text-muted-foreground text-[11px] tracking-wide uppercase">
+                    Companies
+                  </div>
+                  {companies.map((biz) => (
+                    <button
+                      key={biz.id}
+                      type="button"
+                      onClick={() => push({ kind: "company", id: biz.id })}
+                      onMouseEnter={() => setHoveredTenant({ buildingId: id, businessId: biz.id })}
+                      onMouseLeave={() => setHoveredTenant(null)}
+                      className="hover:bg-foreground/10 -mx-1 flex items-center justify-between gap-2 rounded px-1 text-left text-sm"
+                    >
+                      <span className="truncate">{biz.name}</span>
+                      <Badge variant="outline" className="shrink-0 capitalize">
+                        {biz.kind}
+                      </Badge>
+                    </button>
+                  ))}
                 </div>
-                <div className="flex flex-col gap-0.5 pl-1">
-                  {hh.memberIds.map((pid) => {
-                    const persona = indexes.directory.personas.get(pid);
-                    if (!persona) return null;
-                    return (
-                      <button
-                        key={pid}
-                        type="button"
-                        onClick={() => push({ kind: "persona", id: pid })}
-                        className="-mx-1 flex items-baseline justify-between gap-2 rounded px-1 text-left text-sm hover:bg-foreground/10"
-                      >
-                        <span className="truncate">
-                          {persona.givenName} {persona.familyName}
+              )}
+
+              {companies.length > 0 && households.length > 0 && <Separator className="my-0.5" />}
+
+              {households.length > 0 && (
+                <div className="flex flex-col gap-1.5">
+                  <div className="text-muted-foreground flex items-baseline justify-between text-[11px] tracking-wide uppercase">
+                    <span>Residents</span>
+                    <span>Age</span>
+                  </div>
+                  {households.map((hh) => (
+                    <div
+                      key={`${hh.buildingId}:${hh.index}`}
+                      className="flex flex-col gap-0.5"
+                      onMouseEnter={() =>
+                        setHoveredTenant({ buildingId: hh.buildingId, householdIndex: hh.index })
+                      }
+                      onMouseLeave={() => setHoveredTenant(null)}
+                    >
+                      {/* Unit right-aligned in the row, like the ages column
+                          (user 2026-07-08). Pilled so it reads as metadata, distinct
+                          from the plain-text ages below (user 2026-07-10). Family
+                          name reads as a section label: ALL CAPS, one size down,
+                          two shades darker (user 2026-07-27). */}
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="text-foreground/60 truncate text-xs font-medium tracking-wide uppercase">
+                          {hh.label}
                         </span>
-                        <span className="shrink-0 tabular-nums text-muted-foreground">
-                          {persona.age}
-                        </span>
-                      </button>
-                    );
-                  })}
+                        {hh.unit && (
+                          <Badge
+                            variant="outline"
+                            className="shrink-0 px-1.5 py-0 text-[10px] font-normal"
+                          >
+                            Unit {hh.unit}
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="flex flex-col gap-0.5 pl-1">
+                        {hh.memberIds.map((pid) => {
+                          const persona = indexes.directory.personas.get(pid);
+                          if (!persona) return null;
+                          return (
+                            <button
+                              key={pid}
+                              type="button"
+                              onClick={() => push({ kind: "persona", id: pid })}
+                              className="hover:bg-foreground/10 -mx-1 flex items-baseline justify-between gap-2 rounded px-1 text-left text-sm"
+                            >
+                              <span className="truncate">
+                                {persona.givenName} {persona.familyName}
+                              </span>
+                              <span className="text-muted-foreground shrink-0 tabular-nums">
+                                {persona.age}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
+              )}
+            </div>
+          </CollapsiblePanel>
+        </Collapsible>
       </div>
     </>
   );

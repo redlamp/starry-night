@@ -10,10 +10,7 @@ import {
   setDensityProfile as setDensityProfileModule,
   type DensityProfile,
 } from "@/lib/seed/density";
-import {
-  setNamingRegion as setNamingRegionModule,
-  type NamingRegion,
-} from "@/lib/seed/naming";
+import { setNamingRegion as setNamingRegionModule, type NamingRegion } from "@/lib/seed/naming";
 import type { SketchTensorSource } from "@/lib/sketch/orientationField";
 import type { FlightClass } from "@/lib/seed/flights";
 
@@ -576,6 +573,10 @@ type SceneState = {
   setCardDetailsOpen: (v: boolean) => void;
   cardFamilyOpen: boolean;
   setCardFamilyOpen: (v: boolean) => void;
+  // Building card's Occupants disclosure (companies + households list) —
+  // same shared, session-only pattern as cardDetailsOpen (2026-09-05).
+  cardOccupantsOpen: boolean;
+  setCardOccupantsOpen: (v: boolean) => void;
   // City Directory overlay (ControlDock) — in the store so the entity-columns
   // dock can shift to its right while it's open. Runtime tier.
   directoryOpen: boolean;
@@ -608,7 +609,9 @@ type SceneState = {
   setHoverBuildingId: (id: number | null) => void;
   // A tenant hovered on a building card → highlight their parcel in the scene.
   hoveredTenant: { buildingId: number; householdIndex?: number; businessId?: string } | null;
-  setHoveredTenant: (t: { buildingId: number; householdIndex?: number; businessId?: string } | null) => void;
+  setHoveredTenant: (
+    t: { buildingId: number; householdIndex?: number; businessId?: string } | null,
+  ) => void;
   pinnedDistrictId: string | null;
   setPinnedDistrictId: (id: string | null) => void;
   // Directory "Districts" header toggle (user 2026-07-10): outline EVERY
@@ -1383,7 +1386,11 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   // sticky opt-out from the directory auto-show, an ON clears it (user
   // 2026-07-19). Either way the user has taken over — drop the auto flag.
   setShowDistrictBoundaries: (showDistrictBoundaries) =>
-    set({ showDistrictBoundaries, boundariesOptOut: !showDistrictBoundaries, boundariesAutoOn: false }),
+    set({
+      showDistrictBoundaries,
+      boundariesOptOut: !showDistrictBoundaries,
+      boundariesAutoOn: false,
+    }),
   boundariesOptOut: false,
   boundariesAutoOn: false,
   resumeColumns: () => {
@@ -1394,6 +1401,8 @@ export const useSceneStore = create<SceneState>((set, get) => ({
   setCardDetailsOpen: (cardDetailsOpen) => set({ cardDetailsOpen }),
   cardFamilyOpen: true,
   setCardFamilyOpen: (cardFamilyOpen) => set({ cardFamilyOpen }),
+  cardOccupantsOpen: true,
+  setCardOccupantsOpen: (cardOccupantsOpen) => set({ cardOccupantsOpen }),
   setColumnsView: (columnsView) => set({ columnsView }),
   settingsPanelWidth: 448,
   setSettingsPanelWidth: (settingsPanelWidth) => set({ settingsPanelWidth }),
@@ -1407,7 +1416,12 @@ export const useSceneStore = create<SceneState>((set, get) => ({
     set(
       on
         ? { inspectMode: true }
-        : { inspectMode: false, selectedBuildingId: null, focusPivot: null, focusedBuildingId: null },
+        : {
+            inspectMode: false,
+            selectedBuildingId: null,
+            focusPivot: null,
+            focusedBuildingId: null,
+          },
     ),
   focusRequest: null,
   setFocusRequest: (focusRequest) => set({ focusRequest }),
