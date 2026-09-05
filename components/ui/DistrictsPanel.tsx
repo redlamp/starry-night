@@ -75,12 +75,14 @@ export function DistrictsSection() {
   return (
     <div className="flex flex-col gap-1 pt-1">
       <div className="flex items-center justify-between gap-2 text-xs">
-        <span className="text-foreground/70">boundaries</span>
-        <IconTip label="District Boundaries">
+        <span className="text-foreground/70">Show Boundaries</span>
+        {/* Same label as the City Directory's Districts-header toggle (unified
+            2026-09-05) — two homes, one name for the one overlay. */}
+        <IconTip label="Show Boundaries">
           <Switch
             checked={showBoundaries}
             onCheckedChange={setShowBoundaries}
-            aria-label="Toggle district boundaries"
+            aria-label="Show Boundaries"
           />
         </IconTip>
       </div>

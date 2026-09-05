@@ -150,7 +150,13 @@ export type SavedConfig = {
     popCoupling: number;
     lightSize: number;
   };
-  flights?: { enabled: boolean; gapMin: number; gapMax: number; deviation: number; maxPlanes?: number };
+  flights?: {
+    enabled: boolean;
+    gapMin: number;
+    gapMax: number;
+    deviation: number;
+    maxPlanes?: number;
+  };
   // `count` since 2026-07-06 (replaced `enabled`); both optional so pre- and
   // post-change saves load — the reader falls back to DEFAULT_HELICOPTERS.count.
   helicopters?: { count?: number; enabled?: boolean };
@@ -187,6 +193,9 @@ export type SavedConfig = {
   dprCap?: number | null;
   adaptive?: boolean;
   perfStats?: boolean;
+  // Look / Studio settings-drawer split; optional so configs saved before it
+  // existed still load (falls back to Look).
+  studioMode?: boolean;
   // Only the layer-visibility toggles persist — topologyKind / arterialCount
   // are per-seed runtime readouts, not settings.
   cityPlanning?: {

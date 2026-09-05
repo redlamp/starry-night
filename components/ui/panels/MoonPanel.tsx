@@ -51,7 +51,7 @@ export function MoonSection() {
         </Button>
       </div>
       <ValueSlider
-        label="az°"
+        label="Azimuth"
         value={moon.azimuthDeg}
         min={0}
         max={360}
@@ -59,7 +59,7 @@ export function MoonSection() {
         onChange={(azimuthDeg) => setMoon({ azimuthDeg })}
       />
       <ValueSlider
-        label="el°"
+        label="Elevation"
         value={moon.elevationDeg}
         min={-10}
         max={90}
@@ -67,7 +67,7 @@ export function MoonSection() {
         onChange={(elevationDeg) => setMoon({ elevationDeg })}
       />
       <ValueSlider
-        label="dist"
+        label="Distance"
         value={moon.distance}
         min={500}
         max={30000}
@@ -75,7 +75,7 @@ export function MoonSection() {
         onChange={(distance) => setMoon({ distance })}
       />
       <ValueSlider
-        label="size"
+        label="Size"
         value={moon.radiusRatio}
         min={0.005}
         max={0.2}
@@ -85,7 +85,7 @@ export function MoonSection() {
       {/* Phase: auto from the real date, or scrub the synodic cycle manually
           (0 = new, 0.5 = full) for testing/art-direction. */}
       <div className="flex items-center gap-2 text-xs">
-        <span className="text-foreground/70 w-14 shrink-0">phase</span>
+        <span className="text-foreground/70 w-14 shrink-0">Phase</span>
         <Button
           variant="secondary"
           size="sm"
@@ -102,7 +102,7 @@ export function MoonSection() {
       </div>
       {!moon.phaseAuto && (
         <ValueSlider
-          label="cycle"
+          label="Cycle"
           value={moon.phaseManual}
           min={0}
           max={1}
@@ -112,13 +112,13 @@ export function MoonSection() {
       )}
       {/* Stylized terminator: crisp 2-tone / 1-bit dither / cel steps + edge sharpness. */}
       <ModeSelect
-        label="edge"
+        label="Edge"
         value={moon.terminatorStyle}
         modes={MOON_TERM_STYLES}
         onChange={(v) => setMoon({ terminatorStyle: v as typeof moon.terminatorStyle })}
       />
       <ValueSlider
-        label="sharp"
+        label="Sharpness"
         value={moon.edgeSharpness}
         min={0}
         max={1}
@@ -127,7 +127,7 @@ export function MoonSection() {
       />
       <div className="text-foreground/55 pt-1 text-[10px] tracking-wide uppercase">Halo</div>
       <ValueSlider
-        label="size×"
+        label="Size ×"
         value={halo.radiusMul}
         min={1}
         max={8}
@@ -135,7 +135,7 @@ export function MoonSection() {
         onChange={(radiusMul) => setMoonHalo({ radiusMul })}
       />
       <ValueSlider
-        label="core"
+        label="Core"
         value={halo.innerRadius}
         min={0}
         max={0.3}
@@ -143,7 +143,7 @@ export function MoonSection() {
         onChange={(innerRadius) => setMoonHalo({ innerRadius })}
       />
       <ValueSlider
-        label="glow"
+        label="Glow"
         value={halo.intensity}
         min={0}
         max={3}
