@@ -136,3 +136,96 @@ the local gate.
   know that before trusting a shared seed's exact geometry.
 - Follow-up: implement fix (a), re-capture the golden once, and remove the
   `CITY_GOLDEN=skip` escape hatch.
+
+## Spike results (2026-09-05, `worktree-agent-a370c872b76b2cedb`, not merged)
+
+Built `lib/seed/dmath.ts` — deterministic `dsin`/`dcos`/`datan2`/`dexp`/`dhypot`
+using only `+ - * / Math.sqrt Math.floor Math.abs` (range-reduction + a
+fixed-degree Taylor polynomial for sin/cos/exp, a half-angle-reduction +
+Taylor series for atan, and the standard scaled algorithm for hypot) — and
+swapped every native `Math.sin/cos/atan2/exp/hypot` call in `topology.ts`,
+`lattice.ts` (including the `dominantHighwayTilt` tie-break, which now
+compares with a 1e-6 relative tolerance and keeps the first-seen highway on a
+near-tie, instead of a hard `>`), `tensorField.ts`, and — once the first three
+turned out not to be enough, see below — `tensorStreets.ts` (its `rk4()`
+integrator and suburb/subdivision spline logic have their own dense
+`hypot`/`cos`/`sin` usage). `scripts/dmathCheck.ts` checks each function
+against 1e6 seeded random inputs.
+
+**dmath accuracy** (max error vs native `Math.*`, `bun run scripts/dmathCheck.ts`):
+
+| fn      | maxAbs    | maxRel    |
+| ------- | --------- | --------- |
+| dsin    | 2.787e-14 | 4.900e-9  |
+| dcos    | 2.798e-14 | 1.740e-9  |
+| datan2  | 7.780e-12 | 9.906e-12 |
+| dexp    | 6.671e-12 | 9.445e-12 |
+| dhypot  | 1.819e-12 | 4.383e-16 |
+
+**dmath cross-engine parity**: `bun run scripts/dmathCheck.ts` and
+`bunx tsx scripts/dmathCheck.ts` produce IDENTICAL output hashes for all five
+functions (e.g. `dsin` hash `bd56a35c` both runs) — dmath itself is proven
+bit-for-bit across V8 and JSC, as designed. (`dhypot`'s error columns differ
+between the two runs — 1.8e-12 vs 0 — because the *reference* `Math.hypot`
+value itself differs between engines on some inputs; that asymmetry is
+exactly the bug this file exists to route around.)
+
+**City-level parity — the important negative result**: after the fix,
+`bun run scripts/gate1.ts` still passes (same-run determinism intact) and the
+DOCUMENTED bug is confirmed fixed — for `gate1-1` (a ring-radial topology, the
+seed that hits the near-tie), the lattice orientation grid hash (`orientHash`)
+and `buildingCount` now agree exactly between `bun` and `bunx tsx`
+(`buildingCount` 15881 both; previously this was the seed whose count
+diverged). But `bun run scripts/cityGolden.ts` vs `bunx tsx scripts/cityGolden.ts`
+still produce DIFFERENT new hashes per seed for `fullHash`/`buildingsHash`/
+`roadsHash` (e.g. `gate1-0` full hash `d5ba5aae` under Bun vs `09df733a` under
+tsx) — full byte-identity is NOT achieved even after converting all four
+files. Grepping the rest of `lib/seed` turned up ~99 more native
+`hypot`/`cos`/`sin`/`atan2`/`exp` call sites across 14 more files
+(`cityGen.ts` alone has 28, including its own near-tie-shaped hazard:
+`totalTurn`/`maxWindowTurn` threshold comparisons in the arterial/highway
+classifier — a candidate whose accumulated turn angle sits right at the
+200°/35° cutoff could flip which tier it's promoted to, the same failure
+shape as the original bug, just on a continuous boundary instead of a
+guaranteed symmetric tie). `cityGolden.ts`'s `fullHash` hashes the entire
+`city` object, so any one of those remaining call sites can — and does —
+keep the two engines apart.
+
+**Revised recommendation**: option (a) is still directionally right (it's the
+only option that also fixes the browser-facing version of the bug), but its
+true cost is far larger than the original 3-file estimate — realistically a
+sweep of most of `lib/seed`, not a scoped patch. Two honest paths forward:
+(1) fund the full sweep (all ~14 remaining files) before re-capturing the
+golden once, or (2) narrow the CONTRACT instead of the fix — keep
+`cityGolden.ts` scoped to `buildingCount`/`districtCount`/`orientHash`
+(the structural properties this spike DID make cross-engine-stable) and drop
+the full-object `fullHash`/`buildingsHash`/`roadsHash` byte-identity
+requirement, documenting that exact per-pixel geometry is engine-specific by
+design. Either way, do not merge this spike as-is: the golden baseline it
+would produce is a partial fix wearing a "byte-identical" contract it doesn't
+meet.
+
+**Perf cost** (`bun run scripts/profileGen.ts`, 3 seeds, MAX/Metro extent,
+dev baseline vs this spike's 4-file dmath swap):
+
+| seed     | roads before | roads after | total before | total after |
+| -------- | -----------: | ----------: | ------------: | -----------: |
+| gate1-0  | 286ms        | 495ms (+73%)| 835ms         | 1047ms (+25%)|
+| gate1-1  | 260ms        | 471ms (+81%)| 801ms         | 1007ms (+26%)|
+| gate1-2  | 264ms        | 471ms (+78%)| 784ms         | 995ms (+27%)|
+
+The roads/tensor phase (where all four converted files live) roughly
+DOUBLES; total gen time is up ~25-27%, since roads are ~35% of the total
+budget. `field.sample`'s own reported cost roughly doubled too (12-14ms →
+23-25ms across ~450k calls), consistent with `dexp`/`dcos`/`dsin`/`dhypot`
+costing more than the native calls they replace. Extending the fix to the
+remaining ~14 files would add further cost on top of this, roughly in
+proportion to how much of the ~99 remaining call sites sit in per-sample hot
+loops vs one-time setup.
+
+**Visible city changes for the 10 gate1 seeds** (building/district counts,
+this spike's branch vs dev, same engine/Bun): identical for every seed except
+`gate1-1` (15867 → 15881 buildings, 830 → 718 streets; district count
+unchanged at 48) — the one seed whose topology hits the ring-radial
+near-tie the fix targets. This is the re-roll the decision note warned about,
+scoped to exactly the seed the bug predicts.
